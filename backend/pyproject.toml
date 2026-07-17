@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eligo-tech-backend"
+version = "0.1.0"
+description = "AI-native recruitment platform backend — layered, agent + verification architecture."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "eligo-tech" }]
+
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "aiosqlite>=0.20",          # SQLite async driver — zero-external-dependency default
+    "greenlet>=3.0",           # required by SQLAlchemy async
+    "python-multipart>=0.0.9",  # form/file uploads (document extraction endpoints)
+]
+
+[project.optional-dependencies]
+# Production system-of-record. Not required to run the scaffold.
+postgres = [
+    "asyncpg>=0.29",
+    "pgvector>=0.3",
+]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

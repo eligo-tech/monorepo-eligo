@@ -1,0 +1,83 @@
+// Backend DTOs — mirror the FastAPI response_model schemas under /api/v1.
+// Captured from live responses; keep in sync with backend/app/domain/*/schemas.py.
+
+export interface CandidateDTO {
+  id: string
+  tenant_id: string
+  full_name: string
+  email: string
+  phone: string | null
+  current_title: string | null
+  current_company: string | null
+  location: string | null
+  skills: string[]
+  work_history: { company: string; years: number }[]
+  salary_expectation: number | null
+  salary_currency: string
+  availability_weeks: number | null
+  work_permit: string
+  merged_identities: string[]
+  verification_score: number // 0..1
+  created_at: string
+  updated_at: string
+}
+
+export interface JobDTO {
+  id: string
+  tenant_id: string
+  title: string
+  client_company_id: string
+  location: string | null
+  location_radius_km: number | null
+  must_have_skills: string[]
+  required_certifications: string[]
+  requires_work_permit: boolean
+  salary_min: number | null
+  salary_max: number | null
+  salary_currency: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ApplicationDTO {
+  id: string
+  tenant_id: string
+  candidate_id: string
+  job_id: string
+  status: string
+  stage: string
+  notes: string | null
+  history: { at: string; event: string }[]
+  created_at: string
+  updated_at: string
+}
+
+export interface BoardColumnDTO {
+  stage: string
+  label: string
+  applications: ApplicationDTO[]
+}
+
+export interface PipelineBoardDTO {
+  columns: BoardColumnDTO[]
+}
+
+export type BackendStrength = 'strong' | 'moderate' | 'weak'
+
+export interface MatchReasonDTO {
+  title: string
+  strength: BackendStrength
+  evidence: string
+}
+
+export interface MatchResultDTO {
+  candidate_id: string
+  job_id: string
+  passed_hard_filters: boolean
+  hard_filter_failures: string[]
+  score: number // 0..1
+  strength: BackendStrength
+  reasons: MatchReasonDTO[]
+  ranker: string
+}

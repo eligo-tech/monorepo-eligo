@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@supports (font-variation-settings: normal) {
+  :root {
+    font-family: 'Inter var', 'Inter', system-ui, sans-serif;
+  }
+}
+
+body {
+  margin: 0;
+  background: theme('colors.page');
+  color: theme('colors.ink.DEFAULT');
+}
+
+/* Thin, unobtrusive scrollbars to match the mockup surfaces. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd3db transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd3db;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

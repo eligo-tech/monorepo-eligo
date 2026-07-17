@@ -1,0 +1,1 @@
+"""API layer — aggregates all domain routers under the versioned prefix."""

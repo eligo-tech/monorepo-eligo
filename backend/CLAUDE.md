@@ -1,0 +1,126 @@
+# eligo-tech backend — architecture & contributor guide
+
+AI-native recruitment platform. This document is the contract: it tells you
+where code goes and which invariants you may **never** break.
+
+---
+
+## 1. The layered architecture
+
+Six conceptual layers, top to bottom:
+
+1. **API** (`app/api`) — HTTP surface, versioned under `/api/v1`. Thin: it
+   validates input and calls services.
+2. **Domain** (`app/domain/*`) — the business. Each domain is self-contained.
+3. **Agents** (`app/agents`) — narrow AI workers. They *propose*, never write.
+4. **Verification** (`app/domain/verification`) — the trust boundary. The ONLY
+   path from a proposal to the system-of-record. Records receipts.
+5. **System-of-record** (`app/core/database` + each domain's `models.py`) —
+   Postgres in prod (SQLite in the scaffold).
+6. **Core** (`app/core`) — config, database engine/session, logging.
+
+The differentiator is layer 4 sitting *between* agents (3) and the record (5).
+
+---
+
+## 2. Non-negotiable invariants
+
+These are enforced in code. Do not route around them.
+
+### 2.1 Agents propose · verification commits · receipts are append-only
+- Agents (`app/agents/*`) return an `AgentResult` carrying `ProposedChange`
+  objects. **They must never call `session.add`/`commit` on domain models.**
+- The only bridge to persistence is
+  `app.domain.verification.service.verify_and_commit`, invoked via
+  `Agent.commit`. It runs postconditions, checks confidence, writes an
+  `EnrichmentRecord`, and appends `Receipt`s.
+- `Receipt`s are **append-only and hash-chained per tenant**. There is no
+  update/delete path and no endpoint to create one directly. `verify_chain`
+  can recompute the chain to prove it hasn't been tampered with.
+- Rationale: EU AI Act traceability + GDPR Art. 22 (a human-contestable trail
+  behind every automated action).
+
+### 2.2 Deterministic hard filters vs. LLM soft ranking (matching)
+- `matching/service.apply_hard_filters` is **plain Python, no LLM**: work
+  permit, location radius, salary cap, required certifications, must-have
+  skills. A candidate failing any is excluded with an explicit reason.
+- `matching/service.rerank_and_explain` is **the LLM boundary** — the only
+  place a model plugs in. It returns `(score, strength, reasons)` where each
+  `MatchReason` has `title / strength / evidence`.
+- The LLM may re-rank candidates that already passed the hard filters. It may
+  **never** override a hard filter, and its output is a recommendation for a
+  human, never an automated decision (GDPR Art. 22).
+
+### 2.3 Multi-tenancy
+- Every core table has a `tenant_id` (via `TenantMixin`). **Every query filters
+  by `tenant_id`.** Services take `tenant_id` explicitly; never query
+  cross-tenant.
+
+### 2.4 Human-in-the-loop gates
+- Low-confidence extraction → human review queue (not auto-committed).
+- Enrichment from a third-party/public source → GDPR Art. 14 notification is
+  flagged on the result.
+- Outreach/presentations → **nothing is sent without explicit human approval**;
+  the outreach agent only ever produces drafts.
+
+---
+
+## 3. Per-domain file convention
+
+Every domain package under `app/domain/<name>/` has exactly:
+
+| file | responsibility |
+|------|----------------|
+| `models.py`  | SQLAlchemy ORM (system-of-record tables). Compose `IDMixin`, `TenantMixin`, `TimestampMixin`. |
+| `schemas.py` | Pydantic v2 request/response contracts. `model_config = ConfigDict(from_attributes=True)` for read models. |
+| `service.py` | Business logic. No FastAPI imports. Takes/returns models + schemas. |
+| `router.py`  | `APIRouter` exposing the service. Thin. |
+
+Shared primitives live in `app/domain/common/` (`mixins`, `enums`, `types`).
+Cross-domain enums (`PipelineStage`, `ApplicationStatus`, `MatchStrength`,
+`ConfidenceSource`, `ReceiptAction`, `WorkPermitStatus`) belong there.
+
+Portable column types are in `common/types.py`: `JSONDict`/`JSONList` map to
+`JSONB` on Postgres and TEXT on SQLite. Embeddings are JSON lists in the
+scaffold; swap to a `pgvector` `Vector` column in the Postgres profile.
+
+---
+
+## 4. How to run
+
+```bash
+pip install -e ".[dev]"      # ".[postgres]" adds asyncpg + pgvector
+python -m app.seed           # optional demo data
+uvicorn app.main:app --reload
+pytest                       # tests (SQLite, no external deps)
+```
+
+Tables are auto-created on startup (`create_all`) for the scaffold; production
+uses Alembic migrations instead. `app/domain/registry.py` imports every
+domain's models so `create_all` never misses a table — **update it when you add
+a domain.**
+
+---
+
+## 5. Adding a new domain
+
+1. `mkdir app/domain/<name>/` and add `__init__.py`, `models.py`, `schemas.py`,
+   `service.py`, `router.py` (follow §3).
+2. Compose the mixins on every model; give it a `tenant_id`.
+3. Import the new `models` module in `app/domain/registry.py`.
+4. `include_router(...)` your router in `app/api/routes.py`.
+5. If agents will modify your entity, they emit `ProposedChange`s with
+   `entity_type="<name>"` and go through `verify_and_commit` — never a direct
+   write.
+6. Add a test.
+
+---
+
+## 6. Adding a new agent
+
+1. Subclass `app.agents.base.Agent` in `app/agents/<name>.py`.
+2. Implement `run(payload) -> AgentResult`. **No DB writes.** Emit
+   `ProposedChange`s and/or `review_items`.
+3. Override `postconditions()` with deterministic checks any write must pass
+   (format, deliverability, allowed provenance, …).
+4. Persist only via `agent.commit(session, result)` — it records receipts.
