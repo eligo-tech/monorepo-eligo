@@ -2,6 +2,7 @@
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
   CandidateDTO,
+  CVExtractionResultDTO,
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
@@ -45,6 +46,24 @@ export const api = {
     }),
   /** Funnel + dwell + KPIs, derived live from the record. */
   reportingOverview: () => request<ReportingOverviewDTO>('/reporting/overview'),
+
+  /**
+   * Upload a PDF CV for extraction. `persist=false` previews only (writes
+   * nothing); `persist=true` creates a candidate from the accepted fields.
+   */
+  async extractCv(file: File, persist = false): Promise<CVExtractionResultDTO> {
+    const body = new FormData()
+    body.append('file', file)
+    const res = await fetch(`${BASE}/documents/extract-cv?persist=${persist}`, {
+      method: 'POST',
+      body, // let the browser set the multipart boundary
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new ApiError(res.status, detail || res.statusText)
+    }
+    return res.json() as Promise<CVExtractionResultDTO>
+  },
 }
 
 export { ApiError }

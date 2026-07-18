@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Search, SlidersHorizontal, ChevronDown, ArrowDownUp } from 'lucide-react'
 import { Breadcrumb } from '@/components/Breadcrumb'
+import { CvUploadModal } from './CvUploadModal'
 import { Avatar } from '@/components/ui/Avatar'
 import { SkillBadge, CountChip } from '@/components/ui/SkillBadge'
 import { VerificationScore } from '@/components/ui/VerificationScore'
@@ -32,7 +34,12 @@ function Toolbar() {
 const columns = ['Name', 'E-Mail', 'Telefon', 'Erfahrung', 'Skills', 'Verifizierung']
 
 export function CandidatesView() {
-  const { data, loading } = useAsync(() => api.candidates(), [])
+  // Deep-link: /?upload=1 opens the CV import dialog straight away.
+  const [uploadOpen, setUploadOpen] = useState(
+    () => new URLSearchParams(window.location.search).get('upload') === '1',
+  )
+  const [refreshKey, setRefreshKey] = useState(0)
+  const { data, loading } = useAsync(() => api.candidates(), [refreshKey])
   const source = loading ? 'loading' : data ? 'live' : 'demo'
   const rows = data ? data.map(toCandidate) : mockCandidates
 
@@ -54,7 +61,10 @@ export function CandidatesView() {
           <button className="rounded-xl border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-slate-50">
             Import/Export
           </button>
-          <button className="rounded-xl bg-ink px-4 py-2 text-[14px] font-semibold text-white hover:bg-ink-soft">
+          <button
+            onClick={() => setUploadOpen(true)}
+            className="rounded-xl bg-ink px-4 py-2 text-[14px] font-semibold text-white hover:bg-ink-soft"
+          >
             + Kandidat
           </button>
         </div>
@@ -116,6 +126,13 @@ export function CandidatesView() {
           </div>
         ))}
       </div>
+
+      {uploadOpen && (
+        <CvUploadModal
+          onClose={() => setUploadOpen(false)}
+          onCreated={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
     </div>
   )
 }

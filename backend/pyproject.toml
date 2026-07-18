@@ -20,6 +20,7 @@ dependencies = [
     "aiosqlite>=0.20",          # SQLite async driver — zero-external-dependency default
     "greenlet>=3.0",           # required by SQLAlchemy async
     "python-multipart>=0.0.9",  # form/file uploads (document extraction endpoints)
+    "pypdf>=4.2",              # PDF text extraction (CV upload)
 ]
 
 [project.optional-dependencies]
