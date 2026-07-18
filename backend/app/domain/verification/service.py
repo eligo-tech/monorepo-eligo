@@ -14,6 +14,7 @@ real in code, not just documentation.
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import uuid
@@ -135,6 +136,11 @@ async def append_receipt(
         payload=payload,
         prev_hash=prev_hash,
         receipt_hash=receipt_hash,
+        # The ledger is ordered by created_at; DB `func.now()` is only
+        # second-precision on SQLite, so multiple receipts in the same second
+        # would sort by the random UUID id and desync the chain. Stamp a
+        # microsecond-precision UTC time so sequential appends order by insertion.
+        created_at=dt.datetime.now(dt.UTC),
     )
     session.add(receipt)
     await session.flush()

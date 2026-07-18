@@ -12,4 +12,5 @@ from app.domain.companies import models as company_models  # noqa: F401
 from app.domain.jobs import models as job_models  # noqa: F401
 from app.domain.matching import models as matching_models  # noqa: F401
 from app.domain.pipeline import models as pipeline_models  # noqa: F401
+from app.domain.tenants import models as tenant_models  # noqa: F401
 from app.domain.verification import models as verification_models  # noqa: F401

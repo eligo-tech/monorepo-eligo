@@ -7,9 +7,59 @@ and the display order all derive from it — add a field in one place.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from app.agents.document_extraction import ExtractedField
+
+
+@dataclass
+class WorkRole:
+    """One position on the CV — the unit the dossier timeline renders."""
+
+    title: str = ""
+    company: str = ""
+    location: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    highlights: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        return {
+            "title": self.title,
+            "company": self.company,
+            "location": self.location,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "highlights": self.highlights,
+        }
+
+
+@dataclass
+class EducationEntry:
+    degree: str = ""
+    institution: str = ""
+    location: str = ""
+    start_date: str = ""
+    end_date: str = ""
+
+    def as_dict(self) -> dict:
+        return {
+            "degree": self.degree,
+            "institution": self.institution,
+            "location": self.location,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+        }
+
+
+@dataclass
+class CVSections:
+    """Structured, per-entry history — richer than the flat aiFind fields.
+    Empty lists mean the extractor could not (or does not) produce them."""
+
+    work_history: list[WorkRole] = field(default_factory=list)
+    education: list[EducationEntry] = field(default_factory=list)
 
 # Canonical field name → German label, in display order (mirrors aiFind's
 # "New Candidate" form: personal info → contact → career → history).
@@ -71,3 +121,9 @@ class CVExtractor(Protocol):
     name: str
 
     def extract(self, text: str) -> list[ExtractedField]: ...
+
+    # Optional: structured per-entry history (roles + education with dates and
+    # highlights). Extractors that can't produce it simply omit this method —
+    # the orchestrator falls back to the flat fields. Kept separate from
+    # `extract` so the flat confidence-gating contract stays unchanged.
+    def extract_sections(self, text: str) -> CVSections: ...

@@ -1,6 +1,5 @@
 import { CalendarDays, SlidersHorizontal, Table2, ChevronDown, Plus } from 'lucide-react'
 import { Breadcrumb } from '@/components/Breadcrumb'
-import { DataSourceBadge } from '@/components/ui/DataSourceBadge'
 import { PieChart } from './PieChart'
 import {
   funnel as mockFunnel,
@@ -122,8 +121,7 @@ function FeeCard() {
 }
 
 export function ReportingView() {
-  const { data, loading } = useAsync(() => api.reportingOverview(), [])
-  const source = loading ? 'loading' : data ? 'live' : 'demo'
+  const { data } = useAsync(() => api.reportingOverview(), [])
   const funnelData = data ? toFunnel(data.funnel) : mockFunnel
   const dwellData = data ? toDwell(data.dwell) : mockDwell
 
@@ -133,7 +131,6 @@ export function ReportingView() {
       <div className="flex items-center justify-between px-8 pt-6">
         <div className="flex items-center gap-3">
           <Breadcrumb items={['Start', 'Berichte', 'Verweildauer & Funnel-Analyse']} />
-          <DataSourceBadge state={source} />
         </div>
         <div className="flex items-center gap-2.5">
           <button className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-[14px] font-medium text-ink-soft hover:bg-slate-50">

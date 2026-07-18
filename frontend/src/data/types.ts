@@ -16,6 +16,56 @@ export interface Experience {
   location: string
 }
 
+/** One role on the CV timeline: header + achievement highlights. */
+export interface RoleEntry {
+  title: string
+  company: string
+  location?: string
+  period?: string
+  highlights: string[]
+}
+
+export interface EducationEntry {
+  degree: string
+  institution?: string
+  location?: string
+  period?: string
+}
+
+/** Extended profile (aiFind field set) shown in the full candidate dossier. */
+export interface CandidateProfile {
+  firstName?: string
+  lastName?: string
+  sex?: string
+  namePrefix?: string
+  dateOfBirth?: string
+  street?: string
+  postalCode?: string
+  city?: string
+  country?: string
+  linkedinUrl?: string
+  xingUrl?: string
+  industry?: string
+  employmentType?: string
+  willingToRelocate?: string
+  noticePeriod?: string
+  availability?: string
+  totalYearsExperience?: string
+  currentSalary?: number | null
+  salaryExpectation?: number | null
+  salaryCurrency?: string
+  availabilityWeeks?: number | null
+  workPermit?: string
+  languages: string[]
+  /** structured CV history (dates + highlights) */
+  roles: RoleEntry[]
+  education: EducationEntry[]
+  motivation?: string
+  source?: string
+  /** all skills (the table only shows the first two) */
+  allSkills: string[]
+}
+
 export interface Candidate {
   id: string
   name: string
@@ -25,6 +75,8 @@ export interface Candidate {
   email: string
   phone: string
   linkedin?: boolean
+  /** real LinkedIn profile URL, when known */
+  linkedinUrl?: string
   currentTitle: string
   currentCompany: string
   tenure: string
@@ -38,6 +90,8 @@ export interface Candidate {
   aiSummary: string
   stats: { avgTenure: string; current: string; total: string }
   experience: Experience[]
+  /** extended fields for the full dossier view (live candidates only) */
+  profile?: CandidateProfile
 }
 
 export type MatchStrength = 'very-strong' | 'strong' | 'moderate' | 'weak'

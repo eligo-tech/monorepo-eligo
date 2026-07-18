@@ -10,7 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -63,6 +63,26 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(
         default=None, validation_alias="OPENAI_API_KEY"
     )
+
+    # --- Auth (Clerk) ----------------------------------------------------
+    # When false, requests run as the default tenant (no login) — the scaffold
+    # default so tests/demo work with no auth provider. Set true in production.
+    auth_enabled: bool = False
+    clerk_secret_key: str | None = Field(
+        default=None, validation_alias="CLERK_SECRET_KEY"
+    )
+    # The publishable key is public (client-side). Read either name.
+    clerk_publishable_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ELIGO_CLERK_PUBLISHABLE_KEY",
+            "VITE_CLERK_PUBLISHABLE_KEY",
+            "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+        ),
+    )
+    # JWKS URL + issuer are derived from the publishable key when unset.
+    clerk_jwks_url: str | None = None
+    clerk_issuer: str | None = None
 
     # --- CORS ------------------------------------------------------------
     cors_origins: list[str] = Field(

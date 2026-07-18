@@ -3,8 +3,11 @@
 // mock fixtures to the live API.
 import type {
   Candidate,
+  CandidateProfile,
   DwellStage,
+  EducationEntry,
   FunnelStage,
+  RoleEntry,
   MatchReason,
   MatchStrength,
   PipelineCard,
@@ -15,10 +18,12 @@ import type {
 import type {
   CandidateDTO,
   DwellStageDTO,
+  EducationDTO,
   FunnelStageDTO,
   MatchReasonDTO,
   MatchResultDTO,
   PipelineBoardDTO,
+  WorkRoleDTO,
 } from './types'
 
 const AVATAR_TONES = [
@@ -70,6 +75,47 @@ function tenureYears(dto: CandidateDTO): number {
   return dto.work_history.reduce((n, w) => n + (w.years || 0), 0)
 }
 
+/** Join a role's date span into a display period, e.g. "Mar 2024 – Present". */
+function period(start?: string, end?: string): string | undefined {
+  const s = start?.trim()
+  const e = end?.trim()
+  if (s && e) return `${s} – ${e}`
+  return s || e || undefined
+}
+
+/** Backend work_history → structured timeline roles. Tolerates the legacy
+ *  `{ company, years }` shape (renders it as a bare company + tenure). */
+function toRoles(history: WorkRoleDTO[]): RoleEntry[] {
+  return history
+    .map((w) => ({
+      title: (w.title ?? '').trim(),
+      company: (w.company ?? '').trim(),
+      location: w.location?.trim() || undefined,
+      period: period(w.start_date, w.end_date) ?? (w.years ? `${w.years} J` : undefined),
+      highlights: (w.highlights ?? []).map((h) => h.trim()).filter(Boolean),
+    }))
+    .filter((r) => r.title || r.company)
+}
+
+function toEducation(entries: CandidateDTO['education']): EducationEntry[] {
+  if (!entries?.length) return []
+  // Legacy rows stored education as plain strings.
+  if (typeof entries[0] === 'string') {
+    return (entries as string[])
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((degree) => ({ degree }) as EducationEntry)
+  }
+  return (entries as EducationDTO[])
+    .map((e) => ({
+      degree: (e.degree ?? '').trim(),
+      institution: e.institution?.trim() || undefined,
+      location: e.location?.trim() || undefined,
+      period: period(e.start_date, e.end_date),
+    }))
+    .filter((e) => e.degree || e.institution)
+}
+
 const fmtYears = (y: number) => (y > 0 ? `${y} J` : '—')
 
 const strengthMap: Record<MatchReasonDTO['strength'], MatchStrength> = {
@@ -83,6 +129,7 @@ export function toCandidate(dto: CandidateDTO): Candidate {
   const total = tenureYears(dto)
   const current = dto.work_history[0]?.years ?? 0
   const avg = dto.work_history.length ? Math.round(total / dto.work_history.length) : 0
+  const linkedinUrl = normalizeUrl(dto.linkedin_url)
   return {
     id: dto.id,
     name: dto.full_name,
@@ -90,7 +137,8 @@ export function toCandidate(dto: CandidateDTO): Candidate {
     avatar: avatarTone(dto.id),
     email: dto.email,
     phone: dto.phone ?? '—',
-    linkedin: true,
+    linkedin: Boolean(linkedinUrl),
+    linkedinUrl,
     currentTitle: dto.current_title ?? '—',
     currentCompany: dto.current_company ?? '—',
     tenure: current ? `${current} J` : '—',
@@ -101,12 +149,54 @@ export function toCandidate(dto: CandidateDTO): Candidate {
     verification: Math.round(dto.verification_score * 100),
     aiSummary: synthSummary(dto),
     stats: { avgTenure: fmtYears(avg), current: fmtYears(current), total: fmtYears(total) },
-    experience: dto.work_history.map((w, i) => ({
-      company: w.company,
-      title: i === 0 ? (dto.current_title ?? 'Rolle') : 'Frühere Rolle',
-      period: `${w.years} Jahr(e)`,
-      location: dto.location ?? '—',
+    experience: toRoles(dto.work_history).map((r) => ({
+      company: r.company || '—',
+      title: r.title || (dto.current_title ?? 'Rolle'),
+      period: r.period ?? '',
+      location: r.location ?? dto.location ?? '—',
     })),
+    profile: toProfile(dto),
+  }
+}
+
+/** Ensure a stored URL is absolute so the anchor navigates off-app. */
+function normalizeUrl(raw: string | null | undefined): string | undefined {
+  const v = raw?.trim()
+  if (!v) return undefined
+  return /^https?:\/\//i.test(v) ? v : `https://${v}`
+}
+
+/** Backend candidate → the extended dossier profile (all fields optional). */
+function toProfile(dto: CandidateDTO): CandidateProfile {
+  return {
+    firstName: dto.first_name ?? undefined,
+    lastName: dto.last_name ?? undefined,
+    sex: dto.sex ?? undefined,
+    namePrefix: dto.name_prefix ?? undefined,
+    dateOfBirth: dto.date_of_birth ?? undefined,
+    street: dto.street ?? undefined,
+    postalCode: dto.postal_code ?? undefined,
+    city: dto.city ?? undefined,
+    country: dto.country ?? undefined,
+    linkedinUrl: normalizeUrl(dto.linkedin_url),
+    xingUrl: normalizeUrl(dto.xing_url),
+    industry: dto.industry ?? undefined,
+    employmentType: dto.employment_type ?? undefined,
+    willingToRelocate: dto.willing_to_relocate ?? undefined,
+    noticePeriod: dto.notice_period ?? undefined,
+    availability: dto.availability ?? undefined,
+    totalYearsExperience: dto.total_years_experience ?? undefined,
+    currentSalary: dto.current_salary ?? undefined,
+    salaryExpectation: dto.salary_expectation ?? undefined,
+    salaryCurrency: dto.salary_currency,
+    availabilityWeeks: dto.availability_weeks ?? undefined,
+    workPermit: dto.work_permit,
+    languages: dto.languages ?? [],
+    roles: toRoles(dto.work_history),
+    education: toEducation(dto.education),
+    motivation: dto.motivation ?? undefined,
+    source: dto.source ?? undefined,
+    allSkills: dto.skills,
   }
 }
 
@@ -116,8 +206,10 @@ function synthSummary(dto: CandidateDTO): string {
   const role = dto.current_title ?? 'Fachkraft'
   const company = dto.current_company ? ` bei ${dto.current_company}` : ''
   const yrs = tenureYears(dto)
+  const exp = yrs > 0 ? ` mit ${yrs} Jahr(en) Erfahrung` : ''
   const skills = dto.skills.slice(0, 4).map(cap).join(', ')
-  return `${role}${company}${dto.location ? ` in ${dto.location}` : ''} mit ${yrs} Jahr(en) Erfahrung. Schwerpunkte: ${skills || '—'}.`
+  const focus = skills ? ` Schwerpunkte: ${skills}.` : ''
+  return `${role}${company}${dto.location ? ` in ${dto.location}` : ''}${exp}.${focus}`
 }
 
 export function toMatchReasons(reasons: MatchReasonDTO[]): MatchReason[] {

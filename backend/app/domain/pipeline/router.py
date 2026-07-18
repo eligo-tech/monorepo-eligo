@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.auth import get_current_tenant
 from app.core.database import get_db
 from app.domain.pipeline import service
 from app.domain.pipeline.schemas import (
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 @router.get("/applications", response_model=list[ApplicationRead])
 async def list_applications(
-    tenant_id: uuid.UUID = Query(default=settings.default_tenant_id),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> list[ApplicationRead]:
     rows = await service.list_applications(db, tenant_id=tenant_id)
@@ -39,8 +40,10 @@ async def list_applications(
 )
 async def create_application(
     payload: ApplicationCreate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ApplicationRead:
+    payload.tenant_id = tenant_id  # force the authenticated tenant
     row = await service.create_application(db, data=payload)
     return ApplicationRead.model_validate(row)
 
@@ -49,7 +52,7 @@ async def create_application(
 async def transition_status(
     application_id: uuid.UUID,
     payload: StatusTransition,
-    tenant_id: uuid.UUID = Query(default=settings.default_tenant_id),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ApplicationRead:
     app = await service.get_application(
@@ -70,7 +73,7 @@ async def transition_status(
 async def move_stage(
     application_id: uuid.UUID,
     payload: StageMove,
-    tenant_id: uuid.UUID = Query(default=settings.default_tenant_id),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ApplicationRead:
     app = await service.get_application(
@@ -86,7 +89,7 @@ async def move_stage(
 
 @router.get("/board", response_model=PipelineBoard)
 async def board(
-    tenant_id: uuid.UUID = Query(default=settings.default_tenant_id),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> PipelineBoard:
     grouped = await service.board(db, tenant_id=tenant_id)
