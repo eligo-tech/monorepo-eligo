@@ -21,6 +21,9 @@ dependencies = [
     "greenlet>=3.0",           # required by SQLAlchemy async
     "python-multipart>=0.0.9",  # form/file uploads (document extraction endpoints)
     "pypdf>=4.2",              # PDF text extraction (CV upload)
+    # Pre/postcondition process-contract harness — checks are pure predicates
+    # over real state (the system-of-record), never over model output.
+    "laufwise @ git+https://github.com/dfadeeff/laufwise.git",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +31,11 @@ dependencies = [
 postgres = [
     "asyncpg>=0.29",
     "pgvector>=0.3",
+]
+# LLM-backed extraction. The heuristic parser is the zero-dependency fallback;
+# install this profile to enable the OpenAI-backed CV extractor.
+llm = [
+    "openai>=1.40",
 ]
 dev = [
     "pytest>=8.2",

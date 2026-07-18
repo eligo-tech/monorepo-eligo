@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.domain.documents import service
+from app.domain.documents.gate import PreconditionFailed
 from app.domain.documents.schemas import CVExtractionResult
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -42,10 +43,14 @@ async def extract_cv(
     if len(content) > _MAX_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file too large (max 10 MB)")
 
-    return await service.extract_cv(
-        db,
-        filename=file.filename or "cv.pdf",
-        content=content,
-        tenant_id=tenant_id,
-        persist=persist,
-    )
+    try:
+        return await service.extract_cv(
+            db,
+            filename=file.filename or "cv.pdf",
+            content=content,
+            tenant_id=tenant_id,
+            persist=persist,
+        )
+    except PreconditionFailed as exc:
+        # A blocking pre/postcondition did not hold — reject rather than write.
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc

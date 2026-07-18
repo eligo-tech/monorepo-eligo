@@ -22,6 +22,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,  # allow constructing by field name, not only env alias
     )
 
     # --- App -------------------------------------------------------------
@@ -50,6 +51,18 @@ class Settings(BaseSettings):
     # In production, pin the Supabase CA via ELIGO_DB_SSL_ROOT_CERT instead.
     db_ssl_verify: bool = True
     db_ssl_root_cert: str | None = None
+
+    # --- LLM extraction --------------------------------------------------
+    # Vendor-neutral: the factory selects an extractor by provider. "openai"
+    # uses the OpenAI-backed extractor; "heuristic" forces the offline parser.
+    # Any provider falls back to the heuristic parser if unavailable.
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4o-mini"
+    # Read the standard OPENAI_API_KEY (unprefixed) so the SDK's own default and
+    # our config agree. Never logged. Absent → the factory falls back to heuristic.
+    openai_api_key: str | None = Field(
+        default=None, validation_alias="OPENAI_API_KEY"
+    )
 
     # --- CORS ------------------------------------------------------------
     cors_origins: list[str] = Field(
