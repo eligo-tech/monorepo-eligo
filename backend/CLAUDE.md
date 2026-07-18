@@ -63,6 +63,22 @@ These are enforced in code. Do not route around them.
 - Outreach/presentations → **nothing is sent without explicit human approval**;
   the outreach agent only ever produces drafts.
 
+### 2.5 LLM proposes, checks decide (CV extraction)
+- **Extraction is vendor-neutral.** `domain/documents/extraction/` is a factory
+  over a `CVExtractor` protocol (`text → ExtractedField[]`). `settings.llm_provider`
+  selects the impl (`openai` today); **any provider falls back to the heuristic
+  parser** when unavailable, so the feature runs offline and in CI. Add a provider
+  = new module + one line in `factory.py`.
+- **The LLM never decides — it proposes.** Every extracted value is gated by the
+  confidence threshold *and* the **laufwise** pre/postcondition gate
+  (`domain/documents/gate.py`), whose checks are **pure predicates over real
+  state** (the [laufwise](https://github.com/dfadeeff/laufwise) invariant), never
+  over model text: precondition (document has text) → extract → postcondition
+  (e-mail syntactically valid; ≥1 field accepted) → persist → **re-query the DB
+  and prove the row landed** (`candidate.exists == true`). A blocking precondition
+  raises `PreconditionFailed` → HTTP 422; failed postconditions route to review.
+  The gate's verdicts are surfaced in the result `notes` as the verification trace.
+
 ---
 
 ## 3. Per-domain file convention

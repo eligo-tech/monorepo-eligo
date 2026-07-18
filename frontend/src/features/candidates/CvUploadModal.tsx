@@ -179,6 +179,32 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
                 Felder unter der Konfidenzschwelle werden markiert und nicht automatisch
                 übernommen — sie gehen in die manuelle Prüfung.
               </p>
+
+              {/* laufwise verification trace — every check is a predicate over
+                  real state (the extracted result / the DB), not model text. */}
+              {result.notes.length > 0 && (
+                <details className="mt-4 rounded-2xl border border-line">
+                  <summary className="cursor-pointer px-4 py-2.5 text-[13px] font-semibold text-ink">
+                    Prüf-Protokoll{' '}
+                    <span className="font-normal text-ink-muted">
+                      (laufwise · {result.notes.length})
+                    </span>
+                  </summary>
+                  <div className="space-y-1 border-t border-line px-4 py-3 font-mono text-[12px] leading-relaxed">
+                    {result.notes.map((n, i) => (
+                      <div
+                        key={i}
+                        className={cn(
+                          'flex gap-1.5',
+                          n.startsWith('✗') ? 'text-rose-500' : 'text-ink-soft',
+                        )}
+                      >
+                        {n}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           )}
         </div>
