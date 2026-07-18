@@ -108,3 +108,20 @@ export interface ReportingOverviewDTO {
   dwell: DwellStageDTO[]
   summary: ReportingSummaryDTO
 }
+
+export interface CVFieldDTO {
+  field: string
+  label: string
+  value: string
+  confidence: number // 0..1
+  needs_review: boolean
+}
+
+export interface CVExtractionResultDTO {
+  document_name: string
+  fields: CVFieldDTO[]
+  review_items: string[]
+  notes: string[]
+  candidate_id: string | null
+  text_chars: number
+}
