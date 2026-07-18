@@ -2,7 +2,16 @@ import { CalendarDays, SlidersHorizontal, Table2, ChevronDown, Plus } from 'luci
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { DataSourceBadge } from '@/components/ui/DataSourceBadge'
 import { PieChart } from './PieChart'
-import { funnel, dwell, createdJobs, feeShare } from '@/data/reporting'
+import {
+  funnel as mockFunnel,
+  dwell as mockDwell,
+  createdJobs,
+  feeShare,
+} from '@/data/reporting'
+import type { DwellStage, FunnelStage } from '@/data/types'
+import { api } from '@/api/client'
+import { toFunnel, toDwell } from '@/api/adapters'
+import { useAsync } from '@/hooks/useAsync'
 
 function Card({
   title,
@@ -21,12 +30,12 @@ function Card({
   )
 }
 
-function FunnelCard() {
-  const max = Math.max(...funnel.map((f) => f.value))
+function FunnelCard({ data }: { data: FunnelStage[] }) {
+  const max = Math.max(...data.map((f) => f.value), 1)
   return (
     <Card title="Funnel">
       <div className="space-y-3">
-        {funnel.map((f) => (
+        {data.map((f) => (
           <div key={f.label} className="flex items-center gap-4">
             <div className="w-28 text-[15px] text-ink-soft">{f.label}</div>
             <div className="h-6 flex-1 overflow-hidden rounded-md bg-slate-100">
@@ -43,12 +52,12 @@ function FunnelCard() {
   )
 }
 
-function DwellCard() {
+function DwellCard({ data }: { data: DwellStage[] }) {
   return (
     <Card title="Verweildauer je Stufe">
       {/* Fixed-height plot area so percentage bar heights resolve. */}
       <div className="flex h-44 items-end justify-between gap-3">
-        {dwell.map((d) => (
+        {data.map((d) => (
           <div key={d.label} className="flex h-full flex-1 flex-col items-center justify-end">
             <div className="mb-2 text-[12px] font-semibold text-brand-700">{d.caption}</div>
             <div
@@ -59,7 +68,7 @@ function DwellCard() {
         ))}
       </div>
       <div className="mt-2 flex justify-between gap-3">
-        {dwell.map((d) => (
+        {data.map((d) => (
           <div key={d.label} className="flex-1 text-center text-[12px] leading-tight text-ink-muted">
             {d.label}
           </div>
@@ -113,13 +122,18 @@ function FeeCard() {
 }
 
 export function ReportingView() {
+  const { data, loading } = useAsync(() => api.reportingOverview(), [])
+  const source = loading ? 'loading' : data ? 'live' : 'demo'
+  const funnelData = data ? toFunnel(data.funnel) : mockFunnel
+  const dwellData = data ? toDwell(data.dwell) : mockDwell
+
   return (
     <div className="flex h-full flex-col overflow-hidden pt-[76px]">
       {/* Header */}
       <div className="flex items-center justify-between px-8 pt-6">
         <div className="flex items-center gap-3">
           <Breadcrumb items={['Start', 'Berichte', 'Verweildauer & Funnel-Analyse']} />
-          <DataSourceBadge state="demo" />
+          <DataSourceBadge state={source} />
         </div>
         <div className="flex items-center gap-2.5">
           <button className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-[14px] font-medium text-ink-soft hover:bg-slate-50">
@@ -149,8 +163,8 @@ export function ReportingView() {
       {/* Charts grid */}
       <div className="flex-1 overflow-y-auto px-8 pb-8 pt-5">
         <div className="grid grid-cols-2 gap-5">
-          <FunnelCard />
-          <DwellCard />
+          <FunnelCard data={funnelData} />
+          <DwellCard data={dwellData} />
           <CreatedJobsCard />
           <FeeCard />
         </div>

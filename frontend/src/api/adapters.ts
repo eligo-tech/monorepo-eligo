@@ -3,6 +3,8 @@
 // mock fixtures to the live API.
 import type {
   Candidate,
+  DwellStage,
+  FunnelStage,
   MatchReason,
   MatchStrength,
   PipelineCard,
@@ -12,6 +14,8 @@ import type {
 } from '@/data/types'
 import type {
   CandidateDTO,
+  DwellStageDTO,
+  FunnelStageDTO,
   MatchReasonDTO,
   MatchResultDTO,
   PipelineBoardDTO,
@@ -128,6 +132,21 @@ export function toMatchReasons(reasons: MatchReasonDTO[]): MatchReason[] {
 export function overallStrength(result: MatchResultDTO): MatchStrength {
   if (!result.passed_hard_filters) return 'weak'
   return strengthMap[result.strength]
+}
+
+/** Reporting funnel DTO → chart model ({label, value}). */
+export function toFunnel(stages: FunnelStageDTO[]): FunnelStage[] {
+  return stages.map((s) => ({ label: s.label, value: s.count }))
+}
+
+/** Reporting dwell DTO → bar model, normalising avg_days to a 0-1 bar height. */
+export function toDwell(stages: DwellStageDTO[]): DwellStage[] {
+  const max = Math.max(1, ...stages.map((s) => s.avg_days))
+  return stages.map((s) => ({
+    label: s.label,
+    height: s.avg_days / max,
+    caption: s.avg_days > 0 ? `${s.avg_days}T` : '—',
+  }))
 }
 
 /** Pipeline board DTO → Kanban columns, joining candidate details by id. */

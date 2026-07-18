@@ -81,3 +81,30 @@ export interface MatchResultDTO {
   reasons: MatchReasonDTO[]
   ranker: string
 }
+
+export interface FunnelStageDTO {
+  key: string
+  label: string
+  count: number
+}
+
+export interface DwellStageDTO {
+  key: string
+  label: string
+  avg_days: number
+  count: number
+}
+
+export interface ReportingSummaryDTO {
+  total_candidates: number
+  open_jobs: number
+  total_applications: number
+  placements: number
+  avg_verification: number
+}
+
+export interface ReportingOverviewDTO {
+  funnel: FunnelStageDTO[]
+  dwell: DwellStageDTO[]
+  summary: ReportingSummaryDTO
+}

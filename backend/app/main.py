@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     configure_logging()
     if settings.auto_create_tables:
         await create_all()
-        logger.info("tables ensured (%s)", settings.database_url)
+        logger.info("tables ensured (%s)", settings.safe_database_url)
     logger.info("%s started in %s mode", settings.app_name, settings.env)
     yield
 

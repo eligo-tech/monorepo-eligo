@@ -8,6 +8,7 @@ code change.
 
 from __future__ import annotations
 
+import ssl
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -25,16 +26,44 @@ class Base(AsyncAttrs, DeclarativeBase):
     """Declarative base for every ORM model in the platform."""
 
 
-# SQLite needs ``check_same_thread=False`` when used with an async pool.
-_connect_args: dict[str, object] = (
-    {"check_same_thread": False} if settings.is_sqlite else {}
-)
+def _connect_args() -> dict[str, object]:
+    """Driver-specific connection args.
+
+    * SQLite: allow cross-thread use with the async pool.
+    * asyncpg (Supabase / managed Postgres): enable TLS when ``ELIGO_DB_SSL`` is
+      set. If connecting through Supabase's transaction pooler (port 6543),
+      prepared-statement caching must also be disabled — handled here.
+    """
+    if settings.is_sqlite:
+        return {"check_same_thread": False}
+    args: dict[str, object] = {}
+    if settings.is_postgres:
+        if settings.db_ssl:
+            args["ssl"] = _ssl_context()
+        # pgbouncer transaction pooler is incompatible with prepared statements.
+        if ":6543" in settings.database_url:
+            args["statement_cache_size"] = 0
+    return args
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """TLS context for asyncpg. Pins the Supabase CA when provided; otherwise
+    falls back to an unverified context for dev (``ELIGO_DB_SSL_VERIFY=false``)."""
+    if settings.db_ssl_root_cert:
+        return ssl.create_default_context(cafile=settings.db_ssl_root_cert)
+    ctx = ssl.create_default_context()
+    if not settings.db_ssl_verify:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
 
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug and not settings.is_sqlite,
+    echo=settings.db_echo,
     future=True,
-    connect_args=_connect_args,
+    pool_pre_ping=settings.is_postgres,  # recycle dropped pooled connections
+    connect_args=_connect_args(),
 )
 
 SessionLocal = async_sessionmaker(

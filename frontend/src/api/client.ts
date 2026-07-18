@@ -5,6 +5,7 @@ import type {
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
+  ReportingOverviewDTO,
 } from './types'
 
 const BASE = '/api/v1'
@@ -42,6 +43,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ job_id: jobId, include_rejected: includeRejected }),
     }),
+  /** Funnel + dwell + KPIs, derived live from the record. */
+  reportingOverview: () => request<ReportingOverviewDTO>('/reporting/overview'),
 }
 
 export { ApiError }

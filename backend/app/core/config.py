@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     # in production this is replaced by Alembic migrations.
     auto_create_tables: bool = True
 
+    # Echo SQL to logs. Off by default — set ELIGO_DB_ECHO=true to debug queries.
+    db_echo: bool = False
+
+    # Require TLS for the DB connection. Managed Postgres (e.g. Supabase) needs
+    # this; ignored for SQLite. Set ELIGO_DB_SSL=true when using Supabase.
+    db_ssl: bool = False
+    # Verify the server certificate. Supabase's pooler presents a chain that
+    # isn't in the default trust store, so dev connections set this false.
+    # In production, pin the Supabase CA via ELIGO_DB_SSL_ROOT_CERT instead.
+    db_ssl_verify: bool = True
+    db_ssl_root_cert: str | None = None
+
     # --- CORS ------------------------------------------------------------
     cors_origins: list[str] = Field(
         default_factory=lambda: [
@@ -66,6 +78,17 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
+
+    @property
+    def is_postgres(self) -> bool:
+        return "postgresql" in self.database_url or "postgres" in self.database_url
+
+    @property
+    def safe_database_url(self) -> str:
+        """Database URL with any credentials masked — safe to log."""
+        import re
+
+        return re.sub(r"://([^:/@]+):[^@]+@", r"://\1:***@", self.database_url)
 
 
 @lru_cache
