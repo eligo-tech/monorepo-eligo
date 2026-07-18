@@ -28,23 +28,18 @@ from app.domain.candidates import service as candidates_service
 from app.domain.candidates.schemas import CandidateCreate
 from app.domain.documents import gate, parser
 from app.domain.documents.extraction import get_cv_extractor
+from app.domain.documents.extraction.base import FIELD_LABELS, FIELD_ORDER
 from app.domain.documents.gate import GateOutcome, PreconditionFailed
 from app.domain.documents.schemas import CVExtractionResult, CVField
 
 logger = get_logger(__name__)
 
-# Display labels for the extracted fields (product-facing).
-FIELD_LABELS: dict[str, str] = {
-    "full_name": "Name",
-    "email": "E-Mail",
-    "phone": "Telefon",
-    "current_title": "Job Title",
-    "current_company": "Aktuelles Unternehmen",
-    "location": "Standort",
-    "skills": "Skills",
-}
+_IDENTIFYING = ("full_name", "email", "first_name", "last_name")
 
-_IDENTIFYING = ("full_name", "email")
+
+def _order_key(field: str) -> int:
+    """Stable aiFind-style display order; unknown fields sort last."""
+    return FIELD_ORDER.index(field) if field in FIELD_ORDER else len(FIELD_ORDER)
 
 
 def _accepted(fields: list[ExtractedField]) -> dict[str, str]:
@@ -56,13 +51,25 @@ def _extracted_email(fields: list[ExtractedField]) -> str | None:
     return next((f.value for f in fields if f.field == "email"), None)
 
 
+def _full_name(acc: dict[str, str]) -> str | None:
+    """Prefer an explicit full_name; else compose from first/last."""
+    if acc.get("full_name"):
+        return acc["full_name"]
+    parts = [acc.get("first_name"), acc.get("last_name")]
+    composed = " ".join(p for p in parts if p)
+    return composed or None
+
+
 def _build_candidate(tenant_id: uuid.UUID, fields: list[ExtractedField]) -> CandidateCreate:
-    """Assemble a CandidateCreate from the accepted (high-confidence) fields."""
+    """Assemble a CandidateCreate from the accepted (high-confidence) fields.
+
+    Only the columns the canonical Candidate row supports are persisted today;
+    the rest of the aiFind field set is extracted and surfaced for review."""
     acc = _accepted(fields)
-    skills = [s.strip() for s in acc.get("skills", "").split(",") if s.strip()]
+    skills = [s.strip() for s in acc.get("skills", "").replace(";", ",").split(",") if s.strip()]
     return CandidateCreate(
         tenant_id=tenant_id,
-        full_name=acc.get("full_name") or "Unbekannt (aus CV)",
+        full_name=_full_name(acc) or "Unbekannt (aus CV)",
         email=acc.get("email"),
         phone=acc.get("phone"),
         current_title=acc.get("current_title"),
@@ -174,7 +181,7 @@ async def extract_cv(
             confidence=round(f.confidence, 2),
             needs_review=f.confidence < HUMAN_REVIEW_THRESHOLD,
         )
-        for f in extracted
+        for f in sorted(extracted, key=lambda f: _order_key(f.field))
     ]
 
     return CVExtractionResult(
