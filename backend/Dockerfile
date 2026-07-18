@@ -11,6 +11,8 @@ RUN apt-get update \
 # Install deps first for better layer caching.
 COPY pyproject.toml README.md ./
 COPY app ./app
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN pip install --no-cache-dir ".[postgres,llm]"
 
 # Managed Postgres (Supabase) needs TLS. Override the rest via platform env vars:
@@ -20,5 +22,5 @@ ENV ELIGO_DB_SSL=true \
     ELIGO_DEBUG=false
 
 EXPOSE 8000
-# Railway/Render inject $PORT; default to 8000 locally.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Apply DB migrations, then start. Railway/Render inject $PORT.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -107,14 +107,21 @@ scaffold; swap to a `pgvector` `Vector` column in the Postgres profile.
 ```bash
 pip install -e ".[dev]"      # ".[postgres]" adds asyncpg + pgvector
 python -m app.seed           # optional demo data
+alembic upgrade head         # apply DB migrations (reads ELIGO_DATABASE_URL)
 uvicorn app.main:app --reload
 pytest                       # tests (SQLite, no external deps)
 ```
 
-Tables are auto-created on startup (`create_all`) for the scaffold; production
-uses Alembic migrations instead. `app/domain/registry.py` imports every
-domain's models so `create_all` never misses a table — **update it when you add
-a domain.**
+**Schema.** Fresh databases are bootstrapped by `create_all` on startup (it reads
+the current model metadata, so new columns are included). Existing databases
+(e.g. Supabase) are evolved with **Alembic migrations** in `migrations/versions/`
+— `create_all` never alters an existing table. Adding/altering a column: change
+the model, then `alembic revision -m "…"` (autogenerate compares against
+`Base.metadata`) and `alembic upgrade head`. Migrations are idempotent w.r.t.
+`create_all` (they skip columns that already exist). The Dockerfile runs
+`alembic upgrade head` before the server on every deploy.
+`app/domain/registry.py` imports every domain's models so both `create_all` and
+Alembic autogenerate see all tables — **update it when you add a domain.**
 
 ---
 

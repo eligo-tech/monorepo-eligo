@@ -60,22 +60,59 @@ def _full_name(acc: dict[str, str]) -> str | None:
     return composed or None
 
 
-def _build_candidate(tenant_id: uuid.UUID, fields: list[ExtractedField]) -> CandidateCreate:
-    """Assemble a CandidateCreate from the accepted (high-confidence) fields.
+def _split_list(value: str | None) -> list[str] | None:
+    if not value:
+        return None
+    items = [s.strip() for s in value.replace(";", ",").split(",") if s.strip()]
+    return items or None
 
-    Only the columns the canonical Candidate row supports are persisted today;
-    the rest of the aiFind field set is extracted and surfaced for review."""
+
+def _to_int(value: str | None) -> int | None:
+    if not value:
+        return None
+    digits = "".join(c for c in value if c.isdigit())
+    return int(digits) if digits else None
+
+
+def _build_candidate(tenant_id: uuid.UUID, fields: list[ExtractedField]) -> CandidateCreate:
+    """Assemble a CandidateCreate from the accepted (high-confidence) fields —
+    now covering the full aiFind field set the Candidate row can store."""
     acc = _accepted(fields)
-    skills = [s.strip() for s in acc.get("skills", "").replace(";", ",").split(",") if s.strip()]
+    g = acc.get
     return CandidateCreate(
         tenant_id=tenant_id,
         full_name=_full_name(acc) or "Unbekannt (aus CV)",
-        email=acc.get("email"),
-        phone=acc.get("phone"),
-        current_title=acc.get("current_title"),
-        current_company=acc.get("current_company"),
-        location=acc.get("location"),
-        skills=skills,
+        email=g("email"),
+        phone=g("phone"),
+        current_title=g("current_title"),
+        current_company=g("current_company"),
+        location=g("location"),
+        skills=_split_list(g("skills")) or [],
+        # Extended profile
+        first_name=g("first_name"),
+        last_name=g("last_name"),
+        sex=g("sex"),
+        name_prefix=g("name_prefix"),
+        date_of_birth=g("date_of_birth"),
+        street=g("street"),
+        postal_code=g("postal_code"),
+        city=g("city"),
+        country=g("country"),
+        linkedin_url=g("linkedin_url"),
+        xing_url=g("xing_url"),
+        industry=g("industry"),
+        employment_type=g("employment_type"),
+        willing_to_relocate=g("willing_to_relocate"),
+        notice_period=g("notice_period"),
+        availability=g("availability"),
+        total_years_experience=g("total_years_experience"),
+        current_salary=_to_int(g("current_salary")),
+        salary_expectation=_to_int(g("expected_salary")),
+        languages=_split_list(g("languages")),
+        education=_split_list(g("education")),
+        working_experience=_split_list(g("working_experience")),
+        motivation=g("motivation"),
+        source=g("source"),
     )
 
 
