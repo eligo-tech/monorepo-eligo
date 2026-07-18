@@ -1,0 +1,50 @@
+/* eligo-tech landing page — self-contained styles (fonts, keyframes, hover,
+   responsive). Scoped under .lp so it never touches the dashboard app. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:opsz@6..72&display=swap');
+
+.lp {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: #0f1b2a;
+  background: #fff;
+  width: 100%;
+  overflow-x: hidden;
+}
+.lp * { box-sizing: border-box; }
+.lp a { color: #0b7d6a; text-decoration: none; }
+.lp h1, .lp h2 { text-wrap: balance; }
+.lp p { text-wrap: pretty; }
+
+.lp-serif { font-family: 'Newsreader', Georgia, serif; }
+
+@keyframes lp-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.7); } }
+@keyframes lp-floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.lp-pulse { animation: lp-pulse 1.6s ease-in-out infinite; }
+.lp-floaty { animation: lp-floaty 5s ease-in-out infinite; }
+
+/* Hover states */
+.lp-navlink:hover { background: #f0f3f6; }
+.lp-btn-dark:hover { background: #1d3350 !important; }
+.lp-btn-teal:hover { background: #0b7d6a !important; }
+.lp-btn-ghost:hover { border-color: #0e9f86 !important; }
+.lp-agentcard { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.lp-agentcard:hover { border-color: #b9e3d8 !important; box-shadow: 0 12px 32px rgba(15,27,42,.07); transform: translateY(-2px); }
+.lp-footlink:hover { color: #fff; }
+
+/* Responsive */
+@media (max-width: 980px) {
+  .lp-hero-grid, .lp-split { grid-template-columns: 1fr !important; gap: 40px !important; }
+  .lp-split-mock { order: -1; }
+  .lp-h1 { font-size: 40px !important; letter-spacing: -1px !important; }
+  .lp-grid-4 { grid-template-columns: 1fr 1fr !important; }
+  .lp-compliance-grid { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 760px) {
+  .lp-nav-links, .lp-nav-secondary { display: none !important; }
+  .lp-h1 { font-size: 34px !important; }
+  .lp-grid-4, .lp-stats, .lp-footer-grid, .lp-chip-grid { grid-template-columns: 1fr 1fr !important; }
+  .lp-h2 { font-size: 30px !important; }
+}
+@media (max-width: 520px) {
+  .lp-grid-4, .lp-stats, .lp-footer-grid { grid-template-columns: 1fr !important; }
+}
