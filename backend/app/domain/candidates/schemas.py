@@ -28,6 +28,31 @@ class CandidateBase(BaseModel):
     availability_weeks: int | None = None
     work_permit: WorkPermitStatus = WorkPermitStatus.UNKNOWN
 
+    # Extended profile (aiFind field set) — all optional.
+    first_name: str | None = None
+    last_name: str | None = None
+    sex: str | None = None
+    name_prefix: str | None = None
+    date_of_birth: str | None = None
+    street: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
+    linkedin_url: str | None = None
+    xing_url: str | None = None
+    industry: str | None = None
+    employment_type: str | None = None
+    willing_to_relocate: str | None = None
+    notice_period: str | None = None
+    availability: str | None = None
+    total_years_experience: str | None = None
+    current_salary: int | None = None
+    languages: list[str] | None = None
+    education: list[str] | None = None
+    working_experience: list[str] | None = None
+    motivation: str | None = None
+    source: str | None = None
+
 
 class CandidateCreate(CandidateBase):
     tenant_id: uuid.UUID | None = None
