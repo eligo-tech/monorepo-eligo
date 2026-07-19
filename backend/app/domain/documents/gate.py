@@ -58,6 +58,27 @@ def email_is_valid(value: str | None) -> bool:
     return bool(value and _EMAIL_RE.match(value.strip()))
 
 
+def _norm(s: str) -> str:
+    """Lowercase, alphanumeric-only — collapses the character-spacing that PDF
+    text extraction often introduces ('E d g e l e s s' → 'edgeless') so a
+    substring check is robust."""
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def is_grounded(value: str | None, source: str, *, min_len: int = 3) -> bool:
+    """True if `value` actually appears in the CV `source` (anti-hallucination).
+
+    This is the laufwise move: the extracted fact is checked against *real
+    state* — the source document — not accepted on the model's say-so. Values
+    shorter than `min_len` (after normalization) are treated as ungroundable and
+    rejected, to avoid trivial substring matches.
+    """
+    needle = _norm(value or "")
+    if len(needle) < min_len:
+        return False
+    return needle in _norm(source)
+
+
 # ── Check definitions (declarative; the domain contract lives here, not in code)
 
 PRECONDITIONS: list[tuple[str, str | None]] = [
@@ -70,6 +91,19 @@ PRECONDITIONS: list[tuple[str, str | None]] = [
 POSTCONDITIONS: list[tuple[str, str | None]] = [
     ("email.valid == true", "extracted e-mail failed syntactic validation"),
     ("accepted.count >= 1", "no field cleared the confidence threshold"),
+]
+
+# Postconditions over the structured history. Roles/education are only kept if
+# grounded in the CV text (checked in the service via `is_grounded`); these
+# checks assert that what survived is well-formed and that any dropped-as-
+# ungrounded entries are surfaced for review rather than silently trusted.
+SECTIONS_POSTCONDITIONS: list[tuple[str, str | None]] = [
+    ("roles.ungrounded == 0",
+     "one or more extracted roles were not found in the CV text (possible "
+     "hallucination) — dropped and routed to review"),
+    ("education.ungrounded == 0",
+     "one or more education entries were not found in the CV text — dropped and "
+     "routed to review"),
 ]
 
 # Persist gate: refuse to write a candidate with nothing identifying.

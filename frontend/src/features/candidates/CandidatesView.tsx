@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Search, SlidersHorizontal, ChevronDown, ArrowDownUp, X } from 'lucide-react'
+import { Search, SlidersHorizontal, ArrowDownUp, X, Download } from 'lucide-react'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { CvUploadModal } from './CvUploadModal'
 import { CandidateDossier } from './CandidateDossier'
@@ -66,6 +66,37 @@ function Toolbar({ query, onQuery, sort, onCycleSort }: ToolbarProps) {
 const columns = ['Name', 'LinkedIn', 'E-Mail', 'Telefon', 'Erfahrung', 'Skills']
 const GRID = 'grid-cols-[1.6fr_0.7fr_1.6fr_1fr_1.4fr_1.2fr]'
 
+/** Download the given candidates as a CSV file (client-side, no backend call). */
+function exportCsv(rows: Candidate[]): void {
+  if (rows.length === 0) return
+  const headers = ['Name', 'E-Mail', 'Telefon', 'Titel', 'Unternehmen', 'Standort', 'Skills', 'LinkedIn']
+  const cell = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`
+  const lines = [
+    headers.join(','),
+    ...rows.map((c) =>
+      [
+        c.name,
+        c.email,
+        c.phone,
+        c.currentTitle,
+        c.currentCompany,
+        c.location,
+        (c.profile?.allSkills ?? c.skills.map((s) => s.label)).join('; '),
+        c.linkedinUrl ?? '',
+      ]
+        .map((v) => cell(String(v ?? '')))
+        .join(','),
+    ),
+  ]
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `kandidaten-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 /** Free-text haystack for one candidate row. */
 function matches(c: Candidate, q: string): boolean {
   const hay = [
@@ -114,14 +145,12 @@ export function CandidatesView() {
           <Breadcrumb items={['Start', 'Kandidaten']} count={total} />
         </div>
         <div className="flex items-center gap-2.5">
-          <button className="flex items-center gap-1.5 rounded-xl border border-line px-3.5 py-2 text-[14px] font-medium text-ink-soft hover:bg-slate-50">
-            Standard <ChevronDown className="h-4 w-4" />
-          </button>
-          <button className="rounded-xl border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-slate-50">
-            Ansicht
-          </button>
-          <button className="rounded-xl border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-slate-50">
-            Import/Export
+          <button
+            onClick={() => exportCsv(rows)}
+            disabled={rows.length === 0}
+            className="flex items-center gap-1.5 rounded-xl border border-line px-4 py-2 text-[14px] font-medium text-ink-soft hover:bg-slate-50 disabled:opacity-40"
+          >
+            <Download className="h-4 w-4" /> Export
           </button>
           <button
             onClick={() => setUploadOpen(true)}
