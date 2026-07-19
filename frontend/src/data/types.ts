@@ -77,6 +77,8 @@ export interface Candidate {
   linkedin?: boolean
   /** real LinkedIn profile URL, when known */
   linkedinUrl?: string
+  /** ISO timestamp the record was created (date of arrival) */
+  createdAt?: string
   currentTitle: string
   currentCompany: string
   tenure: string
