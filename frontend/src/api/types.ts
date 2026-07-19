@@ -1,6 +1,26 @@
 // Backend DTOs — mirror the FastAPI response_model schemas under /api/v1.
 // Captured from live responses; keep in sync with backend/app/domain/*/schemas.py.
 
+/** One structured role from the CV (dates + achievement highlights). Legacy
+ *  rows may instead carry `{ company, years }`. */
+export interface WorkRoleDTO {
+  title?: string
+  company?: string
+  location?: string
+  start_date?: string
+  end_date?: string
+  highlights?: string[]
+  years?: number // legacy shape
+}
+
+export interface EducationDTO {
+  degree?: string
+  institution?: string
+  location?: string
+  start_date?: string
+  end_date?: string
+}
+
 export interface CandidateDTO {
   id: string
   tenant_id: string
@@ -11,7 +31,7 @@ export interface CandidateDTO {
   current_company: string | null
   location: string | null
   skills: string[]
-  work_history: { company: string; years: number }[]
+  work_history: WorkRoleDTO[]
   salary_expectation: number | null
   salary_currency: string
   availability_weeks: number | null
@@ -20,6 +40,31 @@ export interface CandidateDTO {
   verification_score: number // 0..1
   created_at: string
   updated_at: string
+
+  // Extended profile (aiFind field set) — all optional/nullable.
+  first_name?: string | null
+  last_name?: string | null
+  sex?: string | null
+  name_prefix?: string | null
+  date_of_birth?: string | null
+  street?: string | null
+  postal_code?: string | null
+  city?: string | null
+  country?: string | null
+  linkedin_url?: string | null
+  xing_url?: string | null
+  industry?: string | null
+  employment_type?: string | null
+  willing_to_relocate?: string | null
+  notice_period?: string | null
+  availability?: string | null
+  total_years_experience?: string | null
+  current_salary?: number | null
+  languages?: string[] | null
+  education?: EducationDTO[] | string[] | null
+  working_experience?: string[] | null
+  motivation?: string | null
+  source?: string | null
 }
 
 export interface JobDTO {

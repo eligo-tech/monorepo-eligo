@@ -48,7 +48,8 @@ class CandidateBase(BaseModel):
     total_years_experience: str | None = None
     current_salary: int | None = None
     languages: list[str] | None = None
-    education: list[str] | None = None
+    # Structured entries ({degree, institution, dates}) or legacy strings.
+    education: list[dict] | list[str] | None = None
     working_experience: list[str] | None = None
     motivation: str | None = None
     source: str | None = None

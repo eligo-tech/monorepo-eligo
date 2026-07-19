@@ -28,7 +28,7 @@ from app.domain.candidates import service as candidates_service
 from app.domain.candidates.schemas import CandidateCreate
 from app.domain.documents import gate, parser
 from app.domain.documents.extraction import get_cv_extractor
-from app.domain.documents.extraction.base import FIELD_LABELS, FIELD_ORDER
+from app.domain.documents.extraction.base import CVSections, FIELD_LABELS, FIELD_ORDER
 from app.domain.documents.gate import GateOutcome, PreconditionFailed
 from app.domain.documents.schemas import CVExtractionResult, CVField
 
@@ -74,11 +74,19 @@ def _to_int(value: str | None) -> int | None:
     return int(digits) if digits else None
 
 
-def _build_candidate(tenant_id: uuid.UUID, fields: list[ExtractedField]) -> CandidateCreate:
+def _build_candidate(
+    tenant_id: uuid.UUID,
+    fields: list[ExtractedField],
+    sections: CVSections,
+) -> CandidateCreate:
     """Assemble a CandidateCreate from the accepted (high-confidence) fields —
-    now covering the full aiFind field set the Candidate row can store."""
+    now covering the full aiFind field set the Candidate row can store, plus the
+    structured per-entry work history + education (dates + highlights)."""
     acc = _accepted(fields)
     g = acc.get
+    # Structured history takes precedence; fall back to the flat list fields.
+    work_history = [r.as_dict() for r in sections.work_history]
+    education = [e.as_dict() for e in sections.education] or _split_list(g("education"))
     return CandidateCreate(
         tenant_id=tenant_id,
         full_name=_full_name(acc) or "Unbekannt (aus CV)",
@@ -88,6 +96,7 @@ def _build_candidate(tenant_id: uuid.UUID, fields: list[ExtractedField]) -> Cand
         current_company=g("current_company"),
         location=g("location"),
         skills=_split_list(g("skills")) or [],
+        work_history=work_history,
         # Extended profile
         first_name=g("first_name"),
         last_name=g("last_name"),
@@ -109,22 +118,32 @@ def _build_candidate(tenant_id: uuid.UUID, fields: list[ExtractedField]) -> Cand
         current_salary=_to_int(g("current_salary")),
         salary_expectation=_to_int(g("expected_salary")),
         languages=_split_list(g("languages")),
-        education=_split_list(g("education")),
+        education=education,
         working_experience=_split_list(g("working_experience")),
         motivation=g("motivation"),
         source=g("source"),
     )
 
 
-def _run_extractor(text: str) -> tuple[list[ExtractedField], str]:
+def _run_extractor(text: str) -> tuple[list[ExtractedField], CVSections, str]:
     """Extract via the configured provider; fall back to the heuristic parser on
-    any runtime error so the request never fails on the LLM."""
+    any runtime error so the request never fails on the LLM. Also pulls the
+    structured per-entry history when the provider supports it."""
     extractor = get_cv_extractor()
     try:
-        return extractor.extract(text), extractor.name
+        fields = extractor.extract(text)
     except Exception as exc:
         logger.warning("extractor %s failed (%s) — falling back to heuristic", extractor.name, exc)
-        return parser.extract_cv_fields(text), "heuristic (fallback)"
+        return parser.extract_cv_fields(text), CVSections(), "heuristic (fallback)"
+
+    sections = CVSections()
+    extract_sections = getattr(extractor, "extract_sections", None)
+    if extract_sections is not None:
+        try:
+            sections = extract_sections(text)
+        except Exception as exc:  # structured pass is best-effort — never fail the request
+            logger.warning("extract_sections (%s) failed (%s) — flat fields only", extractor.name, exc)
+    return fields, sections, extractor.name
 
 
 async def extract_cv(
@@ -153,8 +172,13 @@ async def extract_cv(
         )
 
     # ── Extract (vendor-neutral) → confidence-gate via the agent.
-    extracted, extractor_name = _run_extractor(text)
+    extracted, sections, extractor_name = _run_extractor(text)
     notes.append(f"extracted via {extractor_name}")
+    if sections.work_history or sections.education:
+        notes.append(
+            f"structured: {len(sections.work_history)} role(s), "
+            f"{len(sections.education)} education entr(y/ies)"
+        )
 
     agent = DocumentExtractionAgent()
     candidate_id: uuid.UUID | None = None
@@ -186,7 +210,7 @@ async def extract_cv(
             raise PreconditionFailed(reason or "persist precondition failed")
 
         created = await candidates_service.create_candidate(
-            session, data=_build_candidate(tenant_id, extracted)
+            session, data=_build_candidate(tenant_id, extracted, sections)
         )
         candidate_id = created.id
         agent_result = await agent.run(

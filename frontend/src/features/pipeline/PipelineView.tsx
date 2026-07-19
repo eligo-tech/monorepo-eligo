@@ -14,7 +14,6 @@ import {
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { Avatar } from '@/components/ui/Avatar'
 import { LinkedInMark } from '@/components/ui/LinkedInMark'
-import { DataSourceBadge } from '@/components/ui/DataSourceBadge'
 import { pipelineColumns as mockColumns } from '@/data/pipeline'
 import type { PipelineCard as Card } from '@/data/types'
 import { api } from '@/api/client'
@@ -93,12 +92,11 @@ function Column({
 }
 
 export function PipelineView() {
-  const { data, loading } = useAsync(async () => {
+  const { data } = useAsync(async () => {
     const [board, cands] = await Promise.all([api.board(), api.candidates()])
     const byId = new Map(cands.map((c) => [c.id, c]))
     return toPipelineColumns(board, byId)
   }, [])
-  const source = loading ? 'loading' : data ? 'live' : 'demo'
   // Live board may contain empty stages; keep only populated columns, else demo.
   const columns = data && data.some((c) => c.cards.length) ? data : mockColumns
   const total = columns.reduce((n, c) => n + c.cards.length, 0)
@@ -108,7 +106,6 @@ export function PipelineView() {
       <div className="px-8 pt-6">
         <div className="flex items-center gap-3">
           <Breadcrumb items={['Start', 'Jobs', 'Trade Republic', 'Finance Director']} />
-          <DataSourceBadge state={source} />
         </div>
 
         {/* Job sub-tabs */}

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.auth import get_current_tenant
 from app.core.database import get_db
 from app.domain.documents import service
 from app.domain.documents.gate import PreconditionFailed
@@ -25,7 +26,7 @@ async def extract_cv(
         default=False,
         description="If true, create a candidate from the accepted fields and record receipts.",
     ),
-    tenant_id: uuid.UUID = Query(default=settings.default_tenant_id),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> CVExtractionResult:
     """Parse an uploaded PDF CV into structured fields with per-field confidence.

@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { Avatar } from '@/components/ui/Avatar'
-import { DataSourceBadge } from '@/components/ui/DataSourceBadge'
 import { MatchStrengthBadge } from './MatchStrengthBadge'
 import { candidates, marieMatchReasons } from '@/data/candidates'
 import type { MatchStrength } from '@/data/types'
@@ -61,7 +60,7 @@ function DetailRow({
 }
 
 export function MatchingView() {
-  const { data, loading } = useAsync(async () => {
+  const { data } = useAsync(async () => {
     const jobs = await api.jobs()
     if (!jobs.length) throw new Error('no jobs')
     const [results, cands] = await Promise.all([
@@ -80,7 +79,6 @@ export function MatchingView() {
     }
   }, [])
 
-  const source = loading ? 'loading' : data ? 'live' : 'demo'
   const candidate = data?.candidate ?? marie
   const reasons = data?.reasons ?? marieMatchReasons
   const strength: MatchStrength = data?.strength ?? 'strong'
@@ -92,7 +90,6 @@ export function MatchingView() {
       <div className="flex items-center justify-between px-8 pt-6">
         <div className="flex items-center gap-3">
           <Breadcrumb items={['Start', 'Kandidaten', candidate.name]} />
-          <DataSourceBadge state={source} />
         </div>
         <div className="flex items-center gap-3 text-ink-muted">
           <span className="text-[15px]">1 von {total}</span>

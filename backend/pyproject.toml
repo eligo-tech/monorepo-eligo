@@ -22,6 +22,7 @@ dependencies = [
     "python-multipart>=0.0.9",  # form/file uploads (document extraction endpoints)
     "pypdf>=4.2",              # PDF text extraction (CV upload)
     "alembic>=1.13",           # database migrations (production schema changes)
+    "pyjwt[crypto]>=2.8",      # verify Clerk session JWTs (RS256 via JWKS)
     # Pre/postcondition process-contract harness — checks are pure predicates
     # over real state (the system-of-record), never over model output.
     "laufwise @ git+https://github.com/dfadeeff/laufwise.git",

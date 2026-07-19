@@ -15,7 +15,12 @@ from typing import Any, cast
 
 from app.agents.document_extraction import ExtractedField
 from app.core.logging import get_logger
-from app.domain.documents.extraction.base import FIELD_ORDER
+from app.domain.documents.extraction.base import (
+    CVSections,
+    EducationEntry,
+    FIELD_ORDER,
+    WorkRole,
+)
 
 logger = get_logger(__name__)
 
@@ -56,6 +61,70 @@ _SCHEMA = {
             }
         },
         "required": ["fields"],
+    },
+}
+
+# Focused prompt + strict schema for the per-entry history. A dedicated call
+# (rather than cramming this into the flat schema) lets the model attend to
+# parsing each role's dates and achievement bullets accurately.
+_SECTIONS_SYSTEM = (
+    "You parse the WORK EXPERIENCE and EDUCATION sections of a CV/resume into "
+    "structured entries for a recruiting system. Use ONLY what the text states — "
+    "never invent titles, employers, dates or achievements. For each role return "
+    "its title, company, location, start_date and end_date (verbatim as written, "
+    "e.g. 'Mar 2024', 'Present'), and 3-6 concise highlights: the concrete "
+    "responsibilities/achievements listed for THAT role (short phrases, no leading "
+    "bullet characters). Order roles most-recent first. For education return "
+    "degree, institution, location and dates. Leave a string empty if the CV does "
+    "not state it; return an empty highlights list if none are given. No commentary."
+)
+
+_SECTIONS_SCHEMA = {
+    "name": "cv_sections",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "work_history": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "title": {"type": "string"},
+                        "company": {"type": "string"},
+                        "location": {"type": "string"},
+                        "start_date": {"type": "string"},
+                        "end_date": {"type": "string"},
+                        "highlights": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": [
+                        "title", "company", "location",
+                        "start_date", "end_date", "highlights",
+                    ],
+                },
+            },
+            "education": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "degree": {"type": "string"},
+                        "institution": {"type": "string"},
+                        "location": {"type": "string"},
+                        "start_date": {"type": "string"},
+                        "end_date": {"type": "string"},
+                    },
+                    "required": [
+                        "degree", "institution", "location",
+                        "start_date", "end_date",
+                    ],
+                },
+            },
+        },
+        "required": ["work_history", "education"],
     },
 }
 
@@ -102,3 +171,43 @@ class OpenAIExtractor:
                     )
                 )
         return fields
+
+    def extract_sections(self, text: str) -> CVSections:
+        """Structured per-entry work history + education (dates + highlights)."""
+        response = self._client.chat.completions.create(
+            model=self._model,
+            messages=[
+                {"role": "system", "content": _SECTIONS_SYSTEM},
+                {"role": "user", "content": text[:_MAX_CHARS]},
+            ],
+            response_format=cast(
+                Any, {"type": "json_schema", "json_schema": _SECTIONS_SCHEMA}
+            ),
+            temperature=0,
+        )
+        data = json.loads(response.choices[0].message.content or "{}")
+        roles = [
+            WorkRole(
+                title=(r.get("title") or "").strip(),
+                company=(r.get("company") or "").strip(),
+                location=(r.get("location") or "").strip(),
+                start_date=(r.get("start_date") or "").strip(),
+                end_date=(r.get("end_date") or "").strip(),
+                highlights=[h.strip() for h in (r.get("highlights") or []) if h.strip()],
+            )
+            for r in data.get("work_history", [])
+        ]
+        education = [
+            EducationEntry(
+                degree=(e.get("degree") or "").strip(),
+                institution=(e.get("institution") or "").strip(),
+                location=(e.get("location") or "").strip(),
+                start_date=(e.get("start_date") or "").strip(),
+                end_date=(e.get("end_date") or "").strip(),
+            )
+            for e in data.get("education", [])
+        ]
+        # Drop wholly-empty entries the model may emit.
+        roles = [r for r in roles if r.title or r.company]
+        education = [e for e in education if e.degree or e.institution]
+        return CVSections(work_history=roles, education=education)

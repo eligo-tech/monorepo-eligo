@@ -9,17 +9,25 @@ code change.
 from __future__ import annotations
 
 import ssl
+import uuid
 from collections.abc import AsyncGenerator
+from contextvars import ContextVar
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncAttrs,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Session
 
 from app.core.config import settings
+
+# The tenant for the current request. Set by auth.get_current_tenant; read by the
+# after_begin listener so every transaction (incl. those opened after a
+# mid-request commit) re-pins the Postgres GUC that RLS policies isolate on.
+current_tenant_var: ContextVar[str | None] = ContextVar("current_tenant", default=None)
 
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -72,6 +80,23 @@ SessionLocal = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
+
+
+@event.listens_for(Session, "after_begin")
+def _pin_tenant_for_rls(session: Session, transaction, connection) -> None:  # type: ignore[no-untyped-def]
+    """At the start of every transaction, set `app.current_tenant` so Postgres
+    RLS scopes the transaction to the request's tenant. Postgres-only; a UUID is
+    validated before it's inlined (SET LOCAL takes no bind params)."""
+    if connection.dialect.name != "postgresql":
+        return
+    raw = current_tenant_var.get()
+    if not raw:
+        return
+    try:
+        tid = str(uuid.UUID(raw))  # validate — never inline untrusted text
+    except (ValueError, TypeError):
+        return
+    connection.exec_driver_sql(f"SET LOCAL app.current_tenant = '{tid}'")
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
