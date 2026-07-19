@@ -76,12 +76,20 @@ def _org_id(claims: dict) -> str | None:
 
 
 async def _set_tenant_guc(db: AsyncSession, tenant_id: uuid.UUID) -> None:
-    """Scope RLS to this tenant for the request transaction. No-op on SQLite."""
-    if settings.is_postgres:
-        await db.execute(
-            text("SELECT set_config('app.current_tenant', :t, true)"),
-            {"t": str(tenant_id)},
-        )
+    """Scope RLS to this tenant for the request transaction. No-op on SQLite.
+
+    Also drops to the app role so RLS applies even if the connection role is
+    BYPASSRLS (Supabase `postgres`). Covers the current transaction; the
+    after_begin listener re-applies both on any later transaction."""
+    if not settings.is_postgres:
+        return
+    role = settings.db_app_role
+    if role and role.replace("_", "").isalnum():
+        await db.execute(text(f'SET LOCAL ROLE "{role}"'))
+    await db.execute(
+        text("SELECT set_config('app.current_tenant', :t, true)"),
+        {"t": str(tenant_id)},
+    )
 
 
 async def get_current_tenant(

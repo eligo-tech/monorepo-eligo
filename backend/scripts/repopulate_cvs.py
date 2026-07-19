@@ -19,7 +19,7 @@ from pathlib import Path
 from sqlalchemy import delete, func, select
 
 from app.core.config import settings
-from app.core.database import SessionLocal, create_all
+from app.core.database import SessionLocal, create_all, current_tenant_var
 from app.domain.candidates.models import Candidate
 from app.domain.documents import service as documents_service
 from app.domain.documents.gate import PreconditionFailed
@@ -101,6 +101,11 @@ async def main() -> None:
 
     await create_all()  # ensure new tables (e.g. candidate_documents) exist
     tenant_id, tenant_label = await _resolve_tenant()
+    # Pin the tenant so this run works under Row-Level Security: the after_begin
+    # listener sets `app.current_tenant` on every transaction, so the wipe is
+    # scoped to THIS tenant (never nukes other customers) and inserts satisfy the
+    # RLS WITH CHECK. No-op when RLS is off.
+    current_tenant_var.set(str(tenant_id))
     print(
         f"CVs: {len(pdfs)}  ·  provider: {settings.llm_provider}  ·  "
         f"db: {settings.safe_database_url}  ·  tenant: {tenant_label} ({tenant_id})"

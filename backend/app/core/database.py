@@ -96,6 +96,11 @@ def _pin_tenant_for_rls(session: Session, transaction, connection) -> None:  # t
         tid = str(uuid.UUID(raw))  # validate — never inline untrusted text
     except (ValueError, TypeError):
         return
+    # Drop from the (possibly BYPASSRLS) connection role to the app role so RLS
+    # actually applies, then pin the tenant. Both are transaction-local.
+    role = settings.db_app_role
+    if role and role.replace("_", "").isalnum():  # trusted config; keep it identifier-safe
+        connection.exec_driver_sql(f'SET LOCAL ROLE "{role}"')
     connection.exec_driver_sql(f"SET LOCAL app.current_tenant = '{tid}'")
 
 
