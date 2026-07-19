@@ -51,7 +51,7 @@ def _filled(c: Candidate) -> int:
     return sum(1 for f in EXT_FIELDS if getattr(c, f, None) not in (None, [], ""))
 
 
-async def _ingest_one(pdf: Path) -> tuple[str, str]:
+async def _ingest_one(pdf: Path, tenant_id) -> tuple[str, str]:
     """Return (status, detail) for one CV. Fresh session so a failure is isolated."""
     async with SessionLocal() as s:
         try:
@@ -59,7 +59,7 @@ async def _ingest_one(pdf: Path) -> tuple[str, str]:
                 s,
                 filename=pdf.name,
                 content=pdf.read_bytes(),
-                tenant_id=settings.default_tenant_id,
+                tenant_id=tenant_id,
                 persist=True,
             )
         except PreconditionFailed as exc:
@@ -75,18 +75,41 @@ async def _ingest_one(pdf: Path) -> tuple[str, str]:
         return "ok", f"{row.full_name if row else '?'} · {ext}/{len(EXT_FIELDS)} ext fields"
 
 
+async def _resolve_tenant():
+    """Which tenant to load into. An arg (clerk_org_id) targets that org; else the
+    single existing org tenant if there is exactly one; else the default tenant."""
+    from app.domain.tenants import service as tenants_service
+    from app.domain.tenants.models import Tenant
+
+    async with SessionLocal() as s:
+        if len(sys.argv) > 1:
+            t = await tenants_service.get_or_create(s, clerk_org_id=sys.argv[1])
+            return t.id, t.clerk_org_id
+        rows = (await s.execute(select(Tenant))).scalars().all()
+        if len(rows) == 1:
+            return rows[0].id, rows[0].clerk_org_id
+        if len(rows) > 1:
+            listing = ", ".join(t.clerk_org_id for t in rows)
+            sys.exit(f"multiple org tenants — pass one explicitly: {listing}")
+        return settings.default_tenant_id, "default"
+
+
 async def main() -> None:
     pdfs = sorted(CV_DIR.glob("*.pdf"))
     if not pdfs:
         sys.exit(f"no CVs found in {CV_DIR}")
 
-    print(f"CVs: {len(pdfs)}  ·  provider: {settings.llm_provider}  ·  db: {settings.safe_database_url}")
     await create_all()  # ensure new tables (e.g. candidate_documents) exist
+    tenant_id, tenant_label = await _resolve_tenant()
+    print(
+        f"CVs: {len(pdfs)}  ·  provider: {settings.llm_provider}  ·  "
+        f"db: {settings.safe_database_url}  ·  tenant: {tenant_label} ({tenant_id})"
+    )
     await _wipe()
 
     counts = {"ok": 0, "skip": 0, "error": 0}
     for i, pdf in enumerate(pdfs, 1):
-        status, detail = await _ingest_one(pdf)
+        status, detail = await _ingest_one(pdf, tenant_id)
         counts[status] += 1
         mark = {"ok": "✓", "skip": "–", "error": "✗"}[status]
         print(f"  {mark} [{i:>2}/{len(pdfs)}] {pdf.name[:42]:42}  {detail}")
