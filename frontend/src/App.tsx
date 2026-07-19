@@ -6,6 +6,8 @@ import { MatchingView } from './features/matching/MatchingView'
 import { PipelineView } from './features/pipeline/PipelineView'
 import { ReportingView } from './features/reporting/ReportingView'
 import { LandingPage } from './landing/LandingPage'
+import { authEnabled } from './auth/config'
+import { AuthGate } from './auth/AuthGate'
 
 // Maps the active tab to the record highlighted in the sidebar rail.
 const sidebarKeyForTab: Record<Tab, string> = {
@@ -33,10 +35,18 @@ export default function App() {
   }, [])
 
   if (route === null) {
+    // Landing stays public in both modes.
     return <LandingPage onEnterApp={() => (window.location.hash = 'Kandidaten')} />
   }
 
-  return <Dashboard tab={route} />
+  // With Clerk on, the dashboard requires sign-in + an active organization (tenant).
+  return authEnabled ? (
+    <AuthGate>
+      <Dashboard tab={route} />
+    </AuthGate>
+  ) : (
+    <Dashboard tab={route} />
+  )
 }
 
 function Dashboard({ tab: initial }: { tab: Tab }) {
@@ -48,9 +58,15 @@ function Dashboard({ tab: initial }: { tab: Tab }) {
     window.location.hash = t
   }
 
+  // Back to the marketing landing page: clearing the hash flips App to route null.
+  const goHome = () => {
+    history.pushState('', '', window.location.pathname)
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+  }
+
   return (
     <div className="flex h-screen gap-3 overflow-hidden bg-page p-3">
-      <Sidebar activeKey={sidebarKeyForTab[tab]} />
+      <Sidebar activeKey={sidebarKeyForTab[tab]} onHome={goHome} />
 
       <main className="relative flex-1 overflow-hidden">
         <TopNav active={tab} onChange={changeTab} lang={lang} onLangChange={setLang} />

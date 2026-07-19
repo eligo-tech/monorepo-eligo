@@ -1,5 +1,7 @@
 import { Users, Target, KanbanSquare, PresentationIcon } from 'lucide-react'
+import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react'
 import { cn } from '@/lib/cn'
+import { authEnabled } from '@/auth/config'
 
 export type Tab = 'Kandidaten' | 'Matching' | 'Pipeline' | 'Reporting'
 
@@ -42,20 +44,33 @@ export function TopNav({ active, onChange, lang, onLangChange }: TopNavProps) {
         })}
       </div>
 
-      {/* Language switch, pinned right */}
-      <div className="pointer-events-auto absolute right-6 flex items-center rounded-xl bg-white p-1 shadow-pill">
-        {(['DE', 'EN'] as const).map((l) => (
-          <button
-            key={l}
-            onClick={() => onLangChange(l)}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
-              lang === l ? 'bg-slate-100 text-ink' : 'text-ink-faint hover:text-ink-soft',
-            )}
-          >
-            {l}
-          </button>
-        ))}
+      {/* Tenant (organization) + account + language switch, pinned right */}
+      <div className="pointer-events-auto absolute right-6 flex items-center gap-3">
+        {authEnabled && (
+          <div className="flex items-center gap-2 rounded-xl bg-white px-2.5 py-1.5 shadow-pill">
+            <OrganizationSwitcher
+              hidePersonal
+              afterSelectOrganizationUrl="/#Kandidaten"
+              afterCreateOrganizationUrl="/#Kandidaten"
+              appearance={{ elements: { rootBox: 'flex items-center' } }}
+            />
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        )}
+        <div className="flex items-center rounded-xl bg-white p-1 shadow-pill">
+          {(['DE', 'EN'] as const).map((l) => (
+            <button
+              key={l}
+              onClick={() => onLangChange(l)}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
+                lang === l ? 'bg-slate-100 text-ink' : 'text-ink-faint hover:text-ink-soft',
+              )}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

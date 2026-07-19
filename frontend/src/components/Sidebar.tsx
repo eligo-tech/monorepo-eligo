@@ -66,12 +66,22 @@ function NavRow({ item, activeKey }: { item: NavItem; activeKey: string }) {
 }
 
 /** Persistent dark navigation rail. `activeKey` highlights the current record. */
-export function Sidebar({ activeKey = 'Kandidaten' }: { activeKey?: string }) {
+export function Sidebar({
+  activeKey = 'Kandidaten',
+  onHome,
+}: {
+  activeKey?: string
+  onHome?: () => void
+}) {
   return (
     <aside className="flex w-[264px] shrink-0 flex-col rounded-card bg-sidebar px-4 pb-5 pt-5">
-      <div className="px-1.5">
+      <button
+        onClick={onHome}
+        title="Zur Startseite"
+        className="flex w-full items-center rounded-lg px-1.5 py-1 text-left transition-opacity hover:opacity-80"
+      >
         <Logo />
-      </div>
+      </button>
 
       {/* Search */}
       <div className="mt-5 flex items-center gap-2 rounded-xl bg-sidebar-hover px-3 py-2.5 text-sm text-sidebar-muted">

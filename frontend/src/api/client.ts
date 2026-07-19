@@ -13,6 +13,20 @@ import type {
 // deployed backend, e.g. https://eligo-api.up.railway.app/api/v1
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
+// When Clerk auth is active a token getter is registered here (see
+// auth/ClerkTokenBridge); every request then carries the session JWT so the
+// backend can resolve the tenant. Without it, requests go out unauthenticated
+// (the default-tenant demo mode).
+let tokenGetter: (() => Promise<string | null>) | null = null
+export function setAuthTokenGetter(fn: (() => Promise<string | null>) | null): void {
+  tokenGetter = fn
+}
+async function authHeaders(): Promise<Record<string, string>> {
+  if (!tokenGetter) return {}
+  const token = await tokenGetter().catch(() => null)
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -25,8 +39,8 @@ class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()), ...init?.headers },
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -41,7 +55,7 @@ export const api = {
 
   /** Fetch the original uploaded CV (PDF) for a candidate. null if none on file. */
   async candidateCv(id: string): Promise<Blob | null> {
-    const res = await fetch(`${BASE}/candidates/${id}/cv`)
+    const res = await fetch(`${BASE}/candidates/${id}/cv`, { headers: await authHeaders() })
     if (res.status === 404) return null
     if (!res.ok) throw new ApiError(res.status, res.statusText)
     return res.blob()
@@ -67,6 +81,7 @@ export const api = {
     const res = await fetch(`${BASE}/documents/extract-cv?persist=${persist}`, {
       method: 'POST',
       body, // let the browser set the multipart boundary
+      headers: await authHeaders(),
     })
     if (!res.ok) {
       const detail = await res.text().catch(() => '')

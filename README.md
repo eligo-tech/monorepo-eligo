@@ -1,5 +1,7 @@
 # eligo-tech
 
+[![CI](https://github.com/eligo-tech/monorepo-eligo/actions/workflows/ci.yml/badge.svg)](https://github.com/eligo-tech/monorepo-eligo/actions/workflows/ci.yml)
+
 **AI-native recruiting platform.** A simple, reliable system-of-record with a layer
 of narrow agents that read, enrich, match and explain — where **every agent claim is
 verified against a real source before anyone sees it.** Verified AI, not bolted-on AI.
