@@ -126,24 +126,40 @@ def _build_candidate(
 
 
 def _run_extractor(text: str) -> tuple[list[ExtractedField], CVSections, str]:
-    """Extract via the configured provider; fall back to the heuristic parser on
-    any runtime error so the request never fails on the LLM. Also pulls the
-    structured per-entry history when the provider supports it."""
+    """Extract via the configured provider in a SINGLE call (flat fields +
+    structured history), falling back to the heuristic parser on any runtime
+    error so the request never fails on the LLM."""
     extractor = get_cv_extractor()
+    extract_all = getattr(extractor, "extract_all", None)
     try:
-        fields = extractor.extract(text)
+        if extract_all is not None:
+            result = extract_all(text)  # one LLM round-trip
+            return result.fields, result.sections, extractor.name
+        # Providers without structured support (heuristic) → flat fields only.
+        return extractor.extract(text), CVSections(), extractor.name
     except Exception as exc:
         logger.warning("extractor %s failed (%s) — falling back to heuristic", extractor.name, exc)
         return parser.extract_cv_fields(text), CVSections(), "heuristic (fallback)"
 
-    sections = CVSections()
-    extract_sections = getattr(extractor, "extract_sections", None)
-    if extract_sections is not None:
-        try:
-            sections = extract_sections(text)
-        except Exception as exc:  # structured pass is best-effort — never fail the request
-            logger.warning("extract_sections (%s) failed (%s) — flat fields only", extractor.name, exc)
-    return fields, sections, extractor.name
+
+def _ground_sections(text: str, sections: CVSections) -> tuple[CVSections, int, int]:
+    """Keep only the roles/education entries that are grounded in the CV text
+    (their company/title/institution/degree actually appears in the source).
+
+    This is the anti-hallucination guardrail: a fabricated employer or degree —
+    the failure mode that erodes trust — is dropped rather than persisted.
+    Returns the filtered sections plus counts of what was dropped."""
+    kept_roles = [
+        r for r in sections.work_history
+        if gate.is_grounded(r.company, text) or gate.is_grounded(r.title, text)
+    ]
+    kept_edu = [
+        e for e in sections.education
+        if gate.is_grounded(e.institution, text) or gate.is_grounded(e.degree, text)
+    ]
+    dropped_roles = len(sections.work_history) - len(kept_roles)
+    dropped_edu = len(sections.education) - len(kept_edu)
+    return CVSections(work_history=kept_roles, education=kept_edu), dropped_roles, dropped_edu
 
 
 async def extract_cv(
@@ -171,13 +187,23 @@ async def extract_cv(
             notes=notes, candidate_id=None, text_chars=len(text),
         )
 
-    # ── Extract (vendor-neutral) → confidence-gate via the agent.
-    extracted, sections, extractor_name = _run_extractor(text)
+    # ── Extract (vendor-neutral, single call) → confidence-gate via the agent.
+    extracted, raw_sections, extractor_name = _run_extractor(text)
     notes.append(f"extracted via {extractor_name}")
+
+    # ── Anti-hallucination: drop any role/education not grounded in the CV text,
+    #    then assert (laufwise postcondition) that nothing ungrounded slipped by.
+    sections, dropped_roles, dropped_edu = _ground_sections(text, raw_sections)
+    sec_post = gate.evaluate(
+        gate.SECTIONS_POSTCONDITIONS,
+        {"roles": {"ungrounded": dropped_roles}, "education": {"ungrounded": dropped_edu}},
+    )
+    notes += [o.as_note() for o in sec_post]
+    review_items += [o.reason or o.expr for o in sec_post if not o.ok and o.reason]
     if sections.work_history or sections.education:
         notes.append(
             f"structured: {len(sections.work_history)} role(s), "
-            f"{len(sections.education)} education entr(y/ies)"
+            f"{len(sections.education)} education entr(y/ies) grounded"
         )
 
     agent = DocumentExtractionAgent()
