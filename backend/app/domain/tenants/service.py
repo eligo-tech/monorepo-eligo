@@ -21,4 +21,8 @@ async def get_or_create(
     tenant = Tenant(clerk_org_id=clerk_org_id, name=name)
     session.add(tenant)
     await session.flush()  # assigns id
+    # Commit immediately: the org→tenant mapping must survive the request that
+    # first sees this org. Without this it is rolled back at request end, so each
+    # request would mint a NEW tenant id and every tenant-scoped query would miss.
+    await session.commit()
     return tenant

@@ -201,9 +201,14 @@ export function CandidatesView() {
   const [sort, setSort] = useState<SortKey>('created')
   const [skillFilter, setSkillFilter] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Candidate | null>(null)
-  const { data } = useAsync(() => api.candidates(), [refreshKey])
+  const { data, loading, error } = useAsync(() => api.candidates(), [refreshKey])
 
-  const all = useMemo(() => (data ? data.map(toCandidate) : mockCandidates), [data])
+  // Live data when reachable; mock only as an OFFLINE fallback (never flash mock
+  // over a real, possibly-empty, tenant). While loading we show nothing.
+  const all = useMemo(
+    () => (data ? data.map(toCandidate) : error ? mockCandidates : []),
+    [data, error],
+  )
 
   // Distinct technologies across the pool, most common first (for the filter).
   const skillOptions = useMemo(() => {
@@ -289,7 +294,11 @@ export function CandidatesView() {
           ))}
         </div>
 
-        {rows.length === 0 && (
+        {loading && rows.length === 0 && (
+          <div className="px-2 py-16 text-center text-[14px] text-ink-muted">Lädt…</div>
+        )}
+
+        {!loading && rows.length === 0 && (
           <div className="px-2 py-16 text-center text-[14px] text-ink-muted">
             Keine Kandidaten gefunden
             {query ? ` für „${query}“` : ''}
