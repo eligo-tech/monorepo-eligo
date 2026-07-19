@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     db_ssl_verify: bool = True
     db_ssl_root_cert: str | None = None
 
+    # DB role to run tenant-scoped queries as (via SET LOCAL ROLE) so Row-Level
+    # Security is actually enforced. Managed Postgres often connects as a
+    # BYPASSRLS superuser (Supabase `postgres`), for which RLS is ignored; set
+    # ELIGO_DB_APP_ROLE to a NOBYPASSRLS role (e.g. `eligo_app`) to make it bite.
+    # Unset → no role switch (RLS off / single-tenant demo). Postgres-only.
+    db_app_role: str | None = None
+
     # --- LLM extraction --------------------------------------------------
     # Vendor-neutral: the factory selects an extractor by provider. "openai"
     # uses the OpenAI-backed extractor; "heuristic" forces the offline parser.
