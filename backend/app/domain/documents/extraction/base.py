@@ -61,6 +61,16 @@ class CVSections:
     work_history: list[WorkRole] = field(default_factory=list)
     education: list[EducationEntry] = field(default_factory=list)
 
+
+@dataclass
+class ExtractionResult:
+    """Everything one extraction pass yields: the flat aiFind fields (each
+    confidence-scored) and the structured per-entry history. Produced in a
+    single LLM call by providers that implement `extract_all`."""
+
+    fields: list["ExtractedField"] = field(default_factory=list)
+    sections: CVSections = field(default_factory=CVSections)
+
 # Canonical field name → German label, in display order (mirrors aiFind's
 # "New Candidate" form: personal info → contact → career → history).
 CV_FIELDS: dict[str, str] = {
@@ -122,8 +132,8 @@ class CVExtractor(Protocol):
 
     def extract(self, text: str) -> list[ExtractedField]: ...
 
-    # Optional: structured per-entry history (roles + education with dates and
-    # highlights). Extractors that can't produce it simply omit this method —
-    # the orchestrator falls back to the flat fields. Kept separate from
-    # `extract` so the flat confidence-gating contract stays unchanged.
-    def extract_sections(self, text: str) -> CVSections: ...
+    # Optional: flat fields AND structured history in a SINGLE call. Providers
+    # that implement it are driven through this (one LLM round-trip per CV);
+    # those that don't (the heuristic fallback) use `extract` and yield no
+    # structured sections.
+    def extract_all(self, text: str) -> ExtractionResult: ...
