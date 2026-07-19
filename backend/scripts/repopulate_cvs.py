@@ -19,10 +19,11 @@ from pathlib import Path
 from sqlalchemy import delete, func, select
 
 from app.core.config import settings
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, create_all
 from app.domain.candidates.models import Candidate
 from app.domain.documents import service as documents_service
 from app.domain.documents.gate import PreconditionFailed
+from app.domain.documents.models import CandidateDocument
 from app.domain.matching.models import MatchReceipt
 from app.domain.pipeline.models import Application
 from app.domain.verification.models import EnrichmentRecord, Receipt
@@ -40,10 +41,10 @@ EXT_FIELDS = (
 async def _wipe() -> None:
     """Delete candidate-scoped rows in FK-safe order (jobs/companies kept)."""
     async with SessionLocal() as s:
-        for model in (Application, MatchReceipt, EnrichmentRecord, Receipt, Candidate):
+        for model in (Application, MatchReceipt, EnrichmentRecord, Receipt, CandidateDocument, Candidate):
             await s.execute(delete(model))
         await s.commit()
-    print("· wiped applications, match_receipts, enrichment_records, receipts, candidates")
+    print("· wiped applications, match_receipts, enrichment_records, receipts, candidate_documents, candidates")
 
 
 def _filled(c: Candidate) -> int:
@@ -80,6 +81,7 @@ async def main() -> None:
         sys.exit(f"no CVs found in {CV_DIR}")
 
     print(f"CVs: {len(pdfs)}  ·  provider: {settings.llm_provider}  ·  db: {settings.safe_database_url}")
+    await create_all()  # ensure new tables (e.g. candidate_documents) exist
     await _wipe()
 
     counts = {"ok": 0, "skip": 0, "error": 0}

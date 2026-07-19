@@ -38,6 +38,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ status: string }>('/health'),
   candidates: () => request<CandidateDTO[]>('/candidates'),
+
+  /** Fetch the original uploaded CV (PDF) for a candidate. null if none on file. */
+  async candidateCv(id: string): Promise<Blob | null> {
+    const res = await fetch(`${BASE}/candidates/${id}/cv`)
+    if (res.status === 404) return null
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+    return res.blob()
+  },
   jobs: () => request<JobDTO[]>('/jobs'),
   board: () => request<PipelineBoardDTO>('/pipeline/board'),
   /** Rank the candidate pool against one job (hard filters → soft ranking). */

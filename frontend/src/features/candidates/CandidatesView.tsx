@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Search, SlidersHorizontal, ArrowDownUp, X, Download } from 'lucide-react'
+import { Search, SlidersHorizontal, ArrowDownUp, X, Download, Check } from 'lucide-react'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { CvUploadModal } from './CvUploadModal'
 import { CandidateDossier } from './CandidateDossier'
@@ -12,22 +12,103 @@ import { api } from '@/api/client'
 import { toCandidate } from '@/api/adapters'
 import { useAsync } from '@/hooks/useAsync'
 
-type SortKey = 'activity' | 'name' | 'verification'
+type SortKey = 'created' | 'name'
 const SORT_LABELS: Record<SortKey, string> = {
-  activity: 'Letzte Aktivität',
+  created: 'Neueste zuerst',
   name: 'Name (A–Z)',
-  verification: 'Verifizierung',
 }
-const SORT_ORDER: SortKey[] = ['activity', 'name', 'verification']
+const SORT_ORDER: SortKey[] = ['created', 'name']
 
 interface ToolbarProps {
   query: string
   onQuery: (v: string) => void
   sort: SortKey
   onCycleSort: () => void
+  skills: { label: string; count: number }[]
+  selected: Set<string>
+  onToggleSkill: (s: string) => void
+  onClearSkills: () => void
 }
 
-function Toolbar({ query, onQuery, sort, onCycleSort }: ToolbarProps) {
+/** Popover: filter candidates by technology (skill). AND semantics — each added
+ *  technology narrows the list to candidates who have all of them. */
+function FilterPopover({
+  skills,
+  selected,
+  onToggleSkill,
+  onClearSkills,
+}: Pick<ToolbarProps, 'skills' | 'selected' | 'onToggleSkill' | 'onClearSkills'>) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const shown = skills.filter((s) => s.label.toLowerCase().includes(q.trim().toLowerCase()))
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2.5 text-[14px] font-medium text-ink-soft hover:bg-slate-50"
+      >
+        <SlidersHorizontal className="h-4 w-4 text-ink-muted" />
+        Filter
+        {selected.size > 0 && (
+          <span className="rounded-md bg-brand-500 px-1.5 text-[12px] font-semibold text-white">
+            {selected.size}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-line bg-white p-2 shadow-xl">
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-[13px] focus-within:border-brand-500">
+              <Search className="h-4 w-4 text-ink-faint" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Technologie suchen…"
+                className="w-full bg-transparent outline-none placeholder:text-ink-faint"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {shown.length === 0 && (
+                <p className="px-2 py-3 text-center text-[13px] text-ink-muted">Keine Treffer</p>
+              )}
+              {shown.map((s) => {
+                const active = selected.has(s.label)
+                return (
+                  <button
+                    key={s.label}
+                    onClick={() => onToggleSkill(s.label)}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-slate-50"
+                  >
+                    <span
+                      className={`flex h-4 w-4 items-center justify-center rounded border ${
+                        active ? 'border-brand-500 bg-brand-500 text-white' : 'border-line'
+                      }`}
+                    >
+                      {active && <Check className="h-3 w-3" />}
+                    </span>
+                    <span className="flex-1 truncate text-ink">{s.label}</span>
+                    <span className="text-[12px] text-ink-faint">{s.count}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {selected.size > 0 && (
+              <button
+                onClick={onClearSkills}
+                className="mt-2 w-full rounded-lg border border-line py-1.5 text-[13px] font-medium text-ink-soft hover:bg-slate-50"
+              >
+                Zurücksetzen ({selected.size})
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function Toolbar({ query, onQuery, sort, onCycleSort, ...filter }: ToolbarProps) {
   return (
     <div className="flex items-center gap-3">
       <div className="flex flex-1 items-center gap-2.5 rounded-xl border border-line bg-white px-3.5 py-2.5 text-[15px] focus-within:border-brand-500">
@@ -55,10 +136,7 @@ function Toolbar({ query, onQuery, sort, onCycleSort }: ToolbarProps) {
         <ArrowDownUp className="h-4 w-4 text-ink-muted" />
         Sortiert nach <span className="font-semibold text-ink">{SORT_LABELS[sort]}</span>
       </button>
-      <button className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2.5 text-[14px] font-medium text-ink-soft hover:bg-slate-50">
-        <SlidersHorizontal className="h-4 w-4 text-ink-muted" />
-        Filter
-      </button>
+      <FilterPopover {...filter} />
     </div>
   )
 }
@@ -120,22 +198,51 @@ export function CandidatesView() {
   )
   const [refreshKey, setRefreshKey] = useState(0)
   const [query, setQuery] = useState('')
-  const [sort, setSort] = useState<SortKey>('activity')
+  const [sort, setSort] = useState<SortKey>('created')
+  const [skillFilter, setSkillFilter] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Candidate | null>(null)
   const { data } = useAsync(() => api.candidates(), [refreshKey])
 
-  const rows = useMemo(() => {
-    const all = data ? data.map(toCandidate) : mockCandidates
-    const q = query.trim().toLowerCase()
-    const filtered = q ? all.filter((c) => matches(c, q)) : all
-    const sorted = [...filtered]
-    if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'de'))
-    else if (sort === 'verification') sorted.sort((a, b) => b.verification - a.verification)
-    return sorted
-  }, [data, query, sort])
+  const all = useMemo(() => (data ? data.map(toCandidate) : mockCandidates), [data])
 
-  const total = data ? data.length : mockCandidates.length
+  // Distinct technologies across the pool, most common first (for the filter).
+  const skillOptions = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const c of all) {
+      for (const s of c.profile?.allSkills ?? c.skills.map((x) => x.label)) {
+        counts.set(s, (counts.get(s) ?? 0) + 1)
+      }
+    }
+    return [...counts.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+  }, [all])
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    let out = q ? all.filter((c) => matches(c, q)) : all
+    if (skillFilter.size > 0) {
+      out = out.filter((c) => {
+        const have = new Set(
+          (c.profile?.allSkills ?? c.skills.map((x) => x.label)).map((s) => s.toLowerCase()),
+        )
+        return [...skillFilter].every((s) => have.has(s.toLowerCase()))
+      })
+    }
+    const sorted = [...out]
+    if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'de'))
+    else sorted.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+    return sorted
+  }, [all, query, sort, skillFilter])
+
+  const total = all.length
   const cycleSort = () => setSort((s) => SORT_ORDER[(SORT_ORDER.indexOf(s) + 1) % SORT_ORDER.length])
+  const toggleSkill = (s: string) =>
+    setSkillFilter((prev) => {
+      const next = new Set(prev)
+      next.has(s) ? next.delete(s) : next.add(s)
+      return next
+    })
 
   return (
     <div className="flex h-full flex-col overflow-hidden pt-[76px]">
@@ -162,7 +269,16 @@ export function CandidatesView() {
       </div>
 
       <div className="px-8 pt-5">
-        <Toolbar query={query} onQuery={setQuery} sort={sort} onCycleSort={cycleSort} />
+        <Toolbar
+          query={query}
+          onQuery={setQuery}
+          sort={sort}
+          onCycleSort={cycleSort}
+          skills={skillOptions}
+          selected={skillFilter}
+          onToggleSkill={toggleSkill}
+          onClearSkills={() => setSkillFilter(new Set())}
+        />
       </div>
 
       {/* Table */}
@@ -175,7 +291,9 @@ export function CandidatesView() {
 
         {rows.length === 0 && (
           <div className="px-2 py-16 text-center text-[14px] text-ink-muted">
-            Keine Kandidaten gefunden für „{query}“.
+            Keine Kandidaten gefunden
+            {query ? ` für „${query}“` : ''}
+            {skillFilter.size > 0 ? ` mit ${[...skillFilter].join(', ')}` : ''}.
           </div>
         )}
 

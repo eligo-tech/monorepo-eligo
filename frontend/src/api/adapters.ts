@@ -139,6 +139,7 @@ export function toCandidate(dto: CandidateDTO): Candidate {
     phone: dto.phone ?? '—',
     linkedin: Boolean(linkedinUrl),
     linkedinUrl,
+    createdAt: dto.created_at,
     currentTitle: dto.current_title ?? '—',
     currentCompany: dto.current_company ?? '—',
     tenure: current ? `${current} J` : '—',

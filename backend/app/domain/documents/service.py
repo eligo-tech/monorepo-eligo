@@ -24,9 +24,12 @@ from app.agents.document_extraction import (
     ExtractedField,
 )
 from app.core.logging import get_logger
+from sqlalchemy import desc, select
+
 from app.domain.candidates import service as candidates_service
 from app.domain.candidates.schemas import CandidateCreate
 from app.domain.documents import gate, parser
+from app.domain.documents.models import CandidateDocument
 from app.domain.documents.extraction import get_cv_extractor
 from app.domain.documents.extraction.base import CVSections, FIELD_LABELS, FIELD_ORDER
 from app.domain.documents.gate import GateOutcome, PreconditionFailed
@@ -251,6 +254,16 @@ async def extract_cv(
         # ── Postcondition: re-query the system-of-record and prove the write
         #    landed (the laufwise "verify against real state after execute" step).
         notes += [o.as_note() for o in await _verify_persisted(session, tenant_id, candidate_id, accepted.get("email"))]
+
+        # ── Keep the original CV as evidence, shown next to the parsed record.
+        await store_document(
+            session,
+            tenant_id=tenant_id,
+            candidate_id=candidate_id,
+            filename=filename,
+            content=content,
+            content_type="application/pdf",
+        )
     else:
         agent_result = await agent.run(
             DocumentExtractionInput(
@@ -280,6 +293,45 @@ async def extract_cv(
         candidate_id=candidate_id,
         text_chars=len(text),
     )
+
+
+async def store_document(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    filename: str,
+    content: bytes,
+    content_type: str = "application/pdf",
+) -> CandidateDocument:
+    """Persist the raw uploaded CV so it can be shown next to the parsed record."""
+    doc = CandidateDocument(
+        tenant_id=tenant_id,
+        candidate_id=candidate_id,
+        filename=filename,
+        content_type=content_type,
+        byte_size=len(content),
+        content=content,
+    )
+    session.add(doc)
+    await session.commit()
+    return doc
+
+
+async def get_latest_document(
+    session: AsyncSession, *, tenant_id: uuid.UUID, candidate_id: uuid.UUID
+) -> CandidateDocument | None:
+    """The most recent original CV stored for a candidate (None if none)."""
+    result = await session.execute(
+        select(CandidateDocument)
+        .where(
+            CandidateDocument.tenant_id == tenant_id,
+            CandidateDocument.candidate_id == candidate_id,
+        )
+        .order_by(desc(CandidateDocument.created_at))
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 async def _verify_persisted(

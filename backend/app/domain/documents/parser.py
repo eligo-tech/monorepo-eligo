@@ -46,8 +46,38 @@ _TITLE_HINT = re.compile(
 )
 
 
+def _looks_letter_spaced(line: str) -> bool:
+    """True when a line is rendered with a space between every character
+    (`S A R A H   B A U S`), a common artefact of PDF text extraction where
+    glyph kerning is emitted as spaces. Detected by a high share of
+    single-character tokens."""
+    toks = line.split()
+    if len(toks) < 4:
+        return False
+    singles = sum(1 for t in toks if len(t) == 1)
+    return singles / len(toks) > 0.6
+
+
+def _despace(text: str) -> str:
+    """Collapse letter-spacing while preserving word boundaries. In these PDFs a
+    single space separates characters and 2+ spaces separate words, so per
+    letter-spaced line we split on the wide gaps and join the narrow ones —
+    turning `S A R A H   B A U S` into `SARAH BAUS`. Normal lines are untouched."""
+    out: list[str] = []
+    for line in text.split("\n"):
+        if _looks_letter_spaced(line):
+            words = re.split(r" {2,}", line.strip())
+            out.append(" ".join(w.replace(" ", "") for w in words))
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
 def pdf_to_text(content: bytes) -> str:
-    """Extract text from a PDF byte string. Empty string if it can't be read."""
+    """Extract text from a PDF byte string. Empty string if it can't be read.
+
+    Letter-spacing artefacts are normalized so downstream extraction, grounding
+    and display all see clean words rather than `S E N I O R  P M`."""
     from pypdf import PdfReader
 
     try:
@@ -60,7 +90,7 @@ def pdf_to_text(content: bytes) -> str:
             parts.append(page.extract_text() or "")
         except Exception:
             continue
-    return "\n".join(parts)
+    return _despace("\n".join(parts))
 
 
 def _clean_lines(text: str) -> list[str]:
