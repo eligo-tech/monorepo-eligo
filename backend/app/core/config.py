@@ -8,10 +8,11 @@ the scaffold starts with ZERO external services (SQLite fallback).
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -111,7 +112,11 @@ class Settings(BaseSettings):
     clerk_issuer: str | None = None
 
     # --- CORS ------------------------------------------------------------
-    cors_origins: list[str] = Field(
+    # NoDecode stops pydantic-settings from JSON-parsing the env value at the
+    # source level (which would reject a plain/comma-separated string before the
+    # validator runs). _split_cors below accepts both a JSON array and a plain,
+    # comma-separated list — e.g. ELIGO_CORS_ORIGINS=https://a.app,https://b.app.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
             "http://localhost:5173",
@@ -126,11 +131,20 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_cors(cls, value: object) -> object:
-        """Allow a comma-separated string in addition to a JSON list."""
+        """Accept a JSON array OR a plain comma-separated string.
+
+        With NoDecode on the field, pydantic-settings no longer JSON-parses the
+        env value for us, so this validator owns both forms. A bare value like
+        ``https://a.app,https://b.app`` becomes ``["https://a.app", ...]``.
+        """
         if isinstance(value, str):
             stripped = value.strip()
+            if not stripped:
+                return []
             if stripped.startswith("["):
-                return value  # let pydantic parse JSON
+                import json
+
+                return json.loads(stripped)  # explicit JSON-array form
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
 
