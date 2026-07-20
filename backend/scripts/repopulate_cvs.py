@@ -19,7 +19,8 @@ from pathlib import Path
 from sqlalchemy import delete, func, select
 
 from app.core.config import settings
-from app.core.database import SessionLocal, create_all, current_tenant_var
+from app.core.database import AdminSessionLocal as SessionLocal
+from app.core.database import create_all, current_tenant_var
 from app.domain.candidates.models import Candidate
 from app.domain.documents import service as documents_service
 from app.domain.documents.gate import PreconditionFailed

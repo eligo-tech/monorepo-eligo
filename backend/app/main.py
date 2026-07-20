@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
 from app.core.config import settings
-from app.core.database import create_all
+from app.core.database import assert_runtime_rls_enforced, create_all
 from app.core.logging import configure_logging, get_logger
 
 logger = get_logger(__name__)
@@ -27,6 +27,8 @@ async def lifespan(app: FastAPI):
     if settings.auto_create_tables:
         await create_all()
         logger.info("tables ensured (%s)", settings.safe_database_url)
+    # Verify the runtime connection actually enforces RLS (fail-closed isolation).
+    await assert_runtime_rls_enforced()
     logger.info("%s started in %s mode", settings.app_name, settings.env)
     yield
 

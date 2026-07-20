@@ -57,7 +57,26 @@ class Settings(BaseSettings):
     # BYPASSRLS superuser (Supabase `postgres`), for which RLS is ignored; set
     # ELIGO_DB_APP_ROLE to a NOBYPASSRLS role (e.g. `eligo_app`) to make it bite.
     # Unset → no role switch (RLS off / single-tenant demo). Postgres-only.
+    #
+    # Two ways to get RLS-enforced isolation, weakest → strongest:
+    #   1. SET LOCAL ROLE (legacy): connect as `postgres`, set ELIGO_DB_APP_ROLE.
+    #      Only fail-closed for transactions that pin a tenant; an un-pinned query
+    #      runs as the BYPASSRLS connection role and sees ALL tenants (fail-open).
+    #   2. Dedicated login role (preferred, fail-closed): point ELIGO_DATABASE_URL
+    #      at the NOBYPASSRLS role itself, and ELIGO_ADMIN_DATABASE_URL at an
+    #      owner/superuser for DDL. Then the connection can NEVER bypass RLS, so an
+    #      un-pinned query returns zero rows no matter what the app code does.
     db_app_role: str | None = None
+
+    # Password used by scripts/apply_rls to provision the app role as a LOGIN role
+    # (so ELIGO_DATABASE_URL can connect *as* it — mode 2 above). Provisioning-only;
+    # unset → the role is created/kept NOLOGIN (mode 1). Never logged.
+    db_app_role_password: str | None = None
+
+    # Owner/superuser connection used ONLY for DDL (migrations, create_all) and
+    # cross-tenant admin scripts — never for request traffic. Supabase `postgres`.
+    # Unset → falls back to ``database_url`` (single-connection dev / SQLite).
+    admin_database_url: str | None = None
 
     # --- LLM extraction --------------------------------------------------
     # Vendor-neutral: the factory selects an extractor by provider. "openai"
@@ -124,11 +143,21 @@ class Settings(BaseSettings):
         return "postgresql" in self.database_url or "postgres" in self.database_url
 
     @property
-    def safe_database_url(self) -> str:
-        """Database URL with any credentials masked — safe to log."""
+    def admin_url(self) -> str:
+        """Connection used for DDL + cross-tenant admin work. Falls back to the
+        runtime URL when no separate owner connection is configured."""
+        return self.admin_database_url or self.database_url
+
+    @staticmethod
+    def _mask(url: str) -> str:
         import re
 
-        return re.sub(r"://([^:/@]+):[^@]+@", r"://\1:***@", self.database_url)
+        return re.sub(r"://([^:/@]+):[^@]+@", r"://\1:***@", url)
+
+    @property
+    def safe_database_url(self) -> str:
+        """Database URL with any credentials masked — safe to log."""
+        return self._mask(self.database_url)
 
 
 @lru_cache

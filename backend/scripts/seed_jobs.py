@@ -20,7 +20,8 @@ import sys
 from sqlalchemy import delete, func, select
 
 from app.core.config import settings
-from app.core.database import SessionLocal, current_tenant_var
+from app.core.database import AdminSessionLocal as SessionLocal
+from app.core.database import current_tenant_var
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.tenants.models import Tenant
