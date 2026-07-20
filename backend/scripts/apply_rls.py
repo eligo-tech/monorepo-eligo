@@ -9,7 +9,14 @@ from the authenticated org. FORCE makes the policy apply even to the table owner
     .venv/bin/python -m scripts.apply_rls          # apply
     .venv/bin/python -m scripts.apply_rls --status # just report
 
-Postgres only. Deploys get the same via Alembic (0003 + 0005).
+Runs each (idempotent) statement in AUTOCOMMIT rather than one big transaction:
+on managed poolers (Supabase Supavisor) a single dropped connection would
+otherwise roll back the whole run — which once left the app role provisioned but
+still ``NOLOGIN``. Autocommit makes every statement independently durable.
+
+Postgres only. Deploys get the RLS policies via Alembic (0003 + 0005); the app
+role itself is provisioned here (it needs a password, which never belongs in a
+migration).
 """
 
 from __future__ import annotations
@@ -81,8 +88,27 @@ async def _ensure_app_role(conn) -> None:
     await conn.execute(text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}"))
     await conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {role}"))
     await conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO {role}"))
-    await conn.execute(text(f"GRANT {role} TO CURRENT_USER"))  # so the owner can SET ROLE to it (legacy mode)
     print(f"  ✓ app role {role} ready (NOBYPASSRLS) + DML grants · {login}")
+
+
+async def _grant_role_membership_best_effort(eng) -> None:
+    """Make the owner a member of the app role so it can ``SET LOCAL ROLE`` to it.
+
+    Only legacy (NOLOGIN) mode needs this — when the app connects *as* the role
+    (login mode) the owner never switches into it. Run isolated on its own
+    connection and tolerate failure: on Supabase's pooler `GRANT role TO
+    CURRENT_USER` can drop the connection, and it must not abort the RLS setup.
+    """
+    role = settings.db_app_role
+    if settings.db_app_role_password:
+        return  # login mode — owner→role membership is unnecessary
+    try:
+        async with eng.connect() as conn:
+            await conn.execute(text(f"GRANT {role} TO CURRENT_USER"))
+        print(f"  ✓ owner granted membership in {role} (legacy SET-LOCAL-ROLE mode)")
+    except Exception as exc:  # pragma: no cover - pooler-dependent
+        print(f"  ! skipped GRANT {role} TO CURRENT_USER ({type(exc).__name__}) — "
+              f"only needed for legacy SET-LOCAL-ROLE mode; harmless in login mode")
 
 
 async def main() -> None:
@@ -92,7 +118,10 @@ async def main() -> None:
         await _status()
         return
 
-    async with admin_engine.begin() as conn:
+    # AUTOCOMMIT: each idempotent statement is durable on its own, so a single
+    # pooler-dropped connection can't roll back the whole run (see module docstring).
+    eng = admin_engine.execution_options(isolation_level="AUTOCOMMIT")
+    async with eng.connect() as conn:
         await _ensure_app_role(conn)
         for t in TABLES:
             await conn.execute(text(f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY"))
@@ -103,6 +132,8 @@ async def main() -> None:
                 f"USING ({PREDICATE}) WITH CHECK ({PREDICATE})"
             ))
             print(f"  ✓ RLS enforced on {t}")
+    # Isolated + best-effort: keep it away from the statements above.
+    await _grant_role_membership_best_effort(eng)
     print("\nRow-Level Security is ON. Every query must set app.current_tenant.")
     await _status()
 
