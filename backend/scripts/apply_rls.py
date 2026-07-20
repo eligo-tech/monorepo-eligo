@@ -20,7 +20,7 @@ import sys
 from sqlalchemy import text
 
 from app.core.config import settings
-from app.core.database import current_tenant_var, engine
+from app.core.database import admin_engine, current_tenant_var
 from app.domain import registry  # noqa: F401 — register all models
 
 # Every table carrying a tenant_id.
@@ -32,7 +32,7 @@ PREDICATE = "tenant_id = NULLIF(current_setting('app.current_tenant', true), '')
 
 
 async def _status() -> None:
-    async with engine.connect() as conn:
+    async with admin_engine.connect() as conn:
         rows = (await conn.execute(text(
             "SELECT relname, relrowsecurity, relforcerowsecurity "
             "FROM pg_class WHERE relname = ANY(:t) ORDER BY relname"
@@ -42,9 +42,18 @@ async def _status() -> None:
 
 
 async def _ensure_app_role(conn) -> None:
-    """Create the NOBYPASSRLS app role the backend drops to (SET LOCAL ROLE), and
-    grant it DML — so RLS actually applies even though the connection role
-    (Supabase `postgres`) is BYPASSRLS. Idempotent."""
+    """Provision the NOBYPASSRLS app role RLS is enforced through, and grant it
+    DML. Idempotent.
+
+    Two operating modes, selected by whether ``ELIGO_DB_APP_ROLE_PASSWORD`` is set:
+
+    * password set → the role is made a **LOGIN** role so the app can connect
+      *as* it (`ELIGO_DATABASE_URL`). The connection then can never bypass RLS →
+      an un-pinned query returns zero rows (fail-closed). This is preferred.
+    * password unset → the role is left **NOLOGIN**; the app connects as the
+      owner and drops to it per transaction via `SET LOCAL ROLE` (legacy mode,
+      only fail-closed for tenant-pinned transactions).
+    """
     role = settings.db_app_role
     if not role or not role.replace("_", "").isalnum():
         print("! ELIGO_DB_APP_ROLE unset — RLS will NOT be enforced for the app "
@@ -54,12 +63,26 @@ async def _ensure_app_role(conn) -> None:
         f"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='{role}') "
         f"THEN CREATE ROLE {role} NOLOGIN NOBYPASSRLS; END IF; END $$;"
     ))
+    # Always pin the security-critical attribute, even for a pre-existing role.
+    await conn.execute(text(f"ALTER ROLE {role} NOBYPASSRLS"))
+
+    pw = settings.db_app_role_password
+    if pw:
+        # Single-quote-escape the operator-supplied password for the DDL literal
+        # (role name is already validated as an identifier above).
+        pw_literal = "'" + pw.replace("'", "''") + "'"
+        await conn.execute(text(f"ALTER ROLE {role} WITH LOGIN PASSWORD {pw_literal}"))
+        login = "LOGIN — point ELIGO_DATABASE_URL at this role (fail-closed)"
+    else:
+        login = "NOLOGIN — legacy SET-LOCAL-ROLE mode (set ELIGO_DB_APP_ROLE_PASSWORD to harden)"
+
     await conn.execute(text(f"GRANT USAGE ON SCHEMA public TO {role}"))
     await conn.execute(text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {role}"))
     await conn.execute(text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}"))
     await conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {role}"))
-    await conn.execute(text(f"GRANT {role} TO CURRENT_USER"))  # so the app role can SET ROLE to it
-    print(f"  ✓ app role {role} ready (NOBYPASSRLS) + granted DML")
+    await conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO {role}"))
+    await conn.execute(text(f"GRANT {role} TO CURRENT_USER"))  # so the owner can SET ROLE to it (legacy mode)
+    print(f"  ✓ app role {role} ready (NOBYPASSRLS) + DML grants · {login}")
 
 
 async def main() -> None:
@@ -69,7 +92,7 @@ async def main() -> None:
         await _status()
         return
 
-    async with engine.begin() as conn:
+    async with admin_engine.begin() as conn:
         await _ensure_app_role(conn)
         for t in TABLES:
             await conn.execute(text(f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY"))

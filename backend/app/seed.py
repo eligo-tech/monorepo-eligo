@@ -20,7 +20,8 @@ import datetime as dt
 from sqlalchemy import delete
 
 from app.core.config import settings
-from app.core.database import SessionLocal, create_all
+from app.core.database import AdminSessionLocal as SessionLocal
+from app.core.database import create_all
 from app.domain.candidates.models import Candidate
 from app.domain.common.enums import (
     ApplicationStatus,

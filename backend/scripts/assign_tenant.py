@@ -23,7 +23,7 @@ import sys
 from sqlalchemy import select, update
 
 from app.core.config import settings
-from app.core.database import SessionLocal
+from app.core.database import AdminSessionLocal as SessionLocal
 from app.domain.candidates.models import Candidate
 from app.domain.documents.models import CandidateDocument
 from app.domain.matching.models import MatchReceipt
