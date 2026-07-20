@@ -132,6 +132,13 @@ async def main() -> None:
                 f"USING ({PREDICATE}) WITH CHECK ({PREDICATE})"
             ))
             print(f"  ✓ RLS enforced on {t}")
+        # The tenants mapping table is read/created BEFORE a tenant is pinned, so
+        # it can't be tenant-scoped — give it a permissive policy or the app role
+        # is default-denied and every request 500s in get_or_create (see 0006).
+        await conn.execute(text("ALTER TABLE tenants ENABLE ROW LEVEL SECURITY"))
+        await conn.execute(text("DROP POLICY IF EXISTS tenants_app_all ON tenants"))
+        await conn.execute(text("CREATE POLICY tenants_app_all ON tenants USING (true) WITH CHECK (true)"))
+        print("  ✓ tenants: permissive app policy (pre-auth org→tenant lookup)")
     # Isolated + best-effort: keep it away from the statements above.
     await _grant_role_membership_best_effort(eng)
     print("\nRow-Level Security is ON. Every query must set app.current_tenant.")
