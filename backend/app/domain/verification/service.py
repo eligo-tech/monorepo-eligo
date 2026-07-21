@@ -163,6 +163,7 @@ async def verify_and_commit(
     agent: str,
     postconditions: list[Postcondition] | None = None,
     apply_hook: ApplyHook | None = None,
+    actor: str | None = None,
 ) -> CommitResult:
     """Verify a proposed change, record it, and commit iff it passes.
 
@@ -174,6 +175,12 @@ async def verify_and_commit(
         rejected, per GDPR Art. 14),
       * append a ``VERIFY`` receipt, and a ``WRITE`` receipt if committed,
       * optionally invoke ``apply_hook`` to perform the real domain write.
+
+    ``actor`` identifies the acting human (e.g. the recruiter making a manual
+    edit); when set it is recorded in the receipt payload so the append-only,
+    tamper-evident ledger itself names *who* made the change — not only *that* a
+    human did (GDPR Art. 22 contestability). Agents leave it ``None``; their
+    identity is already the ``agent`` field.
     """
     postconditions = postconditions or []
 
@@ -194,6 +201,15 @@ async def verify_and_commit(
     if ok and not confident:
         reason_text = f"low confidence ({change.confidence:.2f}); {reason_text}"
 
+    verify_payload: dict[str, Any] = {
+        "field": change.field,
+        "confidence": change.confidence,
+        "source": change.source.value,
+        "postconditions_ok": ok,
+    }
+    if actor:
+        verify_payload["actor"] = actor
+
     # VERIFY receipt — records the decision regardless of outcome.
     verify_receipt = await append_receipt(
         session,
@@ -204,12 +220,7 @@ async def verify_and_commit(
         subject_id=str(change.entity_id),
         verified=ok,
         summary=f"verify {change.field}: {reason_text}",
-        payload={
-            "field": change.field,
-            "confidence": change.confidence,
-            "source": change.source.value,
-            "postconditions_ok": ok,
-        },
+        payload=verify_payload,
     )
 
     record = EnrichmentRecord(
@@ -232,6 +243,12 @@ async def verify_and_commit(
     if committed:
         if apply_hook is not None:
             await apply_hook(session, change)
+        write_payload: dict[str, Any] = {
+            "field": change.field,
+            "value": change.proposed_value,
+        }
+        if actor:
+            write_payload["actor"] = actor
         # WRITE receipt — the only receipt that signifies a real mutation.
         write_receipt = await append_receipt(
             session,
@@ -242,7 +259,7 @@ async def verify_and_commit(
             subject_id=str(change.entity_id),
             verified=True,
             summary=f"write {change.field}={change.proposed_value!r}",
-            payload={"field": change.field, "value": change.proposed_value},
+            payload=write_payload,
         )
 
     return CommitResult(

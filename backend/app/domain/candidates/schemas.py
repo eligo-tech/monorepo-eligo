@@ -7,11 +7,16 @@ current_title/current_company, skills[], verification_score.
 from __future__ import annotations
 
 import datetime as dt
+import re
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.common.enums import WorkPermitStatus
+
+# Pragmatic e-mail shape check — mirrors the extraction gate's validator. Not a
+# full RFC 5322 parser; rejects the obvious garbage (missing @, no domain dot).
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class CandidateBase(BaseModel):
@@ -93,10 +98,10 @@ class CandidateUpdate(BaseModel):
     notice_period: str | None = None
     availability: str | None = None
     total_years_experience: str | None = None
-    current_salary: int | None = None
-    salary_expectation: int | None = None
+    current_salary: int | None = Field(default=None, ge=0)
+    salary_expectation: int | None = Field(default=None, ge=0)
     salary_currency: str | None = None
-    availability_weeks: int | None = None
+    availability_weeks: int | None = Field(default=None, ge=0)
     work_permit: WorkPermitStatus | None = None
     source: str | None = None
     motivation: str | None = None
@@ -107,6 +112,19 @@ class CandidateUpdate(BaseModel):
     working_experience: list[str] | None = None
     # Structured CV roles ({title, company, location, dates, highlights}).
     work_history: list[dict] | None = None
+
+    @field_validator("email")
+    @classmethod
+    def _valid_email(cls, v: str | None) -> str | None:
+        """Reject a malformed e-mail with 422; treat blank as "clear" (None)."""
+        if v is None:
+            return None
+        v = v.strip()
+        if v == "":
+            return None
+        if not _EMAIL_RE.match(v):
+            raise ValueError("invalid e-mail address")
+        return v
 
 
 class CandidateRead(CandidateBase):

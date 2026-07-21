@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.auth import get_current_tenant
+from app.core.auth import get_current_tenant, get_current_user
 from app.core.database import get_db
 from app.domain.candidates import service
 from app.domain.candidates.schemas import (
@@ -50,15 +50,17 @@ async def update_candidate(
     candidate_id: uuid.UUID,
     payload: CandidateUpdate,
     tenant_id: uuid.UUID = Depends(get_current_tenant),
+    editor: str | None = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CandidateRead:
     """Manually edit a candidate's fields.
 
     Each changed field is committed through the verification gate as a
-    HUMAN_VERIFIED change, leaving an append-only receipt + provenance record.
+    HUMAN_VERIFIED change, leaving an append-only receipt (attributed to the
+    acting user) + provenance record.
     """
     row = await service.update_candidate(
-        db, tenant_id=tenant_id, candidate_id=candidate_id, patch=payload
+        db, tenant_id=tenant_id, candidate_id=candidate_id, patch=payload, editor=editor
     )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "candidate not found")

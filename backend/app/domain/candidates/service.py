@@ -92,6 +92,9 @@ async def create_candidate(
     return candidate
 
 
+# Columns declared NOT NULL — a manual edit must not blank these out.
+_NON_NULLABLE = frozenset({"full_name", "salary_currency", "work_permit"})
+
 # Fields that count toward the "verified share" surfaced to recruiters. A manual
 # edit human-verifies a field, so completing these raises verification_score.
 _KEY_FIELDS = (
@@ -170,8 +173,11 @@ async def update_candidate(
     applied: list[str] = []
 
     for field, new_value in changes.items():
-        # Never blank out the required display name.
-        if field == "full_name" and not (new_value and str(new_value).strip()):
+        # Never NULL a non-nullable column (would raise IntegrityError). The UI
+        # never does this; it guards against a raw-API null.
+        if field in _NON_NULLABLE and (
+            new_value is None or (isinstance(new_value, str) and not new_value.strip())
+        ):
             continue
         if _norm(getattr(candidate, field, None)) == _norm(new_value):
             continue
@@ -200,6 +206,7 @@ async def update_candidate(
             change=change,
             agent="recruiter_manual_edit",
             apply_hook=_apply,
+            actor=editor,
         )
         applied.append(field)
 
