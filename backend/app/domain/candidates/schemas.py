@@ -60,6 +60,55 @@ class CandidateCreate(CandidateBase):
     merged_identities: list[str] = Field(default_factory=list)
 
 
+class CandidateUpdate(BaseModel):
+    """PATCH payload for a manual recruiter edit of a candidate.
+
+    Every field is optional; only the fields actually sent are applied
+    (``model_dump(exclude_unset=True)``). Each changed field is committed
+    through the verification gate as a ``HUMAN_VERIFIED`` change (confidence
+    1.0), so the edit leaves an append-only receipt + ``EnrichmentRecord`` —
+    the value stays as auditable as an agent-proposed one.
+    """
+
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    current_title: str | None = None
+    current_company: str | None = None
+    location: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    sex: str | None = None
+    name_prefix: str | None = None
+    date_of_birth: str | None = None
+    street: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
+    linkedin_url: str | None = None
+    xing_url: str | None = None
+    industry: str | None = None
+    employment_type: str | None = None
+    willing_to_relocate: str | None = None
+    notice_period: str | None = None
+    availability: str | None = None
+    total_years_experience: str | None = None
+    current_salary: int | None = None
+    salary_expectation: int | None = None
+    salary_currency: str | None = None
+    availability_weeks: int | None = None
+    work_permit: WorkPermitStatus | None = None
+    source: str | None = None
+    motivation: str | None = None
+    skills: list[str] | None = None
+    languages: list[str] | None = None
+    # Structured entries ({degree, institution, dates}) or legacy strings.
+    education: list[dict] | list[str] | None = None
+    working_experience: list[str] | None = None
+    # Structured CV roles ({title, company, location, dates, highlights}).
+    work_history: list[dict] | None = None
+
+
 class CandidateRead(CandidateBase):
     model_config = ConfigDict(from_attributes=True)
 

@@ -18,19 +18,53 @@ import {
   ChevronsRight,
   ChevronsLeft,
   User,
+  Pencil,
 } from 'lucide-react'
 import type { Candidate, CandidateProfile } from '@/data/types'
+import type { CandidateDTO } from '@/api/types'
 import { api } from '@/api/client'
 import { Avatar } from '@/components/ui/Avatar'
 import { SkillBadge } from '@/components/ui/SkillBadge'
 import { LinkedInMark } from '@/components/ui/LinkedInMark'
+import { DossierEditor } from './DossierEditor'
 
 /** Full candidate dossier: the ORIGINAL uploaded CV on the left (the evidence),
  *  the PARSED CV — the structured record extracted from it — on the right. */
-export function CandidateDossier({ candidate, onClose }: { candidate: Candidate; onClose: () => void }) {
+export function CandidateDossier({
+  candidate,
+  onClose,
+  onSaved,
+}: {
+  candidate: Candidate
+  onClose: () => void
+  /** Called after a manual edit is persisted, with the fresh record. */
+  onSaved?: (updated: CandidateDTO) => void
+}) {
   const [cvUrl, setCvUrl] = useState<string | null>(null)
   const [cvState, setCvState] = useState<'loading' | 'ready' | 'missing'>('loading')
   const [expanded, setExpanded] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [dto, setDto] = useState<CandidateDTO | null>(null)
+  const [dtoError, setDtoError] = useState(false)
+
+  async function startEdit() {
+    setExpanded(true)
+    setEditing(true)
+    setDtoError(false)
+    if (!dto) {
+      try {
+        setDto(await api.candidate(candidate.id))
+      } catch {
+        setDtoError(true)
+      }
+    }
+  }
+
+  function handleSaved(updated: CandidateDTO) {
+    setDto(updated)
+    setEditing(false)
+    onSaved?.(updated)
+  }
 
   // Close on Escape.
   useEffect(() => {
@@ -166,23 +200,49 @@ export function CandidateDossier({ candidate, onClose }: { candidate: Candidate;
               <span className="ml-2 rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-medium text-brand-700">
                 verifiziert extrahiert
               </span>
-              <button
-                onClick={() => setExpanded((e) => !e)}
-                className="ml-auto flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-[12px] font-medium normal-case tracking-normal text-ink-soft hover:bg-slate-50"
-                title={expanded ? 'Kompaktansicht' : 'Vollständiges Profil (Dossier 360)'}
-              >
-                {expanded ? (
-                  <>
-                    <ChevronsLeft className="h-4 w-4" /> Kompakt
-                  </>
-                ) : (
-                  <>
-                    Dossier 360 <ChevronsRight className="h-4 w-4" />
-                  </>
-                )}
-              </button>
+              {!editing && (
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    onClick={startEdit}
+                    className="flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-[12px] font-medium normal-case tracking-normal text-ink-soft hover:bg-slate-50"
+                    title="Felder bearbeiten"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Bearbeiten
+                  </button>
+                  <button
+                    onClick={() => setExpanded((e) => !e)}
+                    className="flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-[12px] font-medium normal-case tracking-normal text-ink-soft hover:bg-slate-50"
+                    title={expanded ? 'Kompaktansicht' : 'Vollständiges Profil (Dossier 360)'}
+                  >
+                    {expanded ? (
+                      <>
+                        <ChevronsLeft className="h-4 w-4" /> Kompakt
+                      </>
+                    ) : (
+                      <>
+                        Dossier 360 <ChevronsRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </PanelLabel>
             <div className="flex-1 overflow-y-auto px-7 py-6">
+              {editing ? (
+                dtoError ? (
+                  <Placeholder icon={FileWarning}>
+                    Profil konnte nicht geladen werden.
+                    <button onClick={startEdit} className="mt-2 block text-brand-600 hover:underline">
+                      Erneut versuchen
+                    </button>
+                  </Placeholder>
+                ) : dto ? (
+                  <DossierEditor dto={dto} onCancel={() => setEditing(false)} onSaved={handleSaved} />
+                ) : (
+                  <Placeholder>Profil wird geladen…</Placeholder>
+                )
+              ) : (
+                <>
               {/* Key facts — compact (populated only) or the full 360 field set */}
               {expanded ? (
                 <Profile360 candidate={candidate} p={p} />
@@ -294,6 +354,8 @@ export function CandidateDossier({ candidate, onClose }: { candidate: Candidate;
                   <Empty>Keine Ausbildung erfasst</Empty>
                 )}
               </CvSection>
+                </>
+              )}
             </div>
           </div>
         </div>

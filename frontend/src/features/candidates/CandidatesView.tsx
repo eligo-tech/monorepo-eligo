@@ -362,7 +362,16 @@ export function CandidatesView() {
         ))}
       </div>
 
-      {selected && <CandidateDossier candidate={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <CandidateDossier
+          candidate={selected}
+          onClose={() => setSelected(null)}
+          onSaved={(updated) => {
+            setSelected(toCandidate(updated)) // reflect the edit in the open dossier
+            setRefreshKey((k) => k + 1) // and refresh the underlying list
+          }}
+        />
+      )}
 
       {uploadOpen && (
         <CvUploadModal

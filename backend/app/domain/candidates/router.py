@@ -11,7 +11,11 @@ from app.core.config import settings
 from app.core.auth import get_current_tenant
 from app.core.database import get_db
 from app.domain.candidates import service
-from app.domain.candidates.schemas import CandidateCreate, CandidateRead
+from app.domain.candidates.schemas import (
+    CandidateCreate,
+    CandidateRead,
+    CandidateUpdate,
+)
 from app.domain.documents import service as documents_service
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
@@ -35,6 +39,26 @@ async def get_candidate(
 ) -> CandidateRead:
     row = await service.get_candidate(
         db, tenant_id=tenant_id, candidate_id=candidate_id
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "candidate not found")
+    return CandidateRead.model_validate(row)
+
+
+@router.patch("/{candidate_id}", response_model=CandidateRead)
+async def update_candidate(
+    candidate_id: uuid.UUID,
+    payload: CandidateUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> CandidateRead:
+    """Manually edit a candidate's fields.
+
+    Each changed field is committed through the verification gate as a
+    HUMAN_VERIFIED change, leaving an append-only receipt + provenance record.
+    """
+    row = await service.update_candidate(
+        db, tenant_id=tenant_id, candidate_id=candidate_id, patch=payload
     )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "candidate not found")
