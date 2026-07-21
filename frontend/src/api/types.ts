@@ -67,6 +67,44 @@ export interface CandidateDTO {
   source?: string | null
 }
 
+/** PATCH body for a manual recruiter edit — every field optional; only the
+ *  fields present are applied. Mirrors backend CandidateUpdate. */
+export interface CandidateUpdatePayload {
+  full_name?: string
+  email?: string | null
+  phone?: string | null
+  current_title?: string | null
+  current_company?: string | null
+  location?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  sex?: string | null
+  name_prefix?: string | null
+  date_of_birth?: string | null
+  street?: string | null
+  postal_code?: string | null
+  city?: string | null
+  country?: string | null
+  linkedin_url?: string | null
+  xing_url?: string | null
+  industry?: string | null
+  employment_type?: string | null
+  willing_to_relocate?: string | null
+  notice_period?: string | null
+  availability?: string | null
+  total_years_experience?: string | null
+  current_salary?: number | null
+  salary_expectation?: number | null
+  salary_currency?: string
+  work_permit?: string
+  source?: string | null
+  motivation?: string | null
+  skills?: string[]
+  languages?: string[]
+  education?: EducationDTO[]
+  work_history?: WorkRoleDTO[]
+}
+
 export interface JobDTO {
   id: string
   tenant_id: string

@@ -48,9 +48,11 @@ def apply_hard_filters(candidate: Candidate, job: Job) -> list[str]:
 
     # 1. Right to work.
     if job.requires_work_permit and candidate.work_permit not in _ELIGIBLE_PERMITS:
+        # work_permit comes back from the DB as a plain string (String column),
+        # so read `.value` defensively — it may already be one.
+        permit = getattr(candidate.work_permit, "value", candidate.work_permit)
         failures.append(
-            f"work permit '{candidate.work_permit.value}' does not satisfy "
-            f"right-to-work requirement"
+            f"work permit '{permit}' does not satisfy right-to-work requirement"
         )
 
     # 2. Location radius (simplified: same-city match unless radius is open).

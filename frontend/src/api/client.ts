@@ -2,6 +2,7 @@
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
   CandidateDTO,
+  CandidateUpdatePayload,
   CVExtractionResultDTO,
   JobDTO,
   MatchResultDTO,
@@ -52,6 +53,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ status: string }>('/health'),
   candidates: () => request<CandidateDTO[]>('/candidates'),
+
+  /** Fetch a single candidate's full record (used to seed the edit form). */
+  candidate: (id: string) => request<CandidateDTO>(`/candidates/${id}`),
+
+  /** Apply a manual recruiter edit. Each changed field is committed through the
+   *  backend verification gate as a human-verified change (with a receipt). */
+  updateCandidate: (id: string, patch: CandidateUpdatePayload) =>
+    request<CandidateDTO>(`/candidates/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
 
   /** Fetch the original uploaded CV (PDF) for a candidate. null if none on file. */
   async candidateCv(id: string): Promise<Blob | null> {

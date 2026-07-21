@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import enum
+import json
 import uuid
 
 from sqlalchemy import select
@@ -9,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.domain.candidates.models import Candidate
-from app.domain.candidates.schemas import CandidateCreate
+from app.domain.candidates.schemas import CandidateCreate, CandidateUpdate
+from app.domain.common.enums import ConfidenceSource, WorkPermitStatus
+from app.domain.verification import service as verification
+from app.domain.verification.schemas import ProposedChange
 
 
 async def list_candidates(
@@ -82,6 +87,130 @@ async def create_candidate(
     )
     session.add(candidate)
     await session.flush()
+    await session.commit()
+    await session.refresh(candidate)
+    return candidate
+
+
+# Fields that count toward the "verified share" surfaced to recruiters. A manual
+# edit human-verifies a field, so completing these raises verification_score.
+_KEY_FIELDS = (
+    "full_name",
+    "email",
+    "phone",
+    "current_title",
+    "current_company",
+    "location",
+    "date_of_birth",
+    "city",
+    "country",
+    "linkedin_url",
+    "salary_expectation",
+    "work_permit",
+    "skills",
+)
+
+
+def _norm(value: object) -> object:
+    """Normalise an enum to its value so DB strings and enums compare equal."""
+    return value.value if isinstance(value, enum.Enum) else value
+
+
+def _as_text(value: object) -> str | None:
+    """Serialise a proposed value for the provenance record (Text column)."""
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False, default=str)
+    return str(value)
+
+
+def _is_filled(value: object) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip() != "" and value != WorkPermitStatus.UNKNOWN.value
+    if isinstance(value, (list, dict)):
+        return len(value) > 0
+    return True
+
+
+def _verification_score(candidate: Candidate) -> float:
+    filled = sum(1 for f in _KEY_FIELDS if _is_filled(getattr(candidate, f, None)))
+    return round(filled / len(_KEY_FIELDS), 4)
+
+
+async def update_candidate(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    patch: CandidateUpdate,
+    editor: str | None = None,
+) -> Candidate | None:
+    """Apply a manual recruiter edit, one verified change per field.
+
+    Each field that actually changes is routed through
+    ``verification.verify_and_commit`` as a ``HUMAN_VERIFIED`` proposal
+    (confidence 1.0). Because a human is the authoritative source, there is no
+    external state to re-check — the value passes and is written via the
+    ``apply_hook``, leaving a VERIFY + WRITE receipt and an ``EnrichmentRecord``.
+    Returns ``None`` if the candidate does not exist for this tenant.
+    """
+    candidate = await get_candidate(
+        session, tenant_id=tenant_id, candidate_id=candidate_id
+    )
+    if candidate is None:
+        return None
+
+    detail = f"manual edit via recruiter UI ({editor})" if editor else (
+        "manual edit via recruiter UI"
+    )
+    changes = patch.model_dump(exclude_unset=True, mode="json")
+    applied: list[str] = []
+
+    for field, new_value in changes.items():
+        # Never blank out the required display name.
+        if field == "full_name" and not (new_value and str(new_value).strip()):
+            continue
+        if _norm(getattr(candidate, field, None)) == _norm(new_value):
+            continue
+
+        change = ProposedChange(
+            tenant_id=tenant_id,
+            entity_type="candidate",
+            entity_id=candidate_id,
+            field=field,
+            proposed_value=_as_text(new_value),
+            source=ConfidenceSource.HUMAN_VERIFIED,
+            source_detail=detail,
+            confidence=1.0,
+        )
+
+        async def _apply(
+            _session: AsyncSession,
+            _change: ProposedChange,
+            _field: str = field,
+            _value: object = new_value,
+        ) -> None:
+            setattr(candidate, _field, _value)
+
+        await verification.verify_and_commit(
+            session,
+            change=change,
+            agent="recruiter_manual_edit",
+            apply_hook=_apply,
+        )
+        applied.append(field)
+
+    if applied:
+        # A human-entered field is verified; reflect that in the score, but never
+        # lower a score an agent already established.
+        candidate.verification_score = max(
+            candidate.verification_score, _verification_score(candidate)
+        )
+        await session.flush()
+
     await session.commit()
     await session.refresh(candidate)
     return candidate
