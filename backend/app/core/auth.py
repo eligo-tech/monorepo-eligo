@@ -128,5 +128,23 @@ async def get_current_tenant(
     return tenant.id
 
 
+async def get_current_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str | None:
+    """Best-effort identity of the acting user (Clerk ``sub`` claim).
+
+    Used to attribute human actions (e.g. a manual candidate edit) in the
+    append-only receipt ledger. Returns ``None`` in demo/auth-disabled mode.
+    Never raises: authentication is already enforced by ``get_current_tenant``
+    on the same request, so this only needs to *read* the identity.
+    """
+    if not settings.auth_enabled or creds is None:
+        return None
+    try:
+        return verify_token(creds.credentials).get("sub")
+    except Exception:
+        return None
+
+
 # Annotated dependency used across routers in place of the default-tenant query param.
 CurrentTenant = Depends(get_current_tenant)
