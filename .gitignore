@@ -26,7 +26,9 @@ venv/
 .DS_Store
 .idea/
 .vscode/
-data/
+# Local assets only (design mockups, sample CVs). Anchored to the repo root —
+# a bare `data/` would also swallow source dirs like frontend/src/**/data/.
+/data/
 .data/
 
 DEPLOY.md

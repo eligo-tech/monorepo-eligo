@@ -3,6 +3,7 @@
 import type {
   CandidateDTO,
   CandidateUpdatePayload,
+  CompanyDTO,
   CVExtractionResultDTO,
   JobDTO,
   MatchResultDTO,
@@ -73,6 +74,8 @@ export const api = {
     return res.blob()
   },
   jobs: () => request<JobDTO[]>('/jobs'),
+  /** Client + prospect companies — used to name the client on a mandate. */
+  companies: () => request<CompanyDTO[]>('/companies'),
   board: () => request<PipelineBoardDTO>('/pipeline/board'),
   /** Rank the candidate pool against one job (hard filters → soft ranking). */
   matchJob: (jobId: string, includeRejected = true) =>

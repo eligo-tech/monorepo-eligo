@@ -123,6 +123,20 @@ export interface JobDTO {
   updated_at: string
 }
 
+export interface CompanyDTO {
+  id: string
+  tenant_id: string
+  name: string
+  domain: string | null
+  industry: string | null
+  location: string | null
+  is_client: boolean
+  source: string | null
+  bd_signals: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
 export interface ApplicationDTO {
   id: string
   tenant_id: string
