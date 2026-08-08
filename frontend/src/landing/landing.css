@@ -8,6 +8,8 @@
   color: #0f1b2a;
   background: #fff;
   width: 100%;
+  /* body is dark for the cockpit — the landing page must cover it fully. */
+  min-height: 100vh;
   overflow-x: hidden;
 }
 .lp * { box-sizing: border-box; }

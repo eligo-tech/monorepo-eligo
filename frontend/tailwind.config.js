@@ -43,26 +43,79 @@ export default {
         },
         page: '#edf0ef',
         line: '#eceff2',
+
+        // ── Cockpit (dark surface) ────────────────────────────────────────
+        // Near-black, faintly warm surfaces sampled from the cockpit mockups.
+        cockpit: {
+          bg: '#0a0b09',
+          inset: '#0e0f0c',
+          surface: '#121310',
+          raised: '#16170f',
+          line: 'rgba(255, 255, 255, 0.06)',
+          edge: 'rgba(255, 255, 255, 0.10)',
+          text: '#e8e8e3',
+          dim: '#9a9b93',
+          faint: '#6b6d64',
+        },
+        // Semantic trio. Named (not `emerald`/`amber`/`rose`) so they never
+        // shadow a default Tailwind palette the light views still rely on.
+        mint: {
+          300: '#c6e4cd',
+          400: '#a9d6b4',
+          500: '#86c69a',
+          600: '#5f9c74',
+          700: '#3f6b50',
+          800: '#2a4838',
+        },
+        gold: {
+          300: '#f0c489',
+          400: '#e3a75c',
+          500: '#c9902f',
+          600: '#9c6f22',
+          800: '#4a3517',
+        },
+        coral: {
+          300: '#eaa899',
+          400: '#e0897a',
+          500: '#c96a58',
+          600: '#9d4e3f',
+          800: '#4a2620',
+        },
+        lav: {
+          400: '#b0a4d8',
+          600: '#7a6ca8',
+          800: '#3a3350',
+        },
       },
       borderRadius: {
         card: '1.25rem',
+        panel: '1.5rem',
       },
       boxShadow: {
         card: '0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.06)',
         pill: '0 2px 10px rgba(16, 24, 40, 0.08)',
         kanban: '0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 12px rgba(16, 24, 40, 0.05)',
+        // Cockpit: panels read as raised by an inner hairline, not a drop shadow.
+        panel: 'inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 32px rgba(0, 0, 0, 0.45)',
+        'glow-mint': '0 0 24px rgba(134, 198, 154, 0.28)',
+        'glow-gold': '0 0 26px rgba(227, 167, 92, 0.30)',
+        'glow-coral': '0 0 22px rgba(224, 137, 122, 0.28)',
+      },
+      backgroundImage: {
+        // Faint graph-paper overlay behind every cockpit screen.
+        grid: `linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+               linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px)`,
+      },
+      backgroundSize: {
+        // Not `grid` — that key would collide with backgroundImage.grid, since
+        // both utilities share the `bg-` prefix.
+        'grid-cell': '44px 44px',
       },
       fontFamily: {
-        sans: [
-          'Inter',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
-          'sans-serif',
-        ],
+        // Both faces resolve through CSS vars so the command bar's
+        // Jet · Mono · Heli control can swap them at runtime (see index.css).
+        sans: ['var(--font-ui)'],
+        mono: ['var(--font-mono)'],
       },
     },
   },

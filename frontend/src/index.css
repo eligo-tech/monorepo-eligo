@@ -2,22 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Typeface switch ────────────────────────────────────────────────────────
+   Tailwind's font-sans / font-mono resolve through these two vars, so the
+   command bar's Jet · Mono · Heli control only has to set data-typeface on
+   <html>. `jet` is the default and matches the cockpit mockups.            */
+:root,
+:root[data-typeface='jet'] {
+  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* All-mono: the terminal reading of the same layout. */
+:root[data-typeface='mono'] {
+  --font-ui: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Grotesk: system neutral, no downloaded face. */
+:root[data-typeface='heli'] {
+  --font-ui: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 :root {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-@supports (font-variation-settings: normal) {
-  :root {
-    font-family: 'Inter var', 'Inter', system-ui, sans-serif;
-  }
-}
-
 body {
   margin: 0;
-  background: theme('colors.page');
+  /* Neutral: the cockpit shell and the landing page each paint their own
+     background, so neither has to undo the other's. */
+  background: theme('colors.cockpit.bg');
   color: theme('colors.ink.DEFAULT');
+}
+
+/* Numbers must never jitter when a value ticks or the typeface changes. */
+.font-mono,
+[class*='font-mono'] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 /* Thin, unobtrusive scrollbars to match the mockup surfaces. */
@@ -35,4 +60,23 @@ body {
 }
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Dark scrollbars inside the cockpit only. */
+.cockpit-root,
+.cockpit-root * {
+  scrollbar-color: #2c2e28 transparent;
+}
+.cockpit-root *::-webkit-scrollbar-thumb {
+  background: #2c2e28;
+}
+
+/* Hides the horizontal scrollbar on the screen-level swipe track while
+   keeping the track scrollable (used by Carousel). */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
