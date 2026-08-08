@@ -1,7 +1,17 @@
 import { useState } from 'react'
-import { Plus, Trash2, X, Save, Ban, AlertCircle } from 'lucide-react'
+import { Trash2, Save, Ban, AlertCircle } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CandidateDTO, CandidateUpdatePayload, EducationDTO, WorkRoleDTO } from '@/api/types'
+import {
+  AddButton,
+  Button,
+  GroupLabel,
+  MiniInput,
+  SelectInput,
+  TagInput,
+  TextArea,
+  TextInput,
+} from '../../ui/forms'
 
 /** Editable draft — snake_case so it maps 1:1 onto the PATCH payload. Numbers are
  *  held as strings while typing and parsed on save. */
@@ -255,14 +265,13 @@ export function DossierEditor({
 
   return (
     <div>
-      {/* Persönliche Daten */}
       <Group title="Persönliche Daten">
-        <TextField label="Vollständiger Name" value={d.full_name} onChange={(v) => set('full_name', v)} />
-        <TextField label="Vorname" value={d.first_name} onChange={(v) => set('first_name', v)} />
-        <TextField label="Nachname" value={d.last_name} onChange={(v) => set('last_name', v)} />
-        <TextField label="Geschlecht" value={d.sex} onChange={(v) => set('sex', v)} />
-        <TextField label="Namenszusatz" value={d.name_prefix} onChange={(v) => set('name_prefix', v)} />
-        <TextField
+        <TextInput label="Vollständiger Name" value={d.full_name} onChange={(v) => set('full_name', v)} />
+        <TextInput label="Vorname" value={d.first_name} onChange={(v) => set('first_name', v)} />
+        <TextInput label="Nachname" value={d.last_name} onChange={(v) => set('last_name', v)} />
+        <TextInput label="Geschlecht" value={d.sex} onChange={(v) => set('sex', v)} />
+        <TextInput label="Namenszusatz" value={d.name_prefix} onChange={(v) => set('name_prefix', v)} />
+        <TextInput
           label="Geburtsdatum"
           value={d.date_of_birth}
           onChange={(v) => set('date_of_birth', v)}
@@ -270,79 +279,78 @@ export function DossierEditor({
         />
       </Group>
 
-      {/* Kontakt */}
       <Group title="Kontakt">
-        <TextField label="E-Mail" value={d.email} onChange={(v) => set('email', v)} type="email" />
-        <TextField label="Telefon" value={d.phone} onChange={(v) => set('phone', v)} />
-        <TextField label="LinkedIn" value={d.linkedin_url} onChange={(v) => set('linkedin_url', v)} />
-        <TextField label="Xing" value={d.xing_url} onChange={(v) => set('xing_url', v)} />
-        <TextField label="Straße" value={d.street} onChange={(v) => set('street', v)} />
-        <TextField label="PLZ" value={d.postal_code} onChange={(v) => set('postal_code', v)} />
-        <TextField label="Stadt" value={d.city} onChange={(v) => set('city', v)} />
-        <TextField label="Land" value={d.country} onChange={(v) => set('country', v)} />
-        <TextField label="Standort" value={d.location} onChange={(v) => set('location', v)} />
+        <TextInput label="E-Mail" value={d.email} onChange={(v) => set('email', v)} type="email" />
+        <TextInput label="Telefon" value={d.phone} onChange={(v) => set('phone', v)} />
+        <TextInput label="LinkedIn" value={d.linkedin_url} onChange={(v) => set('linkedin_url', v)} />
+        <TextInput label="Xing" value={d.xing_url} onChange={(v) => set('xing_url', v)} />
+        <TextInput label="Straße" value={d.street} onChange={(v) => set('street', v)} />
+        <TextInput label="PLZ" value={d.postal_code} onChange={(v) => set('postal_code', v)} />
+        <TextInput label="Stadt" value={d.city} onChange={(v) => set('city', v)} />
+        <TextInput label="Land" value={d.country} onChange={(v) => set('country', v)} />
+        <TextInput label="Standort" value={d.location} onChange={(v) => set('location', v)} />
       </Group>
 
-      {/* Karriere */}
       <Group title="Karriere">
-        <TextField label="Job-Titel" value={d.current_title} onChange={(v) => set('current_title', v)} />
-        <TextField
+        <TextInput label="Job-Titel" value={d.current_title} onChange={(v) => set('current_title', v)} />
+        <TextInput
           label="Aktuelles Unternehmen"
           value={d.current_company}
           onChange={(v) => set('current_company', v)}
         />
-        <TextField label="Branche" value={d.industry} onChange={(v) => set('industry', v)} />
-        <TextField label="Anstellungsart" value={d.employment_type} onChange={(v) => set('employment_type', v)} />
-        <SelectField
+        <TextInput label="Branche" value={d.industry} onChange={(v) => set('industry', v)} />
+        <TextInput
+          label="Anstellungsart"
+          value={d.employment_type}
+          onChange={(v) => set('employment_type', v)}
+        />
+        <SelectInput
           label="Umzugsbereit"
           value={d.willing_to_relocate}
           onChange={(v) => set('willing_to_relocate', v)}
           options={RELOCATE}
         />
-        <TextField label="Kündigungsfrist" value={d.notice_period} onChange={(v) => set('notice_period', v)} />
-        <TextField label="Verfügbarkeit" value={d.availability} onChange={(v) => set('availability', v)} />
-        <TextField
+        <TextInput label="Kündigungsfrist" value={d.notice_period} onChange={(v) => set('notice_period', v)} />
+        <TextInput label="Verfügbarkeit" value={d.availability} onChange={(v) => set('availability', v)} />
+        <TextInput
           label="Berufserfahrung (Jahre)"
           value={d.total_years_experience}
           onChange={(v) => set('total_years_experience', v)}
         />
-        <TextField
+        <TextInput
           label="Aktuelles Gehalt"
           value={d.current_salary}
           onChange={(v) => set('current_salary', v)}
           type="number"
         />
-        <TextField
+        <TextInput
           label="Wunschgehalt"
           value={d.salary_expectation}
           onChange={(v) => set('salary_expectation', v)}
           type="number"
         />
-        <TextField label="Währung" value={d.salary_currency} onChange={(v) => set('salary_currency', v)} />
-        <SelectField
+        <TextInput label="Währung" value={d.salary_currency} onChange={(v) => set('salary_currency', v)} />
+        <SelectInput
           label="Arbeitserlaubnis"
           value={d.work_permit}
           onChange={(v) => set('work_permit', v)}
           options={WORK_PERMITS}
         />
-        <TextField label="Quelle" value={d.source} onChange={(v) => set('source', v)} />
+        <TextInput label="Quelle" value={d.source} onChange={(v) => set('source', v)} />
       </Group>
 
-      {/* Sprachen */}
-      <section className="mt-6">
-        <Label>Sprachen</Label>
-        <TagEditor tags={d.languages} onChange={(v) => set('languages', v)} placeholder="Sprache hinzufügen…" />
-      </section>
-
-      {/* Skills */}
-      <section className="mt-6">
-        <Label>Skills</Label>
-        <TagEditor tags={d.skills} onChange={(v) => set('skills', v)} placeholder="Skill hinzufügen…" />
-      </section>
-
-      {/* Berufserfahrung */}
       <section className="mt-7">
-        <Label>Berufserfahrung</Label>
+        <GroupLabel>Sprachen</GroupLabel>
+        <TagInput tags={d.languages} onChange={(v) => set('languages', v)} placeholder="Sprache hinzufügen…" />
+      </section>
+
+      <section className="mt-7">
+        <GroupLabel>Skills</GroupLabel>
+        <TagInput tags={d.skills} onChange={(v) => set('skills', v)} placeholder="Skill hinzufügen…" />
+      </section>
+
+      <section className="mt-7">
+        <GroupLabel>Berufserfahrung</GroupLabel>
         <div className="space-y-3">
           {d.work_history.map((role, i) => (
             <RoleCard
@@ -353,15 +361,14 @@ export function DossierEditor({
             />
           ))}
           <AddButton
-            label="Rolle hinzufügen"
+            label="+ Rolle hinzufügen"
             onClick={() => set('work_history', [...d.work_history, { highlights: [] }])}
           />
         </div>
       </section>
 
-      {/* Ausbildung */}
       <section className="mt-7">
-        <Label>Ausbildung</Label>
+        <GroupLabel>Ausbildung</GroupLabel>
         <div className="space-y-3">
           {d.education.map((edu, i) => (
             <EduCard
@@ -371,171 +378,59 @@ export function DossierEditor({
               onRemove={() => set('education', d.education.filter((_, j) => j !== i))}
             />
           ))}
-          <AddButton label="Ausbildung hinzufügen" onClick={() => set('education', [...d.education, {}])} />
+          <AddButton label="+ Ausbildung hinzufügen" onClick={() => set('education', [...d.education, {}])} />
         </div>
       </section>
 
-      {/* Profil / Motivation */}
       <section className="mt-7">
-        <Label>Profil</Label>
-        <textarea
+        <GroupLabel>Profil</GroupLabel>
+        <TextArea
           value={d.motivation}
-          onChange={(e) => set('motivation', e.target.value)}
-          rows={4}
-          className="w-full rounded-lg border border-line px-3 py-2 text-[14px] leading-relaxed text-ink outline-none focus:border-brand-500"
+          onChange={(v) => set('motivation', v)}
           placeholder="Kurzprofil / Motivation…"
         />
       </section>
 
       {/* Sticky action bar — pinned to the bottom of the (scrolling) panel */}
-      <div className="sticky bottom-0 z-10 -mx-7 mt-7 flex items-center gap-3 border-t border-line bg-white px-7 py-3">
+      <div className="sticky bottom-0 z-10 -mx-7 mt-8 flex items-center gap-3 border-t border-cockpit-line bg-cockpit-bg px-7 py-3">
         {err && (
-          <div className="flex items-center gap-1.5 text-[13px] font-medium text-rose-600">
-            <AlertCircle className="h-4 w-4" /> {err}
+          <div className="flex items-center gap-1.5 text-[13px] font-medium text-coral-400">
+            <AlertCircle className="h-4 w-4 shrink-0" /> {err}
           </div>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={onCancel}
-            disabled={saving}
-            className="flex items-center gap-1.5 rounded-xl border border-line px-3.5 py-2 text-[13px] font-medium text-ink-soft hover:bg-slate-50 disabled:opacity-50"
-          >
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <Button onClick={onCancel} disabled={saving}>
             <Ban className="h-4 w-4" /> Abbrechen
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-          >
+          </Button>
+          <Button tone="primary" onClick={save} disabled={saving}>
             <Save className="h-4 w-4" /> {saving ? 'Speichert…' : 'Speichern'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
   )
 }
 
-/* ---------- input primitives ---------- */
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">{children}</h4>
-}
+/* ---------- layout helpers (inputs come from ../../ui/forms) ---------- */
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-6 first:mt-0">
-      <Label>{title}</Label>
+    <section className="mt-7 first:mt-0">
+      <GroupLabel>{title}</GroupLabel>
       <div className="grid grid-cols-2 gap-x-5 gap-y-3 md:grid-cols-3">{children}</div>
     </section>
   )
 }
 
-const fieldClass =
-  'w-full rounded-lg border border-line px-2.5 py-1.5 text-[14px] text-ink outline-none focus:border-brand-500'
-
-function TextField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
-  type?: 'text' | 'email' | 'number'
-}) {
+function RemoveButton({ onClick }: { onClick: () => void }) {
   return (
-    <label className="min-w-0 block">
-      <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink-faint">{label}</span>
-      <input
-        type={type}
-        inputMode={type === 'number' ? 'numeric' : undefined}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className={fieldClass}
-      />
-    </label>
-  )
-}
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-}) {
-  return (
-    <label className="min-w-0 block">
-      <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink-faint">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
-
-function TagEditor({
-  tags,
-  onChange,
-  placeholder,
-}: {
-  tags: string[]
-  onChange: (v: string[]) => void
-  placeholder?: string
-}) {
-  const [input, setInput] = useState('')
-  const add = () => {
-    const v = input.trim()
-    if (v && !tags.includes(v)) onChange([...tags, v])
-    setInput('')
-  }
-  return (
-    <div className="rounded-lg border border-line p-2 focus-within:border-brand-500">
-      <div className="flex flex-wrap gap-1.5">
-        {tags.map((t, i) => (
-          <span
-            key={`${t}-${i}`}
-            className="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[12px] font-medium text-ink-soft"
-          >
-            {t}
-            <button
-              onClick={() => onChange(tags.filter((_, j) => j !== i))}
-              className="text-ink-faint hover:text-rose-600"
-              aria-label={`${t} entfernen`}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-              e.preventDefault()
-              add()
-            } else if (e.key === 'Backspace' && !input && tags.length) {
-              onChange(tags.slice(0, -1))
-            }
-          }}
-          onBlur={add}
-          placeholder={placeholder}
-          className="min-w-[120px] flex-1 bg-transparent px-1 text-[13px] outline-none placeholder:text-ink-faint"
-        />
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-2 flex items-center gap-1 font-mono text-[12px] text-cockpit-faint transition-colors hover:text-coral-400"
+    >
+      <Trash2 className="h-3.5 w-3.5" /> Entfernen
+    </button>
   )
 }
 
@@ -550,27 +445,30 @@ function RoleCard({
 }) {
   const upd = (patch: Partial<WorkRoleDTO>) => onChange({ ...role, ...patch })
   return (
-    <div className="rounded-xl border border-line p-3">
+    <div className="rounded-xl border border-cockpit-line bg-cockpit-raised p-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <MiniInput placeholder="Titel" value={role.title ?? ''} onChange={(v) => upd({ title: v })} span2 />
         <MiniInput placeholder="Unternehmen" value={role.company ?? ''} onChange={(v) => upd({ company: v })} />
         <MiniInput placeholder="Ort" value={role.location ?? ''} onChange={(v) => upd({ location: v })} />
-        <MiniInput placeholder="Von (z.B. 03/2021)" value={role.start_date ?? ''} onChange={(v) => upd({ start_date: v })} />
-        <MiniInput placeholder="Bis (z.B. heute)" value={role.end_date ?? ''} onChange={(v) => upd({ end_date: v })} />
+        <MiniInput
+          placeholder="Von (z.B. 03/2021)"
+          value={role.start_date ?? ''}
+          onChange={(v) => upd({ start_date: v })}
+        />
+        <MiniInput
+          placeholder="Bis (z.B. heute)"
+          value={role.end_date ?? ''}
+          onChange={(v) => upd({ end_date: v })}
+        />
       </div>
-      <textarea
+      <TextArea
         value={(role.highlights ?? []).join('\n')}
-        onChange={(e) => upd({ highlights: e.target.value.split('\n') })}
+        onChange={(v) => upd({ highlights: v.split('\n') })}
         rows={2}
         placeholder="Aufgaben / Erfolge — eine pro Zeile"
-        className="mt-2 w-full rounded-lg border border-line px-2.5 py-1.5 text-[13px] text-ink-soft outline-none focus:border-brand-500"
+        className="mt-2 text-[13px]"
       />
-      <button
-        onClick={onRemove}
-        className="mt-1.5 flex items-center gap-1 text-[12px] font-medium text-ink-faint hover:text-rose-600"
-      >
-        <Trash2 className="h-3.5 w-3.5" /> Entfernen
-      </button>
+      <RemoveButton onClick={onRemove} />
     </div>
   )
 }
@@ -586,52 +484,19 @@ function EduCard({
 }) {
   const upd = (patch: Partial<EducationDTO>) => onChange({ ...edu, ...patch })
   return (
-    <div className="rounded-xl border border-line p-3">
+    <div className="rounded-xl border border-cockpit-line bg-cockpit-raised p-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <MiniInput placeholder="Abschluss" value={edu.degree ?? ''} onChange={(v) => upd({ degree: v })} span2 />
-        <MiniInput placeholder="Institution" value={edu.institution ?? ''} onChange={(v) => upd({ institution: v })} />
+        <MiniInput
+          placeholder="Institution"
+          value={edu.institution ?? ''}
+          onChange={(v) => upd({ institution: v })}
+        />
         <MiniInput placeholder="Ort" value={edu.location ?? ''} onChange={(v) => upd({ location: v })} />
         <MiniInput placeholder="Von" value={edu.start_date ?? ''} onChange={(v) => upd({ start_date: v })} />
         <MiniInput placeholder="Bis" value={edu.end_date ?? ''} onChange={(v) => upd({ end_date: v })} />
       </div>
-      <button
-        onClick={onRemove}
-        className="mt-1.5 flex items-center gap-1 text-[12px] font-medium text-ink-faint hover:text-rose-600"
-      >
-        <Trash2 className="h-3.5 w-3.5" /> Entfernen
-      </button>
+      <RemoveButton onClick={onRemove} />
     </div>
-  )
-}
-
-function MiniInput({
-  value,
-  onChange,
-  placeholder,
-  span2,
-}: {
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
-  span2?: boolean
-}) {
-  return (
-    <input
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className={`${span2 ? 'col-span-2' : ''} rounded-lg border border-line px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-brand-500`}
-    />
-  )
-}
-
-function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 rounded-lg border border-dashed border-line px-3 py-2 text-[13px] font-medium text-ink-soft hover:border-brand-500 hover:text-brand-700"
-    >
-      <Plus className="h-4 w-4" /> {label}
-    </button>
   )
 }

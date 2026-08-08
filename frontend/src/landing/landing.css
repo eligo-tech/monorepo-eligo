@@ -1,37 +1,47 @@
-/* eligo-tech landing page — self-contained styles (fonts, keyframes, hover,
-   responsive). Scoped under .lp so it never touches the dashboard app. */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:opsz@6..72&display=swap');
+/* eligo-tech landing page — self-contained styles (keyframes, hover, responsive).
+   Scoped under .lp so it never touches the cockpit.
+
+   Typography and colour follow the cockpit: Inter for prose, JetBrains Mono for
+   numbers and labels (both self-hosted via @fontsource in main.tsx — no webfont
+   request from this file), on the same near-black graph-paper ground. Layout,
+   breakpoints and animation timings are unchanged from the light version. */
 
 .lp {
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
-  color: #0f1b2a;
-  background: #fff;
+  color: #e8e8e3;
+  background-color: #0a0b09;
+  /* Same 44px grid as the cockpit shell. */
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
   width: 100%;
   /* body is dark for the cockpit — the landing page must cover it fully. */
   min-height: 100vh;
   overflow-x: hidden;
 }
 .lp * { box-sizing: border-box; }
-.lp a { color: #0b7d6a; text-decoration: none; }
+.lp a { color: #a9d6b4; text-decoration: none; }
 .lp h1, .lp h2 { text-wrap: balance; }
 .lp p { text-wrap: pretty; }
 
-.lp-serif { font-family: 'Newsreader', Georgia, serif; }
+/* The pull-quote keeps a distinct voice, but from the cockpit's own stack. */
+.lp-serif { font-family: var(--font-ui); font-weight: 300; letter-spacing: -0.2px; }
 
 @keyframes lp-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.7); } }
 @keyframes lp-floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 .lp-pulse { animation: lp-pulse 1.6s ease-in-out infinite; }
 .lp-floaty { animation: lp-floaty 5s ease-in-out infinite; }
 
-/* Hover states */
-.lp-navlink:hover { background: #f0f3f6; }
-.lp-btn-dark:hover { background: #1d3350 !important; }
-.lp-btn-teal:hover { background: #0b7d6a !important; }
-.lp-btn-ghost:hover { border-color: #0e9f86 !important; }
+/* Hover states — retinted for the dark ground. */
+.lp-navlink:hover { background: rgba(255, 255, 255, 0.05); color: #e8e8e3; }
+.lp-btn-dark:hover { background: #a9d6b4 !important; }
+.lp-btn-teal:hover { background: #a9d6b4 !important; }
+.lp-btn-ghost:hover { border-color: #86c69a !important; }
 .lp-agentcard { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
-.lp-agentcard:hover { border-color: #b9e3d8 !important; box-shadow: 0 12px 32px rgba(15,27,42,.07); transform: translateY(-2px); }
-.lp-footlink:hover { color: #fff; }
+.lp-agentcard:hover { border-color: rgba(134, 198, 154, 0.45) !important; box-shadow: 0 12px 32px rgba(0,0,0,.45); transform: translateY(-2px); }
+.lp-footlink:hover { color: #e8e8e3; }
 
 /* Responsive */
 @media (max-width: 980px) {

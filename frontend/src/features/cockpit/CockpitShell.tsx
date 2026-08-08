@@ -8,11 +8,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CommandBar } from './CommandBar'
 import { CockpitScreen, COCKPIT_SECTIONS } from './screens/CockpitScreen'
+import { KandidatenScreen, KANDIDATEN_SECTIONS } from './screens/kandidaten/KandidatenScreen'
 import { KandidatenweltScreen, KANDIDATENWELT_SECTIONS } from './screens/KandidatenweltScreen'
 import { useCockpitData } from './data/useCockpitData'
 import { useTypeface } from './useTypeface'
 
-export type ScreenKey = 'cockpit' | 'kandidatenwelt'
+export type ScreenKey = 'cockpit' | 'kandidaten' | 'kandidatenwelt'
 
 interface ScreenDef {
   key: ScreenKey
@@ -20,8 +21,11 @@ interface ScreenDef {
   sections: string[]
 }
 
+// Left to right, the drill-down the product tells: the whole book of business →
+// the pool it draws on → one candidate's world.
 export const SCREENS: ScreenDef[] = [
   { key: 'cockpit', sections: COCKPIT_SECTIONS },
+  { key: 'kandidaten', sections: KANDIDATEN_SECTIONS },
   { key: 'kandidatenwelt', sections: KANDIDATENWELT_SECTIONS },
 ]
 
@@ -97,6 +101,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
 
       <main className="mx-auto max-w-[1560px] px-6 pb-24 pt-8">
         {screen === 'cockpit' && <CockpitScreen state={state} />}
+        {screen === 'kandidaten' && <KandidatenScreen />}
         {screen === 'kandidatenwelt' && (
           <KandidatenweltScreen data={state.data.profileSale} />
         )}

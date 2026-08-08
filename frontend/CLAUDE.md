@@ -32,8 +32,9 @@ src/
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
 │   ├── useTypeface.ts          # the Jet · Mono · Heli switch
 │   ├── screens/                # CockpitScreen · KandidatenweltScreen
+│   │   └── kandidaten/         # KandidatenScreen · CandidateDrawer · DossierEditor · CvUploadModal
 │   ├── sections/               # SignalsPanel · Revenue (01) · JobScoring (02) · Process (03) · NextActions
-│   ├── ui/                     # primitives.tsx · Gauge · ProcessStepper · ScoreBar · Carousel
+│   ├── ui/                     # primitives.tsx · forms.tsx · Gauge · ProcessStepper · ScoreBar · Carousel
 │   └── data/                   # types · mock (demo baseline) · adapters (DTO joins) · useCockpitData
 ├── components/                 # cross-feature UI (ui/Avatar, ui/LinkedInMark, …)
 ├── api/                        # client.ts (typed fetch) · types.ts (DTOs) · adapters.ts
@@ -45,13 +46,32 @@ src/
 exporting its section anchor ids. Hash routing, the navigator and keyboard paging
 follow automatically.
 
+**Screens are ordered as a drill-down** — `cockpit` → `kandidaten` →
+`kandidatenwelt`: the whole book of business, the pool it draws on, then one
+candidate's world. ←/→ moves between them; the URL hash names the active one.
+
 ### Parked surfaces
 
-`src/features/{candidates,matching,pipeline,reporting}/`, `components/Sidebar.tsx`
-and `components/TopNav.tsx` are the previous light-themed four-tab CRM. They are
-**unrouted but still compiled** — kept so the CV upload, dossier editor and
-verified-edit flows can be restyled and re-added as cockpit screens one at a time.
-Don't delete them, and don't import from them into `features/cockpit/`.
+`src/features/{matching,pipeline,reporting}/`, `components/Sidebar.tsx` and
+`components/TopNav.tsx` are what remains of the previous light-themed four-tab CRM.
+They are **unrouted but still compiled** — kept so each can be restyled and
+re-added as a cockpit screen. Don't delete them, and don't import from them into
+`features/cockpit/`.
+
+`features/candidates/` is **gone** — it became `cockpit/screens/kandidaten/`
+(Kandidaten was the first surface converted). Its inputs moved to `ui/forms.tsx`;
+its data logic (patch building, validation, CSV export, skill filtering) was carried
+over unchanged. That's the pattern for converting the rest: move the folder, swap
+the class strings for cockpit primitives, leave the logic alone.
+
+### Landing page
+
+`src/landing/` is the marketing page and stays self-contained (its own CSS, inline
+styles, own `C` token object). It is **cockpit-styled** — same near-black ground,
+44px grid, mint/gold/lavender semantics, Inter + JetBrains Mono — so the two
+surfaces read as one system. Two inversions to keep in mind when editing it: `C.navy`
+is now a *text* colour only (grounds are `C.surface`/`raised`/`inset`), and "deep"
+shades are *lighter* than their base because contrast runs the other way on dark.
 
 ## Design system
 
