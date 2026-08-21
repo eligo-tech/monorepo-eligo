@@ -138,7 +138,11 @@ export interface CompanyDTO {
 }
 
 /**
- * A company in the information hub — the market corpus, not the CRM.
+ * A company in the SHARED information hub — the market corpus, not the CRM.
+ *
+ * Carries no `tenant_id`: public facts are identical for every workspace, so
+ * they are stored once. What a tenant makes of a corpus company (`tracked`,
+ * and the link row behind it) is the tenant-scoped part.
  *
  * `resolution_basis` is which rung of the deterministic identity ladder matched
  * (vat > register > domain > name_place). Surfaced in the UI because an identity
@@ -146,7 +150,6 @@ export interface CompanyDTO {
  */
 export interface HubCompanyDTO {
   id: string
-  tenant_id: string
   name: string
   normalized_name: string
   legal_form: string | null
@@ -166,12 +169,25 @@ export interface HubCompanyDTO {
   vat_verified_at: string | null
   industry: string | null
   source: string
-  visibility: string
   open_postings_count: number
   bd_signals: Record<string, unknown>
   first_seen_at: string
   last_seen_at: string
+  created_at: string
+  updated_at: string
+  /** Whether THIS workspace has an overlay row for this corpus company. */
+  tracked: boolean
+}
+
+/** One workspace's relationship to a corpus company — the tenant boundary. */
+export interface HubCompanyLinkDTO {
+  id: string
+  tenant_id: string
+  hub_company_id: string
+  /** The tenant's own CRM company row, once adopted. */
   company_id: string | null
+  relationship: 'watching' | 'prospect' | 'client' | 'ignored'
+  note: string | null
   created_at: string
   updated_at: string
 }
@@ -179,7 +195,6 @@ export interface HubCompanyDTO {
 /** One external posting in the hub — a market signal, never a client mandate. */
 export interface HubJobPostingDTO {
   id: string
-  tenant_id: string
   hub_company_id: string
   observation_id: string | null
   title: string

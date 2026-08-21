@@ -1,9 +1,16 @@
-"""Pydantic v2 contracts for the information hub."""
+"""Pydantic v2 contracts for the information hub.
+
+Corpus reads carry no ``tenant_id`` — the corpus is shared, so there is no
+tenant to report. The tenant's own view of a corpus company is a separate
+contract (``HubCompanyLinkRead``) and a ``tracked`` flag on the listing.
+"""
 
 from __future__ import annotations
 
 import datetime as dt
 import uuid
+
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,7 +19,6 @@ class HubCompanyRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    tenant_id: uuid.UUID
     name: str
     normalized_name: str
     legal_form: str | None
@@ -34,21 +40,22 @@ class HubCompanyRead(BaseModel):
     vat_verified_at: dt.datetime | None
     industry: str | None
     source: str
-    visibility: str
     open_postings_count: int
     bd_signals: dict = Field(default_factory=dict)
     first_seen_at: dt.datetime
     last_seen_at: dt.datetime
-    company_id: uuid.UUID | None
     created_at: dt.datetime
     updated_at: dt.datetime
+
+    # This tenant's overlay, filled in by the router. Not a corpus fact — the
+    # same company is tracked by one tenant and not another.
+    tracked: bool = False
 
 
 class HubJobPostingRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    tenant_id: uuid.UUID
     hub_company_id: uuid.UUID
     observation_id: uuid.UUID | None
     title: str
@@ -81,7 +88,6 @@ class HubObservationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    tenant_id: uuid.UUID
     source: str
     request_url: str
     http_status: int | None
@@ -92,6 +98,29 @@ class HubObservationRead(BaseModel):
     fetched_at: dt.datetime
     note: str | None
     created_at: dt.datetime
+
+
+RELATIONSHIPS = ("watching", "prospect", "client", "ignored")
+
+
+class HubCompanyLinkRead(BaseModel):
+    """One tenant's relationship to one corpus company."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    hub_company_id: uuid.UUID
+    company_id: uuid.UUID | None
+    relationship: str
+    note: str | None
+    created_at: dt.datetime
+    updated_at: dt.datetime
+
+
+class TrackRequest(BaseModel):
+    relationship: Literal["watching", "prospect", "client", "ignored"] = "watching"
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class IngestRequest(BaseModel):

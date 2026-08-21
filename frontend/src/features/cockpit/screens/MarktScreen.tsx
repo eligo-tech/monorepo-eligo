@@ -1,9 +1,14 @@
-// "Markt" — the information hub as a cockpit screen.
+// "Markt" — the shared information hub as a cockpit screen.
 //
 // The outside world, not the own record: companies and their open roles
 // aggregated from public sources, ordered by who is hiring hardest. That
 // ordering IS the product — a recruiter wants whoever has the most open roles
 // right now, not an alphabetical register extract.
+//
+// The corpus itself is SHARED across workspaces — public facts, crawled once.
+// What this workspace makes of it is not: "beobachten" writes a tenant-scoped
+// overlay row, and that toggle is the only thing on this screen that belongs to
+// you rather than to everybody.
 //
 // The identity badge on each row is the other half. Every company here was
 // deduplicated by a deterministic ladder (VAT → Handelsregister → domain →
@@ -13,6 +18,8 @@
 
 import { useMemo, useState } from 'react'
 import {
+  Bookmark,
+  BookmarkCheck,
   Building2,
   ChevronRight,
   ExternalLink,
@@ -26,7 +33,7 @@ import type { HubCompanyDTO, HubJobPostingDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
-import { FIELD } from '../ui/forms'
+import { Button, FIELD } from '../ui/forms'
 
 /** Anchors the Navigator's ↑/↓ steps through on this screen. */
 export const MARKT_SECTIONS = ['section-markt', 'section-unternehmen']
@@ -130,7 +137,25 @@ function PostingList({ companyId }: { companyId: string }) {
 
 function CompanyRow({ company }: { company: HubCompanyDTO }) {
   const [open, setOpen] = useState(false)
+  // Optimistic: the overlay row is this workspace's own state, so the toggle
+  // should feel immediate. Reverted if the write fails.
+  const [tracked, setTracked] = useState(company.tracked)
+  const [saving, setSaving] = useState(false)
   const identity = IDENTITY[company.resolution_basis] ?? IDENTITY.name_place
+
+  const toggleTracked = async () => {
+    const next = !tracked
+    setTracked(next)
+    setSaving(true)
+    try {
+      if (next) await api.trackHubCompany(company.id, 'watching')
+      else await api.untrackHubCompany(company.id)
+    } catch {
+      setTracked(!next)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="border-b border-cockpit-line/60">
@@ -154,6 +179,12 @@ function CompanyRow({ company }: { company: HubCompanyDTO }) {
           {company.website_domain && (
             <Globe className="h-3.5 w-3.5 shrink-0 text-cockpit-faint" />
           )}
+          {tracked && (
+            <BookmarkCheck
+              className="h-3.5 w-3.5 shrink-0 text-mint-400"
+              aria-label="Wird beobachtet"
+            />
+          )}
         </span>
 
         <span className="truncate font-mono text-[13px] text-cockpit-dim">
@@ -173,6 +204,17 @@ function CompanyRow({ company }: { company: HubCompanyDTO }) {
 
       {open && (
         <div className="bg-cockpit-inset/50">
+          {/* The one action on this screen that writes tenant-scoped state.
+              Everything above it is shared corpus, identical for every workspace. */}
+          <div className="flex items-center gap-3 px-3 pt-3">
+            <Button onClick={toggleTracked} disabled={saving} tone={tracked ? 'primary' : 'ghost'}>
+              {tracked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+              {tracked ? 'Wird beobachtet' : 'Beobachten'}
+            </Button>
+            <span className="font-mono text-[11px] text-cockpit-faint">
+              nur in diesem Workspace sichtbar
+            </span>
+          </div>
           <PostingList companyId={company.id} />
         </div>
       )}
@@ -229,6 +271,7 @@ export function MarktScreen() {
   const cities = new Set(all.map((c) => c.city).filter(Boolean)).size
   // How much of the corpus rests on an assumption rather than a register.
   const assumed = all.filter((c) => c.resolution_basis === 'name_place').length
+  const tracked = all.filter((c) => c.tracked).length
 
   return (
     <div className="space-y-8">
@@ -238,7 +281,8 @@ export function MarktScreen() {
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
           Unternehmen und ihre offenen Rollen aus öffentlichen Quellen — wer gerade
-          einstellt, zuerst. Jede Zeile zeigt, woraus die Identität des Unternehmens
+          einstellt, zuerst. Der Korpus ist geteilt; was Sie beobachten, bleibt in
+          diesem Workspace. Jede Zeile zeigt, woraus die Identität des Unternehmens
           bestimmt wurde.
         </p>
       </header>
@@ -264,6 +308,9 @@ export function MarktScreen() {
           </span>
           <span>
             <span className="text-cockpit-text">{cities}</span> Orte
+          </span>
+          <span title="Von diesem Workspace beobachtet — nicht Teil des geteilten Korpus">
+            <span className="text-cockpit-text">{tracked}</span> beobachtet
           </span>
           {assumed > 0 && (
             <span title="Identität aus Name + Ort angenommen, nicht gegen ein Register geprüft">

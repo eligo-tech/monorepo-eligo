@@ -169,11 +169,11 @@ def tenant() -> uuid.UUID:
     return settings.default_tenant_id
 
 
-async def _ingest(adapter: StubAdapter, tenant: uuid.UUID):
+async def _ingest(adapter: StubAdapter, tenant: uuid.UUID | None = None):
+    """Ingest writes the SHARED corpus, so it takes no tenant."""
     async with SessionLocal() as session:
         return await service.ingest(
             session,
-            tenant_id=tenant,
             adapter=adapter,
             request=IngestRequest(source="bundesagentur", where="Berlin"),
         )
@@ -273,6 +273,35 @@ async def test_a_non_200_fetch_is_recorded_and_rejected(tenant) -> None:
     assert row.http_status == 503
 
 
+async def test_the_corpus_is_shared_not_per_tenant(tenant) -> None:
+    """One crawl serves every workspace — that is the point of a shared basis."""
+    await _ingest(StubAdapter(), tenant)
+
+    async with SessionLocal() as session:
+        company = (await session.execute(select(HubCompany))).scalars().first()
+        posting = (await session.execute(select(HubJobPosting))).scalars().first()
+        observation = (await session.execute(select(HubObservation))).scalars().one()
+
+    # Public facts carry no owner. If tenant_id ever comes back onto these
+    # tables, the shared basis has silently become N private copies again.
+    for row in (company, posting, observation):
+        assert not hasattr(row, "tenant_id"), type(row).__name__
+
+
+async def test_a_second_ingest_does_not_duplicate_for_another_caller(tenant) -> None:
+    first = await _ingest(StubAdapter(), tenant)
+    second = await _ingest(StubAdapter(), uuid.uuid4())  # a different workspace
+
+    # The corpus is shared, so the second caller finds everything already there
+    # rather than creating a parallel copy.
+    assert second.companies_created == 0
+    assert second.companies_matched == first.companies_created
+    async with SessionLocal() as session:
+        assert (await session.scalar(select(func.count(HubCompany.id)))) == (
+            first.companies_created
+        )
+
+
 # ---------------------------------------------------------------------------
 # API
 # ---------------------------------------------------------------------------
@@ -322,6 +351,54 @@ async def test_corpus_endpoints_read_back_what_was_ingested(client, tenant) -> N
     observations = (await client.get("/api/v1/hub/observations")).json()
     assert len(observations) == 1
     assert observations[0]["source"] == "bundesagentur"
+
+
+async def test_tracking_is_the_tenant_boundary(client, tenant) -> None:
+    """The corpus is shared; what a tenant makes of it is not."""
+    await _ingest(StubAdapter(), tenant)
+    companies = (await client.get("/api/v1/hub/companies?limit=5")).json()
+    target = companies[0]
+
+    assert target["tracked"] is False
+    assert (await client.get("/api/v1/hub/links")).json() == []
+
+    put = await client.put(
+        f"/api/v1/hub/companies/{target['id']}/track",
+        json={"relationship": "prospect", "note": "hiring hard"},
+    )
+    assert put.status_code == 200
+    assert put.json()["relationship"] == "prospect"
+
+    # Idempotent: tracking twice updates rather than duplicating.
+    again = await client.put(
+        f"/api/v1/hub/companies/{target['id']}/track", json={"relationship": "client"}
+    )
+    assert again.status_code == 200
+    assert again.json()["id"] == put.json()["id"]
+    assert again.json()["relationship"] == "client"
+
+    listed = (await client.get("/api/v1/hub/companies?limit=5")).json()
+    assert [c["tracked"] for c in listed if c["id"] == target["id"]] == [True]
+    assert len((await client.get("/api/v1/hub/links")).json()) == 1
+
+    only_tracked = (
+        await client.get("/api/v1/hub/companies?tracked_only=true&limit=500")
+    ).json()
+    assert [c["id"] for c in only_tracked] == [target["id"]]
+
+    # Untracking drops the overlay row, never the corpus company.
+    assert (
+        await client.delete(f"/api/v1/hub/companies/{target['id']}/track")
+    ).status_code == 204
+    assert (await client.get("/api/v1/hub/links")).json() == []
+    assert (await client.get(f"/api/v1/hub/companies/{target['id']}")).status_code == 200
+
+
+async def test_tracking_an_unknown_company_is_404(client) -> None:
+    resp = await client.put(
+        f"/api/v1/hub/companies/{uuid.uuid4()}/track", json={"relationship": "watching"}
+    )
+    assert resp.status_code == 404
 
 
 async def test_unknown_hub_company_is_404(client) -> None:
