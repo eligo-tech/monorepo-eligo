@@ -8,9 +8,6 @@ import { RevenueSection } from '../sections/RevenueSection'
 import { SignalsPanel } from '../sections/SignalsPanel'
 import type { CockpitState } from '../data/useCockpitData'
 
-/** Section anchors the Navigator's ↑/↓ steps through, in document order. */
-export const COCKPIT_SECTIONS = ['section-signals', 'section-01', 'section-02', 'section-03', 'section-04']
-
 export function CockpitScreen({ state }: { state: CockpitState }) {
   const { data, live } = state
 

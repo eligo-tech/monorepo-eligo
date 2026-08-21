@@ -35,9 +35,6 @@ import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { Button, FIELD } from '../ui/forms'
 
-/** Anchors the Navigator's ↑/↓ steps through on this screen. */
-export const MARKT_SECTIONS = ['section-markt', 'section-unternehmen']
-
 const GRID = 'grid-cols-[minmax(0,3fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_5.5rem]'
 const COLUMNS = ['Unternehmen', 'Ort', 'Identität', 'Rollen']
 
