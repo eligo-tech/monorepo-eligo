@@ -162,10 +162,17 @@ These are enforced in code. Do not route around them.
   collection to be a *described, scheduled, logged* activity, not a side effect
   of someone clicking; (4) "which user triggered this crawl?" has no good answer,
   while "the nightly job ran at 03:00" is auditable.
-- The daily job covers **all of Germany**, sharded by Bundesland: the API caps
-  any query at 10,000 results (HTTP 400 past page 100), and one day of new
-  postings nationwide is ~30,100 — so 16 shards, largest ~5,800. Never scope the
-  crawl to one city; that was a placeholder, not a design.
+- The daily job is **Germany-wide, sharded by Bundesland — and that sharding is
+  only ~83% complete.** Sharding is forced (the API caps any query at 10,000
+  results, HTTP 400 past page 100, against ~709,700 open postings), but `wo=` is
+  a place-NAME lookup, not a region selector: `wo=Hessen` returns 82 postings for
+  an entire state because a village shares the name (same for Brandenburg and
+  Sachsen; no spelling variant fixes it, and the `arbeitsort_plz` facet is
+  truncated to 200 entries so it cannot supply a plan either). The exhaustive key
+  is the ~8,200 five-digit PLZ — every posting has exactly one — and that is the
+  fix, not yet built. **The job probes the nationwide total and prints the
+  coverage it achieved every run**, so the gap stays visible instead of becoming
+  an assumption. Never scope the crawl to one city; that was a placeholder.
 - It crawls a **delta** (`published_since_days=1`), so a run upserts what changed
   instead of re-processing the corpus. That parameter is an **enum** — only
   `{0, 1, 7, 14, 28}` are honoured and the source silently returns ALL ~709,700

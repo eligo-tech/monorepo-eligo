@@ -173,6 +173,11 @@ Built: shared corpus, deterministic identity, ingest gate with pre/postcondition
 append-only fetch evidence, RLS everywhere, hash-chained receipts, machine
 credential for ingestion.
 
+**Known incomplete:** the nightly crawl shards by Bundesland and reaches ~83% of
+German postings, because the source's `wo=` parameter matches place names rather
+than regions. Exhaustive coverage needs PLZ-level sharding (~8,200 shards). The
+job measures and prints its own coverage every run rather than assuming it.
+
 **Not built, and required before this handles real customer data:**
 
 1. `hub_suppressions` + a precondition in the ingest gate (Art. 17/21)
