@@ -130,7 +130,11 @@ class IngestRequest(BaseModel):
     what: str | None = Field(default=None, description="keyword / occupation")
     where: str | None = Field(default=None, description="city, PLZ or region")
     radius_km: int | None = Field(default=None, ge=0, le=200)
-    published_since_days: int | None = Field(default=None, ge=0, le=100)
+    # NOT a free day count. The Bundesagentur honours only these values and
+    # SILENTLY RETURNS EVERYTHING for anything else — `2` yields all 709k
+    # postings, not two days' worth. Measured, not documented. Constraining the
+    # type makes an invalid window a 422 instead of an accidental full crawl.
+    published_since_days: Literal[0, 1, 7, 14, 28] | None = None
     page: int = Field(default=1, ge=1)
     size: int = Field(default=100, ge=1, le=100)
     # Staffing agencies are competitors, not leads — excluded unless asked for.

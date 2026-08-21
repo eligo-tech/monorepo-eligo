@@ -10,19 +10,37 @@ database. That is deliberate:
   * every run leaves the same `hub_observations` evidence trail.
 
     ELIGO_API_BASE=https://…/api/v1 ELIGO_INGEST_TOKEN=… \
-      python -m scripts.hub_daily --region München --region Hamburg
+      python -m scripts.hub_daily
 
-**Delta, not full re-crawl.** Each region is fetched with
-`published_since_days` (default 2), so a run sees only what was published
-recently: new postings INSERT, re-published ones UPDATE, and the rest of the
-corpus is never touched. A nightly run is therefore small and cheap, which is
-the point — nothing is "recalculated".
+**Nationwide by default.** The shard key is the Bundesland, because two hard
+limits force sharding and this is the coarsest key that fits under both:
 
-A delta cannot observe a REMOVAL: a filled vacancy simply stops appearing.
-Absence is only visible over time, so the run finishes by closing postings no
-crawl has seen for `--stale-days`.
+  * The API refuses `page > 100`, so ANY query reaches at most 10,000 results
+    (HTTP 400 beyond that). Germany has ~709,700 open postings — a single
+    nationwide query can only ever see 1.4% of them.
+  * One day of new postings nationwide is ~30,100. Split across the 16 Länder
+    the largest shard is Nordrhein-Westfalen at ~5,800 — comfortably under the
+    cap, with room to grow.
 
-Exits non-zero if any region fails, so the scheduler's own failure notification
+So a full nationwide daily pass is ~320 requests and a few minutes. There is no
+reason to crawl one city.
+
+**Delta, not full re-crawl.** `--since 1` fetches only what was published in the
+last day: new postings INSERT, re-published ones UPDATE, the rest of the corpus
+is never touched.
+
+`--since` is an ENUM — the source honours only {0, 1, 7, 14, 28} and silently
+returns ALL 709k for anything else. The request schema rejects other values, so
+a typo is a 422 rather than an accidental full crawl.
+
+**The stale sweep does NOT belong here** and is off by default. A
+publication-date delta never re-lists a posting published two months ago that is
+still open, so its `last_seen_at` goes stale even though the vacancy is live —
+sweeping on that basis would close roles that never closed. Deactivation is only
+sound after a pass that would have re-seen everything still listed, which is a
+job for a periodic full crawl, not this one.
+
+Exits non-zero if any shard fails, so the scheduler's own failure notification
 is the monitoring (SOC 2 CC7.2).
 """
 
@@ -35,8 +53,19 @@ import sys
 
 import httpx
 
-# The source refuses to page beyond this; a delta should never come close.
-_PAGE_CEILING = 50
+# The API returns HTTP 400 for page > 100, so no query can ever see more than
+# 10,000 results. Every sharding decision here follows from that number.
+_RESULT_CEILING = 10_000
+_PAGE_CEILING = 100
+
+# The default shard set: all of Germany, 16 ways. Chosen because it is the
+# coarsest exhaustive key whose largest daily shard stays under the cap.
+BUNDESLAENDER = [
+    "Baden-Württemberg", "Bayern", "Berlin", "Brandenburg", "Bremen",
+    "Hamburg", "Hessen", "Mecklenburg-Vorpommern", "Niedersachsen",
+    "Nordrhein-Westfalen", "Rheinland-Pfalz", "Saarland", "Sachsen",
+    "Sachsen-Anhalt", "Schleswig-Holstein", "Thüringen",
+]
 
 
 async def _ingest_region(
@@ -66,6 +95,16 @@ async def _ingest_region(
         response.raise_for_status()
         summary = response.json()
 
+        # A shard bigger than the ceiling cannot be fully read. Say so rather
+        # than letting a truncated crawl look like complete coverage.
+        if page == 1 and (summary.get("total_available") or 0) > _RESULT_CEILING:
+            print(
+                f"    ! {region}: {summary['total_available']} results exceed the "
+                f"{_RESULT_CEILING} hard cap — this shard is truncated. Narrow it "
+                f"(smaller --since, or shard by PLZ).",
+                file=sys.stderr,
+            )
+
         totals["pages"] += 1
         totals["fetched"] += summary["fetched"]
         totals["companies"] += summary["companies_created"]
@@ -78,8 +117,12 @@ async def _ingest_region(
             f"+{summary['postings_created']:>3} Rollen  "
             f"~{summary['postings_updated']:>3} bekannt"
         )
-        if summary["fetched"] < 100:
-            break  # short page ⇒ delta exhausted
+        # Page on the SOURCE's total, never on the parsed count. `fetched` is
+        # post-parse: a page holding one anonymous employer yields 99, and
+        # treating that as a short page silently truncates the whole shard.
+        total = summary.get("total_available")
+        if summary["fetched"] == 0 or (total is not None and page * 100 >= total):
+            break
 
     return totals
 
@@ -90,22 +133,33 @@ async def main() -> int:
         "--region",
         action="append",
         default=[],
-        help="city/PLZ; repeatable. Defaults to $ELIGO_HUB_REGIONS (comma-separated).",
+        help="shard key; repeatable. Defaults to $ELIGO_HUB_REGIONS, else all 16 "
+        "Bundesländer — i.e. all of Germany.",
     )
-    parser.add_argument("--radius", type=int, default=25, help="km around each region")
+    parser.add_argument(
+        "--radius",
+        type=int,
+        default=0,
+        help="km around each shard. 0 for Bundesland shards: a radius would make "
+        "neighbouring Länder overlap and re-fetch the same postings.",
+    )
     parser.add_argument(
         "--since",
         type=int,
-        default=2,
-        help="only postings published in the last N days. 2 not 1, so a missed "
-        "or late run still overlaps the previous day instead of leaving a hole.",
+        default=1,
+        choices=[0, 1, 7, 14, 28],
+        help="publication window. The source honours ONLY these values and "
+        "silently returns everything for any other.",
     )
-    parser.add_argument("--max-pages", type=int, default=20, help="page cap per region")
+    parser.add_argument("--max-pages", type=int, default=100, help="page cap per shard")
     parser.add_argument(
         "--stale-days",
         type=int,
-        default=14,
-        help="close postings no crawl has seen for this long. 0 disables.",
+        default=0,
+        help="close postings no crawl has seen for this long. 0 (default) is OFF: "
+        "a publication-date delta never re-lists older postings that are still "
+        "open, so sweeping after one would close live vacancies. Only run this "
+        "after a pass that re-sees everything currently listed.",
     )
     args = parser.parse_args()
 
@@ -115,13 +169,15 @@ async def main() -> int:
         print("ELIGO_API_BASE and ELIGO_INGEST_TOKEN must be set", file=sys.stderr)
         return 2
 
-    regions = args.region or [
-        r.strip()
-        for r in os.environ.get("ELIGO_HUB_REGIONS", "München").split(",")
-        if r.strip()
-    ]
+    configured = os.environ.get("ELIGO_HUB_REGIONS", "").strip()
+    regions = args.region or (
+        [r.strip() for r in configured.split(",") if r.strip()]
+        if configured
+        else BUNDESLAENDER
+    )
+    scope = "Deutschland" if regions == BUNDESLAENDER else f"{len(regions)} shard(s)"
 
-    print(f"nightly corpus refresh · {len(regions)} region(s) · delta {args.since}d")
+    print(f"nightly corpus refresh · {scope} · delta {args.since}d")
     grand = {"pages": 0, "fetched": 0, "companies": 0, "postings": 0, "updated": 0}
     failures: list[str] = []
 
@@ -148,6 +204,8 @@ async def main() -> int:
             for key in grand:
                 grand[key] += totals[key]
 
+        # Off by default — see the module docstring on why a delta must not
+        # drive deactivation.
         if args.stale_days > 0:
             try:
                 response = await client.post(

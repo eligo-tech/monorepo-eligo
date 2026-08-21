@@ -162,10 +162,22 @@ These are enforced in code. Do not route around them.
   collection to be a *described, scheduled, logged* activity, not a side effect
   of someone clicking; (4) "which user triggered this crawl?" has no good answer,
   while "the nightly job ran at 03:00" is auditable.
-- The daily job crawls a **delta** (`published_since_days=1`), so a run upserts
-  what changed instead of re-processing the corpus. Removals are invisible to a
-  delta — only absence over time reveals them — so
-  `service.deactivate_stale_postings` closes what no crawl has seen for N days.
+- The daily job covers **all of Germany**, sharded by Bundesland: the API caps
+  any query at 10,000 results (HTTP 400 past page 100), and one day of new
+  postings nationwide is ~30,100 — so 16 shards, largest ~5,800. Never scope the
+  crawl to one city; that was a placeholder, not a design.
+- It crawls a **delta** (`published_since_days=1`), so a run upserts what changed
+  instead of re-processing the corpus. That parameter is an **enum** — only
+  `{0, 1, 7, 14, 28}` are honoured and the source silently returns ALL ~709,700
+  postings for any other value, so `IngestRequest` constrains its type.
+- Page on the source's `total_available`, never on the count of parsed records:
+  a page holding one unattributable record comes back short and would silently
+  truncate the shard.
+- `deactivate_stale_postings` must **not** run off a publication-date delta. A
+  posting published two months ago and still open is never re-listed, so its
+  `last_seen_at` goes stale while the vacancy is live; sweeping on that basis
+  closes real roles. Deactivation is only sound after a pass that re-sees
+  everything currently listed.
 - **The shared corpus holds company-level facts only — never natural persons.**
   No hiring managers, no Geschäftsführer, no ad authors. A shared table holding
   personal data would make one subject's erasure reach across every customer.

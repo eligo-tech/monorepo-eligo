@@ -6,6 +6,14 @@
 # It calls the deployed API with a scoped machine token, so no database
 # credentials live in CI. A failed run fails the workflow, which is the
 # monitoring signal (SOC 2 CC7.2) — do not add `continue-on-error`.
+#
+# Scope is ALL OF GERMANY: the script shards by Bundesland because the API caps
+# any single query at 10,000 results (HTTP 400 past page 100), and one day of
+# new postings nationwide is ~30,100 — so 16 shards, largest ~5,800, ~320
+# requests, a few minutes.
+#
+# `since` is an ENUM, not a day count: only {0, 1, 7, 14, 28} are honoured and
+# the source silently returns all ~709,700 postings for anything else.
 name: Hub · nightly ingest
 
 on:
@@ -16,12 +24,14 @@ on:
   workflow_dispatch:
     inputs:
       regions:
-        description: "Comma-separated regions (default: repo variable)"
+        description: "Comma-separated shards (default: all 16 Bundesländer)"
         required: false
       since:
-        description: "Only postings published in the last N days"
+        description: "Publication window — only 0, 1, 7, 14, 28 are honoured"
         required: false
-        default: "2"
+        default: "1"
+        type: choice
+        options: ["0", "1", "7", "14", "28"]
 
 concurrency:
   # Never let a slow run overlap the next night's.
@@ -31,7 +41,7 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -50,4 +60,4 @@ jobs:
           ELIGO_HUB_REGIONS: ${{ github.event.inputs.regions || vars.ELIGO_HUB_REGIONS }}
         run: |
           python -m scripts.hub_daily \
-            --since "${{ github.event.inputs.since || '2' }}"
+            --since "${{ github.event.inputs.since || '1' }}"
