@@ -20,9 +20,6 @@ import { Button, FIELD } from '../../ui/forms'
 import { CandidateDrawer } from './CandidateDrawer'
 import { CvUploadModal } from './CvUploadModal'
 
-/** Anchors the Navigator's ↑/↓ steps through on this screen. */
-export const KANDIDATEN_SECTIONS = ['section-kandidaten', 'section-liste']
-
 type SortKey = 'created' | 'name' | 'verification'
 const SORT_LABELS: Record<SortKey, string> = {
   created: 'Neueste zuerst',

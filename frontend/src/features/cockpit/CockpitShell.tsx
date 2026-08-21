@@ -1,34 +1,33 @@
 // The cockpit shell: graph-paper background, command bar, and the screen switch.
 //
-// This replaces the sidebar + pill-tab shell. Screens are declared in one array,
-// so extending the cockpit to further recruitment surfaces (Mandate, BD, …) means
-// adding an entry plus a component — the navigator, hash routing and keyboard
-// paging come along for free.
+// Screens are declared in one array and reached by name from the Section picker
+// in the command bar. Adding a surface means adding an entry plus a component;
+// hash routing comes along for free.
+//
+// The arrow-cluster Navigator this used to carry is gone: paging blindly through
+// screens to reach one you wanted is worse than choosing it from a list.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CommandBar } from './CommandBar'
-import { CockpitScreen, COCKPIT_SECTIONS } from './screens/CockpitScreen'
-import { KandidatenScreen, KANDIDATEN_SECTIONS } from './screens/kandidaten/KandidatenScreen'
-import { KandidatenweltScreen, KANDIDATENWELT_SECTIONS } from './screens/KandidatenweltScreen'
-import { MarktScreen, MARKT_SECTIONS } from './screens/MarktScreen'
+import { CockpitScreen } from './screens/CockpitScreen'
+import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
+import { JobsScreen } from './screens/JobsScreen'
+import { ManagerScreen } from './screens/ManagerScreen'
+import { MarktScreen } from './screens/MarktScreen'
+import type { SectionOption } from './SectionPicker'
 import { useCockpitData } from './data/useCockpitData'
 import { useTypeface } from './useTypeface'
 
-export type ScreenKey = 'cockpit' | 'kandidaten' | 'kandidatenwelt' | 'markt'
+export type ScreenKey = 'cockpit' | 'markt' | 'managers' | 'jobs' | 'kandidaten'
 
-interface ScreenDef {
-  key: ScreenKey
-  /** Anchor ids in document order — what the navigator's ↑/↓ steps through. */
-  sections: string[]
-}
-
-// Left to right, the drill-down the product tells: the whole book of business →
-// the pool it draws on → one candidate's world → the market outside it.
-export const SCREENS: ScreenDef[] = [
-  { key: 'cockpit', sections: COCKPIT_SECTIONS },
-  { key: 'kandidaten', sections: KANDIDATEN_SECTIONS },
-  { key: 'kandidatenwelt', sections: KANDIDATENWELT_SECTIONS },
-  { key: 'markt', sections: MARKT_SECTIONS },
+// The order the product reads in: the book of business, then the market it
+// draws on, then the people and mandates inside it.
+export const SCREENS: SectionOption<ScreenKey>[] = [
+  { key: 'cockpit', label: 'Cockpit' },
+  { key: 'markt', label: 'Markt' },
+  { key: 'managers', label: 'Manager', placeholder: true },
+  { key: 'jobs', label: 'Jobs' },
+  { key: 'kandidaten', label: 'Kandidaten' },
 ]
 
 export const isScreenKey = (v: string): v is ScreenKey =>
@@ -39,9 +38,6 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
   const [typeface, setTypeface] = useTypeface()
   const [screen, setScreen] = useState<ScreenKey>(initialScreen)
   const [query, setQuery] = useState('')
-
-  const index = SCREENS.findIndex((s) => s.key === screen)
-  const sections = SCREENS[index].sections
 
   const goToScreen = useCallback((next: ScreenKey) => {
     setScreen(next)
@@ -59,37 +55,6 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  /** Scroll to the section before/after whichever one is nearest the top. */
-  const stepSection = useCallback(
-    (delta: 1 | -1) => {
-      const tops = sections.map((id) => {
-        const el = document.getElementById(id)
-        return el ? el.getBoundingClientRect().top : Number.POSITIVE_INFINITY
-      })
-      // "Current" = the last section whose top is at or above the fold line.
-      let current = 0
-      tops.forEach((top, i) => {
-        if (top <= 120) current = i
-      })
-      const target = Math.max(0, Math.min(sections.length - 1, current + delta))
-      document.getElementById(sections[target])?.scrollIntoView({ behavior: 'smooth' })
-    },
-    [sections],
-  )
-
-  const nav = useMemo(
-    () => ({
-      onPrevScreen: () => index > 0 && goToScreen(SCREENS[index - 1].key),
-      onNextScreen: () => index < SCREENS.length - 1 && goToScreen(SCREENS[index + 1].key),
-      onPrevSection: () => stepSection(-1),
-      onNextSection: () => stepSection(1),
-      onReset: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
-      canPrevScreen: index > 0,
-      canNextScreen: index < SCREENS.length - 1,
-    }),
-    [index, goToScreen, stepSection],
-  )
-
   return (
     <div className="cockpit-root min-h-screen bg-cockpit-bg bg-grid bg-grid-cell font-sans text-cockpit-text">
       <CommandBar
@@ -98,16 +63,17 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         onQueryChange={setQuery}
         typeface={typeface}
         onTypefaceChange={setTypeface}
-        nav={nav}
+        screens={SCREENS}
+        screen={screen}
+        onScreenChange={goToScreen}
       />
 
       <main className="mx-auto max-w-[1560px] px-6 pb-24 pt-8">
         {screen === 'cockpit' && <CockpitScreen state={state} />}
-        {screen === 'kandidaten' && <KandidatenScreen />}
-        {screen === 'kandidatenwelt' && (
-          <KandidatenweltScreen data={state.data.profileSale} />
-        )}
         {screen === 'markt' && <MarktScreen />}
+        {screen === 'managers' && <ManagerScreen />}
+        {screen === 'jobs' && <JobsScreen />}
+        {screen === 'kandidaten' && <KandidatenScreen />}
       </main>
     </div>
   )

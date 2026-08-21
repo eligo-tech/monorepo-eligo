@@ -41,7 +41,7 @@ export type Tone = keyof typeof BADGE_TONES
 
 /**
  * Numbered section header: mono index badge, title, right-hand hint, hairline.
- * Pass `id` so the Navigator's ↑/↓ can scroll between sections.
+ * Pass `id` to give the section a stable anchor for deep links.
  */
 export function SectionHeader({
   index,
@@ -248,33 +248,6 @@ export function SegmentedControl<T extends string>({
   )
 }
 
-/** Status chip in the command bar — dot + label, mint or gold. */
-export function StatusChip({
-  tone,
-  children,
-}: {
-  tone: 'mint' | 'gold'
-  children: ReactNode
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2 rounded-xl border px-3.5 py-2 text-[14px] font-medium',
-        tone === 'mint'
-          ? 'border-mint-700/70 bg-mint-800/20 text-mint-400'
-          : 'border-gold-600/70 bg-gold-800/20 text-gold-400',
-      )}
-    >
-      <span
-        className={cn(
-          'h-2 w-2 rounded-full',
-          tone === 'mint' ? 'bg-mint-500' : 'bg-gold-400',
-        )}
-      />
-      {children}
-    </div>
-  )
-}
 
 /**
  * Renders body copy with record references (#K-0731, #A-238) picked out in mono,
