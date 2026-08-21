@@ -151,6 +151,32 @@ These are enforced in code. Do not route around them.
   user, so `/hub/ingest` accepts a service token (`ELIGO_INGEST_TOKEN`) or a
   session JWT. Fail-closed — unset, only the Clerk path authenticates.
 
+### 2.7 Ingestion is a scheduled job. No user, no UI.
+- **Filling the corpus is never a user action.** No button, no request handler,
+  and no page load may cause an outbound crawl of a public source. Ingestion
+  runs on a schedule, unattended, authenticated by a machine credential
+  (`ELIGO_INGEST_TOKEN`). The frontend has no client method that can trigger it.
+- Reasons, in order of weight: (1) a presentation control performing an outbound
+  crawl collapses four layers into one; (2) N users × one button = N calls to a
+  free public API for data already held; (3) GDPR Art. 30 / SOC 2 CC7 require
+  collection to be a *described, scheduled, logged* activity, not a side effect
+  of someone clicking; (4) "which user triggered this crawl?" has no good answer,
+  while "the nightly job ran at 03:00" is auditable.
+- The daily job crawls a **delta** (`published_since_days=1`), so a run upserts
+  what changed instead of re-processing the corpus. Removals are invisible to a
+  delta — only absence over time reveals them — so
+  `service.deactivate_stale_postings` closes what no crawl has seen for N days.
+- **The shared corpus holds company-level facts only — never natural persons.**
+  No hiring managers, no Geschäftsführer, no ad authors. A shared table holding
+  personal data would make one subject's erasure reach across every customer.
+  Persons live only in tenant-scoped tables, with provenance and the Art. 14 flow.
+- Erasure in a re-ingesting system needs a **suppression list, not a delete**: the
+  next crawl re-inserts a deleted row. See ARCHITECTURE.md §3 — not yet built.
+
+Full rules, data classification, and the GDPR/SOC 2 obligation map live in
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing
+where data lives.
+
 ---
 
 ## 3. Per-domain file convention

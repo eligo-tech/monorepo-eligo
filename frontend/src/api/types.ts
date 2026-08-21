@@ -179,7 +179,13 @@ export interface HubCompanyDTO {
   tracked: boolean
 }
 
-/** Outcome of one ingest slice — what a "Markt aktualisieren" press did. */
+/**
+ * Outcome of one ingest slice.
+ *
+ * Returned by `POST /hub/ingest`, which only the scheduled job calls — the UI
+ * never triggers ingestion (see ARCHITECTURE.md, RULE 1). Kept here so the
+ * contract is typed in one place.
+ */
 export interface HubIngestSummaryDTO {
   source: string
   /** True when a recent identical fetch was reused and no request was made. */

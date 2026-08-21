@@ -1,0 +1,53 @@
+# Nightly corpus refresh.
+#
+# This workflow is the ONLY thing that fills the shared hub corpus
+# (ARCHITECTURE.md RULE 1: ingestion is a scheduled job — no user, no UI).
+#
+# It calls the deployed API with a scoped machine token, so no database
+# credentials live in CI. A failed run fails the workflow, which is the
+# monitoring signal (SOC 2 CC7.2) — do not add `continue-on-error`.
+name: Hub · nightly ingest
+
+on:
+  schedule:
+    # 03:17 UTC — off the hour so we are not in the thundering herd that every
+    # naive cron aims at the top of the hour.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: "Comma-separated regions (default: repo variable)"
+        required: false
+      since:
+        description: "Only postings published in the last N days"
+        required: false
+        default: "2"
+
+concurrency:
+  # Never let a slow run overlap the next night's.
+  group: hub-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Refresh corpus
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+          ELIGO_HUB_REGIONS: ${{ github.event.inputs.regions || vars.ELIGO_HUB_REGIONS }}
+        run: |
+          python -m scripts.hub_daily \
+            --since "${{ github.event.inputs.since || '2' }}"

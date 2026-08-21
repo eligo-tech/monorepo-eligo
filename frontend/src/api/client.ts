@@ -7,7 +7,6 @@ import type {
   CVExtractionResultDTO,
   HubCompanyDTO,
   HubCompanyLinkDTO,
-  HubIngestSummaryDTO,
   HubJobPostingDTO,
   JobDTO,
   MatchResultDTO,
@@ -92,34 +91,6 @@ export const api = {
   /** Open roles for one hub company. */
   hubCompanyPostings: (id: string) =>
     request<HubJobPostingDTO[]>(`/hub/companies/${id}/postings?limit=200`),
-
-  /**
-   * Load one slice of the market into the SHARED corpus.
-   *
-   * `maxAgeMinutes` makes a press cheap: if anyone already fetched this exact
-   * slice that recently, the backend reuses it instead of calling the source
-   * again. Everybody's refresh button therefore costs at most one request per
-   * slice per window, no matter how many recruiters press it.
-   */
-  refreshHubMarket: (params: {
-    where?: string
-    what?: string
-    radiusKm?: number
-    page?: number
-    maxAgeMinutes?: number
-  }) =>
-    request<HubIngestSummaryDTO>('/hub/ingest', {
-      method: 'POST',
-      body: JSON.stringify({
-        source: 'bundesagentur',
-        where: params.where || null,
-        what: params.what || null,
-        radius_km: params.radiusKm ?? 25,
-        page: params.page ?? 1,
-        size: 100,
-        max_age_minutes: params.maxAgeMinutes ?? 60,
-      }),
-    }),
 
   /** Mark this workspace's interest in a corpus company. Idempotent. */
   trackHubCompany: (id: string, relationship: HubCompanyLinkDTO['relationship'] = 'watching') =>

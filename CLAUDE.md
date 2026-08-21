@@ -69,6 +69,22 @@ matching honors **Art. 22** (human oversight of consequential automated decision
 and the market-map agent is limited to **public** job/company data. Lead with this —
 it's the moat, not overhead.
 
+## Where data is allowed to live — read this before moving any
+
+[`ARCHITECTURE.md`](ARCHITECTURE.md) is binding. The two rules that shape
+everything else:
+
+- **Ingestion is a scheduled job. No user, no UI.** Filling the shared corpus is
+  never a user action — no button, no request handler, no page load may crawl a
+  public source. Presentation reads; a cron writes.
+- **The shared corpus holds company-level facts only, never natural persons.**
+  People (managers, candidates) live exclusively in tenant-scoped tables, with
+  provenance and the GDPR Art. 14 flow.
+
+It also carries the data classification table and the GDPR/SOC 2 obligation map,
+including what is **not** yet built — nothing here may be described to a customer
+as "GDPR compliant" or "SOC 2 compliant" until those gaps are closed.
+
 ## Build order (design-partner first, revenue before breadth)
 
 Phase 0 ingest & read-only Candidate-360 → 1 document intelligence → 2 matching →
