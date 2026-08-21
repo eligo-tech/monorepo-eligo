@@ -398,6 +398,71 @@ async def test_a_failed_fetch_is_never_reused_as_fresh() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Staleness — what a delta crawl cannot see
+# ---------------------------------------------------------------------------
+
+
+async def test_stale_postings_are_closed_and_counts_follow(tenant) -> None:
+    """A filled vacancy just stops appearing; only `last_seen_at` reveals it."""
+    summary = await _ingest(StubAdapter(), tenant)
+
+    async with SessionLocal() as session:
+        rows = (await session.execute(select(HubJobPosting).limit(3))).scalars().all()
+        victim_company = rows[0].hub_company_id
+        old = dt.datetime.now(dt.UTC) - dt.timedelta(days=30)
+        for row in rows:
+            row.last_seen_at = old
+        await session.commit()
+
+    async with SessionLocal() as session:
+        closed = await service.deactivate_stale_postings(session, older_than_days=14)
+
+    assert closed["deactivated"] == 3
+    assert closed["companies_recounted"] >= 1
+
+    async with SessionLocal() as session:
+        active = (
+            await session.scalar(
+                select(func.count(HubJobPosting.id)).where(
+                    HubJobPosting.is_active.is_(True)
+                )
+            )
+        ) or 0
+        # Deactivated, never deleted: a closed role is itself a BD signal.
+        total = (await session.scalar(select(func.count(HubJobPosting.id)))) or 0
+        signal = (
+            await session.scalar(
+                select(HubCompany.open_postings_count).where(
+                    HubCompany.id == victim_company
+                )
+            )
+        ) or 0
+        still_active_for_company = (
+            await session.scalar(
+                select(func.count(HubJobPosting.id)).where(
+                    HubJobPosting.hub_company_id == victim_company,
+                    HubJobPosting.is_active.is_(True),
+                )
+            )
+        ) or 0
+
+    assert total == summary.postings_created
+    assert active == summary.postings_created - 3
+    # The denormalized "who is hiring hardest" signal must not keep counting
+    # vacancies that closed.
+    assert signal == still_active_for_company
+
+
+async def test_expiring_nothing_is_a_no_op(tenant) -> None:
+    await _ingest(StubAdapter(), tenant)
+    async with SessionLocal() as session:
+        assert await service.deactivate_stale_postings(session, older_than_days=14) == {
+            "deactivated": 0,
+            "companies_recounted": 0,
+        }
+
+
+# ---------------------------------------------------------------------------
 # API
 # ---------------------------------------------------------------------------
 

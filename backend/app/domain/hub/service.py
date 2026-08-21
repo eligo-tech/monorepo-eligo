@@ -26,7 +26,7 @@ import hashlib
 import json
 import uuid
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -429,6 +429,68 @@ async def ingest(
         rejected=rejected,
         notes=notes,
     )
+
+
+async def deactivate_stale_postings(
+    session: AsyncSession, *, older_than_days: int = 14
+) -> dict[str, int]:
+    """Close postings the crawler has stopped seeing.
+
+    A *delta* crawl (only postings published since yesterday) is cheap but blind
+    to removals: a filled vacancy simply stops appearing, and nothing in the
+    delta says so. Absence is only observable over time, which is what
+    `last_seen_at` records.
+
+    Postings are deactivated, never deleted — a role that closed is itself a BD
+    signal ("they filled it"), and the audit trail should show the vacancy
+    existed. This also serves GDPR storage limitation: the active corpus stays
+    current instead of accumulating years of dead listings.
+    """
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=older_than_days)
+    rows = await session.execute(
+        select(HubJobPosting.id, HubJobPosting.hub_company_id).where(
+            HubJobPosting.is_active.is_(True), HubJobPosting.last_seen_at < cutoff
+        )
+    )
+    stale = rows.all()
+    if not stale:
+        return {"deactivated": 0, "companies_recounted": 0}
+
+    posting_ids = [row[0] for row in stale]
+    company_ids = {row[1] for row in stale}
+
+    await session.execute(
+        update(HubJobPosting)
+        .where(HubJobPosting.id.in_(posting_ids))
+        .values(is_active=False)
+    )
+    await session.flush()
+
+    # The denormalized signal must follow, or "who is hiring hardest" keeps
+    # counting vacancies that closed.
+    counts = await session.execute(
+        select(HubJobPosting.hub_company_id, func.count(HubJobPosting.id))
+        .where(
+            HubJobPosting.hub_company_id.in_(company_ids),
+            HubJobPosting.is_active.is_(True),
+        )
+        .group_by(HubJobPosting.hub_company_id)
+    )
+    open_counts = dict(counts.all())
+    for company_id in company_ids:
+        await session.execute(
+            update(HubCompany)
+            .where(HubCompany.id == company_id)
+            .values(open_postings_count=open_counts.get(company_id, 0))
+        )
+    await session.commit()
+
+    logger.info(
+        "hub maintenance: deactivated %d stale postings across %d companies",
+        len(posting_ids),
+        len(company_ids),
+    )
+    return {"deactivated": len(posting_ids), "companies_recounted": len(company_ids)}
 
 
 # --------------------------------------------------------------------------

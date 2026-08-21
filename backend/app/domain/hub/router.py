@@ -206,6 +206,21 @@ async def untrack_hub_company(
 # --------------------------------------------------------------------------
 
 
+@router.post("/maintenance/expire-stale")
+async def expire_stale_postings(
+    days: int = Query(default=14, ge=1, le=365),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Close postings no crawl has seen for `days`.
+
+    Operator endpoint, run by the nightly job — not a user action. A delta crawl
+    cannot observe a removal; only the absence of a posting over time can, which
+    is what `last_seen_at` tracks.
+    """
+    return await service.deactivate_stale_postings(db, older_than_days=days)
+
+
 @router.post(
     "/ingest", response_model=IngestSummary, status_code=status.HTTP_201_CREATED
 )

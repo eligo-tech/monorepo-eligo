@@ -204,8 +204,13 @@ class BundesagenturAdapter:
         if query.radius_km is not None:
             params["umkreis"] = query.radius_km
         if query.published_since_days is not None:
-            # The API accepts 0–100 days.
-            params["veroeffentlichtseit"] = min(max(query.published_since_days, 0), 100)
+            # Only {0, 1, 7, 14, 28} are honoured. Every other value is ignored
+            # and the API returns the UNFILTERED set — measured 2026-08-21:
+            #   0 → 20,216   1 → 30,098   7 → 78,636
+            #   14 → 128,810  28 → 216,462   anything else → 709,734 (all)
+            # `IngestRequest` constrains the type so a bad window cannot reach
+            # here, but a wrong value would silently cost a full crawl.
+            params["veroeffentlichtseit"] = query.published_since_days
         if not query.include_staffing:
             params["zeitarbeit"] = "false"
             params["pav"] = "false"

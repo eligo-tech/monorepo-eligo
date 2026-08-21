@@ -107,11 +107,14 @@ async def _run_shard(
             + (f"  ✗{len(summary.rejected)} rejected" if summary.rejected else "")
         )
 
-        if summary.fetched < size:
-            break  # short page ⇒ end of this shard
+        # Page on the SOURCE's total, never on the parsed count: `fetched` is
+        # post-parse, so a page holding one unattributable record comes back
+        # short and would silently truncate the shard.
+        total = summary.total_available
+        if summary.fetched == 0 or (total is not None and page * size >= total):
+            break
         if page == max_pages:
-            remaining = (summary.total_available or 0) - page * size
-            truncated = remaining > 0
+            truncated = (summary.total_available or 0) > page * size
         if page >= _SOURCE_PAGE_CEILING:
             truncated = True
             break

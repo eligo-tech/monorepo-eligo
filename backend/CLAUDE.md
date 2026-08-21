@@ -151,6 +151,51 @@ These are enforced in code. Do not route around them.
   user, so `/hub/ingest` accepts a service token (`ELIGO_INGEST_TOKEN`) or a
   session JWT. Fail-closed — unset, only the Clerk path authenticates.
 
+### 2.7 Ingestion is a scheduled job. No user, no UI.
+- **Filling the corpus is never a user action.** No button, no request handler,
+  and no page load may cause an outbound crawl of a public source. Ingestion
+  runs on a schedule, unattended, authenticated by a machine credential
+  (`ELIGO_INGEST_TOKEN`). The frontend has no client method that can trigger it.
+- Reasons, in order of weight: (1) a presentation control performing an outbound
+  crawl collapses four layers into one; (2) N users × one button = N calls to a
+  free public API for data already held; (3) GDPR Art. 30 / SOC 2 CC7 require
+  collection to be a *described, scheduled, logged* activity, not a side effect
+  of someone clicking; (4) "which user triggered this crawl?" has no good answer,
+  while "the nightly job ran at 03:00" is auditable.
+- The daily job is **Germany-wide, sharded by Bundesland — and that sharding is
+  only ~83% complete.** Sharding is forced (the API caps any query at 10,000
+  results, HTTP 400 past page 100, against ~709,700 open postings), but `wo=` is
+  a place-NAME lookup, not a region selector: `wo=Hessen` returns 82 postings for
+  an entire state because a village shares the name (same for Brandenburg and
+  Sachsen; no spelling variant fixes it, and the `arbeitsort_plz` facet is
+  truncated to 200 entries so it cannot supply a plan either). The exhaustive key
+  is the ~8,200 five-digit PLZ — every posting has exactly one — and that is the
+  fix, not yet built. **The job probes the nationwide total and prints the
+  coverage it achieved every run**, so the gap stays visible instead of becoming
+  an assumption. Never scope the crawl to one city; that was a placeholder.
+- It crawls a **delta** (`published_since_days=1`), so a run upserts what changed
+  instead of re-processing the corpus. That parameter is an **enum** — only
+  `{0, 1, 7, 14, 28}` are honoured and the source silently returns ALL ~709,700
+  postings for any other value, so `IngestRequest` constrains its type.
+- Page on the source's `total_available`, never on the count of parsed records:
+  a page holding one unattributable record comes back short and would silently
+  truncate the shard.
+- `deactivate_stale_postings` must **not** run off a publication-date delta. A
+  posting published two months ago and still open is never re-listed, so its
+  `last_seen_at` goes stale while the vacancy is live; sweeping on that basis
+  closes real roles. Deactivation is only sound after a pass that re-sees
+  everything currently listed.
+- **The shared corpus holds company-level facts only — never natural persons.**
+  No hiring managers, no Geschäftsführer, no ad authors. A shared table holding
+  personal data would make one subject's erasure reach across every customer.
+  Persons live only in tenant-scoped tables, with provenance and the Art. 14 flow.
+- Erasure in a re-ingesting system needs a **suppression list, not a delete**: the
+  next crawl re-inserts a deleted row. See ARCHITECTURE.md §3 — not yet built.
+
+Full rules, data classification, and the GDPR/SOC 2 obligation map live in
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing
+where data lives.
+
 ---
 
 ## 3. Per-domain file convention
