@@ -1,5 +1,4 @@
-// The fixed command bar: wordmark, global search, system status, typeface switch,
-// and the navigator cluster.
+// The fixed command bar: wordmark, global search, Section picker, typeface switch.
 //
 // It also carries the tenant + account controls. Those used to live in TopNav,
 // which the cockpit replaces — dropping them would take organisation switching
@@ -8,8 +7,9 @@
 import { Search } from 'lucide-react'
 import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react'
 import { authEnabled } from '@/auth/config'
-import { SegmentedControl, StatusChip } from './ui/primitives'
-import { Navigator, type NavigatorProps } from './Navigator'
+import { SegmentedControl } from './ui/primitives'
+import { SectionPicker, type SectionOption } from './SectionPicker'
+import type { ScreenKey } from './CockpitShell'
 import type { CockpitStatus } from './data/types'
 import type { Typeface } from './useTypeface'
 
@@ -38,14 +38,18 @@ export function CommandBar({
   onQueryChange,
   typeface,
   onTypefaceChange,
-  nav,
+  screens,
+  screen,
+  onScreenChange,
 }: {
   status: CockpitStatus
   query: string
   onQueryChange: (q: string) => void
   typeface: Typeface
   onTypefaceChange: (t: Typeface) => void
-  nav: NavigatorProps
+  screens: SectionOption<ScreenKey>[]
+  screen: ScreenKey
+  onScreenChange: (key: ScreenKey) => void
 }) {
   return (
     <header className="sticky top-0 z-40 border-b border-cockpit-line bg-cockpit-bg/85 backdrop-blur-md">
@@ -69,12 +73,6 @@ export function CommandBar({
             className="w-full rounded-xl border border-cockpit-line bg-cockpit-inset py-2.5 pl-11 pr-4 text-[15px] text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
           />
         </label>
-
-        {/* System status */}
-        <StatusChip tone="gold">
-          Datenlauf fällig · {status.pendingChanges.value} Änderungen
-        </StatusChip>
-        {status.humanInTheLoop && <StatusChip tone="mint">Human-in-the-Loop aktiv</StatusChip>}
 
         {/* Tenant + account, or the mockup's static initials chip in demo mode */}
         <div className="flex shrink-0 items-center gap-2.5 rounded-xl border border-cockpit-line bg-cockpit-inset px-3 py-1.5">
@@ -104,9 +102,9 @@ export function CommandBar({
           className="shrink-0"
         />
 
-        {/* ml-auto keeps the cluster on the right edge once the bar wraps. */}
-        <div className="ml-auto shrink-0">
-          <Navigator {...nav} />
+        {/* ml-auto keeps the picker on the right edge once the bar wraps. */}
+        <div className="ml-auto">
+          <SectionPicker options={screens} value={screen} onChange={onScreenChange} />
         </div>
       </div>
     </header>

@@ -167,51 +167,6 @@ export interface NextAction {
   provenance: Provenance
 }
 
-// ── Kandidatenwelt · Profilvertrieb ─────────────────────────────────────────
-
-/** The candidate the profile-sale screen is built around. */
-export interface ProfileSubject {
-  ref: string
-  badge: string
-  headline: string
-  /** e.g. "Senior Cloud Architect · 9 J. Erfahrung · AWS / Kubernetes / Go · Wechselbereit". */
-  summary: string
-  optionCount: Figure
-}
-
-/** Left column: a hiring manager in our own database with an open role. */
-export interface ManagerLead {
-  id: string
-  person: string
-  role: string
-  company: string
-  openRole: string
-  skills: string[]
-  match: Figure
-  /** Tone of address we have on file with this contact. */
-  address: 'Sie' | 'Du'
-}
-
-/** Right column: a live vacancy found on the market (public sources only). */
-export interface MarketRole {
-  id: string
-  title: string
-  company: string
-  /** e.g. "München · Gehalt passt · Quelle: LinkedIn Jobs". */
-  meta: string
-  source: string
-  skills: string[]
-  match: Figure
-}
-
-export interface ProfileSaleData {
-  subject: ProfileSubject
-  managers: ManagerLead[]
-  market: MarketRole[]
-}
-
-// ── Command bar state ───────────────────────────────────────────────────────
-
 export interface CockpitStatus {
   /** "Datenlauf fällig · N Änderungen" */
   pendingChanges: Figure
@@ -231,5 +186,4 @@ export interface CockpitData {
   jobScores: JobScore[]
   processes: ProcessCard[]
   actions: NextAction[]
-  profileSale: ProfileSaleData
 }
