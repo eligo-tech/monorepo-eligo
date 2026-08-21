@@ -137,6 +137,77 @@ export interface CompanyDTO {
   updated_at: string
 }
 
+/**
+ * A company in the information hub — the market corpus, not the CRM.
+ *
+ * `resolution_basis` is which rung of the deterministic identity ladder matched
+ * (vat > register > domain > name_place). Surfaced in the UI because an identity
+ * proven by VAT id is a different claim from one assumed from name + postcode.
+ */
+export interface HubCompanyDTO {
+  id: string
+  tenant_id: string
+  name: string
+  normalized_name: string
+  legal_form: string | null
+  dedupe_key: string
+  resolution_basis: 'vat' | 'register' | 'domain' | 'name_place'
+  website_domain: string | null
+  street: string | null
+  postal_code: string | null
+  city: string | null
+  region: string | null
+  country: string | null
+  latitude: number | null
+  longitude: number | null
+  register_court: string | null
+  register_number: string | null
+  vat_id: string | null
+  vat_verified_at: string | null
+  industry: string | null
+  source: string
+  visibility: string
+  open_postings_count: number
+  bd_signals: Record<string, unknown>
+  first_seen_at: string
+  last_seen_at: string
+  company_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** One external posting in the hub — a market signal, never a client mandate. */
+export interface HubJobPostingDTO {
+  id: string
+  tenant_id: string
+  hub_company_id: string
+  observation_id: string | null
+  title: string
+  description: string | null
+  occupation: string | null
+  employment_type: string | null
+  location_text: string | null
+  postal_code: string | null
+  city: string | null
+  country: string | null
+  latitude: number | null
+  longitude: number | null
+  remote_possible: boolean | null
+  salary_min: number | null
+  salary_max: number | null
+  salary_currency: string | null
+  posted_at: string | null
+  expires_at: string | null
+  source: string
+  source_url: string | null
+  external_id: string
+  first_seen_at: string
+  last_seen_at: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface ApplicationDTO {
   id: string
   tenant_id: string

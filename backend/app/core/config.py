@@ -123,6 +123,19 @@ class Settings(BaseSettings):
     clerk_jwks_url: str | None = None
     clerk_issuer: str | None = None
 
+    # --- Machine credentials ---------------------------------------------
+    # Cron has no Clerk user. A session JWT is the wrong credential for a
+    # scheduled backfill — short-lived, tied to a person, revoked when they
+    # leave — so non-interactive ingest callers present this shared secret
+    # instead. UNSET (the default) disables the machine path entirely: only a
+    # Clerk-authenticated human can trigger ingestion. Never logged.
+    #
+    # Generate one with:  python -c "import secrets; print(secrets.token_urlsafe(32))"
+    ingest_token: str | None = None
+    # Tenant a machine-authenticated ingest writes into. Falls back to the
+    # default tenant; set it explicitly once more than one tenant exists.
+    ingest_tenant_id: UUID | None = None
+
     # --- CORS ------------------------------------------------------------
     # NoDecode stops pydantic-settings from JSON-parsing the env value at the
     # source level (which would reject a plain/comma-separated string before the
@@ -139,6 +152,21 @@ class Settings(BaseSettings):
     # Default tenant used by demo/seed endpoints. Every core table carries a
     # ``tenant_id``; real requests would resolve it from auth context.
     default_tenant_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
+
+    @field_validator("ingest_token")
+    @classmethod
+    def _reject_weak_ingest_token(cls, value: str | None) -> str | None:
+        """A short shared secret is worse than none — it looks like protection.
+
+        Refuse to start rather than expose a write endpoint (which also makes
+        outbound calls to a public API) behind a guessable string.
+        """
+        if value is not None and len(value.strip()) < 32:
+            raise ValueError(
+                "ELIGO_INGEST_TOKEN must be at least 32 characters; generate one "
+                'with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
+        return value.strip() if value else None
 
     @field_validator("cors_origins", mode="before")
     @classmethod
