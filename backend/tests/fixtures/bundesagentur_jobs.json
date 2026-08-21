@@ -1,0 +1,2080 @@
+{
+  "ergebnisliste" : [ {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-19"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10115",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5319761,
+      "laenge" : 13.3867379
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-19"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-19",
+    "aenderungsdatum" : "2026-08-19T07:36:52.251",
+    "externeURL" : "https://www.yourfirm.de/job/detail/YF-48852/?utm_source=bundesagentur&utm_medium=unpaid-partner&utm_campaign=000",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "bayoonet AG",
+    "referenznummer" : "12117-YF-48852-YF-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-07-14"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Newtonstr.",
+        "hausnummer" : "18",
+        "plz" : "12489",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.4318919,
+      "laenge" : 13.5306496
+    } ],
+    "veroeffentlichungszeitraum" : {
+      "von" : "2025-06-18"
+    },
+    "datumErsteVeroeffentlichung" : "2025-07-01",
+    "aenderungsdatum" : "2026-07-14T06:27:42.830",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "RADIODATA GmbH",
+    "arbeitgeberKundennummerHash" : "ouczFwc1g-DYBxRGlt2rX3VFppL3ywm6eMqpm-xi8bg=",
+    "referenznummer" : "10000-1202838080-S",
+    "entfernung" : 11,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-17"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Mahlower Straße 124A",
+        "plz" : "14513",
+        "ort" : "Teltow",
+        "region" : "BRANDENBURG",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.397721,
+      "laenge" : 13.2752475
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-17"
+    },
+    "datumErsteVeroeffentlichung" : "2026-05-25",
+    "aenderungsdatum" : "2026-08-17T10:08:20.338",
+    "externeURL" : "https://www.heyjobs.co/de-de/jobs/e115f1ad-716b-4d3a-a468-10f3bd2fa039?utm_content=ad_link&utm_medium=sjm-pr&utm_source=jobboerse",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "GP Günter Papenburg AG",
+    "referenznummer" : "12951-e115f1ad-716b-4d3a--S",
+    "entfernung" : 16,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "SoftwareEntwickler (m/w/d)",
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-06-30"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Eduard-Maurer-Str.",
+        "hausnummer" : "9",
+        "plz" : "16761",
+        "ort" : "Hennigsdorf",
+        "region" : "BRANDENBURG",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.6511635,
+      "laenge" : 13.2072624
+    } ],
+    "veroeffentlichungszeitraum" : {
+      "von" : "2025-08-08"
+    },
+    "datumErsteVeroeffentlichung" : "2025-08-08",
+    "aenderungsdatum" : "2026-06-30T14:45:35.746",
+    "hauptberuf" : "Datenbankentwickler/in",
+    "alternativBeruf1" : "Softwareentwickler/in",
+    "firma" : "ME-Meßsysteme GmbH",
+    "arbeitgeberKundennummerHash" : "xSkx8ksxXZxTl1t7c6bqpxkxjGYxwVle0aybDXE8Pq4=",
+    "referenznummer" : "10001-1001665252-S",
+    "entfernung" : 21,
+    "alleBerufe" : [ "Softwareentwickler/in", "Datenbankentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler Java (m/w/d)",
+    "weitereBerufe" : [ "Softwareentwickler:in", "Java-Entwickler:in" ],
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-07-24"
+    },
+    "verguetungsangabe" : "JAHRESGEHALT",
+    "artDerVerguetung" : "GEHALTSSPANNE",
+    "gehaltsspanneVon" : 40000,
+    "gehaltsspanneBis" : 65000,
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.492683225000064,
+      "laenge" : 13.402575263000074
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-24"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-24",
+    "aenderungsdatum" : "2026-07-24T17:14:18.156",
+    "hauptberuf" : "Softwareentwickler/in",
+    "alternativBeruf1" : "Backend-Entwickler/in",
+    "alternativBeruf2" : "Fachinformatiker/in - Anwendungsentwicklung",
+    "firma" : "IT42morrow IFT GmbH",
+    "arbeitgeberKundennummerHash" : "q50oEXFfyFtrk3OttqO5MvBwiESQw5LWinBDCnNkTUg=",
+    "referenznummer" : "10001-1003443040-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in", "Softwareentwickler:in", "Backend-Entwickler/in", "Fachinformatiker/in - Anwendungsentwicklung", "Java-Entwickler:in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Cobol Softwareentwickler (w/m/d)",
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2025-10-31"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.4926832,
+      "laenge" : 13.4025753
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-01-30"
+    },
+    "datumErsteVeroeffentlichung" : "2025-06-13",
+    "aenderungsdatum" : "2026-08-18T14:26:04.332",
+    "hauptberuf" : "IT-Entwickler/in (Weiterbildung/Ausbildung)",
+    "alternativBeruf1" : "Anwendungsprogrammierer/in",
+    "alternativBeruf2" : "Softwareentwickler/in",
+    "firma" : "EMOS Software GmbH",
+    "arbeitgeberKundennummerHash" : "qk-IDZiaytQ2H0SdJAOnP1Gt8lK31BzmTIRlJJW-UYY=",
+    "referenznummer" : "10001-1001500624-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in", "IT-Entwickler/in (Weiterbildung/Ausbildung)", "Anwendungsprogrammierer/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "FullStack Softwareentwickler (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : false,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-01"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "chiffrenummer" : "214849",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-03"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-03",
+    "aenderungsdatum" : "2026-08-01T07:03:23.882",
+    "externeURL" : "https://www.get-in-it.de/jobsuche/p214849?utm_source=arbeitsagentur&utm_medium=organic&utm_campaign=launch-basic",
+    "hauptberuf" : "Anwendungsprogrammierer/in",
+    "firma" : "HSH",
+    "referenznummer" : "13644-214849-S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Anwendungsprogrammierer/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Senior Fullstack Software Entwickler (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-07-28"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Bundesstraße 5 7",
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-28"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-28",
+    "aenderungsdatum" : "2026-07-28T07:20:37.829",
+    "externeURL" : "https://www.heyjobs.co/de-de/jobs/17d5ad2a-14ae-47f0-bc5d-25f89178ad1d?utm_content=ad_link&utm_medium=sjm-pr&utm_source=jobboerse",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "DIN Solutions GmbH",
+    "referenznummer" : "12951-17d5ad2a-14ae-47f0--S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler:in (m/w/d) – C# / .NET / Angular ",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-04"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-10"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-10",
+    "aenderungsdatum" : "2026-08-04T08:57:30.017",
+    "externeURL" : "https://gute-jobs.de/viewjob-pxnk3?utm_source=jsba-premium&utm_medium=n-a&utm_campaign=jsba-premium&utm_term=softwareentwickler-in-m-w-d-c-net-angular",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "netgo group GmbH",
+    "referenznummer" : "12336-a26f1201j0433117-S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Software-Entwickler .NET/C# XAgent (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : true,
+    "arbeitszeitTeilzeitVormittag" : true,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-05"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10961",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.4928267,
+      "laenge" : 13.3974202
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-05"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-05",
+    "aenderungsdatum" : "2026-08-05T14:12:22.310",
+    "externeURL" : "https://www.jobexport.de/job/5215351.html?exp=81&cid=f2892967-19e6-49f1-8f6b-663c445bae0e",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "blackned GmbH",
+    "referenznummer" : "13635-f2892967_JB5215351-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwicklerin / Softwareentwickler (d/w/m) für medizinische Forschungsdatenkataloge (NUM)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : false,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-21"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Charitéplatz 1",
+        "plz" : "10117",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.523631,
+      "laenge" : 13.378194
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-21"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-21",
+    "aenderungsdatum" : "2026-08-21T12:21:50.164",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Charité Universitätsmedizin Berlin KdöR",
+    "arbeitgeberKundennummerHash" : "h1_v2005UgUf8I-c-VpWcYgMCVqD4JHkfesb0ix3c_U=",
+    "referenznummer" : "17296-0007817:01-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwicklerin / Softwareentwickler (d/w/m) für medizinische Forschungsdaten (NUM)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : false,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-21"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Charitéplatz 1",
+        "plz" : "10117",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.523631,
+      "laenge" : 13.378194
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-21"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-21",
+    "aenderungsdatum" : "2026-08-21T12:21:49.666",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Charité Universitätsmedizin Berlin KdöR",
+    "arbeitgeberKundennummerHash" : "h1_v2005UgUf8I-c-VpWcYgMCVqD4JHkfesb0ix3c_U=",
+    "referenznummer" : "17296-0008044:01-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler (m/w/d) im Bereich Vermessung",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : true,
+    "arbeitszeitTeilzeitNachmittag" : true,
+    "arbeitszeitTeilzeitVormittag" : true,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-07-16"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Eichenstr.",
+        "hausnummer" : "3b",
+        "plz" : "12435",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.496739,
+      "laenge" : 13.455153
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "chiffrenummer" : "f117",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2025-11-26"
+    },
+    "datumErsteVeroeffentlichung" : "2025-11-26",
+    "aenderungsdatum" : "2026-07-16T10:23:17.272",
+    "hauptberuf" : "Softwareentwickler/in",
+    "alternativBeruf1" : "Geoinformatiker/in",
+    "alternativBeruf2" : "Vermessungsingenieur/in",
+    "firma" : "ARC-Greenlab GmbH",
+    "arbeitgeberKundennummerHash" : "1S_gBhS5UgOCucPqCrb47haXdFkbwv4nwlXDbWeRVPY=",
+    "referenznummer" : "10000-1204629632-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in", "Geoinformatiker/in", "Vermessungsingenieur/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Informatiker, Softwareentwickler (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-21"
+    },
+    "verguetungsangabe" : "JAHRESGEHALT",
+    "artDerVerguetung" : "FESTGEHALT",
+    "festgehalt" : 82499.31,
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Boxberger Straße",
+        "hausnummer" : "14",
+        "plz" : "12681",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.549074,
+      "laenge" : 13.537755
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-19"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-19",
+    "aenderungsdatum" : "2026-08-21T07:45:49.271",
+    "externeURL" : "https://www.jobvector.de/job/f66cbe461ad2045f/?utm_source=arbeitsagentur&utm_medium=partner&utm_campaign=tmcfdae_job_jid264444&utm_content=b2c&utm_term=tmf8eca_uicad3a682",
+    "hauptberuf" : "Informatiker/in",
+    "firma" : "Finetech GmbH & Co.KG",
+    "referenznummer" : "14225-f66cbe461ad2045f-S",
+    "entfernung" : 9,
+    "alleBerufe" : [ "Informatiker/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler - ERP (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-21"
+    },
+    "verguetungsangabe" : "JAHRESGEHALT",
+    "artDerVerguetung" : "FESTGEHALT",
+    "festgehalt" : 82283.19,
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Boxberger Straße",
+        "hausnummer" : "14",
+        "plz" : "12681",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.549074,
+      "laenge" : 13.537755
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-21"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-19",
+    "aenderungsdatum" : "2026-08-21T07:45:15.104",
+    "externeURL" : "https://www.jobvector.de/job/27295029c4d3ef9e/?utm_source=arbeitsagentur&utm_medium=partner&utm_campaign=tmcfdae_job_jid266227&utm_content=b2c&utm_term=tmf8eca_uicabe015c",
+    "hauptberuf" : "Informatiker/in",
+    "firma" : "Finetech GmbH & Co.KG",
+    "referenznummer" : "14225-27295029c4d3ef9e-S",
+    "entfernung" : 9,
+    "alleBerufe" : [ "Informatiker/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler (m/w/d) Java/C++",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : false,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-01"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "chiffrenummer" : "284200",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-09"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-09",
+    "aenderungsdatum" : "2026-08-01T07:04:28.134",
+    "externeURL" : "https://www.get-in-engineering.de/jobsuche/p284200?utm_source=arbeitsagentur&utm_medium=organic&utm_campaign=launch-basic",
+    "hauptberuf" : "Ingenieur/in - Elektrotechnik",
+    "alternativBeruf1" : "Ingenieur/in - Informations-, Kommunikationstechnik",
+    "firma" : "IVU Traffic Technologies",
+    "referenznummer" : "13645-284200-S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Ingenieur/in - Elektrotechnik", "Ingenieur/in - Informations-, Kommunikationstechnik" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler:in Java (Homeoffice möglich)",
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-18"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5030532,
+      "laenge" : 13.3819522
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-18"
+    },
+    "datumErsteVeroeffentlichung" : "2025-09-23",
+    "aenderungsdatum" : "2026-08-18T12:11:00.159",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "zollsoft GmbH    ",
+    "arbeitgeberKundennummerHash" : "tpU2b8_iEK2tTuHBLXmgBxKc9J19yGytntSB3y6O1Yo=",
+    "referenznummer" : "10001-1001883453-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Android/Java Softwareentwickler (m/w/d)",
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-02-24"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.4926832,
+      "laenge" : 13.4025753
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2025-06-13"
+    },
+    "datumErsteVeroeffentlichung" : "2025-06-13",
+    "aenderungsdatum" : "2026-08-18T14:26:04.331",
+    "hauptberuf" : "Softwareentwickler/in",
+    "alternativBeruf1" : "IT-Entwickler/in (Weiterbildung/Ausbildung)",
+    "alternativBeruf2" : "Anwendungsprogrammierer/in",
+    "firma" : "EMOS Software GmbH",
+    "arbeitgeberKundennummerHash" : "qk-IDZiaytQ2H0SdJAOnP1Gt8lK31BzmTIRlJJW-UYY=",
+    "referenznummer" : "10001-1001500533-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in", "IT-Entwickler/in (Weiterbildung/Ausbildung)", "Anwendungsprogrammierer/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "(Senior) PHP-Softwareentwickler (m/w/d)",
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-14"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Rosenfelder Str.",
+        "hausnummer" : "15",
+        "plz" : "10315",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5100369,
+      "laenge" : 13.5042993
+    } ],
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-14"
+    },
+    "datumErsteVeroeffentlichung" : "2025-10-27",
+    "aenderungsdatum" : "2026-08-14T11:22:52.108",
+    "hauptberuf" : "Softwareentwickler/in",
+    "alternativBeruf1" : "Softwareentwickler/in",
+    "alternativBeruf2" : "Software-Architect",
+    "firma" : "Firstlead GmbH",
+    "arbeitgeberKundennummerHash" : "a7n_om9oy9lBtVKgwKRk1nOHIwORpxMuObDRWdPe-fY=",
+    "referenznummer" : "10001-1002057348-S",
+    "entfernung" : 5,
+    "alleBerufe" : [ "Softwareentwickler/in", "Softwareentwickler/in", "Software-Architect" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler:in im SAP-Umfeld (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : false,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-01"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "chiffrenummer" : "226037",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-16"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-16",
+    "aenderungsdatum" : "2026-08-01T07:04:22.434",
+    "externeURL" : "https://www.get-in-it.de/jobsuche/p226037?utm_source=arbeitsagentur&utm_medium=organic&utm_campaign=launch-basic",
+    "hauptberuf" : "Anwendungsprogrammierer/in",
+    "firma" : "XFT",
+    "referenznummer" : "13644-226037-S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Anwendungsprogrammierer/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler:in EHDS (all genders)",
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-19"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Rosenthaler Str.",
+        "hausnummer" : "30",
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.525881,
+      "laenge" : 13.4034525
+    } ],
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-06-10"
+    },
+    "datumErsteVeroeffentlichung" : "2026-06-10",
+    "aenderungsdatum" : "2026-08-19T14:34:17.601",
+    "hauptberuf" : "Softwareentwickler/in",
+    "alternativBeruf1" : "Software-Architect",
+    "alternativBeruf2" : "Leiter/in - Softwareentwicklung",
+    "firma" : "gematik GmbH",
+    "arbeitgeberKundennummerHash" : "huQki0TXNbG0qoJYvdwZ9M2bHBeIAWHPFk1_6Y16dfo=",
+    "referenznummer" : "10001-1003203644-S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Softwareentwickler/in", "Software-Architect", "Leiter/in - Softwareentwicklung" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler:in Machine-/Deep-Learning (Homeoffice möglich)",
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-18"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.4926832,
+      "laenge" : 13.4025753
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-18"
+    },
+    "datumErsteVeroeffentlichung" : "2025-09-23",
+    "aenderungsdatum" : "2026-08-18T12:10:42.755",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "zollsoft GmbH    ",
+    "arbeitgeberKundennummerHash" : "tpU2b8_iEK2tTuHBLXmgBxKc9J19yGytntSB3y6O1Yo=",
+    "referenznummer" : "10001-1001883486-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Senior Softwareentwickler:in Java (Homeoffice möglich)",
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-18"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.4926832,
+      "laenge" : 13.4025753
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-18"
+    },
+    "datumErsteVeroeffentlichung" : "2026-02-02",
+    "aenderungsdatum" : "2026-08-18T12:09:00.157",
+    "hauptberuf" : "Softwareentwickler/in",
+    "alternativBeruf1" : "Informatiker/in",
+    "alternativBeruf2" : "Physiker/in",
+    "firma" : "zollsoft GmbH    ",
+    "arbeitgeberKundennummerHash" : "tpU2b8_iEK2tTuHBLXmgBxKc9J19yGytntSB3y6O1Yo=",
+    "referenznummer" : "10001-1002523172-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in", "Informatiker/in", "Physiker/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Software Engineer / Softwareentwickler (w/m/d) Schwerpunkt Künstliche Intelligenz",
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-06-23"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Fehrbelliner Platz",
+        "hausnummer" : "3",
+        "plz" : "10707",
+        "ort" : "Berlin",
+        "ortsteil" : "Wilmersdorf",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.489665,
+      "laenge" : 13.3147215
+    } ],
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-06-23"
+    },
+    "datumErsteVeroeffentlichung" : "2025-11-27",
+    "aenderungsdatum" : "2026-06-23T11:38:14.903",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "ALDB GmbH",
+    "arbeitgeberKundennummerHash" : "yQMNzEbQIKrvkNbhUgt1XVvaUSfzjGWwJwIWd1IxizE=",
+    "referenznummer" : "10001-1002215961-S",
+    "entfernung" : 8,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Software-Entwickler .NET (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : false,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-01"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "chiffrenummer" : "218372",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-03"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-03",
+    "aenderungsdatum" : "2026-08-01T07:02:22.063",
+    "externeURL" : "https://www.get-in-it.de/jobsuche/p218372?utm_source=arbeitsagentur&utm_medium=organic&utm_campaign=launch-basic",
+    "hauptberuf" : "Anwendungsprogrammierer/in",
+    "firma" : "M&H Group",
+    "referenznummer" : "13644-218372-S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Anwendungsprogrammierer/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Software-Entwickler Java (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : false,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-01"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "chiffrenummer" : "124969",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-03"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-03",
+    "aenderungsdatum" : "2026-08-01T07:02:21.903",
+    "externeURL" : "https://www.get-in-it.de/jobsuche/p124969?utm_source=arbeitsagentur&utm_medium=organic&utm_campaign=launch-basic",
+    "hauptberuf" : "Anwendungsprogrammierer/in",
+    "firma" : "M&H Group",
+    "referenznummer" : "13644-124969-S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Anwendungsprogrammierer/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "(Senior) Softwareentwickler abas ERP (w/m/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-05"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10115",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5319761,
+      "laenge" : 13.3867379
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-05"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-05",
+    "aenderungsdatum" : "2026-08-05T07:48:15.016",
+    "externeURL" : "https://www.stellenanzeigen.de/job/detail/SDE-107466/?utm_source=bundesagentur&utm_medium=unpaid-partner&utm_campaign=000",
+    "hauptberuf" : "ERP-Systembetreuer/in",
+    "firma" : "Finetech GmbH & Co. KG",
+    "referenznummer" : "11858-SDE-107466-STA-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "ERP-Systembetreuer/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler (m/w/d) Automatisierung & KI-Lösungen",
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-07-24"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Wagner-Regeny-Str.",
+        "hausnummer" : "14",
+        "plz" : "12489",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.43607,
+      "laenge" : 13.5358515
+    } ],
+    "chiffrenummer" : "2026-06-03-04",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-24"
+    },
+    "datumErsteVeroeffentlichung" : "2026-06-03",
+    "aenderungsdatum" : "2026-07-24T11:40:06.718",
+    "hauptberuf" : "Softwareentwickler/in",
+    "alternativBeruf1" : "ERP-Anwendungsentwickler/in",
+    "alternativBeruf2" : "Fachinformatiker/in - Anwendungsentwicklung",
+    "firma" : "Elektro-EU.DS GmbH",
+    "arbeitgeberKundennummerHash" : "7PhcNRIFqfnAMe8hqeWi7eMe7-H5Rl56bR8D_1_8L1w=",
+    "referenznummer" : "10001-1003171731-S",
+    "entfernung" : 11,
+    "alleBerufe" : [ "Softwareentwickler/in", "ERP-Anwendungsentwickler/in", "Fachinformatiker/in - Anwendungsentwicklung" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Software-Entwickler – RAG, Knowledgraph & Agentische Systeme (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-13"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10623",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.509034,
+      "laenge" : 13.3268731
+    } ],
+    "homeofficemoeglich" : false,
+    "chiffrenummer" : "REF1416O",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-07-27"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-27",
+    "aenderungsdatum" : "2026-08-13T07:21:58.301",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Riverty GmbH",
+    "arbeitgeberKundennummerHash" : "ATDW1dtW9D7FTtfSa5C4odj8HFo8M1AE_LhdqBGsrws=",
+    "referenznummer" : "13660-959640612-S",
+    "entfernung" : 7,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Software-Entwickler und Netzwerkapplikationsspezialist (w/m/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-18"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10115",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5319761,
+      "laenge" : 13.3867379
+    } ],
+    "homeofficemoeglich" : false,
+    "chiffrenummer" : "514102-de",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-17"
+    },
+    "datumErsteVeroeffentlichung" : "2026-07-22",
+    "aenderungsdatum" : "2026-08-17T17:26:03.659",
+    "hauptberuf" : "Informatiker/in",
+    "firma" : "Siemens AG",
+    "arbeitgeberKundennummerHash" : "kMMXym6Me35oUXiBe4YhZNnhsbt6t_xzJPx6op9mbzw=",
+    "referenznummer" : "12465-1602325-1-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Informatiker/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Einkäufer für Bauleistungen (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-19"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Bundesstraße 5 7",
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-19"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-19",
+    "aenderungsdatum" : "2026-08-19T07:12:20.129",
+    "externeURL" : "https://www.heyjobs.co/de-de/jobs/e15bb34b-f73f-4689-a57d-dae2679c9df9?utm_content=ad_link&utm_medium=sjm-pr&utm_source=jobboerse",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Vonovia Recruiting DE",
+    "referenznummer" : "12951-e15bb34b-f73f-4689--S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Backend Developer (m/w/d) – API & Data Integrations",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-20"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Bundesstraße 5 7",
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-20"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-20",
+    "aenderungsdatum" : "2026-08-20T07:09:46.036",
+    "externeURL" : "https://www.heyjobs.co/de-de/jobs/caaba85d-7737-41d5-833d-ca0e754b69f5?utm_content=ad_link&utm_medium=sjm-pr&utm_source=jobboerse",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Octopus Energy Germany GmbH",
+    "referenznummer" : "12951-caaba85d-7737-41d5--S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Software Engineer - Logistics Engineering (all genders)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-20"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Valeska-Gert-Straße 5",
+        "plz" : "10243",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.506468,
+      "laenge" : 13.441248
+    } ],
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-20"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-20",
+    "aenderungsdatum" : "2026-08-20T07:21:07.758",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Zalando SE",
+    "arbeitgeberKundennummerHash" : "6j1LD7GT5Ptmu4Kjh_aAXrzBy8l2iE9iGSfd_WjRWHc=",
+    "referenznummer" : "18251-32132-S",
+    "entfernung" : 1,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Senior Java Entwickler:in",
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-20"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Friedrichstr.",
+        "hausnummer" : "102",
+        "plz" : "10117",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.520904,
+      "laenge" : 13.388769
+    } ],
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-20"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-20",
+    "aenderungsdatum" : "2026-08-20T15:41:39.390",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "aconium GmbH Hauptsitz Berlin",
+    "arbeitgeberKundennummerHash" : "CblOy8NfocYgu0GSFeGgEQjzDG9KCa8AkfyzWy4769c=",
+    "referenznummer" : "10001-1003576425-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Teamleiter Grünpflege | Berlin (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-14"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Bundesstraße 5 7",
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-14"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-14",
+    "aenderungsdatum" : "2026-08-14T07:17:02.504",
+    "externeURL" : "https://www.heyjobs.co/de-de/jobs/8b87e87d-3334-49c4-a731-5a3ebbccb27b?utm_content=ad_link&utm_medium=sjm-pr&utm_source=jobboerse",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Vonovia Recruiting DE",
+    "referenznummer" : "12951-8b87e87d-3334-49c4--S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Principal Software Engineer - Zalando Payments (all genders)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-09-01"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Valeska-Gert-Straße 5",
+        "plz" : "10243",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.506468,
+      "laenge" : 13.441248
+    } ],
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-19"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-19",
+    "aenderungsdatum" : "2026-08-19T07:41:23.297",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Zalando SE",
+    "arbeitgeberKundennummerHash" : "6j1LD7GT5Ptmu4Kjh_aAXrzBy8l2iE9iGSfd_WjRWHc=",
+    "referenznummer" : "18251-32071-S",
+    "entfernung" : 1,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Softwareentwickler C# und .Net für Desktop Service Tools (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-09-01"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "14979",
+        "ort" : "Großbeeren",
+        "region" : "BRANDENBURG",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.3614244,
+      "laenge" : 13.3263106
+    } ],
+    "homeofficemoeglich" : false,
+    "chiffrenummer" : "Sch9639",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-05-08"
+    },
+    "datumErsteVeroeffentlichung" : "2026-05-08",
+    "aenderungsdatum" : "2026-07-30T17:24:11.283",
+    "hauptberuf" : "Informatiker/in",
+    "alternativBeruf1" : "Softwareentwickler/in",
+    "firma" : "Hydac International GmbH",
+    "arbeitgeberKundennummerHash" : "bJkfeUYValnC9_Eqkw75Wn1KbLo90ZXkLj_T2dlI_8g=",
+    "referenznummer" : "10000-1206456080-S",
+    "entfernung" : 18,
+    "alleBerufe" : [ "Softwareentwickler/in", "Informatiker/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Marketing Manager in der Immobilienbranche (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-11"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "strasse" : "Bundesstraße 5 7",
+        "plz" : "10178",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5210906,
+      "laenge" : 13.4099785
+    } ],
+    "homeofficemoeglich" : false,
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-11"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-11",
+    "aenderungsdatum" : "2026-08-11T07:18:48.625",
+    "externeURL" : "https://www.heyjobs.co/de-de/jobs/2f2193ff-4cf9-4980-b9cc-f952e3012f95?utm_content=ad_link&utm_medium=sjm-pr&utm_source=jobboerse",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "Vonovia Recruiting DE",
+    "referenznummer" : "12951-2f2193ff-4cf9-4980--S",
+    "entfernung" : 2,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "mgm technology partners GmbH: Softwareentwickler KI & Automatisierung (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-08-17"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "KEINE_ANGABE",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10115",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5319761,
+      "laenge" : 13.3867379
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-17"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-17",
+    "aenderungsdatum" : "2026-08-17T07:01:09.592",
+    "externeURL" : "https://www.empfehlungsbund.de/job/304057",
+    "hauptberuf" : "KI-Engineer",
+    "firma" : "mgm technology partners GmbH",
+    "referenznummer" : "11956-3040571786917601-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "KI-Engineer" ]
+  }, {
+    "stellenangebotsart" : "ARBEIT",
+    "stellenangebotsTitel" : "Senior DevOps Engineer - BundesMessenger (m/w/d)",
+    "quereinstiegGeeignet" : false,
+    "arbeitszeitSchichtNachtWochenende" : false,
+    "arbeitszeitTeilzeitAbend" : false,
+    "arbeitszeitTeilzeitNachmittag" : false,
+    "arbeitszeitTeilzeitVormittag" : false,
+    "arbeitszeitTeilzeitFlexibel" : false,
+    "arbeitszeitVollzeit" : true,
+    "eintrittszeitraum" : {
+      "von" : "2026-09-01"
+    },
+    "verguetungsangabe" : "KEINE_ANGABEN",
+    "vertragsdauer" : "UNBEFRISTET",
+    "istGeringfuegigeBeschaeftigung" : false,
+    "stellenlokationen" : [ {
+      "adresse" : {
+        "plz" : "10115",
+        "ort" : "Berlin",
+        "region" : "BERLIN",
+        "land" : "DEUTSCHLAND"
+      },
+      "breite" : 52.5319761,
+      "laenge" : 13.3867379
+    } ],
+    "homeofficemoeglich" : true,
+    "homeofficetyp" : "NACH_VEREINBARUNG",
+    "chiffrenummer" : "68772",
+    "veroeffentlichungszeitraum" : {
+      "von" : "2026-08-20"
+    },
+    "datumErsteVeroeffentlichung" : "2026-08-20",
+    "aenderungsdatum" : "2026-08-20T16:22:50.400",
+    "hauptberuf" : "Softwareentwickler/in",
+    "firma" : "BWI GmbH",
+    "arbeitgeberKundennummerHash" : "YllzIWAR0MdjVsi5dNGOXHuiLy55xF0e_EGmKFbGKr4=",
+    "referenznummer" : "13509-00002110db8003-S",
+    "entfernung" : 3,
+    "alleBerufe" : [ "Softwareentwickler/in" ]
+  } ],
+  "maxErgebnisse" : 207,
+  "page" : 1,
+  "size" : 40,
+  "woOutput" : {
+    "bereinigterOrt" : "Berlin",
+    "suchmodus" : "UMKREISSUCHE",
+    "koordinaten" : [ {
+      "lat" : 52.5112613,
+      "lon" : 13.4255145
+    } ]
+  },
+  "facetten" : {
+    "verguetung" : {
+      "counts" : {
+        "jahr" : 17,
+        "stunde" : 1
+      },
+      "maxCount" : 207
+    },
+    "befristung" : {
+      "counts" : {
+        "1" : 9,
+        "2" : 92,
+        "3" : 106
+      },
+      "maxCount" : 207
+    },
+    "externestellenboersen" : {
+      "counts" : {
+        "false" : 135,
+        "true" : 72
+      },
+      "maxCount" : 207
+    },
+    "behinderung" : {
+      "counts" : {
+        "false" : 118,
+        "true" : 31
+      },
+      "maxCount" : 207
+    },
+    "berufsfeld" : {
+      "counts" : {
+        "Elektrotechnik" : 1,
+        "IT-Netzwerktechnik, -Administration, -Organisation" : 8,
+        "IT-Systemanalyse, -Anwendungsberatung und -Vertrieb" : 6,
+        "Informatik" : 9,
+        "Softwareentwicklung und Programmierung" : 179,
+        "Technische Mediengestaltung" : 1,
+        "Technische Produktionsplanung und -steuerung" : 1,
+        "Vermessung und Kartografie" : 1,
+        "Werbung und Marketing" : 1
+      },
+      "maxCount" : 207
+    },
+    "pav" : {
+      "counts" : {
+        "false" : 207,
+        "true" : 67
+      },
+      "maxCount" : 274
+    },
+    "topberuf" : {
+      "counts" : {
+        "Softwareentwickler/in" : 193,
+        "Berufsspezialist/in - Softwareentwicklung" : 23,
+        "Software-Architect" : 31,
+        "Anwendungsprogrammierer/in" : 14,
+        "IT-Entwickler/in (Weiterbildung/Ausbildung)" : 4,
+        "Informatiker/in" : 13,
+        "Cloud-Architect" : 3,
+        "Cyber-Security-Consultant" : 3,
+        "DevOps Engineer" : 3,
+        "Fachinformatiker/in - Anwendungsentwicklung" : 6,
+        "IT-Berater/in" : 3
+      },
+      "scores" : {
+        "Softwareentwickler/in" : 2808727,
+        "Berufsspezialist/in - Softwareentwicklung" : 2240731,
+        "Software-Architect" : 480889,
+        "Anwendungsprogrammierer/in" : 54398,
+        "IT-Entwickler/in (Weiterbildung/Ausbildung)" : 15298,
+        "Informatiker/in" : 9356,
+        "Cloud-Architect" : 8105,
+        "Cyber-Security-Consultant" : 6541,
+        "DevOps Engineer" : 6059,
+        "Fachinformatiker/in - Anwendungsentwicklung" : 4575,
+        "IT-Berater/in" : 1185
+      },
+      "maxCount" : 207
+    },
+    "arbeitsort" : {
+      "counts" : {
+        "Großbeeren" : 3,
+        "Berlin" : 199,
+        "Teltow" : 1,
+        "Ahrensfelde bei Berlin" : 1,
+        "Hennigsdorf" : 3
+      },
+      "maxCount" : 207
+    },
+    "veroeffentlichtseit" : {
+      "counts" : {
+        "0" : 4,
+        "1" : 12,
+        "14" : 45,
+        "28" : 80,
+        "7" : 28,
+        "alle" : 207
+      },
+      "maxCount" : 207
+    },
+    "weitereberufe" : {
+      "counts" : {
+        "Backend-Entwickler:in" : 1,
+        "Build-Systeme (MS-Build), Versionsverwaltung (Git) und CI/C" : 2,
+        "C++ (C++11 oder neuer)" : 2,
+        "Cloud Security" : 1,
+        "Cybersecurity" : 1,
+        "Frontend Developer (React) (m/w/d)" : 1,
+        "Fullstack_.NET, C#, ASP.NET Core / .NET 6+" : 2,
+        "GRC Analyst" : 1,
+        "Governance, Risk & Compliance" : 1,
+        "Java-Entwickler:in" : 1,
+        "Market Automation Engineer" : 1,
+        "Security Engineer" : 1,
+        "Software Engineer (React) (m/w/d)" : 1,
+        "Softwarearchitektur und objektorientiertes Design" : 2,
+        "Softwareentwickler:in" : 1
+      },
+      "maxCount" : 207
+    },
+    "schulbildung" : {
+      "counts" : {
+        "0" : 3,
+        "4" : 1
+      },
+      "maxCount" : 207
+    },
+    "arbeitsort_plz" : {
+      "counts" : {
+        "01067" : 5,
+        "01099" : 1,
+        "01237" : 2,
+        "01445" : 2,
+        "02625" : 2,
+        "03046" : 1,
+        "04103" : 1,
+        "04107" : 3,
+        "04109" : 11,
+        "04129" : 1,
+        "04157" : 1,
+        "04329" : 2,
+        "04357" : 1,
+        "06108" : 1,
+        "07745" : 11,
+        "10115" : 17,
+        "10117" : 13,
+        "10119" : 3,
+        "10178" : 30,
+        "10179" : 5,
+        "10243" : 7,
+        "10245" : 1,
+        "10247" : 6,
+        "10315" : 2,
+        "10369" : 2,
+        "10437" : 2,
+        "10553" : 1,
+        "10559" : 2,
+        "10623" : 4,
+        "10625" : 4,
+        "10707" : 2,
+        "10719" : 5,
+        "10785" : 4,
+        "10789" : 5,
+        "10829" : 3,
+        "10961" : 1,
+        "10969" : 5,
+        "10997" : 30,
+        "12099" : 1,
+        "12159" : 3,
+        "12435" : 2,
+        "12489" : 7,
+        "12681" : 2,
+        "13053" : 1,
+        "13355" : 2,
+        "13591" : 1,
+        "13627" : 1,
+        "14513" : 1,
+        "14548" : 1,
+        "14979" : 3,
+        "15344" : 1,
+        "16356" : 1,
+        "16761" : 3,
+        "17033" : 1,
+        "17268" : 2,
+        "17489" : 1,
+        "18069" : 2,
+        "19061" : 4,
+        "20097" : 10,
+        "20148" : 2,
+        "20355" : 1,
+        "20457" : 7,
+        "20459" : 2,
+        "22083" : 1,
+        "22085" : 3,
+        "22087" : 3,
+        "22587" : 9,
+        "22767" : 3,
+        "24103" : 1,
+        "25587" : 1,
+        "26121" : 2,
+        "27568" : 1,
+        "28195" : 1,
+        "30159" : 4,
+        "30163" : 2,
+        "30173" : 6,
+        "30175" : 1,
+        "30177" : 1,
+        "30453" : 1,
+        "30657" : 1,
+        "30659" : 1,
+        "33605" : 4,
+        "34117" : 3,
+        "37081" : 1,
+        "38440" : 1,
+        "39104" : 2,
+        "39106" : 2,
+        "40210" : 6,
+        "40213" : 2,
+        "40468" : 3,
+        "40472" : 1,
+        "44135" : 1,
+        "44139" : 4,
+        "44787" : 6,
+        "45138" : 1,
+        "45139" : 1,
+        "45731" : 2,
+        "48143" : 4,
+        "48231" : 1,
+        "50667" : 14,
+        "50674" : 1,
+        "50676" : 2,
+        "50679" : 3,
+        "51063" : 4,
+        "51103" : 1,
+        "51147" : 3,
+        "52062" : 1,
+        "52064" : 1,
+        "53117" : 4,
+        "53119" : 6,
+        "53175" : 1,
+        "53340" : 3,
+        "57076" : 1,
+        "60311" : 5,
+        "60313" : 7,
+        "60322" : 5,
+        "60327" : 3,
+        "60329" : 1,
+        "60486" : 12,
+        "60487" : 1,
+        "60528" : 1,
+        "63263" : 1,
+        "64293" : 1,
+        "65189" : 1,
+        "65760" : 2,
+        "68161" : 3,
+        "68165" : 1,
+        "69126" : 4,
+        "69190" : 1,
+        "70174" : 6,
+        "70178" : 3,
+        "70182" : 4,
+        "70191" : 1,
+        "70565" : 2,
+        "70567" : 1,
+        "70629" : 2,
+        "70771" : 3,
+        "71634" : 1,
+        "75181" : 2,
+        "76131" : 1,
+        "76133" : 6,
+        "76137" : 3,
+        "76185" : 1,
+        "76275" : 1,
+        "76863" : 1,
+        "78467" : 1,
+        "80331" : 15,
+        "80636" : 2,
+        "80637" : 9,
+        "80639" : 29,
+        "80807" : 2,
+        "80809" : 4,
+        "80992" : 3,
+        "81379" : 2,
+        "81677" : 1,
+        "81829" : 5,
+        "81929" : 1,
+        "82008" : 2,
+        "82205" : 1,
+        "83026" : 1,
+        "84489" : 1,
+        "85586" : 2,
+        "85737" : 2,
+        "86916" : 2,
+        "87751" : 1,
+        "89075" : 9,
+        "90402" : 10,
+        "90403" : 1,
+        "90443" : 1,
+        "90461" : 3,
+        "90489" : 6,
+        "94469" : 6,
+        "96047" : 1,
+        "98693" : 1,
+        "99084" : 4,
+        "99091" : 1,
+        "99099" : 2
+      },
+      "maxCount" : 207
+    },
+    "arbeitgeber" : {
+      "counts" : {
+        "ALDB GmbH" : 2,
+        "ARC-GREENLAB GmbH" : 1,
+        "ARC-Greenlab GmbH" : 1,
+        "BWI GmbH" : 11,
+        "BridgingIT GmbH" : 3,
+        "Bundesnotarkammer" : 1,
+        "C.U.B.A. gGmbH Gemeinn. Qualifizierungsges. f Umweltschutz, Bildung & Integ." : 1,
+        "Capgemini Deutschland GmbH" : 3,
+        "Charité Universitätsmedizin Berlin KdöR" : 2,
+        "Checkout Charlie GmbH" : 1,
+        "Com In GmbH & Co. KG Consulting + Solutions" : 1,
+        "Communi5 Technologies GmbH" : 1,
+        "DIN Solutions GmbH" : 1,
+        "DNS:NET" : 1,
+        "Deloitte GmbH" : 4,
+        "Deutsche Bahn AG" : 4,
+        "Doc Cirrus GmbH" : 1,
+        "EMOS Software GmbH" : 6,
+        "EY Consulting GmbH" : 2,
+        "Eagleyard Photonics GmbH" : 1,
+        "Elektro-EU.DS GmbH" : 1,
+        "FFA Filmförderungsanstalt" : 1,
+        "FIO Systems AG" : 1,
+        "Filmförderungsanstalt Bundesanstalt des öffentlichen Rechts" : 1,
+        "Finetech GmbH & Co. KG" : 1,
+        "Finetech GmbH & Co.KG" : 2,
+        "Firstlead GmbH" : 2,
+        "Forto Logistics SE & Co. KG" : 1,
+        "GASAG AG" : 1,
+        "GP Günter Papenburg AG" : 1,
+        "Gefeg - Gesellschaft für elektronischen GV mbH" : 1,
+        "HSH" : 1,
+        "HYDAC Group" : 1,
+        "Heinlein Support GmbH" : 1,
+        "HelloFresh SE" : 4,
+        "Hornetsecurity GmbH" : 1,
+        "Hydac International GmbH" : 1,
+        "ICS - Informatik Consulting Systems GmbH (THINK SAFE THINK ICS)" : 4,
+        "IT42morrow IFT GmbH" : 1,
+        "IVU Traffic Technologies" : 1,
+        "Industrie- und Handelskammer zu Berlin" : 1,
+        "JetBrains GmbH" : 29,
+        "Jobvertising Crossmedia GmbH" : 1,
+        "M&H Group" : 2,
+        "ME-Meßsysteme GmbH" : 3,
+        "NTT DATA Business Solutions Global Managed Services GmbH" : 4,
+        "NTT DATA Deutschland SE" : 1,
+        "Netto ApS & Co. KG" : 1,
+        "Octopus Energy Germany GmbH" : 2,
+        "PC Billiger GPC GmbH" : 1,
+        "PD - Berater der öffentlichen Hand GmbH" : 1,
+        "PROCEDO-Berlin GmbH" : 1,
+        "PROMOS consult Projektmanagement, Organisation und Service GmbH" : 2,
+        "Projektron" : 1,
+        "RADIODATA GmbH" : 1,
+        "Riverty GmbH" : 3,
+        "SAP" : 2,
+        "SEITENBAU GmbH" : 2,
+        "Siemens AG" : 1,
+        "Siemens Energy Global GmbH & Co. KG" : 1,
+        "Smartbroker" : 1,
+        "SoftwareOne Deutschland GmbH" : 2,
+        "TELUS Digital" : 1,
+        "Tabris UG (haftungsbeschränkt)" : 1,
+        "Thermondo" : 1,
+        "VISION Consulting GmbH" : 1,
+        "Value AG" : 1,
+        "Vonovia Recruiting DE" : 3,
+        "WAITS Software- und Prozessberatungsges. mbH" : 1,
+        "WGI GmbH" : 2,
+        "Willmine" : 1,
+        "XFT" : 1,
+        "Zalando SE" : 7,
+        "aconium GmbH Hauptsitz Berlin" : 3,
+        "alfatraining Bildungszentrum GmbH" : 6,
+        "bayoonet AG" : 1,
+        "blackned GmbH" : 1,
+        "con terra" : 1,
+        "gematik GmbH" : 2,
+        "inovex GmbH" : 1,
+        "laf.li digital GmbH Frank Wernecke" : 1,
+        "meinphysio+ GmbH" : 1,
+        "mgm technology partners" : 1,
+        "mgm technology partners GmbH" : 1,
+        "ncsolution GmbH" : 1,
+        "netgo group GmbH" : 3,
+        "neuraflow GmbH" : 1,
+        "ppedv" : 1,
+        "secunet Security Networks AG" : 1,
+        "statt-werk GmbH" : 1,
+        "twotickets GmbH" : 2,
+        "urari" : 1,
+        "zeb" : 3,
+        "zollsoft GmbH    " : 15
+      },
+      "maxCount" : 207
+    },
+    "beruf" : {
+      "counts" : {
+        "Anwendungsprogrammierer/in" : 14,
+        "Bachelor Professional - IT (Informationssicherheit)" : 1,
+        "Bachelor Professional - IT (Softwareentwicklung)" : 1,
+        "Backend-Entwickler/in" : 1,
+        "Berufsspezialist/in - Softwareentwicklung" : 23,
+        "Business-Analyst/in" : 1,
+        "Cloud-Architect" : 3,
+        "Cloud-Consultant" : 1,
+        "Cyber-Security-Consultant" : 3,
+        "Datenbankadministrator/in" : 1,
+        "Datenbankentwickler/in" : 2,
+        "DevOps Engineer" : 3,
+        "ERP-Anwendungsentwickler/in" : 2,
+        "ERP-Berater/in - ERP-Consultant" : 2,
+        "ERP-Systembetreuer/in" : 2,
+        "Entwickler/in Digitale Medien" : 1,
+        "Fachberater/in - Softwaretechniken" : 1,
+        "Fachinformatiker/in - Anwendungsentwicklung" : 6,
+        "Frontend-Entwickler/in" : 1,
+        "Fullstack-Entwickler/in" : 1,
+        "Geoinformatiker/in" : 2,
+        "IT-Berater/in" : 3,
+        "IT-Entwickler/in (Weiterbildung/Ausbildung)" : 4,
+        "IT-Kundenbetreuer/in" : 1,
+        "IT-Manager/in" : 1,
+        "IT-Systemadministrator/in" : 2,
+        "IT-Tester/in" : 2,
+        "IT-Testkoordinator/in" : 1,
+        "Informatiker/in" : 13,
+        "Ingenieur/in - Elektrotechnik" : 1,
+        "Ingenieur/in - Informations-, Kommunikationstechnik" : 2,
+        "Interfacedesigner/in" : 1,
+        "KI-Engineer" : 2,
+        "Leiter/in - Softwareentwicklung" : 2,
+        "Mathematisch-technische/r Softwareentwickler/in" : 1,
+        "Mobile Developer" : 2,
+        "Physiker/in" : 2,
+        "Produktmanager/in" : 2,
+        "Projektleiter/in / Projektmanager/in" : 2,
+        "Qualitätsmanager/in" : 1,
+        "Second-Level-Supporter/in" : 1,
+        "Software-Architect" : 31,
+        "Softwareentwickler/in" : 193,
+        "Vermessungsingenieur/in" : 2,
+        "Web Developer" : 2,
+        "Webdesigner/in" : 2,
+        "Wirtschaftsinformatiker/in (Hochschule)" : 1,
+        "Wirtschaftsingenieur/in" : 1
+      },
+      "maxCount" : 207
+    },
+    "homeoffice" : {
+      "counts" : {
+        "prozentual" : 8,
+        "nv_false" : 8,
+        "nv_true" : 94
+      },
+      "maxCount" : 207
+    },
+    "angebotsart" : {
+      "counts" : {
+        "1" : 195,
+        "2" : 7,
+        "34" : 5
+      },
+      "maxCount" : 207
+    },
+    "branche" : {
+      "counts" : {
+        "1" : 5,
+        "11" : 73,
+        "13" : 21,
+        "14" : 2,
+        "18" : 1,
+        "21" : 1,
+        "22" : 2,
+        "29" : 7,
+        "3" : 6,
+        "4" : 6,
+        "7" : 3,
+        "9" : 13
+      },
+      "maxCount" : 207
+    },
+    "quereinstieg" : {
+      "counts" : {
+        "false" : 202,
+        "true" : 5
+      },
+      "maxCount" : 207
+    },
+    "arbeitszeit" : {
+      "counts" : {
+        "tz" : 19,
+        "vz" : 187
+      },
+      "maxCount" : 207
+    },
+    "eintrittsdatum" : {
+      "counts" : {
+        "10_01_01-now" : 190,
+        "26_08_01-26_09_01" : 152,
+        "26_09_01-26_10_01" : 7,
+        "26_10_01-26_11_01" : 3,
+        "26_11_01-26_12_01" : 1
+      },
+      "maxCount" : 207
+    },
+    "zeitarbeit" : {
+      "counts" : {
+        "false" : 207,
+        "true" : 12
+      },
+      "maxCount" : 219
+    },
+    "topberufsfeld" : {
+      "counts" : {
+        "Softwareentwicklung und Programmierung" : 179,
+        "IT-Systemanalyse, -Anwendungsberatung und -Vertrieb" : 6,
+        "IT-Netzwerktechnik, -Administration, -Organisation" : 8,
+        "Informatik" : 9,
+        "Vermessung und Kartografie" : 1,
+        "Technische Mediengestaltung" : 1
+      },
+      "scores" : {
+        "Softwareentwicklung und Programmierung" : 1309455,
+        "IT-Systemanalyse, -Anwendungsberatung und -Vertrieb" : 1697,
+        "IT-Netzwerktechnik, -Administration, -Organisation" : 1601,
+        "Informatik" : 1386,
+        "Vermessung und Kartografie" : 209,
+        "Technische Mediengestaltung" : 172
+      },
+      "maxCount" : 207
+    }
+  }
+}

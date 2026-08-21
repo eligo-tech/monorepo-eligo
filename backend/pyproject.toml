@@ -23,6 +23,7 @@ dependencies = [
     "pypdf>=4.2",              # PDF text extraction (CV upload)
     "alembic>=1.13",           # database migrations (production schema changes)
     "pyjwt[crypto]>=2.8",      # verify Clerk session JWTs (RS256 via JWKS)
+    "httpx>=0.27",             # hub ingestion: async HTTP to public job sources
     # Pre/postcondition process-contract harness — checks are pure predicates
     # over real state (the system-of-record), never over model output.
     "laufwise @ git+https://github.com/dfadeeff/laufwise.git",

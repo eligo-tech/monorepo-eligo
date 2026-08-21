@@ -99,6 +99,35 @@ These are enforced in code. Do not route around them.
   raises `PreconditionFailed` → HTTP 422; failed postconditions route to review.
   The gate's verdicts are surfaced in the result `notes` as the verification trace.
 
+### 2.6 The hub is a corpus, not the system-of-record
+- `domain/hub/` implements layers 1–2 (sources & ingestion). It holds observed
+  evidence about the OUTSIDE world: `hub_companies`, `hub_job_postings`, and
+  `hub_observations` (one append-only row per fetch — every posting links to the
+  retrieval that produced it).
+- **Ingestion does not go through `verify_and_commit`, and that is deliberate.**
+  A posting landing in the corpus asserts nothing about a tenant's record, so it
+  owes no receipt. The receipt is owed at the *other* boundary — when a hub
+  company is adopted into `companies` — and that step goes through the gate like
+  everything else. Do not "fix" this by routing crawls through verification; that
+  would put a million market observations into the tenant's audit ledger.
+- What ingestion DOES owe is `hub/gate.py`, same discipline as `documents/gate.py`:
+  precondition on the fetch (robots/ToS allows, HTTP 200) → parse → postcondition
+  per record (attributable, deduplicable, resolvable identity) → persist →
+  re-query the DB and prove the rows landed. Rejected records are counted and
+  named in the ingest summary — a silent drop is a bug.
+- **Identity is deterministic** (`hub/resolution.py`), same rule as the matcher:
+  VAT → register court+number → registrable domain → normalized name + PLZ/city.
+  `resolution_basis` records which rung matched, so a weak identity is visible.
+  Fuzzy/LLM similarity belongs in a human review queue, never in an auto-merge.
+- **`HubJobPosting` is NOT `jobs.Job`.** A `Job` is a client mandate driving
+  `matching.apply_hard_filters` and the pipeline; a hub posting is a market
+  signal. Promotion of a posting into a mandate is an explicit human action, so
+  market noise can never reach the matcher.
+- Sources sit behind the `SourceAdapter` protocol + `adapters/factory.py`, the
+  same shape as `CVExtractor`. Each adapter splits into a pure `parse_response`
+  and a thin HTTP wrapper, so CI exercises the real parser against a captured
+  payload with no network. Adding a source = new module + one line in the factory.
+
 ---
 
 ## 3. Per-domain file convention

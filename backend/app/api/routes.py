@@ -11,6 +11,7 @@ from fastapi import APIRouter
 from app.domain.candidates.router import router as candidates_router
 from app.domain.companies.router import router as companies_router
 from app.domain.documents.router import router as documents_router
+from app.domain.hub.router import router as hub_router
 from app.domain.jobs.router import router as jobs_router
 from app.domain.matching.router import router as matching_router
 from app.domain.pipeline.router import router as pipeline_router
@@ -30,6 +31,7 @@ api_router.include_router(candidates_router)
 api_router.include_router(companies_router)
 api_router.include_router(documents_router)
 api_router.include_router(jobs_router)
+api_router.include_router(hub_router)
 api_router.include_router(pipeline_router)
 api_router.include_router(matching_router)
 api_router.include_router(reporting_router)
