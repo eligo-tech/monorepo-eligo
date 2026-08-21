@@ -22,18 +22,20 @@ import {
   BookmarkCheck,
   Building2,
   ChevronRight,
+  Download,
   ExternalLink,
   Globe,
   MapPin,
+  RefreshCw,
   Search,
   X,
 } from 'lucide-react'
 import { api } from '@/api/client'
-import type { HubCompanyDTO, HubJobPostingDTO } from '@/api/types'
+import type { HubCompanyDTO, HubIngestSummaryDTO, HubJobPostingDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
-import { Button, FIELD } from '../ui/forms'
+import { Button, FIELD, TextInput } from '../ui/forms'
 
 /** Anchors the Navigator's ↑/↓ steps through on this screen. */
 export const MARKT_SECTIONS = ['section-markt', 'section-unternehmen']
@@ -242,7 +244,8 @@ function EmptyCorpus() {
           </h3>
           <p className="max-w-2xl text-[14px] leading-relaxed text-cockpit-dim">
             Der Hub befüllt sich nicht von selbst — Ingestion läuft nur, wenn sie angestoßen
-            wird. Eine Region laden:
+            wird. Oben eine Region wählen und „Markt aktualisieren“ drücken. Für eine
+            vollständige Region ist das Backfill-Skript der schnellere Weg:
           </p>
           <pre className="overflow-x-auto rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 font-mono text-[12px] text-cockpit-dim">
 python -m scripts.hub_backfill --where Berlin --radius 25
@@ -253,12 +256,129 @@ python -m scripts.hub_backfill --where Berlin --radius 25
   )
 }
 
+/** " — vor 3 Minuten erhoben", or nothing if the age is unknown. */
+function ageLabel(minutes: number | null): string {
+  // Nullable on purpose: an older backend, or an observation predating the
+  // freshness index, reports no age. Say less rather than "vor undefined".
+  if (minutes == null) return ''
+  if (minutes <= 0) return ' — gerade eben erhoben'
+  return ` — vor ${minutes} Minute${minutes === 1 ? '' : 'n'} erhoben`
+}
+
+/**
+ * Load market data into the shared corpus, one slice at a time.
+ *
+ * Worth being clear about what this button is: it writes the SHARED basis, not
+ * this workspace's data. One recruiter pressing it fills the corpus for
+ * everybody, and a second press within the freshness window costs nothing —
+ * the backend reuses the earlier fetch rather than calling the public API
+ * again. So this is not "every user re-crawls"; it is "whoever gets there
+ * first pays, everyone else rides along".
+ */
+function RefreshPanel({ onLoaded }: { onLoaded: () => void }) {
+  const [where, setWhere] = useState('Berlin')
+  const [what, setWhat] = useState('')
+  const [page, setPage] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<HubIngestSummaryDTO | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+
+  const run = async (nextPage: number) => {
+    setBusy(true)
+    setFailed(null)
+    try {
+      const summary = await api.refreshHubMarket({
+        where: where.trim(),
+        what: what.trim(),
+        page: nextPage,
+      })
+      setResult(summary)
+      setPage(nextPage)
+      onLoaded()
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : 'Aktualisierung fehlgeschlagen')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // The source caps deep paging, and one press is one page — so say how much is
+  // left rather than letting a partial load read as the whole market.
+  const remaining =
+    result && result.total_available != null
+      ? result.total_available - page * 100
+      : 0
+
+  return (
+    <Panel className="space-y-3 p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-44">
+          <TextInput label="Ort" value={where} onChange={setWhere} placeholder="Berlin" />
+        </div>
+        <div className="w-56">
+          <TextInput
+            label="Stichwort (optional)"
+            value={what}
+            onChange={setWhat}
+            placeholder="Softwareentwickler"
+          />
+        </div>
+        <Button tone="primary" onClick={() => run(1)} disabled={busy || !where.trim()}>
+          <RefreshCw className={cn('h-4 w-4', busy && 'animate-spin')} />
+          {busy ? 'Lädt…' : 'Markt aktualisieren'}
+        </Button>
+        {remaining > 0 && (
+          <Button onClick={() => run(page + 1)} disabled={busy}>
+            <Download className="h-4 w-4" />
+            Weitere {Math.min(remaining, 100)} laden
+          </Button>
+        )}
+      </div>
+
+      {failed && <p className="text-[13px] text-coral-400">{failed}</p>}
+
+      {result && !failed && (
+        <p className="font-mono text-[12px] leading-relaxed text-cockpit-dim">
+          {result.skipped ? (
+            <span className="text-gold-400">
+              Korpus ist aktuell{ageLabel(result.reused_age_minutes)}. Die Quelle wurde
+              nicht erneut abgefragt.
+            </span>
+          ) : (
+            <>
+              <span className="text-cockpit-text">{result.fetched}</span> Anzeigen geprüft ·{' '}
+              <span className="text-mint-400">+{result.companies_created}</span> Unternehmen
+              neu, {result.companies_matched} bekannt ·{' '}
+              <span className="text-mint-400">+{result.postings_created}</span> Rollen neu,{' '}
+              {result.postings_updated} unverändert
+              {result.rejected.length > 0 && (
+                <span className="text-coral-400"> · {result.rejected.length} verworfen</span>
+              )}
+              {result.total_available != null && (
+                <> · {result.total_available} insgesamt verfügbar</>
+              )}
+            </>
+          )}
+        </p>
+      )}
+
+      <p className="font-mono text-[11px] text-cockpit-faint">
+        Schreibt in den geteilten Korpus — sichtbar für alle Workspaces. Eine erneute
+        Abfrage derselben Region wird aus der letzten Erhebung beantwortet, statt die
+        Quelle noch einmal zu belasten.
+      </p>
+    </Panel>
+  )
+}
+
 export function MarktScreen() {
   const [query, setQuery] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const { data, loading, error } = useAsync<HubCompanyDTO[]>(
     () => api.hubCompanies({ limit: 500 }),
-    [],
+    [reloadKey],
   )
+  const reload = () => setReloadKey((k) => k + 1)
 
   const all = useMemo(() => data ?? [], [data])
   const rows = useMemo(() => {
@@ -318,6 +438,8 @@ export function MarktScreen() {
             </span>
           )}
         </div>
+
+        <RefreshPanel onLoaded={reload} />
 
         {/* Toolbar */}
         <label className="relative flex min-w-[16rem] max-w-xl items-center">

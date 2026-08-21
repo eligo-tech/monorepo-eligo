@@ -75,6 +75,13 @@ class HubObservation(Base, IDMixin, TimestampMixin):
 
     source: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
     request_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    # Stable fingerprint of the *query* (source + filters + page), as opposed to
+    # `content_hash` which fingerprints the response. Lets a later caller ask
+    # "has anyone already fetched this exact slice recently?" and skip the
+    # network — the reason one workspace's refresh serves all of them.
+    query_key: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Compliance gate: recorded per fetch so a refusal is auditable, not silent.

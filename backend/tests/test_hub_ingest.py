@@ -303,6 +303,101 @@ async def test_a_second_ingest_does_not_duplicate_for_another_caller(tenant) -> 
 
 
 # ---------------------------------------------------------------------------
+# Freshness — why a per-user refresh button is safe on a shared corpus
+# ---------------------------------------------------------------------------
+
+
+class CountingAdapter(StubAdapter):
+    """Counts how many times the source was actually asked."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    async def fetch(self, query: SourceQuery) -> FetchResult:
+        self.calls += 1
+        return await super().fetch(query)
+
+
+async def _ingest_with(adapter, **overrides):
+    async with SessionLocal() as session:
+        return await service.ingest(
+            session,
+            adapter=adapter,
+            request=IngestRequest(source="bundesagentur", where="Berlin", **overrides),
+        )
+
+
+def test_the_same_slice_produces_the_same_query_key() -> None:
+    a = IngestRequest(source="bundesagentur", where="Berlin", radius_km=25)
+    b = IngestRequest(source="bundesagentur", where="  berlin ", radius_km=25)
+    # Two recruiters typing the same city differently ask the same question.
+    assert service.query_key(a) == service.query_key(b)
+    # A different page is a different question.
+    assert service.query_key(a) != service.query_key(
+        IngestRequest(source="bundesagentur", where="Berlin", radius_km=25, page=2)
+    )
+
+
+async def test_a_fresh_slice_is_reused_instead_of_refetched() -> None:
+    adapter = CountingAdapter()
+    first = await _ingest_with(adapter, max_age_minutes=60)
+    assert adapter.calls == 1
+    assert first.skipped is False
+    assert first.postings_created > 0
+
+    # A second workspace pressing refresh must NOT hit the public source again.
+    second = await _ingest_with(adapter, max_age_minutes=60)
+    assert adapter.calls == 1, "the source was called twice for one slice"
+    assert second.skipped is True
+    assert "already current" in (second.skipped_reason or "")
+    assert second.postings_created == 0
+    # It reports the earlier fetch's evidence, not a fabricated empty one.
+    assert second.observation_id == first.observation_id
+    assert second.fetched == first.fetched
+
+
+async def test_no_max_age_always_fetches() -> None:
+    """A scheduled backfill wants the real thing, not a cached answer."""
+    adapter = CountingAdapter()
+    await _ingest_with(adapter)
+    await _ingest_with(adapter)
+    assert adapter.calls == 2
+
+
+async def test_a_stale_slice_is_refetched() -> None:
+    adapter = CountingAdapter()
+    await _ingest_with(adapter, max_age_minutes=60)
+
+    # Age the observation past the window.
+    async with SessionLocal() as session:
+        obs = (await session.execute(select(HubObservation))).scalars().one()
+        obs.fetched_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=3)
+        await session.commit()
+
+    again = await _ingest_with(adapter, max_age_minutes=60)
+    assert adapter.calls == 2
+    assert again.skipped is False
+
+
+async def test_a_failed_fetch_is_never_reused_as_fresh() -> None:
+    """Caching a 503 would turn one outage into an hour of silent staleness."""
+    failed = FetchResult(
+        source="bundesagentur",
+        request_url="https://example.invalid/boom",
+        fetched_at=dt.datetime.now(dt.UTC),
+        http_status=503,
+    )
+    with pytest.raises(PreconditionFailed):
+        await _ingest_with(StubAdapter(failed), max_age_minutes=60)
+
+    adapter = CountingAdapter()
+    summary = await _ingest_with(adapter, max_age_minutes=60)
+    assert adapter.calls == 1
+    assert summary.skipped is False
+
+
+# ---------------------------------------------------------------------------
 # API
 # ---------------------------------------------------------------------------
 

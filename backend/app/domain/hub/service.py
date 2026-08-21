@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import json
 import uuid
 
 from sqlalchemy import Select, func, or_, select
@@ -72,6 +73,49 @@ def _posting_hash(posting: SourcedPosting) -> str:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def query_key(request: IngestRequest) -> str:
+    """Stable fingerprint of a crawl slice — the *question*, not the answer.
+
+    Two callers asking for "Berlin, 25km, page 1, no staffing" produce the same
+    key, which is what lets the second one reuse the first one's fetch.
+    `page` is part of the key on purpose: page 2 is a different question.
+    """
+    material = json.dumps(
+        {
+            "source": request.source,
+            "what": (request.what or "").strip().lower() or None,
+            "where": (request.where or "").strip().lower() or None,
+            "radius_km": request.radius_km,
+            "published_since_days": request.published_since_days,
+            "page": request.page,
+            "size": request.size,
+            "include_staffing": request.include_staffing,
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+async def _recent_observation(
+    session: AsyncSession, *, key: str, max_age_minutes: int
+) -> HubObservation | None:
+    """The newest successful fetch of this exact slice, if it is still fresh.
+
+    Only a 200 counts: reusing a failed fetch would cache an outage.
+    """
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=max_age_minutes)
+    return await session.scalar(
+        select(HubObservation)
+        .where(
+            HubObservation.query_key == key,
+            HubObservation.http_status == 200,
+            HubObservation.fetched_at >= cutoff,
+        )
+        .order_by(HubObservation.fetched_at.desc())
+        .limit(1)
+    )
+
+
 # --------------------------------------------------------------------------
 # Ingestion — writes the SHARED corpus, so it takes no tenant
 # --------------------------------------------------------------------------
@@ -83,7 +127,44 @@ async def ingest(
     adapter: SourceAdapter,
     request: IngestRequest,
 ) -> IngestSummary:
-    """Fetch one slice from a public source and merge it into the shared corpus."""
+    """Fetch one slice from a public source and merge it into the shared corpus.
+
+    With `max_age_minutes` set, a recent fetch of the identical slice short-
+    circuits the whole thing: no request, no writes, a summary saying so. That
+    is what makes a per-user "refresh" button safe — the corpus is shared, so
+    the first press does the work and the rest are free.
+    """
+    key = query_key(request)
+    if request.max_age_minutes is not None:
+        fresh = await _recent_observation(
+            session, key=key, max_age_minutes=request.max_age_minutes
+        )
+        if fresh is not None:
+            # Postgres returns an aware timestamptz; SQLite hands back a naive
+            # datetime for the same column. Everything is written as UTC, so
+            # re-attach the zone rather than branching on the dialect.
+            fetched_at = fresh.fetched_at
+            if fetched_at.tzinfo is None:
+                fetched_at = fetched_at.replace(tzinfo=dt.UTC)
+            age = int((dt.datetime.now(dt.UTC) - fetched_at).total_seconds() // 60)
+            return IngestSummary(
+                source=request.source,
+                skipped=True,
+                skipped_reason=(
+                    f"corpus already current — this slice was fetched "
+                    f"{age} minute(s) ago"
+                ),
+                reused_age_minutes=age,
+                observation_id=fresh.id,
+                fetched=fresh.record_count,
+                total_available=fresh.total_available,
+                companies_created=0,
+                companies_matched=0,
+                postings_created=0,
+                postings_updated=0,
+                notes=[f"✓ reused observation {str(fresh.id)[:8]} ({age} min old)"],
+            )
+
     query = SourceQuery(
         what=request.what,
         where=request.where,
@@ -97,6 +178,7 @@ async def ingest(
 
     observation = HubObservation(
         source=result.source,
+        query_key=key,
         request_url=result.request_url,
         http_status=result.http_status,
         robots_allowed=result.robots_allowed,

@@ -135,6 +135,12 @@ class IngestRequest(BaseModel):
     size: int = Field(default=100, ge=1, le=100)
     # Staffing agencies are competitors, not leads — excluded unless asked for.
     include_staffing: bool = False
+    # Reuse a recent fetch of this exact slice instead of hitting the source
+    # again. The corpus is shared, so the first caller pays the network cost and
+    # everyone else gets the answer for free — which is what keeps N recruiters
+    # pressing "refresh" from becoming N calls to a free public API.
+    # None disables the check (a scheduled backfill wants the real thing).
+    max_age_minutes: int | None = Field(default=None, ge=0, le=10_080)
 
 
 class RejectedRecord(BaseModel):
@@ -149,6 +155,14 @@ class IngestSummary(BaseModel):
     """Outcome of one ingest slice."""
 
     source: str
+    # True when `max_age_minutes` was satisfied by an existing observation and
+    # no request was made. The corpus was already current; nothing is a failure.
+    skipped: bool = False
+    skipped_reason: str | None = None
+    # Age of the reused observation, in minutes. Returned as DATA so the UI can
+    # phrase it in its own language rather than printing an English backend
+    # string into a German screen.
+    reused_age_minutes: int | None = None
     observation_id: uuid.UUID
     fetched: int
     total_available: int | None
