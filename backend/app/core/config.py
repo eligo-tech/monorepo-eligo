@@ -91,6 +91,18 @@ class Settings(BaseSettings):
         default=None, validation_alias="OPENAI_API_KEY"
     )
 
+    # --- Information hub (public-source ingestion) -----------------------
+    # Identify the crawler honestly: Nominatim and most public APIs require a
+    # real User-Agent with a contact route, and it is what makes a rate-limit
+    # complaint a conversation rather than a block.
+    hub_user_agent: str = "eligo-tech-hub/0.1 (+https://eligo.tech)"
+    hub_http_timeout: float = 20.0
+
+    # Bundesagentur für Arbeit Jobsuche API. The client id is the agency's own
+    # public one (community-documented at jobsuche.api.bund.dev); no signup.
+    hub_ba_base_url: str = "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service"
+    hub_ba_api_key: str = "jobboerse-jobsuche"
+
     # --- Auth (Clerk) ----------------------------------------------------
     # When false, requests run as the default tenant (no login) — the scaffold
     # default so tests/demo work with no auth provider. Set true in production.
