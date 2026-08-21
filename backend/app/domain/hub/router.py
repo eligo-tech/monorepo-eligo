@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_tenant
+from app.core.auth import get_current_tenant, get_ingest_tenant
 from app.core.database import get_db
 from app.domain.hub import service
 from app.domain.hub.adapters.factory import available_sources, get_source_adapter
@@ -132,7 +132,9 @@ async def list_hub_observations(
 )
 async def ingest_slice(
     payload: IngestRequest,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    # Machine-or-human: a scheduled backfill presents a service token, a
+    # recruiter refreshing from the UI presents their Clerk JWT.
+    tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> IngestSummary:
     """Ingest ONE crawl slice. A backfill is many of these, driven externally.

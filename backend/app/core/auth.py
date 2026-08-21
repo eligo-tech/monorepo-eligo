@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import functools
+import secrets
 import uuid
 
 import jwt
@@ -126,6 +127,44 @@ async def get_current_tenant(
     current_tenant_var.set(str(tenant.id))
     await _set_tenant_guc(db, tenant.id)  # pin the in-flight transaction too
     return tenant.id
+
+
+async def get_ingest_tenant(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> uuid.UUID:
+    """Resolve the tenant for a hub ingest call — machine OR human.
+
+    Ingestion is the platform's first NON-INTERACTIVE caller: a scheduled
+    backfill has no Clerk user, and a session JWT is the wrong credential for it
+    (short-lived, tied to a person, revoked when they leave). So this dependency
+    accepts either:
+
+      * a **service token** (`ELIGO_INGEST_TOKEN`) — for cron/backfill, mapped to
+        `settings.ingest_tenant_id`, or
+      * a **Clerk session JWT** — a recruiter triggering a refresh from the UI,
+        resolved exactly as everywhere else.
+
+    Fail-closed: with no token configured the machine path does not exist and
+    only the Clerk path can authenticate. The comparison is constant-time so a
+    wrong token leaks nothing through timing, and the secret is never logged.
+
+    This matters more than for a plain read endpoint: ingest writes, and makes
+    OUTBOUND requests to a public API — an unauthenticated version would let
+    anyone drive traffic at a third party from our address.
+    """
+    configured = settings.ingest_token
+    presented = creds.credentials if creds else None
+
+    if configured and presented and secrets.compare_digest(presented, configured):
+        tenant_id = settings.ingest_tenant_id or settings.default_tenant_id
+        logger.info("ingest authenticated via service token (tenant=%s)", tenant_id)
+        current_tenant_var.set(str(tenant_id))
+        await _set_tenant_guc(db, tenant_id)
+        return tenant_id
+
+    # Not a machine caller — fall back to the normal human path.
+    return await get_current_tenant(creds, db)
 
 
 async def get_current_user(

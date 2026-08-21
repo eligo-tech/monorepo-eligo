@@ -10,10 +10,11 @@ import { CommandBar } from './CommandBar'
 import { CockpitScreen, COCKPIT_SECTIONS } from './screens/CockpitScreen'
 import { KandidatenScreen, KANDIDATEN_SECTIONS } from './screens/kandidaten/KandidatenScreen'
 import { KandidatenweltScreen, KANDIDATENWELT_SECTIONS } from './screens/KandidatenweltScreen'
+import { MarktScreen, MARKT_SECTIONS } from './screens/MarktScreen'
 import { useCockpitData } from './data/useCockpitData'
 import { useTypeface } from './useTypeface'
 
-export type ScreenKey = 'cockpit' | 'kandidaten' | 'kandidatenwelt'
+export type ScreenKey = 'cockpit' | 'kandidaten' | 'kandidatenwelt' | 'markt'
 
 interface ScreenDef {
   key: ScreenKey
@@ -22,11 +23,12 @@ interface ScreenDef {
 }
 
 // Left to right, the drill-down the product tells: the whole book of business →
-// the pool it draws on → one candidate's world.
+// the pool it draws on → one candidate's world → the market outside it.
 export const SCREENS: ScreenDef[] = [
   { key: 'cockpit', sections: COCKPIT_SECTIONS },
   { key: 'kandidaten', sections: KANDIDATEN_SECTIONS },
   { key: 'kandidatenwelt', sections: KANDIDATENWELT_SECTIONS },
+  { key: 'markt', sections: MARKT_SECTIONS },
 ]
 
 export const isScreenKey = (v: string): v is ScreenKey =>
@@ -105,6 +107,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         {screen === 'kandidatenwelt' && (
           <KandidatenweltScreen data={state.data.profileSale} />
         )}
+        {screen === 'markt' && <MarktScreen />}
       </main>
     </div>
   )

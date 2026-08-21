@@ -5,6 +5,8 @@ import type {
   CandidateUpdatePayload,
   CompanyDTO,
   CVExtractionResultDTO,
+  HubCompanyDTO,
+  HubJobPostingDTO,
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
@@ -76,6 +78,18 @@ export const api = {
   jobs: () => request<JobDTO[]>('/jobs'),
   /** Client + prospect companies — used to name the client on a mandate. */
   companies: () => request<CompanyDTO[]>('/companies'),
+  /** Market corpus: companies aggregated from public sources, most actively
+   *  hiring first. Distinct from /companies, which is the tenant's own CRM. */
+  hubCompanies: (params?: { q?: string; hiringOnly?: boolean; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', params.q)
+    if (params?.hiringOnly) qs.set('hiring_only', 'true')
+    qs.set('limit', String(params?.limit ?? 200))
+    return request<HubCompanyDTO[]>(`/hub/companies?${qs}`)
+  },
+  /** Open roles for one hub company. */
+  hubCompanyPostings: (id: string) =>
+    request<HubJobPostingDTO[]>(`/hub/companies/${id}/postings?limit=200`),
   board: () => request<PipelineBoardDTO>('/pipeline/board'),
   /** Rank the candidate pool against one job (hard filters → soft ranking). */
   matchJob: (jobId: string, includeRejected = true) =>
