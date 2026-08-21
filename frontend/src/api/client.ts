@@ -6,6 +6,7 @@ import type {
   CompanyDTO,
   CVExtractionResultDTO,
   HubCompanyDTO,
+  HubCompanyLinkDTO,
   HubJobPostingDTO,
   JobDTO,
   MatchResultDTO,
@@ -90,6 +91,22 @@ export const api = {
   /** Open roles for one hub company. */
   hubCompanyPostings: (id: string) =>
     request<HubJobPostingDTO[]>(`/hub/companies/${id}/postings?limit=200`),
+
+  /** Mark this workspace's interest in a corpus company. Idempotent. */
+  trackHubCompany: (id: string, relationship: HubCompanyLinkDTO['relationship'] = 'watching') =>
+    request<HubCompanyLinkDTO>(`/hub/companies/${id}/track`, {
+      method: 'PUT',
+      body: JSON.stringify({ relationship }),
+    }),
+
+  /** Drop the overlay row. The shared corpus company itself is untouched. */
+  async untrackHubCompany(id: string): Promise<void> {
+    const res = await fetch(`${BASE}/hub/companies/${id}/track`, {
+      method: 'DELETE',
+      headers: await authHeaders(),
+    })
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+  },
   board: () => request<PipelineBoardDTO>('/pipeline/board'),
   /** Rank the candidate pool against one job (hard filters → soft ranking). */
   matchJob: (jobId: string, includeRejected = true) =>

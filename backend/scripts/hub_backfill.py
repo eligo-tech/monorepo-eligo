@@ -12,6 +12,10 @@ Runs against `ELIGO_DATABASE_URL`, so pointing it at Supabase backfills
 production. Safe to re-run: ingestion is idempotent — an unchanged posting only
 bumps `last_seen_at`, so a second pass reports creations of zero.
 
+The corpus is SHARED, so this takes no tenant: one crawl of Berlin serves every
+workspace. What each tenant layers on top (tracked companies, their own CRM
+rows) lives in `hub_company_link` and is untouched by a backfill.
+
 Two limits are deliberate and REPORTED rather than silent:
 
   * The Bundesagentur caps deep paging (~100 pages). A shard with more results
@@ -25,14 +29,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import sys
-import uuid
 
 from sqlalchemy import func, select
 
-from app.core.config import settings
 from app.core.database import AdminSessionLocal as SessionLocal
-from app.core.database import current_tenant_var
 from app.core.logging import get_logger
 # Registers EVERY table on Base.metadata. Required, not cosmetic: `hub_companies`
 # has a foreign key to `companies`, so importing hub models alone leaves the FK
@@ -43,7 +43,6 @@ from app.domain.hub.adapters.factory import available_sources, get_source_adapte
 from app.domain.hub.gate import PreconditionFailed
 from app.domain.hub.models import HubCompany, HubJobPosting
 from app.domain.hub.schemas import IngestRequest
-from app.domain.tenants.models import Tenant
 
 logger = get_logger(__name__)
 
@@ -51,39 +50,15 @@ logger = get_logger(__name__)
 _SOURCE_PAGE_CEILING = 100
 
 
-async def _resolve_tenant(clerk_org_id: str | None) -> uuid.UUID:
-    """Pick the tenant to load into: an explicit org, the only one, or the default."""
+async def _corpus_size() -> tuple[int, int]:
     async with SessionLocal() as session:
-        if clerk_org_id:
-            from app.domain.tenants import service as tenants_service
-
-            tenant = await tenants_service.get_or_create(session, clerk_org_id=clerk_org_id)
-            return tenant.id
-        rows = (await session.execute(select(Tenant))).scalars().all()
-        if len(rows) == 1:
-            return rows[0].id
-        if len(rows) > 1:
-            sys.exit(
-                f"{len(rows)} tenants exist — pass --org <clerk_org_id> to choose:\n"
-                + "\n".join(f"  {t.clerk_org_id}  {t.id}" for t in rows)
-            )
-    return settings.default_tenant_id
-
-
-async def _corpus_size(tenant_id: uuid.UUID) -> tuple[int, int]:
-    async with SessionLocal() as session:
-        companies = await session.scalar(
-            select(func.count(HubCompany.id)).where(HubCompany.tenant_id == tenant_id)
-        )
-        postings = await session.scalar(
-            select(func.count(HubJobPosting.id)).where(HubJobPosting.tenant_id == tenant_id)
-        )
+        companies = await session.scalar(select(func.count(HubCompany.id)))
+        postings = await session.scalar(select(func.count(HubJobPosting.id)))
     return companies or 0, postings or 0
 
 
 async def _run_shard(
     *,
-    tenant_id: uuid.UUID,
     source: str,
     what: str | None,
     where: str | None,
@@ -111,10 +86,8 @@ async def _run_shard(
         )
         try:
             async with SessionLocal() as session:
-                # Pin the tenant so RLS lets the write through on Postgres.
-                current_tenant_var.set(str(tenant_id))
                 summary = await service.ingest(
-                    session, tenant_id=tenant_id, adapter=adapter, request=request
+                    session, adapter=adapter, request=request
                 )
         except PreconditionFailed as exc:
             print(f"    page {page:>3}: refused — {exc}")
@@ -164,16 +137,14 @@ async def main() -> None:
     parser.add_argument("--size", type=int, default=100, help="records per page (API max 100)")
     parser.add_argument("--max-pages", type=int, default=25, help="page cap per shard")
     parser.add_argument("--delay", type=float, default=1.0, help="seconds between requests")
-    parser.add_argument("--org", default=None, help="clerk_org_id of the target tenant")
     args = parser.parse_args()
 
-    tenant_id = await _resolve_tenant(args.org)
     # Shards are the cross product; an empty list means "unfiltered on that axis".
     wheres = args.where or [None]
     whats = args.what or [None]
 
-    before = await _corpus_size(tenant_id)
-    print(f"tenant {tenant_id}  ·  source {args.source}")
+    before = await _corpus_size()
+    print(f"shared corpus  ·  source {args.source}")
     print(f"corpus before: {before[0]} companies · {before[1]} postings\n")
 
     grand = {"pages": 0, "fetched": 0, "companies": 0, "postings": 0, "rejected": 0}
@@ -182,7 +153,6 @@ async def main() -> None:
             label = " · ".join(part for part in (where, what) if part) or "alles"
             print(f"  shard: {label}")
             totals = await _run_shard(
-                tenant_id=tenant_id,
                 source=args.source,
                 what=what,
                 where=where,
@@ -196,7 +166,7 @@ async def main() -> None:
                 grand[key] += totals[key]
             print()
 
-    after = await _corpus_size(tenant_id)
+    after = await _corpus_size()
     print(f"pages {grand['pages']} · fetched {grand['fetched']} · rejected {grand['rejected']}")
     print(
         f"corpus after:  {after[0]} companies (+{after[0] - before[0]}) · "

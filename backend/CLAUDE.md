@@ -99,17 +99,37 @@ These are enforced in code. Do not route around them.
   raises `PreconditionFailed` → HTTP 422; failed postconditions route to review.
   The gate's verdicts are surfaced in the result `notes` as the verification trace.
 
-### 2.6 The hub is a corpus, not the system-of-record
+### 2.6 The hub is a SHARED corpus, not the system-of-record
 - `domain/hub/` implements layers 1–2 (sources & ingestion). It holds observed
   evidence about the OUTSIDE world: `hub_companies`, `hub_job_postings`, and
   `hub_observations` (one append-only row per fetch — every posting links to the
   retrieval that produced it).
+- **These three tables carry NO `tenant_id` — a deliberate, documented exception
+  to §2.3.** "bayoonet AG is at 10115 Berlin and has three open roles" is a public
+  fact, identical for every tenant; storing it per tenant would mean N copies of
+  one truth and N crawls of one source. They are *reference data*, like a skills
+  taxonomy — not the system-of-record, which stays strictly tenant-scoped. On
+  Postgres they carry an explicitly permissive `shared_corpus_read` policy rather
+  than RLS-off, so the intent is stated rather than looking forgotten.
+- **The tenant boundary is `hub_company_link`** — which corpus companies a tenant
+  watches, and which of their own `companies` rows each maps to. It carries
+  `tenant_id` and gets the standard fail-closed policy. If you need to store
+  something per tenant about a corpus company, it goes here; never add a
+  `tenant_id` back onto the shared tables.
+
+      hub_companies / hub_job_postings / hub_observations   shared public facts
+                              ↓
+      hub_company_link (tenant_id)        ← this tenant's interest
+      companies → jobs (tenant_id)        ← this tenant's business
+
 - **Ingestion does not go through `verify_and_commit`, and that is deliberate.**
-  A posting landing in the corpus asserts nothing about a tenant's record, so it
-  owes no receipt. The receipt is owed at the *other* boundary — when a hub
-  company is adopted into `companies` — and that step goes through the gate like
-  everything else. Do not "fix" this by routing crawls through verification; that
-  would put a million market observations into the tenant's audit ledger.
+  A posting landing in the corpus asserts nothing about any tenant's record, so it
+  owes no receipt. The receipt is owed at the *crossing* — adopting a corpus
+  company into `companies`, i.e. setting `HubCompanyLink.company_id` — and that
+  goes through the gate like everything else. Do not "fix" this by routing crawls
+  through verification; that would put a million market observations into the
+  audit ledger. Merely *tracking* a company also leaves no receipt: noting
+  interest asserts nothing about the record.
 - What ingestion DOES owe is `hub/gate.py`, same discipline as `documents/gate.py`:
   precondition on the fetch (robots/ToS allows, HTTP 200) → parse → postcondition
   per record (attributable, deduplicable, resolvable identity) → persist →
@@ -127,6 +147,9 @@ These are enforced in code. Do not route around them.
   same shape as `CVExtractor`. Each adapter splits into a pure `parse_response`
   and a thin HTTP wrapper, so CI exercises the real parser against a captured
   payload with no network. Adding a source = new module + one line in the factory.
+- **Non-interactive callers** use `auth.get_ingest_tenant`: cron has no Clerk
+  user, so `/hub/ingest` accepts a service token (`ELIGO_INGEST_TOKEN`) or a
+  session JWT. Fail-closed — unset, only the Clerk path authenticates.
 
 ---
 

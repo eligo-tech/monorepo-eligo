@@ -1,11 +1,19 @@
-"""Information-hub business logic — ingestion and corpus reads.
+"""Information-hub business logic — ingestion, corpus reads, tenant overlay.
 
-Ingestion is deliberately *not* an agent commit path. Agents propose changes to
-the system-of-record and must pass `verification.verify_and_commit`; the hub is
-a corpus of observed evidence about the outside world, so a posting landing here
-asserts nothing about a tenant's record and owes no receipt. The receipt is owed
-at the *other* boundary — when a hub company is adopted into `companies` — and
-that step goes through the gate like everything else.
+Two layers with different ownership, and the split is the whole design:
+
+  * **The corpus** (`hub_companies`, `hub_job_postings`, `hub_observations`) is
+    SHARED. Public facts about the outside world are the same for everyone, so
+    they are stored once and crawled once. Ingestion takes no `tenant_id`.
+  * **The overlay** (`hub_company_link`) is tenant-scoped like everything else:
+    which corpus companies this tenant is watching, and which of their own CRM
+    rows each maps to.
+
+Ingestion is deliberately NOT an agent commit path. Agents propose changes to
+the system-of-record and must pass `verification.verify_and_commit`; a posting
+landing in the corpus asserts nothing about anyone's record and owes no receipt.
+The receipt is owed at the crossing — adopting a corpus company into
+`companies` — which is what `HubCompanyLink.company_id` marks.
 
 What ingestion does owe is the gate in `gate.py`: preconditions on the fetch,
 postconditions per record, and a re-query proving the rows landed.
@@ -23,7 +31,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.domain.hub import gate
 from app.domain.hub.adapters.base import SourceAdapter, SourcedPosting, SourceQuery
-from app.domain.hub.models import HubCompany, HubJobPosting, HubObservation
+from app.domain.hub.models import (
+    HubCompany,
+    HubCompanyLink,
+    HubJobPosting,
+    HubObservation,
+)
 from app.domain.hub.resolution import (
     extract_legal_form,
     identity_key,
@@ -59,14 +72,18 @@ def _posting_hash(posting: SourcedPosting) -> str:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+# --------------------------------------------------------------------------
+# Ingestion — writes the SHARED corpus, so it takes no tenant
+# --------------------------------------------------------------------------
+
+
 async def ingest(
     session: AsyncSession,
     *,
-    tenant_id: uuid.UUID,
     adapter: SourceAdapter,
     request: IngestRequest,
 ) -> IngestSummary:
-    """Fetch one slice from a source and merge it into the tenant's corpus."""
+    """Fetch one slice from a public source and merge it into the shared corpus."""
     query = SourceQuery(
         what=request.what,
         where=request.where,
@@ -78,11 +95,7 @@ async def ingest(
     )
     result = await adapter.fetch(query)
 
-    # --- precondition: is this retrieval usable at all? ------------------
-    # Raises PreconditionFailed; the router maps that to 422. The observation is
-    # written first so even a refused fetch leaves evidence.
     observation = HubObservation(
-        tenant_id=tenant_id,
         source=result.source,
         request_url=result.request_url,
         http_status=result.http_status,
@@ -99,6 +112,8 @@ async def ingest(
     # survive that rollback. A refusal is evidence too.
     await session.commit()
 
+    # --- precondition: is this retrieval usable at all? ------------------
+    # Raises PreconditionFailed; the router maps that to 422.
     notes = [outcome.as_note() for outcome in gate.check_fetch(result)]
 
     now = dt.datetime.now(dt.UTC)
@@ -141,10 +156,7 @@ async def ingest(
     existing_companies: dict[str, HubCompany] = {}
     if dedupe_keys:
         rows = await session.execute(
-            select(HubCompany).where(
-                HubCompany.tenant_id == tenant_id,
-                HubCompany.dedupe_key.in_(dedupe_keys),
-            )
+            select(HubCompany).where(HubCompany.dedupe_key.in_(dedupe_keys))
         )
         existing_companies = {row.dedupe_key: row for row in rows.scalars().all()}
 
@@ -155,7 +167,6 @@ async def ingest(
         sourced = posting.company
         if company is None:
             company = HubCompany(
-                tenant_id=tenant_id,
                 name=sourced.name,
                 normalized_name=normalize_company_name(sourced.name),
                 legal_form=extract_legal_form(sourced.name),
@@ -171,7 +182,6 @@ async def ingest(
                 longitude=sourced.longitude,
                 industry=sourced.industry,
                 source=result.source,
-                visibility="private",
                 first_seen_at=now,
                 last_seen_at=now,
             )
@@ -211,7 +221,6 @@ async def ingest(
     if external_ids:
         rows = await session.execute(
             select(HubJobPosting).where(
-                HubJobPosting.tenant_id == tenant_id,
                 HubJobPosting.source == result.source,
                 HubJobPosting.external_id.in_(external_ids),
             )
@@ -229,7 +238,6 @@ async def ingest(
         if row is None:
             session.add(
                 HubJobPosting(
-                    tenant_id=tenant_id,
                     hub_company_id=company.id,
                     observation_id=observation.id,
                     title=posting.title,
@@ -290,11 +298,8 @@ async def ingest(
     touched = [company.id for company in company_by_key.values()]
     if touched:
         counts = await session.execute(
-            select(
-                HubJobPosting.hub_company_id, func.count(HubJobPosting.id)
-            )
+            select(HubJobPosting.hub_company_id, func.count(HubJobPosting.id))
             .where(
-                HubJobPosting.tenant_id == tenant_id,
                 HubJobPosting.hub_company_id.in_(touched),
                 HubJobPosting.is_active.is_(True),
             )
@@ -310,7 +315,6 @@ async def ingest(
     # Re-queried after commit, not inferred from the ORM's bookkeeping.
     observed = await session.scalar(
         select(func.count(HubJobPosting.id)).where(
-            HubJobPosting.tenant_id == tenant_id,
             HubJobPosting.source == result.source,
             HubJobPosting.external_id.in_(external_ids or {""}),
         )
@@ -346,7 +350,7 @@ async def ingest(
 
 
 # --------------------------------------------------------------------------
-# Corpus reads
+# Corpus reads — shared, so no tenant filter
 # --------------------------------------------------------------------------
 
 
@@ -357,19 +361,18 @@ def _paginate(stmt: Select, *, limit: int, offset: int) -> Select:
 async def list_companies(
     session: AsyncSession,
     *,
-    tenant_id: uuid.UUID,
     q: str | None = None,
     city: str | None = None,
     hiring_only: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> list[HubCompany]:
-    """Companies in the corpus, most actively hiring first.
+    """Corpus companies, most actively hiring first.
 
     That ordering is the point of the hub: a recruiter wants whoever has the most
     open roles right now, not an alphabetical register extract.
     """
-    stmt = select(HubCompany).where(HubCompany.tenant_id == tenant_id)
+    stmt = select(HubCompany)
     if q:
         needle = f"%{normalize_company_name(q) or q.lower()}%"
         stmt = stmt.where(
@@ -382,39 +385,26 @@ async def list_companies(
         stmt = stmt.where(func.lower(HubCompany.city) == city.lower())
     if hiring_only:
         stmt = stmt.where(HubCompany.open_postings_count > 0)
-    stmt = stmt.order_by(
-        HubCompany.open_postings_count.desc(), HubCompany.name
-    )
+    stmt = stmt.order_by(HubCompany.open_postings_count.desc(), HubCompany.name)
     rows = await session.execute(_paginate(stmt, limit=limit, offset=offset))
     return list(rows.scalars().all())
 
 
-async def count_companies(
-    session: AsyncSession, *, tenant_id: uuid.UUID
-) -> int:
-    return (
-        await session.scalar(
-            select(func.count(HubCompany.id)).where(
-                HubCompany.tenant_id == tenant_id
-            )
-        )
-    ) or 0
+async def count_companies(session: AsyncSession) -> int:
+    return (await session.scalar(select(func.count(HubCompany.id)))) or 0
 
 
 async def get_company(
-    session: AsyncSession, *, tenant_id: uuid.UUID, hub_company_id: uuid.UUID
+    session: AsyncSession, *, hub_company_id: uuid.UUID
 ) -> HubCompany | None:
     return await session.scalar(
-        select(HubCompany).where(
-            HubCompany.tenant_id == tenant_id, HubCompany.id == hub_company_id
-        )
+        select(HubCompany).where(HubCompany.id == hub_company_id)
     )
 
 
 async def list_postings(
     session: AsyncSession,
     *,
-    tenant_id: uuid.UUID,
     hub_company_id: uuid.UUID | None = None,
     q: str | None = None,
     city: str | None = None,
@@ -423,7 +413,7 @@ async def list_postings(
     limit: int = 50,
     offset: int = 0,
 ) -> list[HubJobPosting]:
-    stmt = select(HubJobPosting).where(HubJobPosting.tenant_id == tenant_id)
+    stmt = select(HubJobPosting)
     if hub_company_id is not None:
         stmt = stmt.where(HubJobPosting.hub_company_id == hub_company_id)
     if q:
@@ -434,19 +424,106 @@ async def list_postings(
         stmt = stmt.where(HubJobPosting.source == source)
     if active_only:
         stmt = stmt.where(HubJobPosting.is_active.is_(True))
-    stmt = stmt.order_by(HubJobPosting.posted_at.desc().nulls_last(), HubJobPosting.title)
+    stmt = stmt.order_by(
+        HubJobPosting.posted_at.desc().nulls_last(), HubJobPosting.title
+    )
     rows = await session.execute(_paginate(stmt, limit=limit, offset=offset))
     return list(rows.scalars().all())
 
 
 async def list_observations(
-    session: AsyncSession, *, tenant_id: uuid.UUID, limit: int = 50
+    session: AsyncSession, *, limit: int = 50
 ) -> list[HubObservation]:
-    """The evidence ledger for this tenant's corpus, newest fetch first."""
+    """The evidence ledger the corpus was built from, newest fetch first."""
     rows = await session.execute(
-        select(HubObservation)
-        .where(HubObservation.tenant_id == tenant_id)
-        .order_by(HubObservation.fetched_at.desc())
-        .limit(limit)
+        select(HubObservation).order_by(HubObservation.fetched_at.desc()).limit(limit)
     )
     return list(rows.scalars().all())
+
+
+# --------------------------------------------------------------------------
+# Tenant overlay — this is where tenant_id (and the JWT) actually matter
+# --------------------------------------------------------------------------
+
+
+async def track_company(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    hub_company_id: uuid.UUID,
+    relationship: str = "watching",
+    note: str | None = None,
+) -> HubCompanyLink:
+    """Record (or update) this tenant's interest in a corpus company.
+
+    Tracking asserts nothing about the system-of-record, so it leaves no receipt.
+    Adoption — pointing ``company_id`` at one of the tenant's own CRM rows — is
+    the crossing that does, and it goes through the verification gate.
+    """
+    link = await session.scalar(
+        select(HubCompanyLink).where(
+            HubCompanyLink.tenant_id == tenant_id,
+            HubCompanyLink.hub_company_id == hub_company_id,
+        )
+    )
+    if link is None:
+        link = HubCompanyLink(
+            tenant_id=tenant_id,
+            hub_company_id=hub_company_id,
+            relationship=relationship,
+            note=note,
+        )
+        session.add(link)
+    else:
+        link.relationship = relationship
+        if note is not None:
+            link.note = note
+    await session.commit()
+    await session.refresh(link)
+    return link
+
+
+async def untrack_company(
+    session: AsyncSession, *, tenant_id: uuid.UUID, hub_company_id: uuid.UUID
+) -> bool:
+    link = await session.scalar(
+        select(HubCompanyLink).where(
+            HubCompanyLink.tenant_id == tenant_id,
+            HubCompanyLink.hub_company_id == hub_company_id,
+        )
+    )
+    if link is None:
+        return False
+    await session.delete(link)
+    await session.commit()
+    return True
+
+
+async def list_links(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    relationship: str | None = None,
+    limit: int = 200,
+) -> list[HubCompanyLink]:
+    stmt = select(HubCompanyLink).where(HubCompanyLink.tenant_id == tenant_id)
+    if relationship:
+        stmt = stmt.where(HubCompanyLink.relationship == relationship)
+    rows = await session.execute(stmt.limit(limit))
+    return list(rows.scalars().all())
+
+
+async def tracked_company_ids(
+    session: AsyncSession, *, tenant_id: uuid.UUID
+) -> set[uuid.UUID]:
+    """Corpus company ids this tenant has an overlay row for.
+
+    Lets a corpus listing be annotated with the tenant's own view in one extra
+    query, without pushing tenant_id back into the shared tables.
+    """
+    rows = await session.execute(
+        select(HubCompanyLink.hub_company_id).where(
+            HubCompanyLink.tenant_id == tenant_id
+        )
+    )
+    return set(rows.scalars().all())

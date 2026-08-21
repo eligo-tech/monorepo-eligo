@@ -20,10 +20,21 @@ Three tables, one job each:
     posting is a market signal. Promotion of a posting into a real mandate is an
     explicit human action, so market noise can never reach the matcher.
 
-All three carry ``tenant_id`` and are RLS-isolated like every other core table.
-``HubCompany.visibility`` is the seam for a future shared/paywalled corpus: flip
-a row to ``shared`` and a cross-tenant read policy can expose it without any
-schema change.
+**These three tables are SHARED, not tenant-scoped** — a deliberate, documented
+exception to "every core row carries a tenant_id" (§2.3). "bayoonet AG is at
+10115 Berlin and has three open roles" is a public fact, identical for every
+tenant; storing it per tenant would mean N copies of one truth and N crawls of
+one source. They are reference data, like a skills taxonomy — not the
+system-of-record, which stays strictly tenant-scoped.
+
+The tenant boundary lives in ``HubCompanyLink``: which corpus companies THIS
+tenant cares about, and which of their own CRM rows each maps to. That table
+carries ``tenant_id`` and is RLS-isolated exactly like everything else.
+
+    hub_companies / hub_job_postings / hub_observations   shared public facts
+                            ↓
+    hub_company_link (tenant_id)        ← this tenant's interest
+    companies → jobs (tenant_id)        ← this tenant's business
 """
 
 from __future__ import annotations
@@ -50,7 +61,7 @@ from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
 from app.domain.common.types import JSONDict
 
 
-class HubObservation(Base, IDMixin, TenantMixin, TimestampMixin):
+class HubObservation(Base, IDMixin, TimestampMixin):
     """One retrieval from a public source. Append-only evidence anchor.
 
     Stores the *request* and its outcome, not the full body: the per-record
@@ -87,15 +98,14 @@ class HubObservation(Base, IDMixin, TenantMixin, TimestampMixin):
     payload: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
 
 
-class HubCompany(Base, IDMixin, TenantMixin, TimestampMixin):
+class HubCompany(Base, IDMixin, TimestampMixin):
     """A company observed in the wild, deduplicated by deterministic identity."""
 
     __tablename__ = "hub_companies"
     __table_args__ = (
-        # Identity is per tenant while the corpus is private; a shared corpus
-        # later lifts this to a global unique on `dedupe_key`.
-        UniqueConstraint("tenant_id", "dedupe_key", name="uq_hub_company_identity"),
-        Index("ix_hub_company_normalized_name", "tenant_id", "normalized_name"),
+        # One company, one row, corpus-wide. The whole point of a shared basis.
+        UniqueConstraint("dedupe_key", name="uq_hub_company_identity"),
+        Index("ix_hub_company_normalized_name", "normalized_name"),
     )
 
     # --- identity -------------------------------------------------------
@@ -134,10 +144,6 @@ class HubCompany(Base, IDMixin, TenantMixin, TimestampMixin):
 
     # --- corpus bookkeeping ----------------------------------------------
     source: Mapped[str] = mapped_column(String(60), nullable=False)
-    # "private" (this tenant only) | "shared" (future paywalled corpus).
-    visibility: Mapped[str] = mapped_column(
-        String(20), default="private", nullable=False
-    )
     # Denormalized BD signal: how many of this company's postings are still open.
     # Maintained on ingest so the "who is hiring hardest" list is a plain query.
     open_postings_count: Mapped[int] = mapped_column(
@@ -152,22 +158,47 @@ class HubCompany(Base, IDMixin, TenantMixin, TimestampMixin):
         DateTime(timezone=True), nullable=False
     )
 
-    # Set once this hub company has been adopted into the tenant's CRM. The
-    # adoption itself goes through `verify_and_commit` and leaves a receipt.
+
+class HubCompanyLink(Base, IDMixin, TenantMixin, TimestampMixin):
+    """One tenant's relationship to one corpus company — the tenant boundary.
+
+    The corpus says what is true of the world; this says what it means to *you*:
+    that you are watching this company, that it is a prospect, and which of your
+    own ``companies`` rows it corresponds to once adopted.
+
+    Adoption (setting ``company_id``) is the corpus→record crossing and goes
+    through ``verify_and_commit``, so it leaves a receipt. Merely tracking a
+    company does not: noting interest asserts nothing about the record.
+    """
+
+    __tablename__ = "hub_company_link"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "hub_company_id", name="uq_hub_link_tenant_company"
+        ),
+    )
+
+    hub_company_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(), ForeignKey("hub_companies.id"), nullable=False, index=True
+    )
+    # The tenant's own CRM row, once this corpus company has been adopted.
     company_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(), ForeignKey("companies.id"), nullable=True, index=True
     )
+    # "watching" | "prospect" | "client" | "ignored"
+    relationship: Mapped[str] = mapped_column(
+        String(20), default="watching", nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
-class HubJobPosting(Base, IDMixin, TenantMixin, TimestampMixin):
+class HubJobPosting(Base, IDMixin, TimestampMixin):
     """One external job posting — a market signal, never a client mandate."""
 
     __tablename__ = "hub_job_postings"
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "source", "external_id", name="uq_hub_posting_source_id"
-        ),
-        Index("ix_hub_posting_company_active", "tenant_id", "hub_company_id", "is_active"),
+        UniqueConstraint("source", "external_id", name="uq_hub_posting_source_id"),
+        Index("ix_hub_posting_company_active", "hub_company_id", "is_active"),
     )
 
     hub_company_id: Mapped[uuid.UUID] = mapped_column(
