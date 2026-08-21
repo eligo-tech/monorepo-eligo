@@ -179,6 +179,25 @@ export interface HubCompanyDTO {
   tracked: boolean
 }
 
+/** Outcome of one ingest slice — what a "Markt aktualisieren" press did. */
+export interface HubIngestSummaryDTO {
+  source: string
+  /** True when a recent identical fetch was reused and no request was made. */
+  skipped: boolean
+  skipped_reason: string | null
+  /** Age of the reused fetch, so the UI can phrase it in its own language. */
+  reused_age_minutes: number | null
+  observation_id: string
+  fetched: number
+  total_available: number | null
+  companies_created: number
+  companies_matched: number
+  postings_created: number
+  postings_updated: number
+  rejected: { external_id: string | null; company: string | null; reason: string }[]
+  notes: string[]
+}
+
 /** One workspace's relationship to a corpus company — the tenant boundary. */
 export interface HubCompanyLinkDTO {
   id: string
