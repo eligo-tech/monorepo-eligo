@@ -16,6 +16,7 @@ from app.domain.jobs.router import router as jobs_router
 from app.domain.matching.router import router as matching_router
 from app.domain.pipeline.router import router as pipeline_router
 from app.domain.reporting.router import router as reporting_router
+from app.domain.searches.router import router as searches_router
 from app.domain.verification.router import router as verification_router
 
 api_router = APIRouter()
@@ -35,4 +36,5 @@ api_router.include_router(hub_router)
 api_router.include_router(pipeline_router)
 api_router.include_router(matching_router)
 api_router.include_router(reporting_router)
+api_router.include_router(searches_router)
 api_router.include_router(verification_router)

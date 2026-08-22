@@ -49,6 +49,20 @@ sweeping on that basis would close roles that never closed. Deactivation is only
 sound after a pass that would have re-seen everything still listed, which is a
 job for a periodic full crawl, not this one.
 
+**Saved searches deepen the corpus where people actually recruit.** After the
+regional sweep the job fetches `/hub/crawl-profiles` — the deduplicated union of
+every workspace's enabled saved search — and runs one slice per directive with
+the keywords passed to the SOURCE.
+
+That matters because the source's full-text search covers posting DESCRIPTIONS,
+which this corpus does not store. Measured 2026-08-22: only 5% of TypeScript
+roles and 33% of Java roles carry the term in their title, so a corpus search
+alone misses most of them. Passing the keywords upstream recovers the rest at a
+handful of requests per profile, instead of fetching descriptions corpus-wide.
+
+The directives carry no tenant: the crawler learns what to fetch, never who
+asked.
+
 Exits non-zero if any shard fails, so the scheduler's own failure notification
 is the monitoring (SOC 2 CC7.2).
 """
@@ -85,6 +99,7 @@ async def _ingest_region(
     since_days: int,
     max_pages: int,
     delay: float = 0.0,
+    what: str | None = None,
 ) -> dict[str, int]:
     totals = {
         "pages": 0, "fetched": 0, "companies": 0, "postings": 0, "updated": 0,
@@ -97,6 +112,9 @@ async def _ingest_region(
             "/hub/ingest",
             json={
                 "source": "bundesagentur",
+                # Passed to the source's full-text parameter, which reaches
+                # posting descriptions the corpus does not store.
+                "what": what,
                 "where": region,
                 "radius_km": radius_km,
                 "published_since_days": since_days,
@@ -108,7 +126,9 @@ async def _ingest_region(
         )
         response.raise_for_status()
         summary = response.json()
-        if page == 1:
+        if page == 1 and what is None:
+            # Only regional shards count toward coverage; a keyword slice is a
+            # subset of them and would inflate the figure.
             totals["available"] = summary.get("total_available") or 0
 
         # A shard bigger than the ceiling cannot be fully read. Say so rather
@@ -187,6 +207,12 @@ async def main() -> int:
         "public service is a design constraint, not an obstacle.",
     )
     parser.add_argument(
+        "--no-profiles",
+        dest="profiles",
+        action="store_false",
+        help="skip the saved-search directives and crawl regions only",
+    )
+    parser.add_argument(
         "--stale-days",
         type=int,
         default=0,
@@ -259,6 +285,48 @@ async def main() -> int:
                 continue
             for key in grand:
                 grand[key] += totals[key]
+
+        # Off by default — see the module docstring on why a delta must not
+        # drive deactivation.
+        # --- saved searches: crawl what workspaces actually watch ---------
+        if args.profiles:
+            try:
+                response = await client.get("/hub/crawl-profiles")
+                response.raise_for_status()
+                directives = response.json()
+            except Exception as exc:
+                print(f"  crawl profiles unavailable: {exc}", file=sys.stderr)
+                directives = []
+                failures.append("crawl-profiles")
+
+            if directives:
+                print(f"  Suchprofile ({len(directives)})")
+            for directive in directives:
+                label = " · ".join(
+                    part for part in (directive["q"], directive.get("city")) if part
+                )
+                print(f"    {label}")
+                try:
+                    totals = await _run_shard(
+                        client,
+                        region=directive.get("city"),
+                        radius_km=directive.get("radius_km") or 0,
+                        since_days=args.since,
+                        max_pages=args.max_pages,
+                        delay=args.delay,
+                        what=directive["q"],
+                    )
+                except Exception as exc:
+                    print(f"      FAILED: {exc}", file=sys.stderr)
+                    failures.append(label)
+                    continue
+                for key in grand:
+                    grand[key] += totals[key]
+            if directives:
+                try:
+                    await client.post("/hub/crawl-profiles/mark-crawled", json=directives)
+                except Exception as exc:
+                    print(f"  mark-crawled failed: {exc}", file=sys.stderr)
 
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.

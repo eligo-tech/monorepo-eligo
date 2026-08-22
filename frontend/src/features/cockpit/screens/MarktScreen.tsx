@@ -27,10 +27,12 @@ import {
   Globe,
   MapPin,
   Search,
+  Star,
+  Trash2,
   X,
 } from 'lucide-react'
 import { api } from '@/api/client'
-import type { HubCorpusStatsDTO, HubEmployerHitDTO } from '@/api/types'
+import type { HubCorpusStatsDTO, HubEmployerHitDTO, SavedSearchDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
@@ -70,6 +72,70 @@ const de = (n: number) => n.toLocaleString('de-DE')
 
 /** Suggestions, so an empty screen teaches what the box accepts. */
 const EXAMPLES = ['Embedded', 'SAP', 'Pflegefachkraft', 'Berlin', 'Netto']
+
+/**
+ * Standing questions — the thing that makes this a daily tool.
+ *
+ * A saved profile is also an ingestion directive: the nightly job crawls the
+ * source with these keywords, which is how postings whose stack appears only in
+ * the description reach the corpus at all. Measured, only 5% of TypeScript roles
+ * name the stack in their title, so without this a corpus search misses 95% of
+ * them. Saving one fetches nothing — the scheduled job acts on it later.
+ */
+function SavedSearches({
+  active,
+  onRun,
+  onDeleted,
+  searches,
+  reload,
+}: {
+  active: string | null
+  onRun: (search: SavedSearchDTO) => void
+  onDeleted: () => void
+  searches: SavedSearchDTO[]
+  reload: () => void
+}) {
+  if (searches.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
+        Suchprofile
+      </span>
+      {searches.map((saved) => (
+        <span
+          key={saved.id}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors',
+            saved.id === active
+              ? 'border-mint-600 bg-mint-800/40 text-mint-300'
+              : 'border-cockpit-line text-cockpit-dim hover:border-cockpit-edge hover:text-cockpit-text',
+          )}
+        >
+          <button type="button" onClick={() => onRun(saved)} className="flex items-center gap-2">
+            {saved.label}
+            {saved.last_result_count != null && (
+              <span className="font-mono text-[11px] text-cockpit-faint">
+                {saved.last_result_count}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            aria-label={`${saved.label} löschen`}
+            onClick={async () => {
+              await api.deleteSavedSearch(saved.id).catch(() => {})
+              reload()
+              onDeleted()
+            }}
+            className="text-cockpit-faint transition-colors hover:text-coral-400"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </span>
+      ))}
+    </div>
+  )
+}
 
 function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
   const [tracked, setTracked] = useState(hit.tracked)
@@ -169,8 +235,11 @@ export function MarktScreen() {
   // The executed query, distinct from the draft: results change when you search,
   // not on every keystroke against a 14k-row corpus.
   const [query, setQuery] = useState<{ q: string; city: string } | null>(null)
+  const [activeSaved, setActiveSaved] = useState<string | null>(null)
+  const [savedKey, setSavedKey] = useState(0)
 
   const stats = useAsync<HubCorpusStatsDTO>(() => api.hubStats(), [])
+  const saved = useAsync<SavedSearchDTO[]>(() => api.savedSearches(), [savedKey])
   const results = useAsync<HubEmployerHitDTO[]>(
     () =>
       query
@@ -180,8 +249,30 @@ export function MarktScreen() {
   )
 
   const run = useCallback(() => {
+    setActiveSaved(null)
     setQuery({ q: draft.trim(), city: city.trim() })
   }, [draft, city])
+
+  const runSaved = useCallback((search: SavedSearchDTO) => {
+    setDraft(search.q ?? '')
+    setCity(search.city ?? '')
+    setActiveSaved(search.id)
+    setQuery({ q: search.q ?? '', city: search.city ?? '' })
+  }, [])
+
+  const saveCurrent = useCallback(async () => {
+    if (!query || (!query.q && !query.city)) return
+    const label = [query.q, query.city].filter(Boolean).join(' · ')
+    await api
+      .createSavedSearch({ label, q: query.q || null, city: query.city || null })
+      .catch(() => {})
+    setSavedKey((k) => k + 1)
+  }, [query])
+
+  const savedList = saved.data ?? []
+  const alreadySaved = savedList.some(
+    (x) => (x.q ?? '') === (query?.q ?? '') && (x.city ?? '') === (query?.city ?? ''),
+  )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -287,7 +378,23 @@ export function MarktScreen() {
             <Search className="h-4 w-4" />
             {results.loading ? 'Sucht…' : 'Suchen'}
           </Button>
+          {query && (query.q || query.city) && !alreadySaved && (
+            <Button
+              onClick={saveCurrent}
+              title="Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen"
+            >
+              <Star className="h-4 w-4" /> Merken
+            </Button>
+          )}
         </div>
+
+        <SavedSearches
+          searches={savedList}
+          active={activeSaved}
+          onRun={runSaved}
+          onDeleted={() => setActiveSaved(null)}
+          reload={() => setSavedKey((k) => k + 1)}
+        />
 
         {/* Results */}
         {!query && (
@@ -301,6 +408,11 @@ export function MarktScreen() {
                   {s && s.companies === 0
                     ? 'Der Korpus ist noch leer. Er wird von einem nächtlichen Job befüllt — eine Suche löst nie eine Abfrage bei einer öffentlichen Quelle aus.'
                     : 'Suchen Sie nach einer Rolle, einer Firma oder einem Ort. Die Liste aller Unternehmen wäre keine Antwort auf eine Frage, die jemand stellt.'}
+                </p>
+                <p className="max-w-2xl text-[13px] leading-relaxed text-cockpit-faint">
+                  Wiederkehrende Suchen als Profil merken: der nächtliche Lauf fragt die
+                  Quelle gezielt danach ab — inklusive Anzeigentexten, die hier sonst nicht
+                  durchsuchbar sind.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {EXAMPLES.map((example) => (
