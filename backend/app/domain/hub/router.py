@@ -19,6 +19,8 @@ from app.core.database import get_db
 from app.domain.hub import service
 from app.domain.hub.adapters.factory import available_sources, get_source_adapter
 from app.domain.hub.gate import PreconditionFailed
+from app.domain.searches import service as searches_service
+from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
     HubCompanyLinkRead,
     HubCorpusStats,
@@ -251,6 +253,31 @@ async def untrack_hub_company(
 # --------------------------------------------------------------------------
 # Ingestion
 # --------------------------------------------------------------------------
+
+
+@router.get("/crawl-profiles", response_model=list[CrawlProfile])
+async def list_crawl_profiles(
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+) -> list[CrawlProfile]:
+    """Crawl directives for the nightly job — the union of saved searches.
+
+    Operator endpoint, machine-authenticated. Deliberately returns only
+    `(q, city, radius_km)`: the crawler learns WHAT to fetch, never WHO asked.
+    Search terms are competitive intelligence and must not leak between
+    workspaces, even though the postings they surface land in the shared corpus.
+
+    Deduplicated, so three workspaces watching "SAP Berater" cost one crawl.
+    """
+    return await searches_service.list_crawl_profiles()
+
+
+@router.post("/crawl-profiles/mark-crawled")
+async def mark_profiles_crawled(
+    profiles: list[CrawlProfile],
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+) -> dict[str, int]:
+    """Stamp `last_crawled_at` after the nightly job has fetched these."""
+    return {"updated": await searches_service.mark_crawled(profiles)}
 
 
 @router.post("/maintenance/expire-stale")

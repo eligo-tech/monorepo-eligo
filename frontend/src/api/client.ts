@@ -10,6 +10,7 @@ import type {
   HubCorpusStatsDTO,
   HubEmployerHitDTO,
   HubJobPostingDTO,
+  SavedSearchDTO,
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
@@ -105,6 +106,30 @@ export const api = {
     qs.set('limit', String(params.limit ?? 40))
     return request<HubEmployerHitDTO[]>(`/hub/search?${qs}`)
   },
+
+  /** This workspace's standing market questions. */
+  savedSearches: () => request<SavedSearchDTO[]>('/searches'),
+
+  /** Save a standing question. Crawls nothing — the nightly job acts on it. */
+  createSavedSearch: (body: {
+    label: string
+    q?: string | null
+    city?: string | null
+    min_roles?: number
+  }) =>
+    request<SavedSearchDTO>('/searches', { method: 'POST', body: JSON.stringify(body) }),
+
+  async deleteSavedSearch(id: string): Promise<void> {
+    const res = await fetch(`${BASE}/searches/${id}`, {
+      method: 'DELETE',
+      headers: await authHeaders(),
+    })
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+  },
+
+  /** Run a saved search against the corpus. Read-only. */
+  savedSearchResults: (id: string) =>
+    request<HubEmployerHitDTO[]>(`/searches/${id}/results?limit=40`),
 
   /** Open roles for one hub company. */
   hubCompanyPostings: (id: string) =>

@@ -234,6 +234,28 @@ export interface HubEmployerHitDTO {
   tracked: boolean
 }
 
+/**
+ * A standing market question belonging to this workspace.
+ *
+ * Two jobs: re-run it against the corpus, and — because `crawl_enabled` puts it
+ * in the nightly job's directive union — deepen the corpus where this workspace
+ * actually recruits. Saving one crawls nothing; the scheduled job acts on it.
+ */
+export interface SavedSearchDTO {
+  id: string
+  tenant_id: string
+  label: string
+  q: string | null
+  city: string | null
+  radius_km: number | null
+  min_roles: number
+  crawl_enabled: boolean
+  last_crawled_at: string | null
+  last_result_count: number | null
+  created_at: string
+  updated_at: string
+}
+
 /** One workspace's relationship to a corpus company — the tenant boundary. */
 export interface HubCompanyLinkDTO {
   id: string
