@@ -26,8 +26,12 @@ from typing import Any, Protocol, runtime_checkable
 class SourceQuery:
     """What to ask a source for. Not every adapter honors every field."""
 
-    what: str | None = None            # keyword / occupation
-    where: str | None = None           # city, PLZ or region
+    what: str | None = None            # keyword / full-text
+    where: str | None = None           # city or PLZ
+    # Occupational field. The best shard key this source has: 144 values, 99.4%
+    # of the daily delta, and — unlike `where` — it never silently resolves to
+    # a village that happens to share a state's name.
+    berufsfeld: str | None = None
     radius_km: int | None = None
     published_since_days: int | None = None
     page: int = 1
@@ -64,6 +68,10 @@ class SourcedPosting:
     company: SourcedCompany
     description: str | None = None
     occupation: str | None = None
+    # Stamped from the SHARD, not read from the record — the source never
+    # returns it per posting.
+    berufsfeld: str | None = None
+    region: str | None = None
     employment_type: str | None = None
     location_text: str | None = None
     postal_code: str | None = None

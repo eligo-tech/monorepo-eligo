@@ -105,8 +105,16 @@ def parse_response(
     request_url: str,
     fetched_at: dt.datetime,
     http_status: int | None = 200,
+    berufsfeld: str | None = None,
 ) -> FetchResult:
-    """Pure payload → ``FetchResult``. No I/O, no DB — the unit CI exercises."""
+    """Pure payload → ``FetchResult``. No I/O, no DB — the unit CI exercises.
+
+    ``berufsfeld`` is the field this slice was requested for. The API never
+    returns it per record — it appears only in the response facets — so the only
+    way a posting can carry one is for the crawler to stamp the shard it came
+    from. Passing it here keeps that knowledge attached to the data instead of
+    being thrown away at the end of the request.
+    """
     records = payload.get("ergebnisliste") or []
     postings: list[SourcedPosting] = []
 
@@ -141,6 +149,8 @@ def parse_response(
                     longitude=place["longitude"],
                 ),
                 occupation=record.get("hauptberuf"),
+                berufsfeld=berufsfeld,
+                region=place["region"],
                 employment_type=_employment_type(record),
                 location_text=" ".join(
                     part for part in (place["postal_code"], city) if part
@@ -199,6 +209,8 @@ class BundesagenturAdapter:
         }
         if query.what:
             params["was"] = query.what
+        if query.berufsfeld:
+            params["berufsfeld"] = query.berufsfeld
         if query.where:
             params["wo"] = query.where
         if query.radius_km is not None:
@@ -247,4 +259,5 @@ class BundesagenturAdapter:
             request_url=str(response.request.url),
             fetched_at=fetched_at,
             http_status=response.status_code,
+            berufsfeld=query.berufsfeld,
         )

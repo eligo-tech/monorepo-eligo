@@ -12,6 +12,8 @@ class SavedSearchBase(BaseModel):
     label: str = Field(min_length=1, max_length=120)
     q: str | None = Field(default=None, max_length=200)
     city: str | None = Field(default=None, max_length=120)
+    regions: list[str] = Field(default_factory=list)
+    berufsfelder: list[str] = Field(default_factory=list)
     radius_km: int | None = Field(default=None, ge=0, le=200)
     min_roles: int = Field(default=0, ge=0)
     crawl_enabled: bool = True
@@ -25,6 +27,8 @@ class SavedSearchUpdate(BaseModel):
     label: str | None = Field(default=None, min_length=1, max_length=120)
     q: str | None = Field(default=None, max_length=200)
     city: str | None = Field(default=None, max_length=120)
+    regions: list[str] | None = None
+    berufsfelder: list[str] | None = None
     radius_km: int | None = Field(default=None, ge=0, le=200)
     min_roles: int | None = Field(default=None, ge=0)
     crawl_enabled: bool | None = None
