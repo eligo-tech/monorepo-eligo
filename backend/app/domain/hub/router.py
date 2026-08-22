@@ -21,6 +21,8 @@ from app.domain.hub.adapters.factory import available_sources, get_source_adapte
 from app.domain.hub.gate import PreconditionFailed
 from app.domain.hub.schemas import (
     HubCompanyLinkRead,
+    HubCorpusStats,
+    HubEmployerHit,
     HubCompanyRead,
     HubJobPostingRead,
     HubObservationRead,
@@ -41,6 +43,51 @@ async def list_sources() -> dict[str, list[str]]:
 # --------------------------------------------------------------------------
 # Corpus (shared)
 # --------------------------------------------------------------------------
+
+
+@router.get("/stats", response_model=HubCorpusStats)
+async def hub_stats(
+    _tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> HubCorpusStats:
+    """Corpus totals. Counted in the DB so the UI stops describing its own page."""
+    return HubCorpusStats.model_validate(await service.corpus_stats(db))
+
+
+@router.get("/search", response_model=list[HubEmployerHit])
+async def search_hub_employers(
+    q: str | None = Query(default=None, description="name, city, role or occupation"),
+    city: str | None = None,
+    min_roles: int = Query(default=0, ge=0),
+    limit: int = Query(default=40, ge=1, le=200),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[HubEmployerHit]:
+    """Search the corpus and return employers, rolled up across their sites.
+
+    This is the recruiter-facing entry point. The unrolled `/hub/companies`
+    listing stays for tooling and debugging, but a directory of 13,851 rows —
+    hundreds of which are the same discounter once per branch — is not a surface
+    anyone can work with.
+    """
+    hits = await service.search_employers(
+        db, q=q, city=city, min_roles=min_roles, limit=limit
+    )
+    tracked = await service.tracked_company_ids(db, tenant_id=tenant_id)
+    out: list[HubEmployerHit] = []
+    for hit in hits:
+        item = HubEmployerHit.model_validate(
+            {
+                **hit,
+                "matching_roles": [
+                    HubJobPostingRead.model_validate(r) for r in hit["matching_roles"]
+                ],
+            }
+        )
+        # An employer counts as tracked when ANY of its sites is.
+        item.tracked = any(cid in tracked for cid in hit["hub_company_ids"])
+        out.append(item)
+    return out
 
 
 @router.get("/companies", response_model=list[HubCompanyRead])

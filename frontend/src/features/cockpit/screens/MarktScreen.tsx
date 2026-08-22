@@ -1,27 +1,28 @@
-// "Markt" — the shared information hub as a cockpit screen.
+// "Markt" — the shared information hub, as a search surface.
 //
-// The outside world, not the own record: companies and their open roles
-// aggregated from public sources, ordered by who is hiring hardest. That
-// ordering IS the product — a recruiter wants whoever has the most open roles
-// right now, not an alphabetical register extract.
+// This is deliberately NOT a directory. A list of every company the crawler has
+// seen answers "who has the most vacancies in Germany", and the answer is always
+// a discounter. The question a recruiter actually has is "who is hiring X near
+// Y", so the screen opens empty and waits to be asked.
 //
-// The corpus itself is SHARED across workspaces — public facts, crawled once.
-// What this workspace makes of it is not: "beobachten" writes a tenant-scoped
-// overlay row, and that toggle is the only thing on this screen that belongs to
-// you rather than to everybody.
+// Two consequences shape the layout:
 //
-// The identity badge on each row is the other half. Every company here was
-// deduplicated by a deterministic ladder (VAT → Handelsregister → domain →
-// name + PLZ), and the badge says WHICH rung matched. A company proven by VAT
-// id is a different claim from one assumed from a name and a postcode, and the
-// surface refuses to blur the two.
+//   * Results are EMPLOYERS, rolled up across sites. `name_place` identity
+//     yields one corpus row per branch, so Netto arrives as ~238 rows; grouped,
+//     it is one line reading "238 Standorte · 264 offene Rollen" — which is the
+//     useful form for business development anyway.
+//   * Every hit shows the roles that made it match. An employer in a result
+//     list without its matching roles is an assertion; with them it is evidence.
+//
+// The corpus itself is shared across workspaces and refreshed by a nightly job —
+// nothing here can trigger a crawl (ARCHITECTURE.md RULE 1). Only "beobachten"
+// writes anything, and it writes to this workspace alone.
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Bookmark,
   BookmarkCheck,
   Building2,
-  ChevronRight,
   ExternalLink,
   Globe,
   MapPin,
@@ -29,42 +30,27 @@ import {
   X,
 } from 'lucide-react'
 import { api } from '@/api/client'
-import type { HubCompanyDTO, HubJobPostingDTO } from '@/api/types'
+import type { HubCorpusStatsDTO, HubEmployerHitDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { Button, FIELD } from '../ui/forms'
 
-const GRID = 'grid-cols-[minmax(0,3fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_5.5rem]'
-const COLUMNS = ['Unternehmen', 'Ort', 'Identität', 'Rollen']
-
 /**
- * How the identity was established, in the recruiter's language.
+ * Which rung of the identity ladder established this employer.
  *
- * Deliberately not collapsed into a single "verified" flag: `name_place` is an
+ * Deliberately not collapsed into one "verified" tick: `name_place` is an
  * assumption that two postings naming the same employer in the same town are
- * the same company. True almost always, provable never — so it reads as neutral
+ * the same company. True almost always, provable never — so it reads neutral
  * rather than green.
  */
 const IDENTITY: Record<
-  HubCompanyDTO['resolution_basis'],
+  HubEmployerHitDTO['resolution_basis'],
   { label: string; tone?: 'mint' | 'gold'; title: string }
 > = {
-  vat: {
-    label: 'USt-IdNr',
-    tone: 'mint',
-    title: 'Identität über die Umsatzsteuer-Identifikationsnummer bestimmt',
-  },
-  register: {
-    label: 'HRB',
-    tone: 'mint',
-    title: 'Identität über Registergericht und Handelsregisternummer bestimmt',
-  },
-  domain: {
-    label: 'Domain',
-    tone: 'gold',
-    title: 'Identität über die Unternehmensdomain bestimmt',
-  },
+  vat: { label: 'USt-IdNr', tone: 'mint', title: 'Identität über die USt-IdNr bestimmt' },
+  register: { label: 'HRB', tone: 'mint', title: 'Identität über das Handelsregister bestimmt' },
+  domain: { label: 'Domain', tone: 'gold', title: 'Identität über die Unternehmensdomain bestimmt' },
   name_place: {
     label: 'Name + Ort',
     title: 'Angenommen aus Firmenname und Ort — nicht gegen ein Register geprüft',
@@ -72,81 +58,35 @@ const IDENTITY: Record<
 }
 
 const dateDe = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+  iso
+    ? new Date(iso).toLocaleDateString('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+    : '—'
 
-/** Free-text haystack for one company row. */
-function matches(c: HubCompanyDTO, q: string): boolean {
-  return [c.name, c.city, c.postal_code, c.website_domain, c.industry]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-    .includes(q)
-}
+const de = (n: number) => n.toLocaleString('de-DE')
 
-/** The open roles for one company, loaded on expand rather than up front. */
-function PostingList({ companyId }: { companyId: string }) {
-  const { data, loading, error } = useAsync<HubJobPostingDTO[]>(
-    () => api.hubCompanyPostings(companyId),
-    [companyId],
-  )
+/** Suggestions, so an empty screen teaches what the box accepts. */
+const EXAMPLES = ['Embedded', 'SAP', 'Pflegefachkraft', 'Berlin', 'Netto']
 
-  if (loading) {
-    return <p className="px-3 py-3 font-mono text-[12px] text-cockpit-faint">lädt…</p>
-  }
-  if (error || !data) {
-    return (
-      <p className="px-3 py-3 font-mono text-[12px] text-coral-400">
-        Rollen konnten nicht geladen werden.
-      </p>
-    )
-  }
-
-  return (
-    <ul className="divide-y divide-cockpit-line/60">
-      {data.map((p) => (
-        <li key={p.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2">
-          <span className="text-[14px] text-cockpit-text">{p.title}</span>
-          {p.occupation && p.occupation !== p.title && (
-            <Chip className="shrink-0">{p.occupation}</Chip>
-          )}
-          {p.remote_possible && <Chip tone="lav">Homeoffice</Chip>}
-          <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
-            <span title="Erstveröffentlichung">{dateDe(p.posted_at)}</span>
-            {p.source_url && (
-              // The employer's own posting — the entry point for upgrading this
-              // company from a shallow board record to its real ATS feed.
-              <a
-                href={p.source_url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="flex items-center gap-1 transition-colors hover:text-mint-400"
-                title="Original-Stellenanzeige öffnen"
-              >
-                Quelle <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-          </span>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function CompanyRow({ company }: { company: HubCompanyDTO }) {
-  const [open, setOpen] = useState(false)
-  // Optimistic: the overlay row is this workspace's own state, so the toggle
-  // should feel immediate. Reverted if the write fails.
-  const [tracked, setTracked] = useState(company.tracked)
+function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
+  const [tracked, setTracked] = useState(hit.tracked)
   const [saving, setSaving] = useState(false)
-  const identity = IDENTITY[company.resolution_basis] ?? IDENTITY.name_place
+  const identity = IDENTITY[hit.resolution_basis] ?? IDENTITY.name_place
+  // Tracking is per corpus row; a rolled-up employer is tracked via its first
+  // site, which is what the API reports back as `tracked`.
+  const anchorId = hit.hub_company_ids[0]
 
-  const toggleTracked = async () => {
+  const toggle = async () => {
+    if (!anchorId) return
     const next = !tracked
     setTracked(next)
     setSaving(true)
     try {
-      if (next) await api.trackHubCompany(company.id, 'watching')
-      else await api.untrackHubCompany(company.id)
+      if (next) await api.trackHubCompany(anchorId, 'watching')
+      else await api.untrackHubCompany(anchorId)
     } catch {
       setTracked(!next)
     } finally {
@@ -155,121 +95,111 @@ function CompanyRow({ company }: { company: HubCompanyDTO }) {
   }
 
   return (
-    <div className="border-b border-cockpit-line/60">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className={cn(
-          'grid w-full items-center gap-4 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.02]',
-          GRID,
+    <Panel className="p-4">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+        <h3 className="text-[16px] font-medium text-cockpit-text">{hit.name}</h3>
+        {hit.website_domain && (
+          <span className="flex items-center gap-1 font-mono text-[12px] text-cockpit-faint">
+            <Globe className="h-3.5 w-3.5" />
+            {hit.website_domain}
+          </span>
         )}
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          <ChevronRight
-            className={cn(
-              'h-4 w-4 shrink-0 text-cockpit-faint transition-transform',
-              open && 'rotate-90',
-            )}
-          />
-          <span className="truncate text-[15px] text-cockpit-text">{company.name}</span>
-          {company.website_domain && (
-            <Globe className="h-3.5 w-3.5 shrink-0 text-cockpit-faint" />
-          )}
-          {tracked && (
-            <BookmarkCheck
-              className="h-3.5 w-3.5 shrink-0 text-mint-400"
-              aria-label="Wird beobachtet"
-            />
-          )}
-        </span>
+        <Chip tone={identity.tone} className="cursor-help">
+          <span title={identity.title}>{identity.label}</span>
+        </Chip>
 
-        <span className="truncate font-mono text-[13px] text-cockpit-dim">
-          {[company.postal_code, company.city].filter(Boolean).join(' ') || '—'}
-        </span>
-
-        <span>
-          <Chip tone={identity.tone} className="cursor-help" >
-            <span title={identity.title}>{identity.label}</span>
-          </Chip>
-        </span>
-
-        <span className="text-right font-mono text-[15px] text-cockpit-text">
-          {company.open_postings_count}
-        </span>
-      </button>
-
-      {open && (
-        <div className="bg-cockpit-inset/50">
-          {/* The one action on this screen that writes tenant-scoped state.
-              Everything above it is shared corpus, identical for every workspace. */}
-          <div className="flex items-center gap-3 px-3 pt-3">
-            <Button onClick={toggleTracked} disabled={saving} tone={tracked ? 'primary' : 'ghost'}>
-              {tracked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-              {tracked ? 'Wird beobachtet' : 'Beobachten'}
-            </Button>
-            <span className="font-mono text-[11px] text-cockpit-faint">
-              nur in diesem Workspace sichtbar
+        <span className="ml-auto flex items-center gap-4 font-mono text-[13px] text-cockpit-faint">
+          {hit.sites > 1 && (
+            <span title="Standorte im Korpus — dieselbe Firma, mehrfach erfasst">
+              <span className="text-cockpit-text">{de(hit.sites)}</span> Standorte
             </span>
-          </div>
-          <PostingList companyId={company.id} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-/**
- * Shown when the corpus is empty — which it is until somebody ingests.
- *
- * An empty table reads as "broken"; naming the exact command that fills it
- * reads as "not started yet". The hub has no automatic population by design:
- * ingestion only ever runs when it is asked to.
- */
-function EmptyCorpus() {
-  return (
-    <Panel className="p-6">
-      <div className="flex items-start gap-3">
-        <span className="rounded-md border border-cockpit-line p-2 text-cockpit-faint">
-          <Building2 className="h-5 w-5" />
+          )}
+          <span>
+            <span className="text-[15px] text-cockpit-text">{de(hit.open_roles)}</span> Rollen
+          </span>
+          <Button onClick={toggle} disabled={saving || !anchorId} tone={tracked ? 'primary' : 'ghost'}>
+            {tracked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+            {tracked ? 'Beobachtet' : 'Beobachten'}
+          </Button>
         </span>
-        <div className="min-w-0 space-y-2">
-          <h3 className="text-[16px] font-medium text-cockpit-text">
-            Noch keine Unternehmen im Korpus
-          </h3>
-          <p className="max-w-2xl text-[14px] leading-relaxed text-cockpit-dim">
-            Der Korpus wird von einem nächtlichen Job befüllt, nicht aus der Oberfläche —
-            eine Suche löst niemals eine Abfrage bei einer öffentlichen Quelle aus. Bis der
-            erste Lauf durch ist, bleibt diese Ansicht leer. Erstbefüllung einer Region:
-          </p>
-          <pre className="overflow-x-auto rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 font-mono text-[12px] text-cockpit-dim">
-python -m scripts.hub_backfill --where München --radius 25
-          </pre>
-        </div>
       </div>
+
+      <p className="mt-1.5 flex items-center gap-1.5 font-mono text-[12px] text-cockpit-dim">
+        <MapPin className="h-3.5 w-3.5 shrink-0 text-cockpit-faint" />
+        {hit.cities.join(' · ') || '—'}
+        {hit.city_count > hit.cities.length && (
+          <span className="text-cockpit-faint">
+            +{hit.city_count - hit.cities.length} weitere
+          </span>
+        )}
+      </p>
+
+      {hit.matching_roles.length > 0 && (
+        <ul className="mt-3 space-y-1 border-t border-cockpit-line/60 pt-2.5">
+          {hit.matching_roles.map((role) => (
+            <li key={role.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-[14px] text-cockpit-text">{role.title}</span>
+              {role.city && <Chip>{role.city}</Chip>}
+              {role.remote_possible && <Chip tone="lav">Homeoffice</Chip>}
+              <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
+                <span>{dateDe(role.posted_at)}</span>
+                {role.source_url && (
+                  <a
+                    href={role.source_url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="flex items-center gap-1 transition-colors hover:text-mint-400"
+                    title="Original-Stellenanzeige öffnen"
+                  >
+                    Quelle <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Panel>
   )
 }
 
 export function MarktScreen() {
-  const [query, setQuery] = useState('')
-  const { data, loading, error } = useAsync<HubCompanyDTO[]>(
-    () => api.hubCompanies({ limit: 500 }),
-    [],
+  const [draft, setDraft] = useState('')
+  const [city, setCity] = useState('')
+  // The executed query, distinct from the draft: results change when you search,
+  // not on every keystroke against a 14k-row corpus.
+  const [query, setQuery] = useState<{ q: string; city: string } | null>(null)
+
+  const stats = useAsync<HubCorpusStatsDTO>(() => api.hubStats(), [])
+  const results = useAsync<HubEmployerHitDTO[]>(
+    () =>
+      query
+        ? api.hubSearch({ q: query.q, city: query.city, limit: 40 })
+        : Promise.resolve([]),
+    [query?.q, query?.city],
   )
 
-  const all = useMemo(() => data ?? [], [data])
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q ? all.filter((c) => matches(c, q)) : all
-  }, [all, query])
+  const run = useCallback(() => {
+    setQuery({ q: draft.trim(), city: city.trim() })
+  }, [draft, city])
 
-  const openRoles = all.reduce((sum, c) => sum + c.open_postings_count, 0)
-  const hiring = all.filter((c) => c.open_postings_count > 0).length
-  const cities = new Set(all.map((c) => c.city).filter(Boolean)).size
-  // How much of the corpus rests on an assumption rather than a register.
-  const assumed = all.filter((c) => c.resolution_basis === 'name_place').length
-  const tracked = all.filter((c) => c.tracked).length
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        const el = e.target as HTMLElement | null
+        if (el?.tagName === 'INPUT') run()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [run])
+
+  const s = stats.data
+  const hits = results.data ?? []
+  const totalRoles = useMemo(
+    () => hits.reduce((sum, h) => sum + h.open_roles, 0),
+    [hits],
+  )
 
   return (
     <div className="space-y-8">
@@ -278,107 +208,156 @@ export function MarktScreen() {
           Markt
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
-          Unternehmen und ihre offenen Rollen aus öffentlichen Quellen — wer gerade
-          einstellt, zuerst. Der Korpus ist geteilt und wird nächtlich aktualisiert;
-          was Sie beobachten, bleibt in diesem Workspace. Jede Zeile zeigt, woraus die
-          Identität des Unternehmens bestimmt wurde.
+          Wer gerade einstellt — durchsuchbar nach Rolle, Firma und Ort. Der Korpus ist
+          geteilt und wird nächtlich aktualisiert; was Sie beobachten, bleibt in diesem
+          Workspace.
         </p>
       </header>
 
       <section className="space-y-5">
         <SectionHeader
-          id="section-unternehmen"
           index="01"
-          title="Unternehmen"
-          hint={error ? 'offline' : 'live aus dem Korpus'}
+          title="Suche"
+          hint={
+            s?.last_ingest_at
+              ? `zuletzt aktualisiert ${dateDe(s.last_ingest_at)}`
+              : stats.error
+                ? 'offline'
+                : 'live aus dem Korpus'
+          }
         />
 
-        {/* Stats strip */}
+        {/* Corpus totals — counted in the database, never over the loaded page. */}
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
-          <span>
-            <span className="text-cockpit-text">{all.length}</span> Unternehmen
-          </span>
-          <span>
-            <span className="text-cockpit-text">{hiring}</span> stellen ein
-          </span>
-          <span>
-            <span className="text-cockpit-text">{openRoles}</span> offene Rollen
-          </span>
-          <span>
-            <span className="text-cockpit-text">{cities}</span> Orte
-          </span>
-          <span title="Von diesem Workspace beobachtet — nicht Teil des geteilten Korpus">
-            <span className="text-cockpit-text">{tracked}</span> beobachtet
-          </span>
-          {assumed > 0 && (
-            <span title="Identität aus Name + Ort angenommen, nicht gegen ein Register geprüft">
-              <span className="text-cockpit-text">{assumed}</span> ohne Registerprüfung
-            </span>
+          {s ? (
+            <>
+              <span title="Unternehmen nach Zusammenfassung der Standorte">
+                <span className="text-cockpit-text">{de(s.employers)}</span> Unternehmen
+              </span>
+              <span title="Einzelne Korpus-Einträge — eine Firma kann mehrere Standorte haben">
+                <span className="text-cockpit-text">{de(s.companies)}</span> Standorte
+              </span>
+              <span>
+                <span className="text-cockpit-text">{de(s.open_postings)}</span> offene Rollen
+              </span>
+              <span>
+                <span className="text-cockpit-text">{de(s.cities)}</span> Orte
+              </span>
+              <span title="Identität aus Name + Ort angenommen, nicht gegen ein Register geprüft">
+                <span className="text-cockpit-text">{de(s.unverified_identity)}</span> ohne
+                Registerprüfung
+              </span>
+            </>
+          ) : (
+            <span>{stats.error ? 'Korpus nicht erreichbar' : 'lädt Kennzahlen…'}</span>
           )}
         </div>
 
-        {/* Toolbar */}
-        <label className="relative flex min-w-[16rem] max-w-xl items-center">
-          <Search className="pointer-events-none absolute left-3.5 h-[17px] w-[17px] text-cockpit-faint" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Unternehmen, Ort, Domain…"
-            className={cn(FIELD, 'py-2.5 pl-11 pr-9 text-[15px]')}
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              aria-label="Suche zurücksetzen"
-              className="absolute right-3 text-cockpit-faint transition-colors hover:text-cockpit-text"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </label>
+        {/* Query */}
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="relative flex min-w-[18rem] flex-1 items-center">
+            <Search className="pointer-events-none absolute left-3.5 h-[17px] w-[17px] text-cockpit-faint" />
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Rolle, Firma oder Stichwort — z. B. Embedded, SAP, Pflegefachkraft"
+              className={cn(FIELD, 'py-2.5 pl-11 pr-9 text-[15px]')}
+            />
+            {draft && (
+              <button
+                type="button"
+                onClick={() => setDraft('')}
+                aria-label="Suche zurücksetzen"
+                className="absolute right-3 text-cockpit-faint transition-colors hover:text-cockpit-text"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </label>
+          <label className="relative flex w-52 items-center">
+            <MapPin className="pointer-events-none absolute left-3.5 h-[17px] w-[17px] text-cockpit-faint" />
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Ort"
+              className={cn(FIELD, 'py-2.5 pl-11 text-[15px]')}
+            />
+          </label>
+          <Button tone="primary" onClick={run} disabled={results.loading}>
+            <Search className="h-4 w-4" />
+            {results.loading ? 'Sucht…' : 'Suchen'}
+          </Button>
+        </div>
 
-        {loading && (
-          <p className="font-mono text-[13px] text-cockpit-faint">lädt Korpus…</p>
+        {/* Results */}
+        {!query && (
+          <Panel className="p-6">
+            <div className="flex items-start gap-3">
+              <span className="rounded-md border border-cockpit-line p-2 text-cockpit-faint">
+                <Building2 className="h-5 w-5" />
+              </span>
+              <div className="space-y-3">
+                <p className="max-w-2xl text-[14px] leading-relaxed text-cockpit-dim">
+                  {s && s.companies === 0
+                    ? 'Der Korpus ist noch leer. Er wird von einem nächtlichen Job befüllt — eine Suche löst nie eine Abfrage bei einer öffentlichen Quelle aus.'
+                    : 'Suchen Sie nach einer Rolle, einer Firma oder einem Ort. Die Liste aller Unternehmen wäre keine Antwort auf eine Frage, die jemand stellt.'}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {EXAMPLES.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => {
+                        setDraft(example)
+                        setQuery({ q: example, city: city.trim() })
+                      }}
+                      className="rounded-md border border-cockpit-line px-2.5 py-1 font-mono text-[12px] text-cockpit-dim transition-colors hover:border-mint-600 hover:text-mint-400"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Panel>
         )}
 
-        {error && (
+        {query && results.loading && (
+          <p className="font-mono text-[13px] text-cockpit-faint">sucht im Korpus…</p>
+        )}
+
+        {query && results.error && (
           <Panel className="p-5">
             <p className="text-[14px] text-coral-400">
-              Der Korpus konnte nicht geladen werden — ist die Sitzung noch gültig?
+              Die Suche ist fehlgeschlagen — ist die Sitzung noch gültig?
             </p>
           </Panel>
         )}
 
-        {!loading && !error && all.length === 0 && <EmptyCorpus />}
+        {query && !results.loading && !results.error && (
+          <>
+            <p className="font-mono text-[13px] text-cockpit-faint">
+              <span className="text-cockpit-text">{de(hits.length)}</span> Unternehmen ·{' '}
+              <span className="text-cockpit-text">{de(totalRoles)}</span> offene Rollen
+              {hits.length >= 40 && <span> · nur die stärksten 40 gezeigt</span>}
+            </p>
 
-        {!loading && !error && all.length > 0 && (
-          <div>
-            <div
-              className={cn(
-                'grid gap-4 border-b border-cockpit-line px-3 pb-2.5',
-                'font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint',
-                GRID,
-              )}
-            >
-              {COLUMNS.map((c) => (
-                <div key={c} className={c === 'Rollen' ? 'text-right' : undefined}>
-                  {c}
-                </div>
-              ))}
-            </div>
-
-            {rows.map((c) => (
-              <CompanyRow key={c.id} company={c} />
-            ))}
-
-            {rows.length === 0 && (
-              <p className="flex items-center gap-2 px-3 py-6 text-[14px] text-cockpit-dim">
-                <MapPin className="h-4 w-4 text-cockpit-faint" />
-                Kein Unternehmen passt zu „{query}“.
-              </p>
+            {hits.length === 0 ? (
+              <Panel className="p-6">
+                <p className="text-[14px] text-cockpit-dim">
+                  Nichts gefunden für „{query.q || query.city}“. Der Korpus enthält heute nur
+                  Titel und Berufsbezeichnungen — keine Anzeigentexte —, deshalb trifft eine
+                  Suche nach Anforderungen noch nicht.
+                </p>
+              </Panel>
+            ) : (
+              <div className="space-y-3">
+                {hits.map((hit) => (
+                  <EmployerCard key={hit.normalized_name} hit={hit} />
+                ))}
+              </div>
             )}
-          </div>
+          </>
         )}
       </section>
     </div>

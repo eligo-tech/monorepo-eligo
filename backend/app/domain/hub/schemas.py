@@ -100,6 +100,38 @@ class HubObservationRead(BaseModel):
     created_at: dt.datetime
 
 
+class HubCorpusStats(BaseModel):
+    """Corpus-wide totals, counted in the database rather than over a page."""
+
+    companies: int
+    # Distinct employers after collapsing one-row-per-site fragmentation.
+    employers: int
+    hiring: int
+    open_postings: int
+    cities: int
+    unverified_identity: int
+    sources: int
+    last_ingest_at: dt.datetime | None
+
+
+class HubEmployerHit(BaseModel):
+    """One employer in a search result — a rollup, not a single corpus row."""
+
+    normalized_name: str
+    name: str
+    # How many corpus rows (sites) this employer collapses into.
+    sites: int
+    open_roles: int
+    cities: list[str] = Field(default_factory=list)
+    city_count: int
+    resolution_basis: str
+    website_domain: str | None = None
+    hub_company_ids: list[uuid.UUID] = Field(default_factory=list)
+    # The roles that justify the hit — the answer carries its own evidence.
+    matching_roles: list[HubJobPostingRead] = Field(default_factory=list)
+    tracked: bool = False
+
+
 RELATIONSHIPS = ("watching", "prospect", "client", "ignored")
 
 
