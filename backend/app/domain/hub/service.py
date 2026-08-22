@@ -26,7 +26,7 @@ import hashlib
 import json
 import uuid
 
-from sqlalchemy import Select, func, or_, select, update
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -778,16 +778,45 @@ async def search_employers(
             )
         )
 
-    roles = func.sum(HubCompany.open_postings_count)
+    # ONE predicate for what counts as a matching role, used for both the
+    # headline number and the evidence list below. Previously the number was
+    # SUM(open_postings_count) — every active posting at the employer — while
+    # the list was filtered, so a search for "Embedded" showed "2 Rollen" above
+    # a single Embedded role. A count that disagrees with the evidence under it
+    # is worse than no count; sharing the predicate makes them agree by
+    # construction rather than by remembering to update both.
+    role_match: list = [HubJobPosting.is_active.is_(True), *posting_filters]
+    if q and q.strip():
+        needle = f"%{q.strip().lower()}%"
+        role_match.append(
+            or_(
+                func.lower(HubJobPosting.title).like(needle),
+                func.lower(HubJobPosting.occupation).like(needle),
+                # A hit on the COMPANY makes all of its roles relevant: searching
+                # "Netto" should report Netto's whole vacancy count.
+                func.lower(HubCompany.name).like(needle),
+                func.lower(HubCompany.city).like(needle),
+            )
+        )
+
+    roles = func.count(HubJobPosting.id)
     grouped = await session.execute(
         select(
             HubCompany.normalized_name,
-            func.count(HubCompany.id).label("sites"),
+            # DISTINCT: the join multiplies a company row by its postings.
+            func.count(func.distinct(HubCompany.id)).label("sites"),
             roles.label("roles"),
             # Shortest name is the least cluttered of the variants a source
             # emits ("Netto Marken-Discount Stiftung & Co. KG" vs the same plus
             # a branch suffix).
             func.min(HubCompany.name).label("name"),
+        )
+        # OUTER join with the predicate in the ON clause: an employer that
+        # matched by name but has no matching role still appears, honestly
+        # showing 0, instead of vanishing from its own search.
+        .outerjoin(
+            HubJobPosting,
+            and_(HubJobPosting.hub_company_id == HubCompany.id, *role_match),
         )
         .where(HubCompany.id.in_(candidates))
         .group_by(HubCompany.normalized_name)
@@ -834,26 +863,10 @@ async def search_employers(
     role_stmt = (
         select(HubJobPosting, HubCompany.normalized_name)
         .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
-        .where(
-            HubCompany.normalized_name.in_(names),
-            HubJobPosting.is_active.is_(True),
-        )
+        # The SAME predicate that produced the count above.
+        .where(HubCompany.normalized_name.in_(names), *role_match)
         .order_by(HubJobPosting.posted_at.desc().nulls_last())
     )
-    if q and q.strip():
-        needle = f"%{q.strip().lower()}%"
-        role_stmt = role_stmt.where(
-            or_(
-                func.lower(HubJobPosting.title).like(needle),
-                func.lower(HubJobPosting.occupation).like(needle),
-                func.lower(HubCompany.name).like(needle),
-                func.lower(HubCompany.city).like(needle),
-            )
-        )
-    # The roles shown as evidence must satisfy the same filters, or a hit
-    # filtered to Bayern would display its Hamburg vacancies as the reason.
-    if posting_filters:
-        role_stmt = role_stmt.where(*posting_filters)
     matched: dict[str, list[HubJobPosting]] = {}
     for posting, name in (await session.execute(role_stmt.limit(limit * 40))).all():
         bucket = matched.setdefault(name, [])

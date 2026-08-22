@@ -334,7 +334,7 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
               <span className="text-cockpit-text">{de(hit.sites)}</span> Standorte
             </span>
           )}
-          <span>
+          <span title="Treffer für diese Suche — nicht alle offenen Rollen des Unternehmens">
             <span className="text-[15px] text-cockpit-text">{de(hit.open_roles)}</span> Rollen
           </span>
           <Button onClick={toggle} disabled={saving || !anchorId} tone={tracked ? 'primary' : 'ghost'}>
@@ -377,6 +377,11 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
               </span>
             </li>
           ))}
+          {hit.open_roles > hit.matching_roles.length && (
+            <li className="px-0 pt-1 font-mono text-[12px] text-cockpit-faint">
+              +{de(hit.open_roles - hit.matching_roles.length)} weitere Treffer
+            </li>
+          )}
         </ul>
       )}
     </Panel>
