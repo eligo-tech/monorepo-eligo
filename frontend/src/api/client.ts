@@ -9,6 +9,7 @@ import type {
   HubCompanyLinkDTO,
   HubCorpusStatsDTO,
   HubEmployerHitDTO,
+  HubFacetsDTO,
   HubJobPostingDTO,
   SavedSearchDTO,
   JobDTO,
@@ -94,14 +95,28 @@ export const api = {
   /** Corpus totals, counted server-side. Never derive these from a page. */
   hubStats: () => request<HubCorpusStatsDTO>('/hub/stats'),
 
+  /** Filter options with counts, taken from the corpus itself. */
+  hubFacets: () => request<HubFacetsDTO>('/hub/facets'),
+
   /**
    * Search the corpus. Returns EMPLOYERS rolled up across their sites, each
    * carrying the roles that made it match.
    */
-  hubSearch: (params: { q?: string; city?: string; minRoles?: number; limit?: number }) => {
+  hubSearch: (params: {
+    q?: string
+    city?: string
+    regions?: string[]
+    berufsfelder?: string[]
+    minRoles?: number
+    limit?: number
+  }) => {
     const qs = new URLSearchParams()
     if (params.q) qs.set('q', params.q)
     if (params.city) qs.set('city', params.city)
+    // Repeated params, not comma-joined: a Berufsfeld contains commas
+    // ("Krankenpflege, Rettungsdienst und Geburtshilfe").
+    params.regions?.forEach((r) => qs.append('region', r))
+    params.berufsfelder?.forEach((b) => qs.append('berufsfeld', b))
     if (params.minRoles) qs.set('min_roles', String(params.minRoles))
     qs.set('limit', String(params.limit ?? 40))
     return request<HubEmployerHitDTO[]>(`/hub/search?${qs}`)
@@ -115,6 +130,8 @@ export const api = {
     label: string
     q?: string | null
     city?: string | null
+    regions?: string[]
+    berufsfelder?: string[]
     min_roles?: number
   }) =>
     request<SavedSearchDTO>('/searches', { method: 'POST', body: JSON.stringify(body) }),

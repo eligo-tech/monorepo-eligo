@@ -100,6 +100,7 @@ async def _ingest_region(
     max_pages: int,
     delay: float = 0.0,
     what: str | None = None,
+    berufsfeld: str | None = None,
 ) -> dict[str, int]:
     totals = {
         "pages": 0, "fetched": 0, "companies": 0, "postings": 0, "updated": 0,
@@ -115,6 +116,7 @@ async def _ingest_region(
                 # Passed to the source's full-text parameter, which reaches
                 # posting descriptions the corpus does not store.
                 "what": what,
+                "berufsfeld": berufsfeld,
                 "where": region,
                 "radius_km": radius_km,
                 "published_since_days": since_days,
@@ -126,7 +128,7 @@ async def _ingest_region(
         )
         response.raise_for_status()
         summary = response.json()
-        if page == 1 and what is None:
+        if page == 1 and what is None and berufsfeld is None:
             # Only regional shards count toward coverage; a keyword slice is a
             # subset of them and would inflate the figure.
             totals["available"] = summary.get("total_available") or 0
@@ -205,6 +207,14 @@ async def main() -> int:
         default=0.4,
         help="seconds between requests. Being a considerate client of a free "
         "public service is a design constraint, not an obstacle.",
+    )
+    parser.add_argument(
+        "--by-berufsfeld",
+        action="store_true",
+        help="shard by occupational field instead of Bundesland. 144 values, "
+        "99.4%% of the daily delta versus 81%% for Bundesland — because `wo=` "
+        "matches place names and loses whole states. Also the only way postings "
+        "acquire a `berufsfeld`, which is what the UI filter needs.",
     )
     parser.add_argument(
         "--no-profiles",

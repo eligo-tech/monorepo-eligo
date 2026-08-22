@@ -18,7 +18,7 @@
 // nothing here can trigger a crawl (ARCHITECTURE.md RULE 1). Only "beobachten"
 // writes anything, and it writes to this workspace alone.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bookmark,
   BookmarkCheck,
@@ -26,13 +26,21 @@ import {
   ExternalLink,
   Globe,
   MapPin,
+  Check,
+  ChevronDown,
   Search,
   Star,
   Trash2,
   X,
 } from 'lucide-react'
 import { api } from '@/api/client'
-import type { HubCorpusStatsDTO, HubEmployerHitDTO, SavedSearchDTO } from '@/api/types'
+import type {
+  FacetValueDTO,
+  HubCorpusStatsDTO,
+  HubEmployerHitDTO,
+  HubFacetsDTO,
+  SavedSearchDTO,
+} from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
@@ -69,6 +77,135 @@ const dateDe = (iso: string | null) =>
     : '—'
 
 const de = (n: number) => n.toLocaleString('de-DE')
+
+/**
+ * The source emits ASCII-folded region codes — `BADEN_WUERTTEMBERG`,
+ * `THUERINGEN`. Title-casing them alone leaves "Baden-Wuerttemberg", so the 16
+ * states are mapped explicitly: umlauts cannot be recovered by transformation,
+ * and a German product spelling German states wrong is not a detail.
+ */
+const REGION_LABELS: Record<string, string> = {
+  BADEN_WUERTTEMBERG: 'Baden-Württemberg',
+  BAYERN: 'Bayern',
+  BERLIN: 'Berlin',
+  BRANDENBURG: 'Brandenburg',
+  BREMEN: 'Bremen',
+  HAMBURG: 'Hamburg',
+  HESSEN: 'Hessen',
+  MECKLENBURG_VORPOMMERN: 'Mecklenburg-Vorpommern',
+  NIEDERSACHSEN: 'Niedersachsen',
+  NORDRHEIN_WESTFALEN: 'Nordrhein-Westfalen',
+  RHEINLAND_PFALZ: 'Rheinland-Pfalz',
+  SAARLAND: 'Saarland',
+  SACHSEN: 'Sachsen',
+  SACHSEN_ANHALT: 'Sachsen-Anhalt',
+  SCHLESWIG_HOLSTEIN: 'Schleswig-Holstein',
+  THUERINGEN: 'Thüringen',
+}
+
+/** Falls back to title-case for anything the source adds later. */
+const prettyRegion = (raw: string) =>
+  REGION_LABELS[raw] ??
+  raw
+    .split('_')
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join('-')
+
+/**
+ * Multi-select filter. OR within one control, AND across the two — several
+ * Bundesländer widen the area, a Berufsfeld narrows within it.
+ *
+ * Options come from `/hub/facets`, i.e. from the corpus itself with counts, so
+ * the list never offers a filter that would return nothing. A Berufsfeld only
+ * appears once postings carrying it have been ingested.
+ */
+function FacetFilter({
+  label,
+  options,
+  selected,
+  onChange,
+  format = (v: string) => v,
+}: {
+  label: string
+  options: FacetValueDTO[]
+  selected: string[]
+  onChange: (next: string[]) => void
+  format?: (value: string) => string
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onClick = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const toggle = (value: string) =>
+    onChange(
+      selected.includes(value)
+        ? selected.filter((v) => v !== value)
+        : [...selected, value],
+    )
+
+  return (
+    <div ref={ref} className="relative">
+      <Button onClick={() => setOpen((o) => !o)} disabled={options.length === 0}>
+        {label}
+        {selected.length > 0 && (
+          <span className="rounded-md bg-mint-800/70 px-1.5 font-mono text-[12px] text-mint-300">
+            {selected.length}
+          </span>
+        )}
+        <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+      </Button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 max-h-80 w-[22rem] overflow-y-auto rounded-xl border border-cockpit-line bg-cockpit-surface shadow-panel">
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="w-full border-b border-cockpit-line px-3 py-2 text-left font-mono text-[12px] text-cockpit-faint hover:text-coral-400"
+            >
+              Auswahl aufheben
+            </button>
+          )}
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => toggle(option.value)}
+              className={cn(
+                'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition-colors hover:bg-white/[0.04]',
+                selected.includes(option.value) ? 'text-cockpit-text' : 'text-cockpit-dim',
+              )}
+            >
+              <Check
+                className={cn(
+                  'h-3.5 w-3.5 shrink-0',
+                  selected.includes(option.value) ? 'text-mint-400' : 'text-transparent',
+                )}
+              />
+              <span className="truncate">{format(option.value)}</span>
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-cockpit-faint">
+                {option.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /** Suggestions, so an empty screen teaches what the box accepts. */
 const EXAMPLES = ['Embedded', 'SAP', 'Pflegefachkraft', 'Berlin', 'Netto']
@@ -234,45 +371,83 @@ export function MarktScreen() {
   const [city, setCity] = useState('')
   // The executed query, distinct from the draft: results change when you search,
   // not on every keystroke against a 14k-row corpus.
-  const [query, setQuery] = useState<{ q: string; city: string } | null>(null)
+  const [query, setQuery] = useState<{
+    q: string
+    city: string
+    regions: string[]
+    berufsfelder: string[]
+  } | null>(null)
+  const [regions, setRegions] = useState<string[]>([])
+  const [berufsfelder, setBerufsfelder] = useState<string[]>([])
   const [activeSaved, setActiveSaved] = useState<string | null>(null)
   const [savedKey, setSavedKey] = useState(0)
 
   const stats = useAsync<HubCorpusStatsDTO>(() => api.hubStats(), [])
+  const facets = useAsync<HubFacetsDTO>(() => api.hubFacets(), [])
   const saved = useAsync<SavedSearchDTO[]>(() => api.savedSearches(), [savedKey])
   const results = useAsync<HubEmployerHitDTO[]>(
     () =>
       query
-        ? api.hubSearch({ q: query.q, city: query.city, limit: 40 })
+        ? api.hubSearch({
+            q: query.q,
+            city: query.city,
+            regions: query.regions,
+            berufsfelder: query.berufsfelder,
+            limit: 40,
+          })
         : Promise.resolve([]),
-    [query?.q, query?.city],
+    [query?.q, query?.city, query?.regions.join('|'), query?.berufsfelder.join('|')],
   )
 
   const run = useCallback(() => {
     setActiveSaved(null)
-    setQuery({ q: draft.trim(), city: city.trim() })
-  }, [draft, city])
+    setQuery({ q: draft.trim(), city: city.trim(), regions, berufsfelder })
+  }, [draft, city, regions, berufsfelder])
 
   const runSaved = useCallback((search: SavedSearchDTO) => {
     setDraft(search.q ?? '')
     setCity(search.city ?? '')
+    setRegions(search.regions ?? [])
+    setBerufsfelder(search.berufsfelder ?? [])
     setActiveSaved(search.id)
-    setQuery({ q: search.q ?? '', city: search.city ?? '' })
+    setQuery({
+      q: search.q ?? '',
+      city: search.city ?? '',
+      regions: search.regions ?? [],
+      berufsfelder: search.berufsfelder ?? [],
+    })
   }, [])
 
   const saveCurrent = useCallback(async () => {
-    if (!query || (!query.q && !query.city)) return
-    const label = [query.q, query.city].filter(Boolean).join(' · ')
+    if (!query) return
+    const label =
+      [query.q, query.city].filter(Boolean).join(' · ') ||
+      [...query.berufsfelder, ...query.regions.map(prettyRegion)].join(' · ')
+    if (!label) return
     await api
-      .createSavedSearch({ label, q: query.q || null, city: query.city || null })
+      .createSavedSearch({
+        label: label.slice(0, 120),
+        q: query.q || null,
+        city: query.city || null,
+        regions: query.regions,
+        berufsfelder: query.berufsfelder,
+      })
       .catch(() => {})
     setSavedKey((k) => k + 1)
   }, [query])
 
   const savedList = saved.data ?? []
+  const same = (a: string[], b: string[]) =>
+    a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|')
   const alreadySaved = savedList.some(
-    (x) => (x.q ?? '') === (query?.q ?? '') && (x.city ?? '') === (query?.city ?? ''),
+    (x) =>
+      (x.q ?? '') === (query?.q ?? '') &&
+      (x.city ?? '') === (query?.city ?? '') &&
+      same(x.regions ?? [], query?.regions ?? []) &&
+      same(x.berufsfelder ?? [], query?.berufsfelder ?? []),
   )
+  const hasCriteria =
+    !!query && (!!query.q || !!query.city || query.regions.length > 0 || query.berufsfelder.length > 0)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -374,11 +549,24 @@ export function MarktScreen() {
               className={cn(FIELD, 'py-2.5 pl-11 text-[15px]')}
             />
           </label>
+          <FacetFilter
+            label="Bundesland"
+            options={facets.data?.regions ?? []}
+            selected={regions}
+            onChange={setRegions}
+            format={prettyRegion}
+          />
+          <FacetFilter
+            label="Berufsfeld"
+            options={facets.data?.berufsfelder ?? []}
+            selected={berufsfelder}
+            onChange={setBerufsfelder}
+          />
           <Button tone="primary" onClick={run} disabled={results.loading}>
             <Search className="h-4 w-4" />
             {results.loading ? 'Sucht…' : 'Suchen'}
           </Button>
-          {query && (query.q || query.city) && !alreadySaved && (
+          {hasCriteria && !alreadySaved && (
             <Button
               onClick={saveCurrent}
               title="Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen"
@@ -421,7 +609,12 @@ export function MarktScreen() {
                       type="button"
                       onClick={() => {
                         setDraft(example)
-                        setQuery({ q: example, city: city.trim() })
+                        setQuery({
+                          q: example,
+                          city: city.trim(),
+                          regions,
+                          berufsfelder,
+                        })
                       }}
                       className="rounded-md border border-cockpit-line px-2.5 py-1 font-mono text-[12px] text-cockpit-dim transition-colors hover:border-mint-600 hover:text-mint-400"
                     >

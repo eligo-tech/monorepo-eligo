@@ -204,6 +204,18 @@ export interface HubIngestSummaryDTO {
   notes: string[]
 }
 
+/** One filter option and how many active postings carry it. */
+export interface FacetValueDTO {
+  value: string
+  count: number
+}
+
+/** Filter options, derived from the corpus so none of them return nothing. */
+export interface HubFacetsDTO {
+  regions: FacetValueDTO[]
+  berufsfelder: FacetValueDTO[]
+}
+
 /** Corpus-wide totals, counted in the database rather than over a page. */
 export interface HubCorpusStatsDTO {
   companies: number
@@ -247,6 +259,8 @@ export interface SavedSearchDTO {
   label: string
   q: string | null
   city: string | null
+  regions: string[]
+  berufsfelder: string[]
   radius_km: number | null
   min_roles: number
   crawl_enabled: boolean
@@ -277,6 +291,10 @@ export interface HubJobPostingDTO {
   title: string
   description: string | null
   occupation: string | null
+  /** Coarse occupational field — stamped from the crawl shard, not the record. */
+  berufsfeld: string | null
+  /** Bundesland from the record's own address. */
+  region: string | null
   employment_type: string | null
   location_text: string | null
   postal_code: string | null

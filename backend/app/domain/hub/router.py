@@ -25,6 +25,7 @@ from app.domain.hub.schemas import (
     HubCompanyLinkRead,
     HubCorpusStats,
     HubEmployerHit,
+    HubFacets,
     HubCompanyRead,
     HubJobPostingRead,
     HubObservationRead,
@@ -56,10 +57,21 @@ async def hub_stats(
     return HubCorpusStats.model_validate(await service.corpus_stats(db))
 
 
+@router.get("/facets", response_model=HubFacets)
+async def hub_facets(
+    _tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> HubFacets:
+    """Available filter values with counts, taken from the corpus."""
+    return HubFacets.model_validate(await service.corpus_facets(db))
+
+
 @router.get("/search", response_model=list[HubEmployerHit])
 async def search_hub_employers(
     q: str | None = Query(default=None, description="name, city, role or occupation"),
     city: str | None = None,
+    region: list[str] | None = Query(default=None, description="Bundesland; repeatable"),
+    berufsfeld: list[str] | None = Query(default=None, description="repeatable"),
     min_roles: int = Query(default=0, ge=0),
     limit: int = Query(default=40, ge=1, le=200),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
@@ -73,7 +85,13 @@ async def search_hub_employers(
     anyone can work with.
     """
     hits = await service.search_employers(
-        db, q=q, city=city, min_roles=min_roles, limit=limit
+        db,
+        q=q,
+        city=city,
+        regions=region,
+        berufsfelder=berufsfeld,
+        min_roles=min_roles,
+        limit=limit,
     )
     tracked = await service.tracked_company_ids(db, tenant_id=tenant_id)
     out: list[HubEmployerHit] = []

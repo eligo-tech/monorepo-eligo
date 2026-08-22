@@ -61,6 +61,8 @@ class HubJobPostingRead(BaseModel):
     title: str
     description: str | None
     occupation: str | None
+    berufsfeld: str | None
+    region: str | None
     employment_type: str | None
     location_text: str | None
     postal_code: str | None
@@ -114,6 +116,18 @@ class HubCorpusStats(BaseModel):
     last_ingest_at: dt.datetime | None
 
 
+class FacetValue(BaseModel):
+    value: str
+    count: int
+
+
+class HubFacets(BaseModel):
+    """Filter options, derived from the corpus so none of them return nothing."""
+
+    regions: list[FacetValue] = Field(default_factory=list)
+    berufsfelder: list[FacetValue] = Field(default_factory=list)
+
+
 class HubEmployerHit(BaseModel):
     """One employer in a search result — a rollup, not a single corpus row."""
 
@@ -159,8 +173,12 @@ class IngestRequest(BaseModel):
     """One crawl slice. Deliberately small — a full backfill is many of these."""
 
     source: str = "bundesagentur"
-    what: str | None = Field(default=None, description="keyword / occupation")
-    where: str | None = Field(default=None, description="city, PLZ or region")
+    what: str | None = Field(default=None, description="full-text keyword")
+    where: str | None = Field(default=None, description="city or PLZ")
+    # The best shard key this source has: 144 values covering 99.4% of the daily
+    # delta, and — unlike `where` — it never resolves to a village sharing a
+    # state's name. Also the only way a posting learns its own field.
+    berufsfeld: str | None = Field(default=None, max_length=120)
     radius_km: int | None = Field(default=None, ge=0, le=200)
     # NOT a free day count. The Bundesagentur honours only these values and
     # SILENTLY RETURNS EVERYTHING for anything else — `2` yields all 709k

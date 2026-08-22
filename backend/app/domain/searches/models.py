@@ -30,6 +30,8 @@ import datetime as dt
 
 from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint
 
+from app.domain.common.types import JSONList
+
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -50,6 +52,10 @@ class SavedSearch(Base, IDMixin, TenantMixin, TimestampMixin):
     # reaches posting descriptions we do not store ourselves.
     q: Mapped[str | None] = mapped_column(String(200), nullable=True)
     city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Bundesländer and occupational fields. OR-within, AND-across: several
+    # regions widen the area, a Berufsfeld narrows within it.
+    regions: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    berufsfelder: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
     radius_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
     min_roles: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 

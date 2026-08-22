@@ -85,6 +85,7 @@ def query_key(request: IngestRequest) -> str:
             "source": request.source,
             "what": (request.what or "").strip().lower() or None,
             "where": (request.where or "").strip().lower() or None,
+            "berufsfeld": request.berufsfeld,
             "radius_km": request.radius_km,
             "published_since_days": request.published_since_days,
             "page": request.page,
@@ -168,6 +169,7 @@ async def ingest(
     query = SourceQuery(
         what=request.what,
         where=request.where,
+        berufsfeld=request.berufsfeld,
         radius_km=request.radius_km,
         published_since_days=request.published_since_days,
         page=request.page,
@@ -325,6 +327,8 @@ async def ingest(
                     title=posting.title,
                     description=posting.description,
                     occupation=posting.occupation,
+                    berufsfeld=posting.berufsfeld,
+                    region=posting.region,
                     employment_type=posting.employment_type,
                     location_text=posting.location_text,
                     postal_code=posting.postal_code,
@@ -355,11 +359,17 @@ async def ingest(
         row.last_seen_at = now
         row.is_active = True
         row.observation_id = observation.id
+        # Backfill only. A posting first seen by a regional sweep has no field;
+        # the next berufsfeld shard that returns it supplies one. Never clear a
+        # known field because this particular slice did not ask for it.
+        if posting.berufsfeld and not row.berufsfeld:
+            row.berufsfeld = posting.berufsfeld
         if row.content_hash != content_hash:
             row.title = posting.title
             row.description = posting.description
             row.occupation = posting.occupation
             row.employment_type = posting.employment_type
+            row.region = posting.region or row.region
             row.location_text = posting.location_text
             row.postal_code = posting.postal_code
             row.city = posting.city
@@ -639,6 +649,33 @@ async def corpus_stats(session: AsyncSession) -> dict:
     }
 
 
+async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
+    """Filter options with counts, derived from the corpus itself.
+
+    Not a hardcoded taxonomy: the options are what the corpus actually holds, so
+    a Berufsfeld appears only once postings carrying it have been ingested. That
+    keeps the UI from offering filters that return nothing.
+    """
+    regions = await session.execute(
+        select(HubJobPosting.region, func.count(HubJobPosting.id))
+        .where(HubJobPosting.is_active.is_(True), HubJobPosting.region.is_not(None))
+        .group_by(HubJobPosting.region)
+        .order_by(func.count(HubJobPosting.id).desc())
+    )
+    fields = await session.execute(
+        select(HubJobPosting.berufsfeld, func.count(HubJobPosting.id))
+        .where(
+            HubJobPosting.is_active.is_(True), HubJobPosting.berufsfeld.is_not(None)
+        )
+        .group_by(HubJobPosting.berufsfeld)
+        .order_by(func.count(HubJobPosting.id).desc())
+    )
+    return {
+        "regions": [{"value": v, "count": c} for v, c in regions.all()],
+        "berufsfelder": [{"value": v, "count": c} for v, c in fields.all()],
+    }
+
+
 # Strongest identity first — used to label a rolled-up employer by the best
 # evidence any of its sites carries.
 _BASIS_RANK = {"vat": 0, "register": 1, "domain": 2, "name_place": 3}
@@ -649,6 +686,8 @@ async def search_employers(
     *,
     q: str | None = None,
     city: str | None = None,
+    regions: list[str] | None = None,
+    berufsfelder: list[str] | None = None,
     min_roles: int = 0,
     limit: int = 40,
     roles_per_employer: int = 6,
@@ -670,6 +709,11 @@ async def search_employers(
     Searchable text today is company name, city, posting title and occupation.
     Posting descriptions are not stored (the source's search endpoint does not
     return them), so this is keyword matching, not semantic retrieval.
+
+    `regions` and `berufsfelder` are OR-within, AND-across: several Bundesländer
+    widen the area, a Berufsfeld narrows within it. Both filter on POSTING
+    fields, so an employer qualifies when a matching role does — a nationwide
+    chain is not excluded from "Bayern" because its head office sits elsewhere.
     """
     candidates = select(HubCompany.id)
 
@@ -701,6 +745,22 @@ async def search_employers(
     if city and city.strip():
         candidates = candidates.where(
             func.lower(HubCompany.city).like(f"%{city.strip().lower()}%")
+        )
+
+    # Structured filters run against POSTINGS, so an employer qualifies through
+    # a matching role rather than through its head-office address.
+    posting_filters = []
+    if regions:
+        posting_filters.append(HubJobPosting.region.in_(regions))
+    if berufsfelder:
+        posting_filters.append(HubJobPosting.berufsfeld.in_(berufsfelder))
+    if posting_filters:
+        candidates = candidates.where(
+            HubCompany.id.in_(
+                select(HubJobPosting.hub_company_id).where(
+                    HubJobPosting.is_active.is_(True), *posting_filters
+                )
+            )
         )
 
     roles = func.sum(HubCompany.open_postings_count)
@@ -775,6 +835,10 @@ async def search_employers(
                 func.lower(HubCompany.city).like(needle),
             )
         )
+    # The roles shown as evidence must satisfy the same filters, or a hit
+    # filtered to Bayern would display its Hamburg vacancies as the reason.
+    if posting_filters:
+        role_stmt = role_stmt.where(*posting_filters)
     matched: dict[str, list[HubJobPosting]] = {}
     for posting, name in (await session.execute(role_stmt.limit(limit * 40))).all():
         bucket = matched.setdefault(name, [])

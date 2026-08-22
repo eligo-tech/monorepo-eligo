@@ -219,6 +219,20 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The source's own occupation taxonomy label (BA: `hauptberuf`).
     occupation: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # The coarser occupational FIELD (BA: `berufsfeld`, 144 values).
+    #
+    # Absent from every record the source returns — it exists only in the query
+    # facets. We know it only because the crawler asked for it: a posting
+    # fetched by a berufsfeld shard is stamped with that shard's field. Postings
+    # pulled by a regional sweep or a saved-search keyword slice have none, so
+    # this is nullable by nature, not by oversight.
+    berufsfeld: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, index=True
+    )
+    # Bundesland, from the record's own address — reliable, unlike the `wo=`
+    # QUERY parameter, which matches place names and returns 82 postings for
+    # the whole of Hessen. Accurate to filter on; useless to shard on.
+    region: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     employment_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     location_text: Mapped[str | None] = mapped_column(String(200), nullable=True)

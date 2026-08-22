@@ -86,7 +86,13 @@ async def run_saved_search(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "saved search not found")
 
     hits = await hub_service.search_employers(
-        db, q=saved.q, city=saved.city, min_roles=saved.min_roles, limit=limit
+        db,
+        q=saved.q,
+        city=saved.city,
+        regions=list(saved.regions or []),
+        berufsfelder=list(saved.berufsfelder or []),
+        min_roles=saved.min_roles,
+        limit=limit,
     )
     tracked = await hub_service.tracked_company_ids(db, tenant_id=tenant_id)
     out: list[HubEmployerHit] = []
