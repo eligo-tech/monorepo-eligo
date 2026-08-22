@@ -85,6 +85,21 @@ It also carries the data classification table and the GDPR/SOC 2 obligation map,
 including what is **not** yet built — nothing here may be described to a customer
 as "GDPR compliant" or "SOC 2 compliant" until those gaps are closed.
 
+## Skills
+
+Repeatable procedures live in `.claude/skills/`. Invoke them rather than
+re-deriving the rules:
+
+| skill | use it when |
+|---|---|
+| `architecture-review` | before opening or when reviewing a PR; adding a table or column; deciding where data lives; anything touching the hub, verification, tenancy, RLS, ingestion or personal data |
+| `add-hub-source` | integrating a job board / ATS feed / employment-service API, or debugging one that returns wrong counts |
+| `add-domain` | creating a new backend domain + migration + RLS |
+
+`architecture-review` carries the binding rules from `ARCHITECTURE.md` in
+checkable form; `add-hub-source` carries the source-integration defects this
+project has actually hit, each with the command that would have caught it.
+
 ## Build order (design-partner first, revenue before breadth)
 
 Phase 0 ingest & read-only Candidate-360 → 1 document intelligence → 2 matching →
