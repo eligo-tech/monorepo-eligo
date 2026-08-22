@@ -7,7 +7,7 @@ required for EU AI Act transparency about automated data.
 
 from __future__ import annotations
 
-from sqlalchemy import Float, Integer, String, Text, Uuid
+from sqlalchemy import Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base

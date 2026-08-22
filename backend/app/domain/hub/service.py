@@ -364,12 +364,17 @@ async def ingest(
         # known field because this particular slice did not ask for it.
         if posting.berufsfeld and not row.berufsfeld:
             row.berufsfeld = posting.berufsfeld
+        # `region` belongs on the TOUCH path too, not only when content changed.
+        # Almost every re-crawl returns an identical posting, so a backfill that
+        # only runs on change effectively never runs — which is why the
+        # Bundesland filter stayed empty after the column was added.
+        if posting.region and not row.region:
+            row.region = posting.region
         if row.content_hash != content_hash:
             row.title = posting.title
             row.description = posting.description
             row.occupation = posting.occupation
             row.employment_type = posting.employment_type
-            row.region = posting.region or row.region
             row.location_text = posting.location_text
             row.postal_code = posting.postal_code
             row.city = posting.city
@@ -412,6 +417,15 @@ async def ingest(
         )
     )
     landed = gate.check_persisted(expected=len(accepted), observed=observed or 0)
+    # The source's own facets describe how the result set divides. Passing them
+    # up means the crawler's shard plan comes from the API rather than from a
+    # list in our code that silently goes stale.
+    shard_plan = [
+        {"value": value, "count": count}
+        for value, count in sorted(
+            (result.facet_counts or {}).items(), key=lambda kv: -kv[1]
+        )
+    ]
     notes.append(landed.as_note())
     if rejected:
         notes.append(f"✗ {len(rejected)} record(s) rejected by postconditions")
@@ -438,6 +452,7 @@ async def ingest(
         postings_updated=postings_updated,
         rejected=rejected,
         notes=notes,
+        shard_plan=shard_plan,
     )
 
 

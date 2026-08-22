@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.agents.base import Agent, AgentResult
 from app.domain.common.enums import ConfidenceSource

@@ -78,7 +78,7 @@ async def corpus():
         c = await _company(s, "Klinikum Musterstadt", "Stuttgart", "k5", 1)
         await s.flush()
         regions = ("BERLIN", "NORDRHEIN_WESTFALEN", "BADEN_WUERTTEMBERG")
-        for i, (comp, region) in enumerate(zip((a1, a2, a3), regions)):
+        for i, (comp, region) in enumerate(zip((a1, a2, a3), regions, strict=True)):
             await _posting(
                 s, comp, "Verkäufer (m/w/d)", f"n{i}", "Verkäufer/in",
                 berufsfeld="Verkauf", region=region,
