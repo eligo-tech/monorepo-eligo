@@ -7,6 +7,8 @@ import type {
   CVExtractionResultDTO,
   HubCompanyDTO,
   HubCompanyLinkDTO,
+  HubCorpusStatsDTO,
+  HubEmployerHitDTO,
   HubJobPostingDTO,
   JobDTO,
   MatchResultDTO,
@@ -88,6 +90,22 @@ export const api = {
     qs.set('limit', String(params?.limit ?? 200))
     return request<HubCompanyDTO[]>(`/hub/companies?${qs}`)
   },
+  /** Corpus totals, counted server-side. Never derive these from a page. */
+  hubStats: () => request<HubCorpusStatsDTO>('/hub/stats'),
+
+  /**
+   * Search the corpus. Returns EMPLOYERS rolled up across their sites, each
+   * carrying the roles that made it match.
+   */
+  hubSearch: (params: { q?: string; city?: string; minRoles?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params.q) qs.set('q', params.q)
+    if (params.city) qs.set('city', params.city)
+    if (params.minRoles) qs.set('min_roles', String(params.minRoles))
+    qs.set('limit', String(params.limit ?? 40))
+    return request<HubEmployerHitDTO[]>(`/hub/search?${qs}`)
+  },
+
   /** Open roles for one hub company. */
   hubCompanyPostings: (id: string) =>
     request<HubJobPostingDTO[]>(`/hub/companies/${id}/postings?limit=200`),

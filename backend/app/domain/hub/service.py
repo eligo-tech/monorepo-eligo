@@ -585,6 +585,219 @@ async def list_observations(
     return list(rows.scalars().all())
 
 
+async def corpus_stats(session: AsyncSession) -> dict:
+    """Corpus-wide aggregates, counted in the DATABASE.
+
+    The screen used to derive these from whatever page it had loaded, so a
+    500-row page reported "500 Unternehmen" against a corpus of 13,851. A number
+    that describes the page while claiming to describe the corpus is worse than
+    no number.
+    """
+    postings_active = select(func.count(HubJobPosting.id)).where(
+        HubJobPosting.is_active.is_(True)
+    )
+    return {
+        "companies": (await session.scalar(select(func.count(HubCompany.id)))) or 0,
+        # Distinct EMPLOYERS, collapsing the one-row-per-site fragmentation that
+        # `name_place` identity produces (Netto has a row per store postcode).
+        "employers": (
+            await session.scalar(
+                select(func.count(func.distinct(HubCompany.normalized_name)))
+            )
+        ) or 0,
+        "hiring": (
+            await session.scalar(
+                select(func.count(HubCompany.id)).where(
+                    HubCompany.open_postings_count > 0
+                )
+            )
+        ) or 0,
+        "open_postings": (await session.scalar(postings_active)) or 0,
+        "cities": (
+            await session.scalar(
+                select(func.count(func.distinct(HubCompany.city))).where(
+                    HubCompany.city.is_not(None)
+                )
+            )
+        ) or 0,
+        # How much of the corpus rests on the weakest identity rung.
+        "unverified_identity": (
+            await session.scalar(
+                select(func.count(HubCompany.id)).where(
+                    HubCompany.resolution_basis == "name_place"
+                )
+            )
+        ) or 0,
+        "sources": (
+            await session.scalar(
+                select(func.count(func.distinct(HubCompany.source)))
+            )
+        ) or 0,
+        "last_ingest_at": await session.scalar(
+            select(func.max(HubObservation.fetched_at))
+        ),
+    }
+
+
+# Strongest identity first — used to label a rolled-up employer by the best
+# evidence any of its sites carries.
+_BASIS_RANK = {"vat": 0, "register": 1, "domain": 2, "name_place": 3}
+
+
+async def search_employers(
+    session: AsyncSession,
+    *,
+    q: str | None = None,
+    city: str | None = None,
+    min_roles: int = 0,
+    limit: int = 40,
+    roles_per_employer: int = 6,
+) -> list[dict]:
+    """Search the corpus and return EMPLOYERS, not company rows.
+
+    Two deliberate departures from the old listing:
+
+    * **Rolled up by identity.** `name_place` gives one row per site, so a
+      discounter with 200 branches produced 200 rows and buried every specialist
+      employer beneath it. Grouping by `normalized_name` turns that into
+      "Netto — 203 Standorte, 1,240 offene Rollen", which is one useful BD row
+      instead of 203 useless ones.
+    * **Matched on ROLES as well as names.** A recruiter asks "who is hiring
+      embedded engineers near Stuttgart", so a company qualifies when its
+      postings match, and the matching postings come back with it — the answer
+      has to show its own evidence.
+
+    Searchable text today is company name, city, posting title and occupation.
+    Posting descriptions are not stored (the source's search endpoint does not
+    return them), so this is keyword matching, not semantic retrieval.
+    """
+    candidates = select(HubCompany.id)
+
+    if q and q.strip():
+        needle = f"%{q.strip().lower()}%"
+        normalized = normalize_company_name(q)
+        by_company = select(HubCompany.id).where(
+            or_(
+                func.lower(HubCompany.name).like(needle),
+                func.lower(HubCompany.city).like(needle),
+                *(
+                    [HubCompany.normalized_name.like(f"%{normalized}%")]
+                    if normalized
+                    else []
+                ),
+            )
+        )
+        by_role = select(HubJobPosting.hub_company_id).where(
+            HubJobPosting.is_active.is_(True),
+            or_(
+                func.lower(HubJobPosting.title).like(needle),
+                func.lower(HubJobPosting.occupation).like(needle),
+            ),
+        )
+        candidates = candidates.where(
+            or_(HubCompany.id.in_(by_company), HubCompany.id.in_(by_role))
+        )
+
+    if city and city.strip():
+        candidates = candidates.where(
+            func.lower(HubCompany.city).like(f"%{city.strip().lower()}%")
+        )
+
+    roles = func.sum(HubCompany.open_postings_count)
+    grouped = await session.execute(
+        select(
+            HubCompany.normalized_name,
+            func.count(HubCompany.id).label("sites"),
+            roles.label("roles"),
+            # Shortest name is the least cluttered of the variants a source
+            # emits ("Netto Marken-Discount Stiftung & Co. KG" vs the same plus
+            # a branch suffix).
+            func.min(HubCompany.name).label("name"),
+        )
+        .where(HubCompany.id.in_(candidates))
+        .group_by(HubCompany.normalized_name)
+        .having(roles >= min_roles)
+        .order_by(roles.desc(), func.min(HubCompany.name))
+        .limit(limit)
+    )
+    groups = grouped.all()
+    if not groups:
+        return []
+
+    names = [row.normalized_name for row in groups]
+
+    # Sites per employer: cities, and the strongest identity any site carries.
+    site_rows = await session.execute(
+        select(
+            HubCompany.id,
+            HubCompany.normalized_name,
+            HubCompany.city,
+            HubCompany.resolution_basis,
+            HubCompany.website_domain,
+        ).where(HubCompany.normalized_name.in_(names))
+    )
+    cities: dict[str, list[str]] = {}
+    basis: dict[str, str] = {}
+    domains: dict[str, str] = {}
+    ids: dict[str, list[uuid.UUID]] = {}
+    for row in site_rows.all():
+        ids.setdefault(row.normalized_name, []).append(row.id)
+        if row.city:
+            bucket = cities.setdefault(row.normalized_name, [])
+            if row.city not in bucket:
+                bucket.append(row.city)
+        current = basis.get(row.normalized_name)
+        if current is None or _BASIS_RANK.get(
+            row.resolution_basis, 9
+        ) < _BASIS_RANK.get(current, 9):
+            basis[row.normalized_name] = row.resolution_basis
+        if row.website_domain and row.normalized_name not in domains:
+            domains[row.normalized_name] = row.website_domain
+
+    # The roles that justify each hit. Filtered by the same query, so the result
+    # shows why the employer matched rather than an arbitrary sample.
+    role_stmt = (
+        select(HubJobPosting, HubCompany.normalized_name)
+        .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
+        .where(
+            HubCompany.normalized_name.in_(names),
+            HubJobPosting.is_active.is_(True),
+        )
+        .order_by(HubJobPosting.posted_at.desc().nulls_last())
+    )
+    if q and q.strip():
+        needle = f"%{q.strip().lower()}%"
+        role_stmt = role_stmt.where(
+            or_(
+                func.lower(HubJobPosting.title).like(needle),
+                func.lower(HubJobPosting.occupation).like(needle),
+                func.lower(HubCompany.name).like(needle),
+                func.lower(HubCompany.city).like(needle),
+            )
+        )
+    matched: dict[str, list[HubJobPosting]] = {}
+    for posting, name in (await session.execute(role_stmt.limit(limit * 40))).all():
+        bucket = matched.setdefault(name, [])
+        if len(bucket) < roles_per_employer:
+            bucket.append(posting)
+
+    return [
+        {
+            "normalized_name": row.normalized_name,
+            "name": row.name,
+            "sites": row.sites,
+            "open_roles": int(row.roles or 0),
+            "cities": cities.get(row.normalized_name, [])[:6],
+            "city_count": len(cities.get(row.normalized_name, [])),
+            "resolution_basis": basis.get(row.normalized_name, "name_place"),
+            "website_domain": domains.get(row.normalized_name),
+            "hub_company_ids": ids.get(row.normalized_name, []),
+            "matching_roles": matched.get(row.normalized_name, []),
+        }
+        for row in groups
+    ]
+
+
 # --------------------------------------------------------------------------
 # Tenant overlay — this is where tenant_id (and the JWT) actually matter
 # --------------------------------------------------------------------------

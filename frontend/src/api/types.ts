@@ -204,6 +204,36 @@ export interface HubIngestSummaryDTO {
   notes: string[]
 }
 
+/** Corpus-wide totals, counted in the database rather than over a page. */
+export interface HubCorpusStatsDTO {
+  companies: number
+  /** Distinct employers after collapsing one-row-per-site fragmentation. */
+  employers: number
+  hiring: number
+  open_postings: number
+  cities: number
+  unverified_identity: number
+  sources: number
+  last_ingest_at: string | null
+}
+
+/** One employer in a search result — a rollup across sites, not a corpus row. */
+export interface HubEmployerHitDTO {
+  normalized_name: string
+  name: string
+  /** How many corpus rows (branches/sites) this employer collapses into. */
+  sites: number
+  open_roles: number
+  cities: string[]
+  city_count: number
+  resolution_basis: 'vat' | 'register' | 'domain' | 'name_place'
+  website_domain: string | null
+  hub_company_ids: string[]
+  /** The roles that justify the hit — the answer carries its own evidence. */
+  matching_roles: HubJobPostingDTO[]
+  tracked: boolean
+}
+
 /** One workspace's relationship to a corpus company — the tenant boundary. */
 export interface HubCompanyLinkDTO {
   id: string
