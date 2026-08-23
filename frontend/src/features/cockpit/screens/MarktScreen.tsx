@@ -23,14 +23,15 @@ import {
   Bookmark,
   BookmarkCheck,
   Building2,
+  Check,
+  ChevronDown,
   ExternalLink,
   Globe,
   MapPin,
-  Check,
-  ChevronDown,
   Search,
   Star,
   Trash2,
+  UserRound,
   X,
 } from 'lucide-react'
 import { api } from '@/api/client'
@@ -327,6 +328,17 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
         <Chip tone={identity.tone} className="cursor-help">
           <span title={identity.title}>{identity.label}</span>
         </Chip>
+        {hit.suspected_natural_person && (
+          <Chip tone="coral" className="cursor-help">
+            <span
+              title="Der Firmenname sieht nach einer natürlichen Person aus (Einzelunternehmen). Damit stehen personenbezogene Daten im geteilten Korpus — automatisch erkannt, nicht geprüft."
+              className="flex items-center gap-1"
+            >
+              <UserRound className="h-3 w-3" />
+              mögl. Person
+            </span>
+          </Chip>
+        )}
 
         <span className="ml-auto flex items-center gap-4 font-mono text-[13px] text-cockpit-faint">
           {hit.sites > 1 && (
@@ -363,15 +375,23 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
               {role.remote_possible && <Chip tone="lav">Homeoffice</Chip>}
               <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
                 <span>{dateDe(role.posted_at)}</span>
-                {role.source_url && (
+                {/* The employer's own ad when the source has one, otherwise the
+                    agency's page derived from the reference number — so every
+                    posting opens somewhere instead of most being dead ends. */}
+                {(role.source_url ?? role.detail_url) && (
                   <a
-                    href={role.source_url}
+                    href={role.source_url ?? role.detail_url ?? undefined}
                     target="_blank"
                     rel="noreferrer noopener"
                     className="flex items-center gap-1 transition-colors hover:text-mint-400"
-                    title="Original-Stellenanzeige öffnen"
+                    title={
+                      role.source_url
+                        ? 'Original-Stellenanzeige beim Unternehmen öffnen'
+                        : 'Anzeige bei der Bundesagentur für Arbeit öffnen'
+                    }
                   >
-                    Quelle <ExternalLink className="h-3 w-3" />
+                    {role.source_url ? 'Quelle' : 'Anzeige'}
+                    <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
               </span>
@@ -535,6 +555,12 @@ export function MarktScreen() {
                 <span className="text-cockpit-text">{de(s.unverified_identity)}</span> ohne
                 Registerprüfung
               </span>
+              {s.suspected_personal_data > 0 && (
+                <span title="Firmennamen, die nach natürlichen Personen aussehen (Einzelunternehmen) — personenbezogene Daten im geteilten Korpus">
+                  <span className="text-coral-400">{de(s.suspected_personal_data)}</span> mögl.
+                  Personen
+                </span>
+              )}
             </>
           ) : (
             <span>{stats.error ? 'Korpus nicht erreichbar' : 'lädt Kennzahlen…'}</span>

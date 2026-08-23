@@ -41,6 +41,7 @@ from app.domain.hub.models import (
 from app.domain.hub.resolution import (
     extract_legal_form,
     identity_key,
+    looks_like_natural_person,
     normalize_company_name,
     normalize_domain,
 )
@@ -265,6 +266,7 @@ async def ingest(
                 latitude=sourced.latitude,
                 longitude=sourced.longitude,
                 industry=sourced.industry,
+                suspected_natural_person=looks_like_natural_person(sourced.name),
                 source=result.source,
                 first_seen_at=now,
                 last_seen_at=now,
@@ -646,6 +648,15 @@ async def corpus_stats(session: AsyncSession) -> dict:
             )
         ) or 0,
         # How much of the corpus rests on the weakest identity rung.
+        # Rows whose NAME looks like a person's — sole traders. Counted so the
+        # GDPR exposure of a shared corpus is a number on screen, not a footnote.
+        "suspected_personal_data": (
+            await session.scalar(
+                select(func.count(HubCompany.id)).where(
+                    HubCompany.suspected_natural_person.is_(True)
+                )
+            )
+        ) or 0,
         "unverified_identity": (
             await session.scalar(
                 select(func.count(HubCompany.id)).where(
