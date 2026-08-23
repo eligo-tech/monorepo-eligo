@@ -54,9 +54,20 @@ These are enforced in code. Do not route around them.
   `app.domain.verification.service.verify_and_commit`, invoked via
   `Agent.commit`. It runs postconditions, checks confidence, writes an
   `EnrichmentRecord`, and appends `Receipt`s.
-- `Receipt`s are **append-only and hash-chained per tenant**. There is no
-  update/delete path and no endpoint to create one directly. `verify_chain`
-  can recompute the chain to prove it hasn't been tampered with.
+- `Receipt`s are **append-only and hash-chained per tenant**, enforced by the
+  DATABASE and not by convention: triggers refuse UPDATE and DELETE for every
+  connection including the owner (attached to the table in `models.py`, so both
+  `create_all` and Alembic install them), and migration 0014 additionally
+  revokes both privileges from the runtime role.
+- Position is explicit. `chain_index` is a per-tenant sequence and
+  `UNIQUE (tenant_id, chain_index)` is what makes the chain single-headed:
+  reading the head and inserting is not atomic, so concurrent appends would
+  otherwise both claim the same predecessor and make a valid workload look like
+  tampering. `append_receipt` retries on conflict inside a SAVEPOINT, so a lost
+  race never rolls back the caller's other work.
+- `verify_chain` checks hashes AND contiguity — a hash chain alone would not
+  notice a removed row whose successor was re-pointed. **Truncation at the head
+  is still invisible from inside**; that needs an externally anchored head.
 - Rationale: EU AI Act traceability + GDPR Art. 22 (a human-contestable trail
   behind every automated action).
 

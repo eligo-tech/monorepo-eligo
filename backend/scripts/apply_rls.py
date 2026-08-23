@@ -88,6 +88,12 @@ async def _ensure_app_role(conn) -> None:
     await conn.execute(text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}"))
     await conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {role}"))
     await conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO {role}"))
+    # The blanket GRANT above would hand the runtime role UPDATE and DELETE on
+    # the receipt ledger, which is the whole point of it being append-only: one
+    # stolen application credential could otherwise rewrite history and
+    # recompute every hash. Triggers (migration 0014) refuse the operation even
+    # for the owner; this makes sure the app role never holds the privilege.
+    await conn.execute(text(f"REVOKE UPDATE, DELETE ON receipts FROM {role}"))
     print(f"  ✓ app role {role} ready (NOBYPASSRLS) + DML grants · {login}")
 
 
