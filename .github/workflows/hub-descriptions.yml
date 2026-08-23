@@ -19,9 +19,9 @@ on:
         required: false
         default: "500"
       batch:
-        description: "Postings per request (the server paces itself between fetches)"
+        description: "Postings per request — larger means a longer-held request, which is what a proxy times out"
         required: false
-        default: "50"
+        default: "25"
 
 concurrency:
   # Never let two passes fetch the same postings at once.
@@ -52,7 +52,7 @@ jobs:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
           TARGET: ${{ github.event.inputs.target || '500' }}
-          BATCH: ${{ github.event.inputs.batch || '50' }}
+          BATCH: ${{ github.event.inputs.batch || '25' }}
         run: |
           if [ "$TARGET" = "all" ]; then
             python -m scripts.hub_descriptions --all --batch "$BATCH"
