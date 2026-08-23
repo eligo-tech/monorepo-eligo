@@ -12,27 +12,33 @@ database. That is deliberate:
     ELIGO_API_BASE=https://…/api/v1 ELIGO_INGEST_TOKEN=… \
       python -m scripts.hub_daily
 
-**Germany-wide, and it measures how much of Germany it actually got.**
+**Germany-wide, sharded by occupational field, and it measures its own coverage.**
 
 Sharding is forced: the API refuses `page > 100`, so any single query reaches at
 most 10,000 results, while Germany has ~709,700 open postings and ~30,100 new
 ones per day. One query can never see the country.
 
-The shard key is the Bundesland, which is the coarsest key that fits under the
-cap — but it is NOT exhaustive, and that must not be papered over. `wo=` is a
-place-NAME lookup, not a region selector, so Bundesländer whose names are also
-villages resolve to the village: measured 2026-08-21, `wo=Hessen` → 82 postings,
-`wo=Brandenburg` → 62, `wo=Sachsen` → 63, for entire states. No spelling variant
-fixes it (`Land Hessen` → 66, `Freistaat Sachsen` → 57), and the `arbeitsort_plz`
-facet is truncated to the top 200 entries, so it cannot supply a shard plan
-either.
+The shard key is `berufsfeld`, and the shard plan comes from the API's own
+response facets — not a list in this file that would silently go stale.
+Measured 2026-08-22 on one day's postings:
 
-Summed, the 16 shards cover **~83%** of the nationwide daily total. The honest
-fix is sharding by all ~8,200 five-digit PLZ, which IS exhaustive because every
-posting has exactly one — that is a follow-up, not something to fake here.
+    berufsfeld   127 fields, 99.4% coverage, 1 field over the 10k cap
+    Bundesland    16 shards,  81.2% coverage, 0 shards over the cap
 
-Until then this job PROBES the nationwide total and reports the coverage it
-achieved, so the shortfall is visible every night instead of being assumed away.
+Bundesland's shortfall is not size. `wo=` is a place-NAME lookup, not a region
+selector, so states whose names are also villages resolve to the village:
+`wo=Hessen` → 82 postings for the entire state, `wo=Sachsen` → 63. No spelling
+variant fixes it, and no sub-sharding fixes a query pointed at the wrong place.
+`berufsfeld` has no such hole.
+
+It is also the ONLY way a posting learns its own field: the source never returns
+`berufsfeld` per record, only in facets, so a posting carries one exactly when a
+crawl asked for that field. The shard key and the UI filter are the same fact.
+
+A field over the cap is split by Bundesland — losing part of one field rather
+than the whole crawl, and the coverage line reports whatever was lost. The job
+probes the nationwide total every run and prints the coverage it achieved, so a
+shortfall is visible rather than assumed away.
 
 **Delta, not full re-crawl.** `--since 1` fetches only what was published in the
 last day: new postings INSERT, re-published ones UPDATE, the rest of the corpus
@@ -101,6 +107,7 @@ async def _ingest_region(
     delay: float = 0.0,
     what: str | None = None,
     berufsfeld: str | None = None,
+    primary: bool = False,
 ) -> dict[str, int]:
     totals = {
         "pages": 0, "fetched": 0, "companies": 0, "postings": 0, "updated": 0,
@@ -128,9 +135,9 @@ async def _ingest_region(
         )
         response.raise_for_status()
         summary = response.json()
-        if page == 1 and what is None and berufsfeld is None:
-            # Only regional shards count toward coverage; a keyword slice is a
-            # subset of them and would inflate the figure.
+        if page == 1 and primary:
+            # Only the PRIMARY sweep counts toward coverage. A saved-search
+            # keyword slice is a subset of it and would inflate the figure.
             totals["available"] = summary.get("total_available") or 0
 
         # A shard bigger than the ceiling cannot be fully read. Say so rather
@@ -209,12 +216,11 @@ async def main() -> int:
         "public service is a design constraint, not an obstacle.",
     )
     parser.add_argument(
-        "--by-berufsfeld",
+        "--by-region",
         action="store_true",
-        help="shard by occupational field instead of Bundesland. 144 values, "
-        "99.4%% of the daily delta versus 81%% for Bundesland — because `wo=` "
-        "matches place names and loses whole states. Also the only way postings "
-        "acquire a `berufsfeld`, which is what the UI filter needs.",
+        help="shard by Bundesland instead of occupational field. The old "
+        "behaviour, kept as an escape hatch: it reaches only ~81%% of the daily "
+        "delta because `wo=` matches place names and loses whole states.",
     )
     parser.add_argument(
         "--no-profiles",
@@ -273,9 +279,50 @@ async def main() -> int:
                 },
             )
             probe.raise_for_status()
-            national_total = probe.json().get("total_available") or 0
+            body = probe.json()
+            national_total = body.get("total_available") or 0
+            shard_plan = body.get("shard_plan") or []
         except Exception as exc:
-            print(f"  coverage probe failed: {exc}", file=sys.stderr)
+            print(f"  probe failed: {exc}", file=sys.stderr)
+            shard_plan = []
+
+        # --- primary sweep -------------------------------------------------
+        if not args.by_region and shard_plan:
+            for entry in shard_plan:
+                field, expected = entry["value"], entry["count"]
+                print(f"  {field}  ({expected})")
+                # Oversized fields cannot be read whole; split them by
+                # Bundesland. `wo=` is unreliable for a few states, so this
+                # loses part of ONE field rather than the whole crawl — and the
+                # coverage line reports whatever was lost.
+                sub_shards: list[str | None] = (
+                    BUNDESLAENDER if expected > _RESULT_CEILING else [None]
+                )
+                if len(sub_shards) > 1:
+                    print(
+                        f"    ! {field}: {expected} exceeds the {_RESULT_CEILING} "
+                        f"cap — splitting by Bundesland",
+                        file=sys.stderr,
+                    )
+                for sub in sub_shards:
+                    try:
+                        totals = await _ingest_region(
+                            client,
+                            region=sub,
+                            radius_km=0,
+                            since_days=args.since,
+                            max_pages=args.max_pages,
+                            delay=args.delay,
+                            berufsfeld=field,
+                            primary=True,
+                        )
+                    except Exception as exc:
+                        print(f"    FAILED: {exc}", file=sys.stderr)
+                        failures.append(field)
+                        continue
+                    for key in grand:
+                        grand[key] += totals[key]
+            regions = []  # the field sweep replaces the regional one
 
         for region in regions:
             print(f"  {region}")
@@ -287,6 +334,7 @@ async def main() -> int:
                     since_days=args.since,
                     max_pages=args.max_pages,
                     delay=args.delay,
+                    primary=True,
                 )
             except Exception as exc:
                 # One bad region must not silently shrink the corpus refresh.
@@ -317,7 +365,7 @@ async def main() -> int:
                 )
                 print(f"    {label}")
                 try:
-                    totals = await _run_shard(
+                    totals = await _ingest_region(
                         client,
                         region=directive.get("city"),
                         radius_km=directive.get("radius_km") or 0,
@@ -368,8 +416,17 @@ async def main() -> int:
         )
         # Bundesland shards are known-incomplete (~83%); print it every run so
         # the gap stays visible rather than becoming an assumption.
-        print(line if pct >= 95 else f"{line} — shards are not exhaustive; "
-              f"PLZ-level sharding is the fix", file=sys.stdout if pct >= 95 else sys.stderr)
+        # Below the threshold, say WHERE the loss is rather than repeating a
+        # generic remedy: with berufsfeld shards the residue is one oversized
+        # field split by Bundesland, which is a different problem from the
+        # structural hole the Bundesland-only sweep had.
+        print(
+            line
+            if pct >= 95
+            else f"{line} — the shortfall is an oversized field split by "
+            f"Bundesland, whose `wo=` lookup loses some states",
+            file=sys.stdout if pct >= 95 else sys.stderr,
+        )
     if failures:
         print(f"FAILED: {', '.join(failures)}", file=sys.stderr)
         return 1

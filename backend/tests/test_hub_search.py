@@ -77,12 +77,18 @@ async def corpus():
         b = await _company(s, "Embedded Systems GmbH", "Stuttgart", "k4", 2)
         c = await _company(s, "Klinikum Musterstadt", "Stuttgart", "k5", 1)
         await s.flush()
+        # As many postings as each site's counter claims — the fixture has to be
+        # internally consistent now that the reported number IS a count of
+        # matching postings rather than a denormalized column.
         regions = ("BERLIN", "NORDRHEIN_WESTFALEN", "BADEN_WUERTTEMBERG")
-        for i, (comp, region) in enumerate(zip((a1, a2, a3), regions)):
-            await _posting(
-                s, comp, "Verkäufer (m/w/d)", f"n{i}", "Verkäufer/in",
-                berufsfeld="Verkauf", region=region,
-            )
+        for site, (comp, region) in enumerate(
+            zip((a1, a2, a3), regions, strict=True)
+        ):
+            for n in range(comp.open_postings_count):
+                await _posting(
+                    s, comp, "Verkäufer (m/w/d)", f"n{site}-{n}", "Verkäufer/in",
+                    berufsfeld="Verkauf", region=region,
+                )
         await _posting(
             s, b, "Embedded Software Entwickler", "e1", "Softwareentwickler/in",
             berufsfeld="Softwareentwicklung", region="BADEN_WUERTTEMBERG",
@@ -104,7 +110,7 @@ async def test_stats_count_the_corpus_not_a_page(corpus) -> None:
     assert stats["companies"] == 5
     # Three Netto rows collapse to one employer, so 5 rows are 3 employers.
     assert stats["employers"] == 3
-    assert stats["open_postings"] == 6
+    assert stats["open_postings"] == 9   # 2+3+1 Verkauf, 2 Software, 1 Pflege
     assert stats["cities"] == 4          # Berlin, Köln, Ulm, Stuttgart
     assert stats["unverified_identity"] == 5
     assert stats["last_ingest_at"] is None  # nothing ingested, only seeded
@@ -116,9 +122,48 @@ async def test_search_rolls_branches_up_into_one_employer(corpus) -> None:
     assert len(hits) == 1, "238 branches must not be 238 rows"
     hit = hits[0]
     assert hit["sites"] == 3
+    # A hit on the COMPANY name makes all of its roles relevant.
     assert hit["open_roles"] == 6          # 2 + 3 + 1
     assert set(hit["cities"]) == {"Berlin", "Köln", "Ulm"}
     assert hit["city_count"] == 3
+
+
+async def test_the_count_matches_the_evidence(corpus) -> None:
+    """The headline number must count the SAME roles it lists underneath.
+
+    Regression: `open_roles` was SUM(open_postings_count) — every active posting
+    at the employer — while the list was filtered. A search for "Embedded" then
+    reported "2 Rollen" above a single Embedded role, which a recruiter reads as
+    two Embedded vacancies.
+    """
+    async with SessionLocal() as s:
+        # "Firmware" hits ONE of Embedded Systems GmbH's two roles, and does not
+        # appear in the company name — so this isolates role matching. Searching
+        # "Embedded" would legitimately return both, because the company itself
+        # matches and then all of its roles are relevant.
+        hits = await service.search_employers(s, q="Firmware")
+    assert len(hits) == 1
+    assert hits[0]["open_roles"] == 1, "counted roles that did not match"
+    assert len(hits[0]["matching_roles"]) == 1
+    assert hits[0]["open_roles"] == len(hits[0]["matching_roles"])
+
+
+async def test_a_company_name_hit_counts_all_of_its_roles(corpus) -> None:
+    """The other half of the rule: match the employer, and every role counts."""
+    async with SessionLocal() as s:
+        hits = await service.search_employers(s, q="Embedded Systems")
+    assert hits[0]["open_roles"] == 2
+    assert len(hits[0]["matching_roles"]) == 2
+
+
+async def test_the_count_respects_structured_filters_too(corpus) -> None:
+    async with SessionLocal() as s:
+        hits = await service.search_employers(
+            s, berufsfelder=["Softwareentwicklung"], regions=["BAYERN"]
+        )
+    # Two software roles exist, but only one is in Bayern.
+    assert hits[0]["open_roles"] == 1
+    assert [r.region for r in hits[0]["matching_roles"]] == ["BAYERN"]
 
 
 async def test_search_matches_on_roles_not_only_names(corpus) -> None:
@@ -214,7 +259,7 @@ async def test_facets_are_derived_from_the_corpus(corpus) -> None:
     async with SessionLocal() as s:
         facets = await service.corpus_facets(s)
     fields = {f["value"]: f["count"] for f in facets["berufsfelder"]}
-    assert fields == {"Verkauf": 3, "Softwareentwicklung": 2, "Krankenpflege": 1}
+    assert fields == {"Verkauf": 6, "Softwareentwicklung": 2, "Krankenpflege": 1}
     regions = {r["value"] for r in facets["regions"]}
     assert "BAYERN" in regions
     # Options are ordered by volume so the useful ones surface first.

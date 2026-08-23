@@ -15,7 +15,7 @@ from httpx import ASGITransport, AsyncClient
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.domain.searches import service
-from app.domain.searches.schemas import SavedSearchCreate, SavedSearchUpdate
+from app.domain.searches.schemas import SavedSearchCreate
 from app.main import app
 
 
@@ -71,8 +71,13 @@ async def test_crud_round_trip(client) -> None:
 
 
 async def test_labels_are_unique_per_workspace(client) -> None:
+    from sqlalchemy.exc import IntegrityError
+
     await client.post("/api/v1/searches", json={"label": "dup", "q": "a"})
-    with pytest.raises(Exception):
+    # The DB constraint is what enforces this, so assert on IT rather than on
+    # "something raised" — a blind Exception would also pass if the request
+    # failed for an unrelated reason.
+    with pytest.raises(IntegrityError):
         await client.post("/api/v1/searches", json={"label": "dup", "q": "b"})
 
 

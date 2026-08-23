@@ -34,6 +34,11 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
+      - name: Lint
+        # Catches undefined names and unused imports — the class of bug tests
+        # miss when the code path is only reached in production.
+        run: ruff check app scripts tests
+
       - name: Run tests
         # Runs on the SQLite fallback — no external services or secrets needed.
         env:

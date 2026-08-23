@@ -178,6 +178,9 @@ def parse_response(
         robots_allowed=True,  # documented API, not a scrape
         postings=postings,
         total_available=payload.get("maxErgebnisse"),
+        facet_counts=(payload.get("facetten") or {})
+        .get("berufsfeld", {})
+        .get("counts", {}),
         content_hash=hashlib.sha256(
             json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest(),

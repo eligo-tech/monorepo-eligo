@@ -125,12 +125,15 @@ function FacetFilter({
   selected,
   onChange,
   format = (v: string) => v,
+  emptyHint,
 }: {
   label: string
   options: FacetValueDTO[]
   selected: string[]
   onChange: (next: string[]) => void
   format?: (value: string) => string
+  /** Why there is nothing to choose yet. A dead grey control explains nothing. */
+  emptyHint?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -156,9 +159,23 @@ function FacetFilter({
         : [...selected, value],
     )
 
+  if (options.length === 0) {
+    // Stay clickable and say why. The values arrive with ingestion, so an
+    // empty list means "not crawled yet", not "broken".
+    return (
+      <span
+        title={emptyHint}
+        className="flex cursor-help items-center gap-1.5 rounded-xl border border-dashed border-cockpit-line px-4 py-2 text-[14px] text-cockpit-faint"
+      >
+        {label}
+        <span className="font-mono text-[11px]">keine Werte</span>
+      </span>
+    )
+  }
+
   return (
     <div ref={ref} className="relative">
-      <Button onClick={() => setOpen((o) => !o)} disabled={options.length === 0}>
+      <Button onClick={() => setOpen((o) => !o)}>
         {label}
         {selected.length > 0 && (
           <span className="rounded-md bg-mint-800/70 px-1.5 font-mono text-[12px] text-mint-300">
@@ -317,7 +334,7 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
               <span className="text-cockpit-text">{de(hit.sites)}</span> Standorte
             </span>
           )}
-          <span>
+          <span title="Treffer für diese Suche — nicht alle offenen Rollen des Unternehmens">
             <span className="text-[15px] text-cockpit-text">{de(hit.open_roles)}</span> Rollen
           </span>
           <Button onClick={toggle} disabled={saving || !anchorId} tone={tracked ? 'primary' : 'ghost'}>
@@ -360,6 +377,11 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
               </span>
             </li>
           ))}
+          {hit.open_roles > hit.matching_roles.length && (
+            <li className="px-0 pt-1 font-mono text-[12px] text-cockpit-faint">
+              +{de(hit.open_roles - hit.matching_roles.length)} weitere Treffer
+            </li>
+          )}
         </ul>
       )}
     </Panel>
@@ -555,12 +577,14 @@ export function MarktScreen() {
             selected={regions}
             onChange={setRegions}
             format={prettyRegion}
+            emptyHint="Das Bundesland wird beim Ingest aus der Adresse der Anzeige übernommen. Anzeigen, die vor Einführung des Feldes erfasst wurden, tragen es erst nach dem nächsten Lauf."
           />
           <FacetFilter
             label="Berufsfeld"
             options={facets.data?.berufsfelder ?? []}
             selected={berufsfelder}
             onChange={setBerufsfelder}
+            emptyHint="Das Berufsfeld liefert die Quelle nicht pro Anzeige — es entsteht nur, wenn der nächtliche Lauf gezielt danach fragt. Werte erscheinen nach dem ersten berufsfeld-Durchlauf."
           />
           <Button tone="primary" onClick={run} disabled={results.loading}>
             <Search className="h-4 w-4" />

@@ -32,3 +32,5 @@ venv/
 .data/
 
 DEPLOY.md
+# Local editor/tool configs — machine-specific, often carry localhost ports
+.codex/

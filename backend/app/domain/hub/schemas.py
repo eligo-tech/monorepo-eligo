@@ -227,3 +227,6 @@ class IngestSummary(BaseModel):
     rejected: list[RejectedRecord] = Field(default_factory=list)
     # The gate's verdicts, in runbook order — the verification trace.
     notes: list[str] = Field(default_factory=list)
+    # How the source says this result set divides — the crawler's shard plan,
+    # taken from the API's own facets rather than a list in our code.
+    shard_plan: list[dict] = Field(default_factory=list)

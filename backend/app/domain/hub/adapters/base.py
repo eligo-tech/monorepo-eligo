@@ -104,6 +104,9 @@ class FetchResult:
     total_available: int | None = None
     content_hash: str | None = None
     note: str | None = None
+    # How the source says this result set divides (Bundesagentur: the
+    # `berufsfeld` facet). The crawler's shard plan, straight from the API.
+    facet_counts: dict[str, int] = field(default_factory=dict)
 
 
 @runtime_checkable
