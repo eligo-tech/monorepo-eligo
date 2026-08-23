@@ -24,9 +24,11 @@ product with an SLA. Fine to build on; not something to assume is guaranteed.
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import hashlib
 import json
+import re
 from typing import Any
 
 import httpx
@@ -44,6 +46,10 @@ logger = get_logger(__name__)
 
 SOURCE_NAME = "bundesagentur"
 _SEARCH_PATH = "/pc/v6/jobs"
+# Full ad text lives behind a per-record call, keyed on base64 of the reference
+# number. The search endpoint never returns it — which is why the corpus could
+# search titles only, and why 95% of TypeScript roles were unfindable.
+_DETAIL_PATH = "/pc/v4/jobdetails"
 
 
 def _parse_dt(value: str | None) -> dt.datetime | None:
@@ -187,6 +193,11 @@ def parse_response(
     )
 
 
+def _strip_markup(text: str) -> str:
+    """The field is mostly plain text but carries occasional HTML."""
+    return re.sub(r"<[^>]+>", " ", text)
+
+
 class BundesagenturAdapter:
     """`SourceAdapter` over the Jobsuche API."""
 
@@ -264,3 +275,30 @@ class BundesagenturAdapter:
             http_status=response.status_code,
             berufsfeld=query.berufsfeld,
         )
+
+    async def fetch_description(self, external_id: str) -> str | None:
+        """Full ad text for one posting. ONE request — call it sparingly.
+
+        Fetching the whole corpus this way would be ~26,000 requests against a
+        free public service for ads nobody will place. Callers prioritise by
+        saved search, so the text deepens where people actually recruit.
+        """
+        encoded = base64.b64encode(external_id.encode()).decode()
+        url = f"{self._base_url}{_DETAIL_PATH}/{encoded}"
+        headers = {"X-API-Key": self._api_key, "User-Agent": self._user_agent}
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            response = await client.get(url, headers=headers)
+
+        if response.status_code != 200:
+            logger.info(
+                "no detail for %s (HTTP %s)", external_id, response.status_code
+            )
+            return None
+        payload = response.json()
+        text = (
+            payload.get("stellenbeschreibung")
+            or payload.get("stellenangebotsBeschreibung")
+            or ""
+        )
+        cleaned = _strip_markup(text).strip()
+        return cleaned or None

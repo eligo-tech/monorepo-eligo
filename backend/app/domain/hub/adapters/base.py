@@ -120,3 +120,8 @@ class SourceAdapter(Protocol):
     name: str
 
     async def fetch(self, query: SourceQuery) -> FetchResult: ...
+
+    # Optional. A source that publishes full ad text behind a per-record call
+    # implements this; callers probe with `hasattr` rather than requiring it,
+    # because most feeds return everything in the listing.
+    async def fetch_description(self, external_id: str) -> str | None: ...

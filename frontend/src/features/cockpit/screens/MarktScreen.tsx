@@ -37,6 +37,7 @@ import {
 import { api } from '@/api/client'
 import type {
   FacetValueDTO,
+  HubJobPostingDTO,
   HubCorpusStatsDTO,
   HubEmployerHitDTO,
   HubFacetsDTO,
@@ -292,6 +293,64 @@ function SavedSearches({
   )
 }
 
+/** One role, expandable to its full ad text when the corpus has it. */
+function RoleRow({ role }: { role: HubJobPostingDTO }) {
+  const [open, setOpen] = useState(false)
+  const link = role.source_url ?? role.detail_url
+  return (
+    <li className="border-b border-cockpit-line/30 pb-1 last:border-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        {role.description ? (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="flex items-center gap-1.5 text-left text-[14px] text-cockpit-text transition-colors hover:text-mint-400"
+          >
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 shrink-0 text-cockpit-faint transition-transform',
+                open && 'rotate-180',
+              )}
+            />
+            {role.title}
+          </button>
+        ) : (
+          <span className="text-[14px] text-cockpit-text">{role.title}</span>
+        )}
+        {role.city && <Chip>{role.city}</Chip>}
+        {role.remote_possible && <Chip tone="lav">Homeoffice</Chip>}
+        <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
+          <span>{dateDe(role.posted_at)}</span>
+          {/* The employer's own ad when the source has one, otherwise the
+              agency's page derived from the reference number — so every posting
+              opens somewhere instead of most being dead ends. */}
+          {link && (
+            <a
+              href={link}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="flex items-center gap-1 transition-colors hover:text-mint-400"
+              title={
+                role.source_url
+                  ? 'Original-Stellenanzeige beim Unternehmen öffnen'
+                  : 'Anzeige bei der Bundesagentur für Arbeit öffnen'
+              }
+            >
+              {role.source_url ? 'Quelle' : 'Anzeige'}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </span>
+      </div>
+      {open && role.description && (
+        <p className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 text-[13px] leading-relaxed text-cockpit-dim">
+          {role.description}
+        </p>
+      )}
+    </li>
+  )
+}
+
 function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
   const [tracked, setTracked] = useState(hit.tracked)
   const [saving, setSaving] = useState(false)
@@ -369,33 +428,7 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
       {hit.matching_roles.length > 0 && (
         <ul className="mt-3 space-y-1 border-t border-cockpit-line/60 pt-2.5">
           {hit.matching_roles.map((role) => (
-            <li key={role.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="text-[14px] text-cockpit-text">{role.title}</span>
-              {role.city && <Chip>{role.city}</Chip>}
-              {role.remote_possible && <Chip tone="lav">Homeoffice</Chip>}
-              <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
-                <span>{dateDe(role.posted_at)}</span>
-                {/* The employer's own ad when the source has one, otherwise the
-                    agency's page derived from the reference number — so every
-                    posting opens somewhere instead of most being dead ends. */}
-                {(role.source_url ?? role.detail_url) && (
-                  <a
-                    href={role.source_url ?? role.detail_url ?? undefined}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="flex items-center gap-1 transition-colors hover:text-mint-400"
-                    title={
-                      role.source_url
-                        ? 'Original-Stellenanzeige beim Unternehmen öffnen'
-                        : 'Anzeige bei der Bundesagentur für Arbeit öffnen'
-                    }
-                  >
-                    {role.source_url ? 'Quelle' : 'Anzeige'}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-              </span>
-            </li>
+            <RoleRow key={role.id} role={role} />
           ))}
           {hit.open_roles > hit.matching_roles.length && (
             <li className="px-0 pt-1 font-mono text-[12px] text-cockpit-faint">

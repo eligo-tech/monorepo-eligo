@@ -21,12 +21,13 @@ postconditions per record, and a re-query proving the rows landed.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import hashlib
 import json
 import uuid
 
-from sqlalchemy import Select, and_, func, or_, select, update
+from sqlalchemy import Select, and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -520,6 +521,99 @@ async def deactivate_stale_postings(
     return {"deactivated": len(posting_ids), "companies_recounted": len(company_ids)}
 
 
+async def fetch_missing_descriptions(
+    session: AsyncSession,
+    *,
+    adapter: SourceAdapter,
+    limit: int = 200,
+    priority_terms: list[str] | None = None,
+    delay: float = 0.3,
+) -> dict[str, int]:
+    """Fill in ad text for postings that have none, most useful first.
+
+    The listing endpoint never returns a description, so a corpus built from it
+    can only search headlines — and a stack is usually named in the body:
+    measured, 5% of TypeScript roles and 33% of Java roles carry the term in
+    their title. Everything else was unfindable.
+
+    Filling all of it would be one request per posting, ~26,000 against a free
+    public service, mostly for ads nobody will place. So `priority_terms` — the
+    union of saved searches — decides the order, and the text deepens where
+    people actually recruit. Called with no terms it simply takes the newest.
+
+    Idempotent and resumable: only rows with no description are considered, so
+    an interrupted run costs nothing and the next one continues.
+    """
+    if not hasattr(adapter, "fetch_description"):
+        return {"attempted": 0, "stored": 0, "empty": 0}
+
+    stmt = select(HubJobPosting).where(
+        HubJobPosting.is_active.is_(True),
+        HubJobPosting.description.is_(None),
+        HubJobPosting.source == adapter.name,
+    )
+    if priority_terms:
+        # Postings a saved profile would surface come first. A CASE rather than
+        # a filter, so the run still makes progress once those are exhausted.
+        wanted = or_(
+            *[
+                or_(
+                    func.lower(HubJobPosting.title).like(f"%{term}%"),
+                    func.lower(HubJobPosting.occupation).like(f"%{term}%"),
+                )
+                for term in priority_terms
+            ]
+        )
+        stmt = stmt.order_by(
+            case((wanted, 0), else_=1), HubJobPosting.posted_at.desc().nulls_last()
+        )
+    else:
+        stmt = stmt.order_by(HubJobPosting.posted_at.desc().nulls_last())
+
+    rows = (await session.execute(stmt.limit(limit))).scalars().all()
+    stored = empty = 0
+    for row in rows:
+        try:
+            text = await adapter.fetch_description(row.external_id)
+        except Exception as exc:
+            # One unreachable posting must not end the run.
+            logger.info("description fetch failed for %s: %s", row.external_id, exc)
+            text = None
+        if text:
+            row.description = text
+            stored += 1
+        else:
+            empty += 1
+        if delay:
+            await asyncio.sleep(delay)
+    await session.commit()
+
+    logger.info(
+        "descriptions: attempted=%d stored=%d empty=%d", len(rows), stored, empty
+    )
+    return {"attempted": len(rows), "stored": stored, "empty": empty}
+
+
+async def descriptions_progress(session: AsyncSession) -> dict[str, int]:
+    """How much of the active corpus is searchable by its text."""
+    total = (
+        await session.scalar(
+            select(func.count(HubJobPosting.id)).where(
+                HubJobPosting.is_active.is_(True)
+            )
+        )
+    ) or 0
+    with_text = (
+        await session.scalar(
+            select(func.count(HubJobPosting.id)).where(
+                HubJobPosting.is_active.is_(True),
+                HubJobPosting.description.is_not(None),
+            )
+        )
+    ) or 0
+    return {"active_postings": total, "with_description": with_text}
+
+
 # --------------------------------------------------------------------------
 # Corpus reads — shared, so no tenant filter
 # --------------------------------------------------------------------------
@@ -707,6 +801,27 @@ async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
 _BASIS_RANK = {"vat": 0, "register": 1, "domain": 2, "name_place": 3}
 
 
+def _term_matches(term: str):
+    """One search word, matched against everything a posting can be found by.
+
+    Includes the ad TEXT, so once descriptions are stored a search reaches the
+    requirements rather than only the headline — which is where a stack is
+    actually named: measured, only 5% of TypeScript roles and 33% of Java roles
+    carry the term in their title.
+
+    A hit on the COMPANY counts too, so searching "Netto" still reports Netto's
+    whole vacancy count rather than only ads with "Netto" in the title.
+    """
+    needle = f"%{term}%"
+    return or_(
+        func.lower(HubJobPosting.title).like(needle),
+        func.lower(HubJobPosting.occupation).like(needle),
+        func.lower(HubJobPosting.description).like(needle),
+        func.lower(HubCompany.name).like(needle),
+        func.lower(HubCompany.city).like(needle),
+    )
+
+
 async def search_employers(
     session: AsyncSession,
     *,
@@ -743,26 +858,37 @@ async def search_employers(
     """
     candidates = select(HubCompany.id)
 
-    if q and q.strip():
-        needle = f"%{q.strip().lower()}%"
-        normalized = normalize_company_name(q)
+    # EVERY word must match SOMEWHERE — the query is a set of terms, not a
+    # phrase. Matching `%python entwickler%` literally required the two words to
+    # be adjacent in that order, so "Pflegefachkraft als Praxisanleitung" was
+    # invisible to a search for "pflegefachkraft praxisanleitung". Measured on
+    # the corpus: that one query lost 5 of 5 real matches.
+    terms = [t for t in (q or "").lower().split() if t]
+
+    if terms:
         by_company = select(HubCompany.id).where(
-            or_(
-                func.lower(HubCompany.name).like(needle),
-                func.lower(HubCompany.city).like(needle),
-                *(
-                    [HubCompany.normalized_name.like(f"%{normalized}%")]
-                    if normalized
-                    else []
-                ),
-            )
+            *[
+                or_(
+                    func.lower(HubCompany.name).like(f"%{term}%"),
+                    func.lower(HubCompany.city).like(f"%{term}%"),
+                    HubCompany.normalized_name.like(
+                        f"%{normalize_company_name(term) or term}%"
+                    ),
+                )
+                for term in terms
+            ]
         )
-        by_role = select(HubJobPosting.hub_company_id).where(
-            HubJobPosting.is_active.is_(True),
-            or_(
-                func.lower(HubJobPosting.title).like(needle),
-                func.lower(HubJobPosting.occupation).like(needle),
-            ),
+        # A company also qualifies when one of its postings satisfies every
+        # term — matching per POSTING, not across the whole employer, so
+        # "python entwickler" does not hit a company that has a Python role and
+        # a separate unrelated Entwickler role.
+        by_role = (
+            select(HubJobPosting.hub_company_id)
+            .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
+            .where(
+                HubJobPosting.is_active.is_(True),
+                *[_term_matches(term) for term in terms],
+            )
         )
         candidates = candidates.where(
             or_(HubCompany.id.in_(by_company), HubCompany.id.in_(by_role))
@@ -797,18 +923,7 @@ async def search_employers(
     # is worse than no count; sharing the predicate makes them agree by
     # construction rather than by remembering to update both.
     role_match: list = [HubJobPosting.is_active.is_(True), *posting_filters]
-    if q and q.strip():
-        needle = f"%{q.strip().lower()}%"
-        role_match.append(
-            or_(
-                func.lower(HubJobPosting.title).like(needle),
-                func.lower(HubJobPosting.occupation).like(needle),
-                # A hit on the COMPANY makes all of its roles relevant: searching
-                # "Netto" should report Netto's whole vacancy count.
-                func.lower(HubCompany.name).like(needle),
-                func.lower(HubCompany.city).like(needle),
-            )
-        )
+    role_match.extend(_term_matches(term) for term in terms)
 
     roles = func.count(HubJobPosting.id)
     grouped = await session.execute(

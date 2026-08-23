@@ -27,6 +27,7 @@ from app.core.config import settings
 # routers; the first test fails loudly if they drift apart.
 DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     ("POST", "/hub/ingest"),
+    ("POST", "/hub/descriptions/fetch"),
     ("POST", "/hub/maintenance/expire-stale"),
     ("GET", "/hub/crawl-profiles"),
     ("POST", "/hub/crawl-profiles/mark-crawled"),

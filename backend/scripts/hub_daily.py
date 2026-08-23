@@ -69,6 +69,14 @@ handful of requests per profile, instead of fetching descriptions corpus-wide.
 The directives carry no tenant: the crawler learns what to fetch, never who
 asked.
 
+**Ad text is fetched on a budget.** The listing endpoint returns no description,
+so a corpus built from it can only search headlines — and a stack is usually
+named in the body: 5% of TypeScript roles and 33% of Java roles carry the term
+in their title. Filling every posting would be one request each, ~26,000 against
+a free service, mostly for ads nobody will place. So each run fetches
+`--descriptions` of them, ordered by the union of saved searches, and the corpus
+gains full text where people actually recruit.
+
 Exits non-zero if any shard fails, so the scheduler's own failure notification
 is the monitoring (SOC 2 CC7.2).
 """
@@ -221,6 +229,14 @@ async def main() -> int:
         help="shard by Bundesland instead of occupational field. The old "
         "behaviour, kept as an escape hatch: it reaches only ~81%% of the daily "
         "delta because `wo=` matches place names and loses whole states.",
+    )
+    parser.add_argument(
+        "--descriptions",
+        type=int,
+        default=300,
+        help="how many missing ad texts to fetch per run (0 disables). One "
+        "request each, so this is a budget, not a target: the corpus fills "
+        "over nights, prioritised by the union of saved searches.",
     )
     parser.add_argument(
         "--no-profiles",
@@ -385,6 +401,23 @@ async def main() -> int:
                     await client.post("/hub/crawl-profiles/mark-crawled", json=directives)
                 except Exception as exc:
                     print(f"  mark-crawled failed: {exc}", file=sys.stderr)
+
+        # --- ad text for what people actually search -----------------------
+        if args.descriptions > 0:
+            try:
+                response = await client.post(
+                    f"/hub/descriptions/fetch?limit={args.descriptions}"
+                )
+                response.raise_for_status()
+                d = response.json()
+                print(
+                    f"  Anzeigentexte: +{d['stored']} geholt "
+                    f"({d['empty']} ohne Text) · "
+                    f"{d['with_description']}/{d['active_postings']} durchsuchbar"
+                )
+            except Exception as exc:
+                print(f"  description fetch FAILED: {exc}", file=sys.stderr)
+                failures.append("descriptions")
 
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.

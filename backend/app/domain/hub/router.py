@@ -298,6 +298,35 @@ async def mark_profiles_crawled(
     return {"updated": await searches_service.mark_crawled(profiles)}
 
 
+@router.post("/descriptions/fetch")
+async def fetch_descriptions(
+    limit: int = Query(default=200, ge=1, le=2000),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Fill in ad text for postings that have none. Machine-only (RULE 1).
+
+    Ordered by the union of saved searches, so the corpus gains full text where
+    people actually recruit rather than uniformly across ads nobody will place.
+    """
+    profiles = await searches_service.list_crawl_profiles()
+    terms = sorted({t for p in profiles for t in p.q.lower().split() if len(t) > 2})
+    result = await service.fetch_missing_descriptions(
+        db, adapter=get_source_adapter("bundesagentur"), limit=limit,
+        priority_terms=terms,
+    )
+    return {**result, **await service.descriptions_progress(db)}
+
+
+@router.get("/descriptions/progress")
+async def descriptions_progress(
+    _tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """How much of the corpus is searchable by its text."""
+    return await service.descriptions_progress(db)
+
+
 @router.post("/maintenance/expire-stale")
 async def expire_stale_postings(
     days: int = Query(default=14, ge=1, le=365),

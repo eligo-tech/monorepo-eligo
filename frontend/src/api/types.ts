@@ -293,6 +293,7 @@ export interface HubJobPostingDTO {
   hub_company_id: string
   observation_id: string | null
   title: string
+  /** Full ad text. NULL until the nightly job has fetched it for this posting. */
   description: string | null
   occupation: string | null
   /** Coarse occupational field — stamped from the crawl shard, not the record. */
