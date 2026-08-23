@@ -1,0 +1,53 @@
+# Bulk ad-text pass — operator-triggered, never scheduled.
+#
+# The listing endpoint returns no description, so full text costs ONE request
+# per posting and there is no bulk call. That makes this a deliberate action
+# with a budget, not something to run nightly: the nightly job already tops up
+# a few hundred, and this is for the first fill or after adding a saved search
+# that opens a new slice of the market.
+#
+# Runs through the deployed API with the machine credential, so no database
+# credentials live in CI and the work is subject to the same operator-only
+# authorization as every other ingestion path (ARCHITECTURE.md RULE 1).
+name: Hub · fetch ad text
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Roughly how many descriptions to store this run"
+        required: false
+        default: "500"
+      batch:
+        description: "Postings per request (the server paces itself between fetches)"
+        required: false
+        default: "50"
+
+concurrency:
+  # Never let two passes fetch the same postings at once.
+  group: hub-descriptions
+  cancel-in-progress: false
+
+jobs:
+  descriptions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Fetch ad text
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+        run: |
+          python -m scripts.hub_descriptions \
+            --target "${{ github.event.inputs.target || '500' }}" \
+            --batch  "${{ github.event.inputs.batch  || '50' }}"
