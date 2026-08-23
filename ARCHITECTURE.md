@@ -34,29 +34,40 @@ route around it.
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-### RULE 1 — Ingestion is a scheduled job. No user, no UI.
+### RULE 1 — Ingestion is machine-triggered only.
 
-**Filling the corpus is never a user action.** No button, no request handler, and
-no page load may cause an outbound crawl of a public source. Ingestion runs on a
-schedule, unattended, authenticated by a machine credential.
+**No human-authenticated request may cause an outbound crawl of a public
+source.** Not from the UI, and not from a logged-in user calling the API.
 
-Why this is a rule and not a preference:
+The rule previously read "no request handler may crawl", which was false: the
+design *is* a request handler — the scheduler calls `POST /hub/ingest` and the
+crawl runs synchronously inside that request. A rule the code visibly
+contradicts gets read as aspiration, and that is how a critical hole shipped
+past a review that claimed to check for it.
 
-* **Layering.** A presentation control that performs an outbound HTTP crawl
-  collapses four layers into one. Presentation reads; ingestion writes.
-* **Third-party load.** N users × one button = N calls to a free public API for
-  data already held. Politeness to a public service is a design constraint.
-* **GDPR Art. 30 / SOC 2 CC7.** Collection must be a described, scheduled,
-  logged activity with a named lawful basis — not an unpredictable side effect
-  of someone clicking around.
-* **Attribution.** "Which user triggered this crawl?" is a question with no good
-  answer. "The nightly job ran at 03:00 and fetched these slices" is auditable.
+Three parts:
 
-The tenant identity of whoever *would* have triggered it is irrelevant: ingest
-writes shared rows and must never tag them with a tenant.
+1. **No human-authenticated or UI trigger.** A valid Clerk session is refused on
+   every operator endpoint.
+2. **Operator endpoints exist, machine credentials only.** `ELIGO_INGEST_TOKEN`,
+   no fallback, fail-closed: with no token configured and auth enabled, ingestion
+   returns 503 rather than accepting whoever asks.
+3. **Scheduler → job is HTTP today; a known deviation.** Holding a request open
+   across dozens of external calls gives no retry, no backpressure, and makes a
+   timeout indistinguishable from a failure. A queue would be better. Do not
+   resolve it by moving the crawl into a user-facing path.
 
-Consequence: a recruiter who wants fresher data does not get a crawl button.
-They get a corpus that is already current, and they *search* it.
+Enforced by `backend/tests/test_operator_endpoints.py`, which derives the
+machine-only route set from the app, requires it to match an explicit
+declaration, and attacks each route with a valid session for a real
+organisation. Verified by reintroducing the original bug and watching it fail.
+
+Reasons, in order of weight: N users × one trigger = N calls to a free public
+API for data already held; GDPR Art. 30 / SOC 2 CC7 require collection to be a
+described, scheduled, logged activity; "which user triggered this crawl?" has no
+good answer while "the nightly job ran at 03:17" is auditable; and an operator
+endpoint reachable by any tenant leaks `/hub/crawl-profiles` — the union of every
+workspace's saved-search terms.
 
 ### RULE 2 — The shared corpus holds company-level facts only. Never natural persons.
 
@@ -76,9 +87,15 @@ consent, purpose and retention are already per-customer.
 provenance, and route through the GDPR Art. 14 flow when sourced from a third
 party.
 
-Edge case that must be handled explicitly: **sole traders** (Einzelunternehmen,
-Freiberufler) whose company name *is* a person's name. These are personal data
-despite sitting in a company field. They must be flaggable and suppressible.
+Edge case, and it is not hypothetical: **sole traders** (Einzelunternehmen,
+Freiberufler) trade under their own name, so `hub_companies.name` is personal
+data while every column stays company-shaped. "Andreas Uwe Weiss" sat in the
+corpus unflagged, and a grep over column names can never find a person inside a
+column called `name`.
+
+`resolution.looks_like_natural_person` screens at ingest and sets
+`suspected_natural_person` — a screen, not a verdict, tuned to over-include. It
+flags; it does not remedy. Erasure still needs the suppression list below.
 
 ### RULE 3 — The tenant boundary is a table, not a column on shared data.
 

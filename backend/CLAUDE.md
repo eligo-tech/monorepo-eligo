@@ -151,11 +151,15 @@ These are enforced in code. Do not route around them.
   user, so `/hub/ingest` accepts a service token (`ELIGO_INGEST_TOKEN`) or a
   session JWT. Fail-closed — unset, only the Clerk path authenticates.
 
-### 2.7 Ingestion is a scheduled job. No user, no UI.
-- **Filling the corpus is never a user action.** No button, no request handler,
-  and no page load may cause an outbound crawl of a public source. Ingestion
-  runs on a schedule, unattended, authenticated by a machine credential
-  (`ELIGO_INGEST_TOKEN`). The frontend has no client method that can trigger it.
+### 2.7 Ingestion is machine-triggered only.
+- **No human-authenticated request may cause an outbound crawl.** Not from the
+  UI, not from a logged-in user calling the API. Operator endpoints *do* exist
+  and *are* request handlers — the scheduler calls `POST /hub/ingest` over HTTP —
+  but they accept `ELIGO_INGEST_TOKEN` only, with no fallback to the Clerk path.
+  Saying "no request handler may crawl" was false and let a critical hole ship.
+- Enforced by `tests/test_operator_endpoints.py`, which derives the machine-only
+  route set from the app and attacks each route with a valid user session. Add an
+  operator endpoint → declare it there, or the test fails.
 - Reasons, in order of weight: (1) a presentation control performing an outbound
   crawl collapses four layers into one; (2) N users × one button = N calls to a
   free public API for data already held; (3) GDPR Art. 30 / SOC 2 CC7 require
