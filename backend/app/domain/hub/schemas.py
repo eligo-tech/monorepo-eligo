@@ -12,7 +12,9 @@ import uuid
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from urllib.parse import quote
+
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class HubCompanyRead(BaseModel):
@@ -39,6 +41,7 @@ class HubCompanyRead(BaseModel):
     vat_id: str | None
     vat_verified_at: dt.datetime | None
     industry: str | None
+    suspected_natural_person: bool
     source: str
     open_postings_count: int
     bd_signals: dict = Field(default_factory=dict)
@@ -77,6 +80,8 @@ class HubJobPostingRead(BaseModel):
     posted_at: dt.datetime | None
     expires_at: dt.datetime | None
     source: str
+    # The EMPLOYER's own posting, when the source supplies one. Absent for most
+    # records: 4,317 of 6,958 in a live sample had none.
     source_url: str | None
     external_id: str
     first_seen_at: dt.datetime
@@ -84,6 +89,28 @@ class HubJobPostingRead(BaseModel):
     is_active: bool
     created_at: dt.datetime
     updated_at: dt.datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def detail_url(self) -> str | None:
+        """The source's own page for this posting, derived from its reference.
+
+        Most records carry no `externeURL` — 4,317 of 6,958 in a live sample —
+        which left the majority of postings unclickable. But every one has a
+        reference number, and the agency's page resolves from it directly:
+
+            https://www.arbeitsagentur.de/jobsuche/jobdetail/10001-1003370640-S
+
+        Derived rather than stored: no migration, no extra request, and it works
+        for every posting already in the corpus. `source_url` keeps its narrower
+        meaning — the EMPLOYER's own ad — so the two are not conflated.
+        """
+        if self.source == "bundesagentur" and self.external_id:
+            return (
+                "https://www.arbeitsagentur.de/jobsuche/jobdetail/"
+                + quote(self.external_id, safe="")
+            )
+        return None
 
 
 class HubObservationRead(BaseModel):
@@ -108,6 +135,7 @@ class HubCorpusStats(BaseModel):
     companies: int
     # Distinct employers after collapsing one-row-per-site fragmentation.
     employers: int
+    suspected_personal_data: int
     hiring: int
     open_postings: int
     cities: int
@@ -139,6 +167,7 @@ class HubEmployerHit(BaseModel):
     cities: list[str] = Field(default_factory=list)
     city_count: int
     resolution_basis: str
+    suspected_natural_person: bool = False
     website_domain: str | None = None
     hub_company_ids: list[uuid.UUID] = Field(default_factory=list)
     # The roles that justify the hit — the answer carries its own evidence.

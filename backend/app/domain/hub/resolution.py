@@ -188,3 +188,69 @@ def identity_key(
         return "name_place", f"name_place:{normalized}:{place.lower()}"
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Personal-data screening
+# ---------------------------------------------------------------------------
+
+# Tokens that mark an ORGANISATION. Matched as substrings, so "Bauleitung"
+# catches on "bau" and "Bundesstadt" on "stadt". German compounds make prefix
+# matching the practical choice.
+_ORG_MARKERS = (
+    "gmbh", "mbh", "aktienges", "verein", "verband", "stiftung", "genoss",
+    "gesellschaft", "holding", "group", "gruppe", "partner", "consult",
+    "service", "solution", "system", "technik", "technolog", "engineering",
+    "bau", "werk", "fabrik", "industrie", "handel", "markt", "vertrieb",
+    "logistik", "transport", "spedition", "klinik", "krankenhaus", "hospital",
+    "praxis", "apotheke", "pflege", "senior", "heim", "schule", "akademie",
+    "universit", "hochschul", "institut", "zentrum", "labor", "stadt",
+    "gemeinde", "kreis", "landrat", "amt", "behörde", "behoerde", "ministeri",
+    "bundes", "landes", "kirche", "caritas", "diakon", "hotel", "restaurant",
+    "gastro", "bank", "sparkasse", "versicher", "immobil", "energie", "stadtwerk",
+    "verwaltung", "agentur", "media", "digital", "software", "consulting",
+    "personal", "zeitarbeit", "aug", "e.v", "ev.", "kg", "ohg", "gbr",
+)
+
+
+def looks_like_natural_person(name: str | None) -> bool:
+    """Screening heuristic: does this company name look like a PERSON's name?
+
+    A sole trader (Einzelunternehmen, Freiberufler) often trades under their own
+    name, so `hub_companies.name` can itself be personal data even though every
+    column is company-shaped. "Andreas Uwe Weiss" is in the corpus today. No
+    check over column NAMES can catch that — the value is the problem, not the
+    field it sits in.
+
+    This is a SCREEN, not a verdict, and it is deliberately tuned to
+    over-include: a false positive costs a visible flag on a company, a false
+    negative silently keeps personal data in a shared cross-tenant table. It
+    never deletes or hides anything by itself — per §2.2's rule that fuzzy
+    judgements may surface things for a human but never decide them.
+
+    Rejects anything carrying a legal form or an organisational marker, then
+    accepts the remainder only if it reads like two or three capitalised words.
+    """
+    if not name:
+        return False
+    cleaned = name.strip()
+    if extract_legal_form(cleaned):
+        return False
+
+    lowered = fold_umlauts(cleaned).lower()
+    if any(marker in lowered for marker in _ORG_MARKERS):
+        return False
+    if any(ch.isdigit() for ch in cleaned):
+        return False
+    if "&" in cleaned or "+" in cleaned:
+        return False
+
+    words = cleaned.split()
+    if not 2 <= len(words) <= 3:
+        return False
+    # Every word alphabetic (allowing hyphens and the German set) and starting
+    # upper-case — "Andreas Uwe Weiss", "Anna-Lena Schmidt".
+    return all(
+        word[:1].isupper() and all(c.isalpha() or c in "-." for c in word)
+        for word in words
+    )

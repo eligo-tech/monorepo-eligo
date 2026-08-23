@@ -149,6 +149,23 @@ class HubCompany(Base, IDMixin, TimestampMixin):
 
     industry: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
+    # A sole trader (Einzelunternehmen, Freiberufler) often trades under their
+    # own name, so THIS ROW's `name` can itself be personal data even though
+    # every column here is company-shaped — "Andreas Uwe Weiss" is in the corpus
+    # today. RULE 2 says the shared corpus holds no natural persons; that rule
+    # was unenforceable because no check over column NAMES can catch a person
+    # sitting in a column called `name`.
+    #
+    # A SCREEN, not a verdict (`resolution.looks_like_natural_person`), tuned to
+    # over-include: a false positive costs a visible flag, a false negative
+    # silently keeps personal data in a shared cross-tenant table. It hides and
+    # deletes nothing by itself — §2.2's rule that a fuzzy judgement may surface
+    # something for a human but never decide it. Acting on the flag (suppression,
+    # Art. 14/17) is the next step.
+    suspected_natural_person: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+
     # --- corpus bookkeeping ----------------------------------------------
     source: Mapped[str] = mapped_column(String(60), nullable=False)
     # Denormalized BD signal: how many of this company's postings are still open.

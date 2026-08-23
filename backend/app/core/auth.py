@@ -133,38 +133,58 @@ async def get_ingest_tenant(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
 ) -> uuid.UUID:
-    """Resolve the tenant for a hub ingest call — machine OR human.
+    """Authorize a MACHINE caller for ingestion. A user token is rejected.
 
-    Ingestion is the platform's first NON-INTERACTIVE caller: a scheduled
-    backfill has no Clerk user, and a session JWT is the wrong credential for it
-    (short-lived, tied to a person, revoked when they leave). So this dependency
-    accepts either:
+    Ingestion is a scheduled job (ARCHITECTURE.md RULE 1). This dependency used
+    to fall back to `get_current_tenant`, which made the rule false: any
+    authenticated recruiter could drive arbitrary crawl slices, write the shared
+    cross-tenant corpus, deactivate postings globally, and read
+    `/hub/crawl-profiles` — the union of every workspace's saved-search terms,
+    which is precisely the competitive intelligence the unattributed design
+    exists to protect. There is no fallback now: a valid Clerk JWT gets 401.
 
-      * a **service token** (`ELIGO_INGEST_TOKEN`) — for cron/backfill, mapped to
-        `settings.ingest_tenant_id`, or
-      * a **Clerk session JWT** — a recruiter triggering a refresh from the UI,
-        resolved exactly as everywhere else.
+    Modes, all fail-closed:
 
-    Fail-closed: with no token configured the machine path does not exist and
-    only the Clerk path can authenticate. The comparison is constant-time so a
-    wrong token leaks nothing through timing, and the secret is never logged.
-
-    This matters more than for a plain read endpoint: ingest writes, and makes
-    OUTBOUND requests to a public API — an unauthenticated version would let
-    anyone drive traffic at a third party from our address.
+      * token configured → it must match, in every environment. A session JWT,
+        a wrong token or no token is 401.
+      * no token, auth disabled → allowed. Local dev and CI, where every other
+        endpoint is open to the default tenant anyway.
+      * no token, auth enabled → 503. A production deployment that never
+        configured a machine credential must not accept ingestion at all;
+        refusing loudly beats silently accepting whoever asks.
     """
     configured = settings.ingest_token
     presented = creds.credentials if creds else None
 
-    if configured and presented and secrets.compare_digest(presented, configured):
-        tenant_id = settings.ingest_tenant_id or settings.default_tenant_id
-        logger.info("ingest authenticated via service token (tenant=%s)", tenant_id)
-        current_tenant_var.set(str(tenant_id))
-        await _set_tenant_guc(db, tenant_id)
-        return tenant_id
+    if configured:
+        if presented and secrets.compare_digest(presented, configured):
+            tenant_id = settings.ingest_tenant_id or settings.default_tenant_id
+            logger.info("ingest authorized by machine credential (tenant=%s)", tenant_id)
+            current_tenant_var.set(str(tenant_id))
+            await _set_tenant_guc(db, tenant_id)
+            return tenant_id
+        # Deliberately identical for "no credential" and "a user's JWT": the
+        # response must not tell a caller whether they merely used the wrong
+        # KIND of credential.
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "ingestion requires a machine credential",
+        )
 
-    # Not a machine caller — fall back to the normal human path.
-    return await get_current_tenant(creds, db)
+    if settings.auth_enabled:
+        logger.error(
+            "ingest attempted but ELIGO_INGEST_TOKEN is unset — refusing"
+        )
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "ingestion is not configured on this deployment",
+        )
+
+    # Auth disabled: local dev / CI, where the whole API runs as one tenant.
+    tenant_id = settings.ingest_tenant_id or settings.default_tenant_id
+    current_tenant_var.set(str(tenant_id))
+    await _set_tenant_guc(db, tenant_id)
+    return tenant_id
 
 
 async def get_current_user(

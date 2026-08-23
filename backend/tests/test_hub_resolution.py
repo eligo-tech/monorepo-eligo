@@ -100,3 +100,57 @@ def test_ladder_prefers_the_strongest_available_identity() -> None:
 def test_a_name_without_a_place_does_not_resolve() -> None:
     # "Müller GmbH" alone is not an identity in a country with thousands of them.
     assert identity_key(name="Müller GmbH") is None
+
+
+# ---------------------------------------------------------------------------
+# Personal-data screening (sole traders)
+# ---------------------------------------------------------------------------
+
+
+def test_a_persons_name_used_as_a_company_is_flagged() -> None:
+    """RULE 2's real hole: a sole trader IS the company, so `name` is personal
+    data while every column stays company-shaped. All of these are in the live
+    corpus."""
+    from app.domain.hub.resolution import looks_like_natural_person
+
+    for name in (
+        "Andreas Uwe Weiss",
+        "Raffaele Nicolai",
+        "Susanne Yilmaz",
+        "Anna-Lena Schmidt",
+        "Martin Müller",
+    ):
+        assert looks_like_natural_person(name), name
+
+
+def test_organisations_are_not_flagged() -> None:
+    from app.domain.hub.resolution import looks_like_natural_person
+
+    for name in (
+        "Thomann GmbH",
+        "Deutsche Bahn AG",
+        "Netto Marken-Discount Stiftung & Co. KG",
+        "Sparda-Bank Nürnberg eG",
+        "Kreissparkasse München",
+        # A person's surname plus a trade word is still an organisation marker.
+        "Martin Müller Bauleitung",
+        # Compound German place words must not read as a two-word person name.
+        "Bundesstadt Bonn",
+        "Stadt Aalen",
+        "Klinikum Esslingen GmbH",
+        "FRITZ!",
+    ):
+        assert not looks_like_natural_person(name), name
+
+
+def test_the_screen_errs_towards_flagging() -> None:
+    """Tuned to over-include on purpose: a false positive costs a visible flag,
+    a false negative silently keeps personal data in a shared table."""
+    from app.domain.hub.resolution import looks_like_natural_person
+
+    # Contains a person's name, so flagging it is the desired direction even
+    # though the business is a practice rather than the person.
+    assert looks_like_natural_person("Physio Wittrin")
+    # Nothing to screen.
+    assert not looks_like_natural_person("")
+    assert not looks_like_natural_person(None)

@@ -168,6 +168,8 @@ export interface HubCompanyDTO {
   vat_id: string | null
   vat_verified_at: string | null
   industry: string | null
+  /** The company NAME looks like a person's — a sole trader. A screen, not a verdict. */
+  suspected_natural_person: boolean
   source: string
   open_postings_count: number
   bd_signals: Record<string, unknown>
@@ -221,6 +223,7 @@ export interface HubCorpusStatsDTO {
   companies: number
   /** Distinct employers after collapsing one-row-per-site fragmentation. */
   employers: number
+  suspected_personal_data: number
   hiring: number
   open_postings: number
   cities: number
@@ -239,6 +242,7 @@ export interface HubEmployerHitDTO {
   cities: string[]
   city_count: number
   resolution_basis: 'vat' | 'register' | 'domain' | 'name_place'
+  suspected_natural_person: boolean
   website_domain: string | null
   hub_company_ids: string[]
   /** The roles that justify the hit — the answer carries its own evidence. */
@@ -309,7 +313,10 @@ export interface HubJobPostingDTO {
   posted_at: string | null
   expires_at: string | null
   source: string
+  /** The EMPLOYER's own ad, when the source supplies one. Often absent. */
   source_url: string | null
+  /** The source's own page, derived server-side from the reference number. */
+  detail_url: string | null
   external_id: string
   first_seen_at: string
   last_seen_at: string
