@@ -175,7 +175,7 @@ that cannot be retrofitted by a script — it must live in the ingest path.
 | **CC7.2** monitoring | the scheduled job must alert on failure, not fail silently | ❌ not implemented |
 | **CC7.3** evidence of operation | proof of what ran, when, and what it retrieved | ✅ `hub_observations` is exactly this |
 | **CC8.1** change management | migrations reviewed, CI green before merge | ✅ Alembic + PR + GitHub Actions |
-| **PI1.1** processing integrity | outputs traceable to inputs; tamper-evident | ✅ hash-chained receipts, `verify_chain` |
+| **PI1.1** processing integrity | outputs traceable to inputs; tamper-evident | ✅ hash-chained receipts with DB-enforced immutability (triggers + revoked grants); `verify_chain` checks hashes and contiguity. ⚠ head truncation still needs an external anchor |
 | **P (Privacy)** | data classification and retention documented | ⚠ classification here; retention missing |
 
 Note for auditors: the shared corpus is **not** a tenant-isolation gap. It holds
@@ -189,6 +189,12 @@ would be identical for any observer. Customer data remains RLS-isolated.
 Built: shared corpus, deterministic identity, ingest gate with pre/postconditions,
 append-only fetch evidence, RLS everywhere, hash-chained receipts, machine
 credential for ingestion.
+
+**Known incomplete:** the receipt ledger detects modification, mid-chain
+insertion and deletion, but not truncation at the head — nothing inside the
+database can distinguish "ten receipts" from "twelve, with the last two
+removed". That requires periodically anchoring the signed chain head somewhere
+the application cannot reach.
 
 **Known incomplete:** the nightly crawl shards by Bundesland and reaches ~83% of
 German postings, because the source's `wo=` parameter matches place names rather

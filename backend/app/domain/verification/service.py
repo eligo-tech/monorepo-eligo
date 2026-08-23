@@ -22,6 +22,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from sqlalchemy import desc, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -82,15 +83,26 @@ def _hash_receipt(
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
-async def _latest_hash(session: AsyncSession, tenant_id: uuid.UUID) -> str | None:
-    """Return the hash of the most recent receipt for a tenant (chain head)."""
+async def _chain_head(
+    session: AsyncSession, tenant_id: uuid.UUID
+) -> tuple[int, str] | None:
+    """Return ``(chain_index, receipt_hash)`` of this tenant's last receipt.
+
+    Ordered by `chain_index`, not by `created_at`: position is a property of the
+    ledger, and deriving it from a timestamp made correctness depend on clock
+    resolution.
+    """
     result = await session.execute(
-        select(Receipt.receipt_hash)
+        select(Receipt.chain_index, Receipt.receipt_hash)
         .where(Receipt.tenant_id == tenant_id)
-        .order_by(desc(Receipt.created_at), desc(Receipt.id))
+        .order_by(desc(Receipt.chain_index))
         .limit(1)
     )
-    return result.scalar_one_or_none()
+    return result.first()
+
+
+# Two writers racing resolve in one retry; more only under heavy contention.
+_MAX_APPEND_ATTEMPTS = 5
 
 
 async def append_receipt(
@@ -110,40 +122,61 @@ async def append_receipt(
     This is the ONLY way receipts are created. There is no update/delete path.
     """
     payload = payload or {}
-    prev_hash = await _latest_hash(session, tenant_id)
-    receipt_id = uuid.uuid4()
-    receipt_hash = _hash_receipt(
-        receipt_id=receipt_id,
-        tenant_id=tenant_id,
-        agent=agent,
-        action=action,
-        subject_type=subject_type,
-        subject_id=subject_id,
-        verified=verified,
-        summary=summary,
-        payload=payload,
-        prev_hash=prev_hash,
-    )
-    receipt = Receipt(
-        id=receipt_id,
-        tenant_id=tenant_id,
-        agent=agent,
-        action=action,
-        subject_type=subject_type,
-        subject_id=subject_id,
-        verified=verified,
-        summary=summary,
-        payload=payload,
-        prev_hash=prev_hash,
-        receipt_hash=receipt_hash,
-        # The ledger is ordered by created_at; DB `func.now()` is only
-        # second-precision on SQLite, so multiple receipts in the same second
-        # would sort by the random UUID id and desync the chain. Stamp a
-        # microsecond-precision UTC time so sequential appends order by insertion.
-        created_at=dt.datetime.now(dt.UTC),
-    )
-    session.add(receipt)
-    await session.flush()
+
+    # Read the head, claim the next position, and let the DATABASE arbitrate.
+    # Reading and inserting are not atomic, so two concurrent appends for one
+    # tenant can read the same head; `UNIQUE (tenant_id, chain_index)` turns
+    # that into a rejected insert instead of a silently forked ledger that
+    # `verify_chain` would later report as tampering. Each attempt runs in a
+    # SAVEPOINT so a lost race rolls back only this insert, never the caller's
+    # other work in the same transaction.
+    for attempt in range(_MAX_APPEND_ATTEMPTS):
+        head = await _chain_head(session, tenant_id)
+        chain_index = (head[0] + 1) if head else 0
+        prev_hash = head[1] if head else None
+
+        receipt_id = uuid.uuid4()
+        receipt_hash = _hash_receipt(
+            receipt_id=receipt_id,
+            tenant_id=tenant_id,
+            agent=agent,
+            action=action,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            verified=verified,
+            summary=summary,
+            payload=payload,
+            prev_hash=prev_hash,
+        )
+        receipt = Receipt(
+            id=receipt_id,
+            tenant_id=tenant_id,
+            chain_index=chain_index,
+            agent=agent,
+            action=action,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            verified=verified,
+            summary=summary,
+            payload=payload,
+            prev_hash=prev_hash,
+            receipt_hash=receipt_hash,
+            created_at=dt.datetime.now(dt.UTC),
+        )
+        try:
+            async with session.begin_nested():
+                session.add(receipt)
+                await session.flush()
+            break
+        except IntegrityError:
+            # Someone else took this position. Re-read the head and try again.
+            logger.info(
+                "receipt append lost a race at index %d (attempt %d) — retrying",
+                chain_index,
+                attempt + 1,
+            )
+            if attempt == _MAX_APPEND_ATTEMPTS - 1:
+                raise
     logger.info(
         "receipt[%s] agent=%s action=%s subject=%s/%s verified=%s",
         receipt.receipt_hash[:8],
@@ -294,10 +327,21 @@ async def verify_chain(
     result = await session.execute(
         select(Receipt)
         .where(Receipt.tenant_id == tenant_id)
-        .order_by(Receipt.created_at, Receipt.id)
+        .order_by(Receipt.chain_index)
     )
     prev: str | None = None
+    expected_index = 0
     for receipt in result.scalars().all():
+        # A gap means a receipt was removed. The hash chain alone would not
+        # notice: deleting a row and re-pointing its successor is detectable,
+        # but a contiguous sequence is what proves nothing was quietly dropped.
+        if receipt.chain_index != expected_index:
+            return (
+                False,
+                f"chain gap at index {expected_index} "
+                f"(next receipt is {receipt.chain_index})",
+            )
+        expected_index += 1
         expected = _hash_receipt(
             receipt_id=receipt.id,
             tenant_id=receipt.tenant_id,
