@@ -15,7 +15,10 @@ from there.
 Ordering is the union of saved searches (server-side), so the text fills in
 where people actually recruit rather than uniformly across ads nobody will
 place. Idempotent and resumable: only postings without a description are ever
-considered, so an interrupted run costs nothing and a re-run continues.
+considered, so an interrupted run costs nothing and a re-run continues. That
+same property is why a failed batch is retried rather than fatal — a pass
+spanning hours will meet a redeploy or a proxy blip, and abandoning the run over
+one is wasteful when repeating the request costs nothing.
 """
 
 from __future__ import annotations
@@ -26,6 +29,10 @@ import os
 import sys
 
 import httpx
+
+# A redeploy or a proxy blip mid-run is expected over hours, not exceptional.
+_MAX_BATCH_ATTEMPTS = 4
+_MAX_CONSECUTIVE_FAILURES = 3
 
 
 async def main() -> int:
@@ -39,9 +46,11 @@ async def main() -> int:
     parser.add_argument(
         "--batch",
         type=int,
-        default=50,
+        default=25,
         help="postings per request. The server paces itself between fetches, so "
-        "a larger batch means a longer-held connection, not a faster crawl.",
+        "a larger batch is a LONGER-HELD connection, not a faster crawl — and a "
+        "long request is what a hosting proxy times out. 25 keeps each request "
+        "near ten seconds.",
     )
     parser.add_argument(
         "--all",
@@ -73,16 +82,43 @@ async def main() -> int:
         except Exception:
             pass
 
+        consecutive_failures = 0
         while args.all or stored < args.target:
-            try:
-                response = await client.post(
-                    f"/hub/descriptions/fetch?limit={args.batch}"
-                )
-                response.raise_for_status()
-                result = response.json()
-            except Exception as exc:
-                print(f"batch failed: {exc}", file=sys.stderr)
-                return 1
+            result = None
+            for attempt in range(_MAX_BATCH_ATTEMPTS):
+                try:
+                    response = await client.post(
+                        f"/hub/descriptions/fetch?limit={args.batch}"
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    break
+                except Exception as exc:
+                    # A run spanning hours WILL meet a redeploy, a proxy blip or
+                    # a slow upstream. Aborting on the first one wastes the
+                    # whole pass, and the work is idempotent — retrying costs
+                    # nothing but a wait.
+                    wait = min(2 ** attempt * 5, 60)
+                    print(
+                        f"  batch failed ({type(exc).__name__}: {exc}) — "
+                        f"retrying in {wait}s",
+                        file=sys.stderr,
+                    )
+                    if attempt < _MAX_BATCH_ATTEMPTS - 1:
+                        await asyncio.sleep(wait)
+
+            if result is None:
+                consecutive_failures += 1
+                # Persistent failure is different from a blip: stop rather than
+                # hammer a service that is plainly unwell.
+                if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                    print(
+                        f"giving up after {consecutive_failures} failed batches",
+                        file=sys.stderr,
+                    )
+                    return 1
+                continue
+            consecutive_failures = 0
 
             # Nothing left to attempt — every active posting has been tried.
             if result["attempted"] == 0:
