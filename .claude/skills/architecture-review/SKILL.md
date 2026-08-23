@@ -30,27 +30,57 @@ PRESENTATION   routers (thin) + frontend. READS the corpus. NEVER fills it.
 
 ## The rules, and how to check each
 
-### RULE 1 — Ingestion is a scheduled job. No user, no UI.
+### RULE 1 — Ingestion is machine-triggered only.
 
-No button, no request handler, no page load may cause an outbound crawl of a
-public source. Ingestion runs unattended, authenticated by a machine credential.
+**No human-authenticated request may cause an outbound crawl of a public source.**
+Not from the UI, and not from a logged-in user calling the API directly.
+
+The earlier wording — "no request handler may crawl" — was false, and its
+falseness had a cost. The actual design *is* a request handler: the scheduler
+calls `POST /hub/ingest` over HTTP, and the crawl runs synchronously inside that
+request. Stating a rule the code visibly contradicts trains people to read it as
+aspiration, and it is precisely how F1 shipped: the reviewer's check confirmed
+the frontend was clean and stopped there, while the backend dependency fell back
+to the human path.
+
+State it in three parts instead:
+
+1. **No human-authenticated or UI trigger.** A valid Clerk session must be
+   refused on every operator endpoint.
+2. **Operator endpoints are allowed, with machine credentials only.** The
+   scheduler authenticates with `ELIGO_INGEST_TOKEN`; there is no fallback.
+3. **The scheduler → job boundary is HTTP today, and that is a known
+   deviation.** A crawl that holds a request open across dozens of external
+   calls is fragile — a timeout is indistinguishable from a failure, and there
+   is no retry or backpressure. A queue would be better. Do not "fix" this by
+   moving the crawl into a user-facing path.
+
+**Enforcement is `backend/tests/test_operator_endpoints.py`, not a grep.** It
+derives the machine-only route set by introspecting which routes depend on
+`get_ingest_tenant`, requires that set to match an explicit declaration, and
+then attacks each one with a *valid session for a real organisation*. Verified:
+reintroducing the F1 fallback fails four of its cases.
 
 ```bash
-# Any client CALL that can trigger ingestion is a violation. The filter drops
-# comment lines — `types.ts` legitimately documents the endpoint it never calls,
-# and a check that flags prose is a check people learn to ignore.
+# The enforcement itself. If you change ingestion, this must still pass.
+cd backend && .venv/bin/python -m pytest tests/test_operator_endpoints.py -q
+
+# Adding an operator endpoint? Declare it, or the first test fails:
+grep -n "DECLARED_OPERATOR_ROUTES" -A 8 backend/tests/test_operator_endpoints.py
+
+# The UI must still have no path to ingestion (comment lines excluded — a
+# docstring naming the endpoint is not a call, and a check that flags prose is
+# one people learn to ignore).
 grep -rn "/hub/ingest" frontend/src | grep -vE ":[[:space:]]*(\*|//)" \
   && echo "VIOLATION: the UI can crawl"
-
-# Legitimate callers: the router, the scheduled job, operator scripts.
-grep -rn "service.ingest\|\"/hub/ingest\"" backend/app backend/scripts
 ```
 
-Why it is a rule: a presentation control performing an outbound crawl collapses
-four layers into one; N users × one button = N calls to a free public API for
-data already held; GDPR Art. 30 / SOC 2 CC7 require collection to be a
-*described, scheduled, logged* activity; and "which user triggered this crawl?"
-has no good answer while "the nightly job ran at 03:17" is auditable.
+Reasons the rule exists, in order of weight: N users × one trigger = N calls to
+a free public API for data already held; GDPR Art. 30 / SOC 2 CC7 require
+collection to be a *described, scheduled, logged* activity; "which user
+triggered this crawl?" has no good answer while "the nightly job ran at 03:17"
+is auditable; and an operator endpoint reachable by any tenant leaks
+`/hub/crawl-profiles`, the union of every workspace's saved-search terms.
 
 ### RULE 2 — The shared corpus holds company-level facts only. Never natural persons.
 
@@ -60,11 +90,34 @@ evidence. They may **not** hold names, e-mails, phone numbers or profiles of
 people — no hiring managers, no Geschäftsführer, no ad authors.
 
 ```bash
-# A person-shaped column on a shared table is a violation.
+# A person-shaped COLUMN on a shared table is a violation.
 grep -nE "first_name|last_name|email|phone|person|contact" backend/app/domain/hub/models.py
 # Shared tables must not carry tenant_id (see RULE 3).
 grep -n "TenantMixin" backend/app/domain/hub/models.py   # only HubCompanyLink may
 ```
+
+**A grep over column names is not sufficient, and assuming it was is how the
+live violation survived.** A sole trader IS the company, so `hub_companies.name`
+holds personal data while every column stays company-shaped — "Andreas Uwe
+Weiss" was in the corpus with no flag. No check over the word `name` finds a
+person inside a column called `name`.
+
+The value-level screen is `resolution.looks_like_natural_person`, applied at
+ingest and surfaced as `suspected_natural_person`. When reviewing a change that
+adds a shared column or a new source, ask what the *values* can contain, not
+just what the column is called:
+
+```bash
+# (-k "flagg" matches all three screening tests; a selector that silently
+#  deselects everything is the same false green this rule exists to prevent)
+cd backend && .venv/bin/python -m pytest tests/test_hub_resolution.py -q -k flagg
+# And for a new adapter: does anything person-shaped reach `raw`?
+grep -n "raw=" backend/app/domain/hub/adapters/*.py
+```
+
+The screen flags; it does not remedy. Erasure still needs a suppression list
+(ARCHITECTURE.md §3) — deleting a row does not help while tonight's crawl
+re-inserts it.
 
 Why: a shared table of personal data makes one data subject's erasure reach
 across every customer, and makes us controller of personal data we are
