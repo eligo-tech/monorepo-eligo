@@ -120,9 +120,11 @@ async def main() -> int:
                 continue
             consecutive_failures = 0
 
-            # Nothing left to attempt — every active posting has been tried.
+            # `attempted` is this BATCH, never the corpus total — the endpoint
+            # also returns `corpus_attempted`, and conflating the two once made
+            # this check unable to fire at all.
             if result["attempted"] == 0:
-                print("  no postings left without a description")
+                print("  every active posting has now been tried")
                 break
 
             attempted += result["attempted"]

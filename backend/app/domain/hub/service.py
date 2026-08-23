@@ -628,12 +628,16 @@ async def descriptions_progress(session: AsyncSession) -> dict[str, int]:
             )
         )
     ) or 0
+    # Deliberately NOT called "attempted": `fetch_missing_descriptions` already
+    # returns that name for the size of ONE batch, and the endpoint merges both
+    # dicts. The collision silently replaced the batch count with a corpus-wide
+    # total, which broke the caller's `attempted == 0` exhaustion check — the
+    # loop could never end. One word, two meanings, is what caused the original
+    # incident too.
     return {
         "active_postings": total,
         "with_description": with_text,
-        # Tried and came back empty — the source has no text for these. Reported
-        # separately so "not yet fetched" is never confused with "nothing there".
-        "attempted": attempted,
+        "corpus_attempted": attempted,
         "remaining": max(total - attempted, 0),
     }
 
