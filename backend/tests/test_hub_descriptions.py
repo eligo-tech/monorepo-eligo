@@ -111,13 +111,13 @@ async def test_progress_separates_never_tried_from_nothing_there(postings) -> No
         assert before == {
             "active_postings": 3,
             "with_description": 0,
-            "attempted": 0,
+            "corpus_attempted": 0,
             "remaining": 3,
         }
         await service.fetch_missing_descriptions(s, adapter=adapter, limit=10, delay=0)
         after = await service.descriptions_progress(s)
 
-    assert after["attempted"] == 3
+    assert after["corpus_attempted"] == 3
     assert after["with_description"] == 1
     # Nothing remaining, so a caller looping on progress terminates.
     assert after["remaining"] == 0
@@ -160,3 +160,28 @@ async def test_an_adapter_without_detail_support_is_a_no_op(postings) -> None:
         assert await service.fetch_missing_descriptions(
             s, adapter=_NoDetail(), limit=10, delay=0
         ) == {"attempted": 0, "stored": 0, "empty": 0}
+
+
+async def test_the_endpoint_keeps_the_batch_count_distinct(postings) -> None:
+    """The response merges a batch result with corpus progress.
+
+    Regression: both used the key `attempted`, so the corpus total overwrote the
+    batch count and the caller's `attempted == 0` exhaustion check could never
+    fire — a second infinite loop, hidden behind the fix for the first.
+    """
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.config import settings
+    from app.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        body = (
+            await client.post(f"{settings.api_v1_prefix}/hub/descriptions/fetch?limit=5")
+        ).json()
+
+    assert "attempted" in body and "corpus_attempted" in body
+    # The batch count is bounded by the batch, never the corpus.
+    assert body["attempted"] <= 5
+    assert body["corpus_attempted"] >= body["attempted"]
