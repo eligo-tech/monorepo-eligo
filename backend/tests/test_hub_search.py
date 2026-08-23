@@ -302,3 +302,63 @@ async def test_filters_are_repeatable_query_params(client, corpus) -> None:
 async def test_stats_endpoint_matches_the_service(client, corpus) -> None:
     body = (await client.get("/api/v1/hub/stats")).json()
     assert body["companies"] == 5 and body["employers"] == 3
+
+
+async def test_a_multi_word_query_ands_its_terms(corpus) -> None:
+    """Regression: the query is a set of terms, not a phrase.
+
+    `LIKE '%embedded entwickler%'` required the words adjacent in that order, so
+    "Embedded Software Entwickler" was invisible. Measured on the real corpus,
+    one such query lost 5 of 5 matches.
+    """
+    async with SessionLocal() as s:
+        # Adjacent in neither order, but both words are present.
+        hits = await service.search_employers(s, q="entwickler embedded")
+    assert [h["name"] for h in hits] == ["Embedded Systems GmbH"]
+    assert "Embedded Software Entwickler" in [
+        r.title for r in hits[0]["matching_roles"]
+    ]
+
+
+async def test_every_term_must_match_somewhere(corpus) -> None:
+    async with SessionLocal() as s:
+        # "firmware" matches a role; "zzz" matches nothing — so the pair must not.
+        assert await service.search_employers(s, q="firmware zzz") == []
+        assert len(await service.search_employers(s, q="firmware")) == 1
+
+
+async def test_terms_match_per_posting_not_across_the_employer(corpus) -> None:
+    """Embedded Systems GmbH has an "Embedded" role and a "Firmware" role.
+
+    A query for both words must not match on the strength of two DIFFERENT
+    postings — otherwise "python entwickler" would hit any company that happens
+    to have one Python role and one unrelated Entwickler role.
+    """
+    async with SessionLocal() as s:
+        hits = await service.search_employers(s, q="embedded firmware")
+    # "Embedded" is in the company name, so the company matches both terms —
+    # legitimate. What must NOT happen is a role list containing roles that
+    # satisfy only one term each.
+    for hit in hits:
+        for role in hit["matching_roles"]:
+            haystack = f"{role.title} {role.occupation or ''} {hit['name']}".lower()
+            assert "embedded" in haystack and "firmware" in haystack or "embedded" in hit["name"].lower()
+
+
+async def test_search_reaches_the_ad_text_once_it_is_stored(corpus) -> None:
+    """The point of storing descriptions: a stack named only in the body."""
+    from sqlalchemy import select
+
+    from app.domain.hub.models import HubJobPosting
+
+    async with SessionLocal() as s:
+        row = (
+            await s.execute(
+                select(HubJobPosting).where(HubJobPosting.external_id == "e1")
+            )
+        ).scalar_one()
+        row.description = "Wir suchen Verstärkung mit Kotlin und Gradle."
+        await s.commit()
+
+        hits = await service.search_employers(s, q="kotlin")
+    assert [h["name"] for h in hits] == ["Embedded Systems GmbH"]
