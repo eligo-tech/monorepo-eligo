@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: "Roughly how many descriptions to store this run"
+        description: "How many to store this run, or 'all' for the whole corpus"
         required: false
         default: "500"
       batch:
@@ -31,7 +31,11 @@ concurrency:
 jobs:
   descriptions:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Measured 2.4 postings/s, so a full 26k corpus is ~3 hours. GitHub caps a
+    # job at 6h; 350 leaves headroom without pretending the work is quick. A
+    # timeout is not data loss either way — the pass only ever considers
+    # postings with no description, so the next run continues where this stopped.
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +51,11 @@ jobs:
         env:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+          TARGET: ${{ github.event.inputs.target || '500' }}
+          BATCH: ${{ github.event.inputs.batch || '50' }}
         run: |
-          python -m scripts.hub_descriptions \
-            --target "${{ github.event.inputs.target || '500' }}" \
-            --batch  "${{ github.event.inputs.batch  || '50' }}"
+          if [ "$TARGET" = "all" ]; then
+            python -m scripts.hub_descriptions --all --batch "$BATCH"
+          else
+            python -m scripts.hub_descriptions --target "$TARGET" --batch "$BATCH"
+          fi
