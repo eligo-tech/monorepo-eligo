@@ -130,7 +130,8 @@ async def main() -> int:
             empty += result["empty"]
             print(
                 f"  +{result['stored']:>3} stored ({result['empty']} without text) · "
-                f"{result['with_description']}/{result['active_postings']} searchable"
+                f"{result['with_description']}/{result['active_postings']} searchable · "
+                f"{result.get('remaining', '?')} not yet tried"
             )
 
     print(

@@ -275,6 +275,17 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     external_id: Mapped[str] = mapped_column(String(200), nullable=False)
 
+    # When the ad text was last REQUESTED — set whether or not text came back.
+    #
+    # Selecting work by `description IS NULL` alone is an infinite loop: a
+    # posting the source 404s has no text to store, stays NULL, and is chosen
+    # again on the very next batch. That is not hypothetical — a production run
+    # re-fetched the same 25 references every few seconds until it was killed.
+    # Recording the ATTEMPT is what makes the pass terminate.
+    description_fetched_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
     # SHA-256 of the meaningful fields — an unchanged posting only bumps
     # `last_seen_at` instead of rewriting the row.
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
