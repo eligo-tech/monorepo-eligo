@@ -547,9 +547,15 @@ async def fetch_missing_descriptions(
     if not hasattr(adapter, "fetch_description"):
         return {"attempted": 0, "stored": 0, "empty": 0}
 
+    # Never ATTEMPTED, not merely "has no description". A posting whose detail
+    # call 404s never gains text, so selecting on the text alone re-picks it
+    # forever — which is exactly what happened in production until the run was
+    # killed. One attempt per posting; the timestamp leaves room for a
+    # deliberate retry policy later.
     stmt = select(HubJobPosting).where(
         HubJobPosting.is_active.is_(True),
         HubJobPosting.description.is_(None),
+        HubJobPosting.description_fetched_at.is_(None),
         HubJobPosting.source == adapter.name,
     )
     if priority_terms:
@@ -579,6 +585,9 @@ async def fetch_missing_descriptions(
             # One unreachable posting must not end the run.
             logger.info("description fetch failed for %s: %s", row.external_id, exc)
             text = None
+        # Stamped on every outcome, including failure: the point is that this
+        # posting has been tried, not that it yielded something.
+        row.description_fetched_at = dt.datetime.now(dt.UTC)
         if text:
             row.description = text
             stored += 1
@@ -611,7 +620,22 @@ async def descriptions_progress(session: AsyncSession) -> dict[str, int]:
             )
         )
     ) or 0
-    return {"active_postings": total, "with_description": with_text}
+    attempted = (
+        await session.scalar(
+            select(func.count(HubJobPosting.id)).where(
+                HubJobPosting.is_active.is_(True),
+                HubJobPosting.description_fetched_at.is_not(None),
+            )
+        )
+    ) or 0
+    return {
+        "active_postings": total,
+        "with_description": with_text,
+        # Tried and came back empty — the source has no text for these. Reported
+        # separately so "not yet fetched" is never confused with "nothing there".
+        "attempted": attempted,
+        "remaining": max(total - attempted, 0),
+    }
 
 
 # --------------------------------------------------------------------------
