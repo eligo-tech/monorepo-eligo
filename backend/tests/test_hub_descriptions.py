@@ -93,6 +93,23 @@ async def test_a_posting_without_text_is_never_requested_twice(postings) -> None
     assert len(adapter.calls) == calls_before, "re-requested a dead posting"
 
 
+async def test_exact_scope_never_falls_through_to_backlog(postings) -> None:
+    """Nightly IDs are a hard boundary, not merely a priority hint."""
+    adapter = _Adapter({"no-text-2": "new job text"})
+
+    async with SessionLocal() as s:
+        result = await service.fetch_missing_descriptions(
+            s,
+            adapter=adapter,
+            limit=25,
+            external_ids=["no-text-2", "not-in-the-corpus"],
+            delay=0,
+        )
+
+    assert result == {"attempted": 1, "stored": 1, "empty": 0}
+    assert adapter.calls == ["no-text-2"]
+
+
 async def test_every_attempt_is_stamped_even_when_empty(postings) -> None:
     adapter = _Adapter({"has-text": "text"})
     async with SessionLocal() as s:
