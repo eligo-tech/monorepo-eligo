@@ -94,6 +94,8 @@ import httpx
 # 10,000 results. Every sharding decision here follows from that number.
 _RESULT_CEILING = 10_000
 _PAGE_CEILING = 100
+_DESCRIPTION_BATCH_SIZE = 25
+_DESCRIPTION_BATCH_ATTEMPTS = 4
 
 # The default shard set: all of Germany, 16 ways. Chosen because it is the
 # coarsest exhaustive key whose largest daily shard stays under the cap.
@@ -189,6 +191,57 @@ async def _ingest_region(
             await asyncio.sleep(delay)
 
     return totals
+
+
+async def _fetch_descriptions(
+    client: httpx.AsyncClient,
+    *,
+    limit: int,
+) -> dict[str, int]:
+    """Top up ad text without holding one request open past the proxy timeout.
+
+    The server fetches one source detail page at a time and deliberately paces
+    those calls. Sending the nightly budget of 300 in one request therefore
+    takes roughly two minutes and can be cut off by the hosting proxy even when
+    every upstream call succeeds. Keep each request near ten seconds, retry a
+    transiently failed batch, and stop once the attempt budget is exhausted.
+    """
+    attempted = stored = empty = 0
+    latest: dict[str, int] = {}
+
+    while attempted < limit:
+        batch = min(_DESCRIPTION_BATCH_SIZE, limit - attempted)
+        result: dict[str, int] | None = None
+        for attempt in range(_DESCRIPTION_BATCH_ATTEMPTS):
+            try:
+                response = await client.post(f"/hub/descriptions/fetch?limit={batch}")
+                response.raise_for_status()
+                result = response.json()
+                break
+            except Exception as exc:
+                wait = min(2 ** attempt * 5, 60)
+                print(
+                    f"  description batch failed ({type(exc).__name__}: {exc}) — "
+                    f"retrying in {wait}s",
+                    file=sys.stderr,
+                )
+                if attempt < _DESCRIPTION_BATCH_ATTEMPTS - 1:
+                    await asyncio.sleep(wait)
+
+        if result is None:
+            raise RuntimeError(
+                f"description batch failed after {_DESCRIPTION_BATCH_ATTEMPTS} attempts"
+            )
+
+        latest = result
+        batch_attempted = result["attempted"]
+        attempted += batch_attempted
+        stored += result["stored"]
+        empty += result["empty"]
+        if batch_attempted == 0:
+            break
+
+    return {**latest, "attempted": attempted, "stored": stored, "empty": empty}
 
 
 async def main() -> int:
@@ -405,13 +458,9 @@ async def main() -> int:
         # --- ad text for what people actually search -----------------------
         if args.descriptions > 0:
             try:
-                response = await client.post(
-                    f"/hub/descriptions/fetch?limit={args.descriptions}"
-                )
-                response.raise_for_status()
-                d = response.json()
+                d = await _fetch_descriptions(client, limit=args.descriptions)
                 print(
-                    f"  Anzeigentexte: +{d['stored']} geholt "
+                    f"  Anzeigentexte: {d['attempted']} geprüft, +{d['stored']} geholt "
                     f"({d['empty']} ohne Text) · "
                     f"{d['with_description']}/{d['active_postings']} durchsuchbar"
                 )
