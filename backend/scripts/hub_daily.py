@@ -69,13 +69,12 @@ handful of requests per profile, instead of fetching descriptions corpus-wide.
 The directives carry no tenant: the crawler learns what to fetch, never who
 asked.
 
-**Ad text is fetched on a budget.** The listing endpoint returns no description,
-so a corpus built from it can only search headlines — and a stack is usually
-named in the body: 5% of TypeScript roles and 33% of Java roles carry the term
-in their title. Filling every posting would be one request each, ~26,000 against
-a free service, mostly for ads nobody will place. So each run fetches
-`--descriptions` of them, ordered by the union of saved searches, and the corpus
-gains full text where people actually recruit.
+**Every newly inserted posting gets one ad-text attempt.** The listing endpoint
+returns no description, so the ingest response returns the stable source IDs it
+created and this coordinator fetches exactly those details. Existing rows are
+never swept merely because they lack text; the separate manual bulk workflow is
+the only owner of historical backlog. A same-day rerun creates no rows and makes
+no description calls.
 
 Exits non-zero if any shard fails, so the scheduler's own failure notification
 is the monitoring (SOC 2 CC7.2).
@@ -118,6 +117,7 @@ async def _ingest_region(
     what: str | None = None,
     berufsfeld: str | None = None,
     primary: bool = False,
+    created_external_ids: set[str] | None = None,
 ) -> dict[str, int]:
     totals = {
         "pages": 0, "fetched": 0, "companies": 0, "postings": 0, "updated": 0,
@@ -145,6 +145,8 @@ async def _ingest_region(
         )
         response.raise_for_status()
         summary = response.json()
+        if created_external_ids is not None:
+            created_external_ids.update(summary.get("posting_external_ids_created", []))
         if page == 1 and primary:
             # Only the PRIMARY sweep counts toward coverage. A saved-search
             # keyword slice is a subset of it and would inflate the figure.
@@ -196,25 +198,32 @@ async def _ingest_region(
 async def _fetch_descriptions(
     client: httpx.AsyncClient,
     *,
-    limit: int,
+    external_ids: set[str],
 ) -> dict[str, int]:
-    """Top up ad text without holding one request open past the proxy timeout.
+    """Fetch ad text only for postings created by this nightly run.
 
     The server fetches one source detail page at a time and deliberately paces
     those calls. Sending the nightly budget of 300 in one request therefore
     takes roughly two minutes and can be cut off by the hosting proxy even when
     every upstream call succeeds. Keep each request near ten seconds, retry a
-    transiently failed batch, and stop once the attempt budget is exhausted.
+    transiently failed batch. The explicit source IDs are the run boundary: a
+    rerun does no description work for rows created by the earlier invocation,
+    and historical backlog remains the manual bulk workflow's responsibility.
     """
     attempted = stored = empty = 0
     latest: dict[str, int] = {}
+    pending = sorted(external_ids)
 
-    while attempted < limit:
-        batch = min(_DESCRIPTION_BATCH_SIZE, limit - attempted)
+    while pending:
+        batch_ids = pending[:_DESCRIPTION_BATCH_SIZE]
+        pending = pending[_DESCRIPTION_BATCH_SIZE:]
         result: dict[str, int] | None = None
         for attempt in range(_DESCRIPTION_BATCH_ATTEMPTS):
             try:
-                response = await client.post(f"/hub/descriptions/fetch?limit={batch}")
+                response = await client.post(
+                    f"/hub/descriptions/fetch?limit={len(batch_ids)}",
+                    json={"external_ids": batch_ids},
+                )
                 response.raise_for_status()
                 result = response.json()
                 break
@@ -238,10 +247,12 @@ async def _fetch_descriptions(
         attempted += batch_attempted
         stored += result["stored"]
         empty += result["empty"]
-        if batch_attempted == 0:
-            break
-
-    return {**latest, "attempted": attempted, "stored": stored, "empty": empty}
+    return {
+        **latest,
+        "attempted": attempted,
+        "stored": stored,
+        "empty": empty,
+    }
 
 
 async def main() -> int:
@@ -284,12 +295,10 @@ async def main() -> int:
         "delta because `wo=` matches place names and loses whole states.",
     )
     parser.add_argument(
-        "--descriptions",
-        type=int,
-        default=300,
-        help="how many missing ad texts to fetch per run (0 disables). One "
-        "request each, so this is a budget, not a target: the corpus fills "
-        "over nights, prioritised by the union of saved searches.",
+        "--no-descriptions",
+        dest="descriptions",
+        action="store_false",
+        help="skip ad-text fetches for postings newly inserted by this run",
     )
     parser.add_argument(
         "--no-profiles",
@@ -329,6 +338,7 @@ async def main() -> int:
     }
     failures: list[str] = []
     national_total = 0
+    created_external_ids: set[str] = set()
 
     async with httpx.AsyncClient(
         base_url=base,
@@ -349,6 +359,7 @@ async def main() -> int:
             )
             probe.raise_for_status()
             body = probe.json()
+            created_external_ids.update(body.get("posting_external_ids_created", []))
             national_total = body.get("total_available") or 0
             shard_plan = body.get("shard_plan") or []
         except Exception as exc:
@@ -384,6 +395,7 @@ async def main() -> int:
                             delay=args.delay,
                             berufsfeld=field,
                             primary=True,
+                            created_external_ids=created_external_ids,
                         )
                     except Exception as exc:
                         print(f"    FAILED: {exc}", file=sys.stderr)
@@ -404,6 +416,7 @@ async def main() -> int:
                     max_pages=args.max_pages,
                     delay=args.delay,
                     primary=True,
+                    created_external_ids=created_external_ids,
                 )
             except Exception as exc:
                 # One bad region must not silently shrink the corpus refresh.
@@ -442,6 +455,7 @@ async def main() -> int:
                         max_pages=args.max_pages,
                         delay=args.delay,
                         what=directive["q"],
+                        created_external_ids=created_external_ids,
                     )
                 except Exception as exc:
                     print(f"      FAILED: {exc}", file=sys.stderr)
@@ -456,9 +470,11 @@ async def main() -> int:
                     print(f"  mark-crawled failed: {exc}", file=sys.stderr)
 
         # --- ad text for what people actually search -----------------------
-        if args.descriptions > 0:
+        if args.descriptions and created_external_ids:
             try:
-                d = await _fetch_descriptions(client, limit=args.descriptions)
+                d = await _fetch_descriptions(
+                    client, external_ids=created_external_ids
+                )
                 print(
                     f"  Anzeigentexte: {d['attempted']} geprüft, +{d['stored']} geholt "
                     f"({d['empty']} ohne Text) · "
@@ -467,6 +483,8 @@ async def main() -> int:
             except Exception as exc:
                 print(f"  description fetch FAILED: {exc}", file=sys.stderr)
                 failures.append("descriptions")
+        elif args.descriptions:
+            print("  Anzeigentexte: keine neuen Rollen in diesem Lauf")
 
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.

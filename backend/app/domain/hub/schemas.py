@@ -253,9 +253,23 @@ class IngestSummary(BaseModel):
     companies_matched: int
     postings_created: int
     postings_updated: int
+    # Stable source IDs created by THIS slice. The nightly coordinator carries
+    # their union into the description pass, so a rerun never backfills old
+    # corpus rows merely because they still lack text.
+    posting_external_ids_created: list[str] = Field(default_factory=list)
     rejected: list[RejectedRecord] = Field(default_factory=list)
     # The gate's verdicts, in runbook order — the verification trace.
     notes: list[str] = Field(default_factory=list)
     # How the source says this result set divides — the crawler's shard plan,
     # taken from the API's own facets rather than a list in our code.
     shard_plan: list[dict] = Field(default_factory=list)
+
+
+class DescriptionFetchRequest(BaseModel):
+    """Optional exact scope for a description batch.
+
+    Omit the body for the deliberate/manual backlog pass. The nightly job sends
+    only IDs returned as newly created by its own ingest calls.
+    """
+
+    external_ids: list[str] = Field(min_length=1, max_length=25)

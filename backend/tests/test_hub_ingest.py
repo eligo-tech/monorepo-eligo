@@ -183,6 +183,9 @@ async def test_ingest_deduplicates_employers_across_postings(tenant) -> None:
     summary = await _ingest(StubAdapter(), tenant)
 
     assert summary.postings_created == len(_fetch_result().postings)
+    assert set(summary.posting_external_ids_created) == {
+        posting.external_id for posting in _fetch_result().postings
+    }
     assert not summary.rejected
     # The fixture contains employers posting several roles, so the corpus must
     # hold strictly fewer companies than postings.
@@ -207,6 +210,7 @@ async def test_ingest_is_idempotent(tenant) -> None:
     second = await _ingest(StubAdapter(), tenant)
 
     assert second.postings_created == 0
+    assert second.posting_external_ids_created == []
     assert second.postings_updated == first.postings_created
     assert second.companies_created == 0
     assert second.companies_matched == first.companies_created

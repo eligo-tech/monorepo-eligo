@@ -316,6 +316,7 @@ async def ingest(
 
     postings_created = 0
     postings_updated = 0
+    posting_external_ids_created: list[str] = []
 
     for posting, _, key in accepted:
         company = company_by_key[key]
@@ -356,6 +357,7 @@ async def ingest(
                 )
             )
             postings_created += 1
+            posting_external_ids_created.append(posting.external_id)
             continue
 
         # Seen before: a touch when nothing changed, a rewrite when it did.
@@ -453,6 +455,7 @@ async def ingest(
         companies_matched=companies_matched,
         postings_created=postings_created,
         postings_updated=postings_updated,
+        posting_external_ids_created=posting_external_ids_created,
         rejected=rejected,
         notes=notes,
         shard_plan=shard_plan,
@@ -527,6 +530,7 @@ async def fetch_missing_descriptions(
     adapter: SourceAdapter,
     limit: int = 200,
     priority_terms: list[str] | None = None,
+    external_ids: list[str] | None = None,
     delay: float = 0.3,
 ) -> dict[str, int]:
     """Fill in ad text for postings that have none, most useful first.
@@ -558,6 +562,11 @@ async def fetch_missing_descriptions(
         HubJobPosting.description_fetched_at.is_(None),
         HubJobPosting.source == adapter.name,
     )
+    if external_ids is not None:
+        # Exact run scope supplied by the nightly coordinator. Do not let its
+        # description pass drift into the historical backlog when some new
+        # postings have no fetchable text or the run is repeated.
+        stmt = stmt.where(HubJobPosting.external_id.in_(external_ids))
     if priority_terms:
         # Postings a saved profile would surface come first. A CASE rather than
         # a filter, so the run still makes progress once those are exhausted.

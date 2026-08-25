@@ -22,6 +22,7 @@ from app.domain.hub.gate import PreconditionFailed
 from app.domain.searches import service as searches_service
 from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
+    DescriptionFetchRequest,
     HubCompanyLinkRead,
     HubCorpusStats,
     HubEmployerHit,
@@ -300,6 +301,7 @@ async def mark_profiles_crawled(
 
 @router.post("/descriptions/fetch")
 async def fetch_descriptions(
+    payload: DescriptionFetchRequest | None = None,
     limit: int = Query(default=200, ge=1, le=2000),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
@@ -314,6 +316,7 @@ async def fetch_descriptions(
     result = await service.fetch_missing_descriptions(
         db, adapter=get_source_adapter("bundesagentur"), limit=limit,
         priority_terms=terms,
+        external_ids=payload.external_ids if payload else None,
     )
     return {**result, **await service.descriptions_progress(db)}
 
