@@ -345,6 +345,14 @@ async def test_terms_match_per_posting_not_across_the_employer(corpus) -> None:
             assert "embedded" in haystack and "firmware" in haystack or "embedded" in hit["name"].lower()
 
 
+@pytest.mark.skipif(
+    not service.SEARCH_AD_TEXT,
+    reason=(
+        "SEARCH_AD_TEXT is off as a stopgap — the description scan is unindexed "
+        "and blows the 120s statement_timeout. Migration 0016 restores it, and "
+        "this test un-skips itself when the flag goes back to True."
+    ),
+)
 async def test_search_reaches_the_ad_text_once_it_is_stored(corpus) -> None:
     """The point of storing descriptions: a stack named only in the body."""
     from sqlalchemy import select

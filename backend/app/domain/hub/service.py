@@ -838,25 +838,47 @@ async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
 _BASIS_RANK = {"vat": 0, "register": 1, "domain": 2, "name_place": 3}
 
 
+# STOPGAP — flip back to True once migration 0016 has run.
+#
+# Matching the ad TEXT is the behaviour we want (see `_term_matches`), but
+# `lower(description) LIKE '%term%'` cannot use an index, and the nightly pass
+# has now filled 90,450 descriptions averaging 2.4 KB into a 518 MB table.
+# `search_employers` evaluates the predicate three times per request, so one
+# search measured 107.8s against a database whose `statement_timeout` is 120s —
+# i.e. it fails on the deployed instance and merely crawls locally.
+#
+# Excluding the column takes the same search to 9.7s. The cost is real: only 5%
+# of TypeScript roles and 33% of Java roles name the stack in their TITLE, so
+# most keyword hits are lost until this is turned back on.
+#
+# The fix is migration 0016 (pg_trgm GIN indexes on these exact expressions),
+# which makes the full predicate fast without changing what it matches. After
+# running it, set this to True and delete this comment.
+SEARCH_AD_TEXT = False
+
+
 def _term_matches(term: str):
     """One search word, matched against everything a posting can be found by.
 
     Includes the ad TEXT, so once descriptions are stored a search reaches the
     requirements rather than only the headline — which is where a stack is
     actually named: measured, only 5% of TypeScript roles and 33% of Java roles
-    carry the term in their title.
+    carry the term in their title. Gated on `SEARCH_AD_TEXT` while the corpus
+    has no index to serve it.
 
     A hit on the COMPANY counts too, so searching "Netto" still reports Netto's
     whole vacancy count rather than only ads with "Netto" in the title.
     """
     needle = f"%{term}%"
-    return or_(
+    fields = [
         func.lower(HubJobPosting.title).like(needle),
         func.lower(HubJobPosting.occupation).like(needle),
-        func.lower(HubJobPosting.description).like(needle),
         func.lower(HubCompany.name).like(needle),
         func.lower(HubCompany.city).like(needle),
-    )
+    ]
+    if SEARCH_AD_TEXT:
+        fields.insert(2, func.lower(HubJobPosting.description).like(needle))
+    return or_(*fields)
 
 
 async def search_employers(
