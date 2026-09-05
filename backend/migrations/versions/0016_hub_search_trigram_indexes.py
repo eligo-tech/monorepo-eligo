@@ -21,6 +21,13 @@ query writes, so the planner can match them without touching the query.
 Trigram indexes need a term of at least 3 characters to help; shorter terms fall
 back to a scan, which is the pre-existing behaviour and no worse.
 
+Scope: SHORT columns only. `lower(description)` is ~220 MB and its GIN build is
+the one that blows past any sane deploy window, so it is deliberately left out.
+Nothing needs it while `SEARCH_AD_TEXT` is False, because the predicate does not
+touch the column at all. Indexing description belongs with the change that turns
+that flag back on, where the build can be done deliberately rather than inside a
+release that is holding the API down while it runs.
+
 Postgres only: SQLite (tests) has neither the extension nor the problem.
 
 Revision ID: 0016
@@ -42,15 +49,25 @@ depends_on: str | Sequence[str] | None = None
 _INDEXES = [
     ("ix_hub_posting_title_trgm", "hub_job_postings", "lower(title)"),
     ("ix_hub_posting_occupation_trgm", "hub_job_postings", "lower(occupation)"),
-    ("ix_hub_posting_description_trgm", "hub_job_postings", "lower(description)"),
     ("ix_hub_company_name_trgm", "hub_companies", "lower(name)"),
     ("ix_hub_company_city_trgm", "hub_companies", "lower(city)"),
+    # The company-match branch scans this with a leading wildcard too, which the
+    # existing b-tree ix_hub_company_normalized_name cannot serve.
+    ("ix_hub_company_normname_trgm", "hub_companies", "normalized_name"),
 ]
 
 
 def upgrade() -> None:
     if op.get_bind().dialect.name != "postgresql":
         return
+    # statement_timeout applies to DDL. This database sets it to 2min, which is
+    # less than a GIN build takes: the first attempt at this migration was
+    # cancelled mid-CREATE INDEX and rolled back. Because the container start
+    # command is `alembic upgrade head && uvicorn`, that failure also meant the
+    # API never booted. Lifted for this transaction only.
+    op.execute("SET LOCAL statement_timeout = 0")
+    # Fail fast rather than queue behind a long transaction holding the table.
+    op.execute("SET LOCAL lock_timeout = '30s'")
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     for name, table, expr in _INDEXES:
         op.execute(
