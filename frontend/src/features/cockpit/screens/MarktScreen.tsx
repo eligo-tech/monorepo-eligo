@@ -34,7 +34,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
-import { api } from '@/api/client'
+import { ApiError, api } from '@/api/client'
 import type {
   FacetValueDTO,
   HubJobPostingDTO,
@@ -441,6 +441,48 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
   )
 }
 
+/**
+ * What actually went wrong, rather than a guess.
+ *
+ * This previously read "ist die Sitzung noch gültig?" for EVERY failure. That
+ * is one plausible cause out of many, and when the real answer was a 500 from a
+ * query the database cancelled, the message sent the reader to re-authenticate
+ * — a wrong instruction is worse than a vague one. The status code decides the
+ * sentence now, and the server's own text is shown underneath, so a failure can
+ * be diagnosed from the screen instead of from the Network tab.
+ */
+function SearchError({ error }: { error: Error }) {
+  const status = error instanceof ApiError ? error.status : null
+
+  // A fetch that never got a response (network down, CORS, aborted) has no
+  // status at all — distinct from the server answering with a failure.
+  const headline =
+    status === null
+      ? 'Keine Antwort vom Server — Netzwerk, CORS oder Abbruch.'
+      : status === 401 || status === 403
+        ? `Sitzung abgelaufen oder nicht berechtigt (HTTP ${status}) — bitte neu anmelden.`
+        : status === 408 || status === 504 || status === 502 || status === 503
+          ? `Zeitüberschreitung (HTTP ${status}) — die Suche war zu langsam für den Server.`
+          : status >= 500
+            ? `Serverfehler (HTTP ${status}) — die Abfrage wurde nicht zu Ende geführt.`
+            : `Suche abgelehnt (HTTP ${status}).`
+
+  // The body is the useful half for a 500 (Postgres names its own cancellation),
+  // but it can be a long HTML error page, so it is capped.
+  const detail = (error.message ?? '').trim().slice(0, 300)
+
+  return (
+    <Panel className="space-y-2 p-5">
+      <p className="text-[14px] text-coral-400">Die Suche ist fehlgeschlagen — {headline}</p>
+      {detail && (
+        <p className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-cockpit-faint">
+          {detail}
+        </p>
+      )}
+    </Panel>
+  )
+}
+
 export function MarktScreen() {
   const [draft, setDraft] = useState('')
   const [city, setCity] = useState('')
@@ -714,13 +756,7 @@ export function MarktScreen() {
           <p className="font-mono text-[13px] text-cockpit-faint">sucht im Korpus…</p>
         )}
 
-        {query && results.error && (
-          <Panel className="p-5">
-            <p className="text-[14px] text-coral-400">
-              Die Suche ist fehlgeschlagen — ist die Sitzung noch gültig?
-            </p>
-          </Panel>
-        )}
+        {query && results.error && <SearchError error={results.error} />}
 
         {query && !results.loading && !results.error && (
           <>
