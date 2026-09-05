@@ -857,7 +857,27 @@ _BASIS_RANK = {"vat": 0, "register": 1, "domain": 2, "name_place": 3}
 SEARCH_AD_TEXT = False
 
 
-def _term_matches(term: str):
+def _companies_matching(term: str):
+    """Company ids whose OWN fields carry the term.
+
+    Split out so the predicate can be referenced from a posting-side filter as
+    a membership test. Every branch here is single-table, so the trigram
+    indexes serve it: the planner reports a BitmapOr over the three company
+    indexes at a cost of ~97 for the whole subquery.
+    """
+    needle = f"%{term}%"
+    return select(HubCompany.id).where(
+        or_(
+            func.lower(HubCompany.name).like(needle),
+            func.lower(HubCompany.city).like(needle),
+            HubCompany.normalized_name.like(
+                f"%{normalize_company_name(term) or term}%"
+            ),
+        )
+    )
+
+
+def _term_matches(term: str, name_hit_ids: list | None = None):
     """One search word, matched against everything a posting can be found by.
 
     Includes the ad TEXT, so once descriptions are stored a search reaches the
@@ -867,17 +887,36 @@ def _term_matches(term: str):
     has no index to serve it.
 
     A hit on the COMPANY counts too, so searching "Netto" still reports Netto's
-    whole vacancy count rather than only ads with "Netto" in the title.
+    whole vacancy count rather than only ads with "Netto" in the title. That
+    company hit is expressed as MEMBERSHIP rather than as another arm of the
+    OR, and the distinction is the difference between a search that answers and
+    one that gets killed.
+
+    An OR reaching across two tables cannot be pushed down to either table's
+    index: the planner has to join first and filter afterwards. With
+    `lower(hub_companies.name)` sitting in this OR, EXPLAIN showed a hash join
+    of all 154,367 postings against all 81,540 companies with the whole
+    predicate as a Join Filter — sequential scans of both tables, no index used,
+    ~122s and cancelled by statement_timeout. Every arm below names
+    `hub_job_postings` alone, so ix_hub_posting_title_trgm and
+    ix_hub_posting_occupation_trgm can finally serve it.
     """
     needle = f"%{term}%"
     fields = [
         func.lower(HubJobPosting.title).like(needle),
         func.lower(HubJobPosting.occupation).like(needle),
-        func.lower(HubCompany.name).like(needle),
-        func.lower(HubCompany.city).like(needle),
     ]
     if SEARCH_AD_TEXT:
-        fields.insert(2, func.lower(HubJobPosting.description).like(needle))
+        fields.append(func.lower(HubJobPosting.description).like(needle))
+    # The company arm is added ONLY when some company actually matched by name,
+    # and as a literal id list rather than a correlated subquery. When nothing
+    # matched — the common case; "embedded" matches no company name — the arm
+    # disappears and what remains is pure hub_job_postings, which the bitmap
+    # scan answers in 0.5ms. Leaving an always-present subquery here is what
+    # cost 111s: the planner cannot see it is empty, so it abandons the bitmap
+    # scan and walks the table.
+    if name_hit_ids:
+        fields.append(HubJobPosting.hub_company_id.in_(name_hit_ids))
     return or_(*fields)
 
 
@@ -924,6 +963,14 @@ async def search_employers(
     # the corpus: that one query lost 5 of 5 real matches.
     terms = [t for t in (q or "").lower().split() if t]
 
+    # Resolve the company-name side FIRST, one cheap indexed query per term, so
+    # the posting predicate below stays single-table. See `_term_matches`.
+    name_hits: dict[str, list] = {}
+    for term in terms:
+        name_hits[term] = list(
+            (await session.execute(_companies_matching(term))).scalars().all()
+        )
+
     if terms:
         by_company = select(HubCompany.id).where(
             *[
@@ -941,13 +988,12 @@ async def search_employers(
         # term — matching per POSTING, not across the whole employer, so
         # "python entwickler" does not hit a company that has a Python role and
         # a separate unrelated Entwickler role.
-        by_role = (
-            select(HubJobPosting.hub_company_id)
-            .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
-            .where(
-                HubJobPosting.is_active.is_(True),
-                *[_term_matches(term) for term in terms],
-            )
+        # No join to HubCompany: `_term_matches` carries the company side as a
+        # subquery, and joining here would reintroduce the cross-table filter
+        # that made this unservable by any index.
+        by_role = select(HubJobPosting.hub_company_id).where(
+            HubJobPosting.is_active.is_(True),
+            *[_term_matches(term, name_hits[term]) for term in terms],
         )
         candidates = candidates.where(
             or_(HubCompany.id.in_(by_company), HubCompany.id.in_(by_role))
@@ -982,7 +1028,7 @@ async def search_employers(
     # is worse than no count; sharing the predicate makes them agree by
     # construction rather than by remembering to update both.
     role_match: list = [HubJobPosting.is_active.is_(True), *posting_filters]
-    role_match.extend(_term_matches(term) for term in terms)
+    role_match.extend(_term_matches(term, name_hits[term]) for term in terms)
 
     roles = func.count(HubJobPosting.id)
     grouped = await session.execute(
