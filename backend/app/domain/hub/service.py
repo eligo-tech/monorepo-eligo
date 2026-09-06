@@ -853,7 +853,8 @@ async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
 _BASIS_RANK = {"vat": 0, "register": 1, "domain": 2, "name_place": 3}
 
 
-# STOPGAP — flip back to True once migration 0016 has run.
+# Ad-text matching, served by the trigram index on hub_posting_payload
+# (migration 0018).
 #
 # Matching the ad TEXT is the behaviour we want (see `_term_matches`), but
 # `lower(description) LIKE '%term%'` cannot use an index, and the nightly pass
@@ -869,7 +870,7 @@ _BASIS_RANK = {"vat": 0, "register": 1, "domain": 2, "name_place": 3}
 # The fix is migration 0016 (pg_trgm GIN indexes on these exact expressions),
 # which makes the full predicate fast without changing what it matches. After
 # running it, set this to True and delete this comment.
-SEARCH_AD_TEXT = False
+SEARCH_AD_TEXT = True
 
 
 def _companies_matching(term: str):

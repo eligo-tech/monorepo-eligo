@@ -357,7 +357,7 @@ async def test_search_reaches_the_ad_text_once_it_is_stored(corpus) -> None:
     """The point of storing descriptions: a stack named only in the body."""
     from sqlalchemy import select
 
-    from app.domain.hub.models import HubJobPosting
+    from app.domain.hub.models import HubJobPosting, HubPostingPayload
 
     async with SessionLocal() as s:
         row = (
@@ -365,7 +365,12 @@ async def test_search_reaches_the_ad_text_once_it_is_stored(corpus) -> None:
                 select(HubJobPosting).where(HubJobPosting.external_id == "e1")
             )
         ).scalar_one()
-        row.description = "Wir suchen Verstärkung mit Kotlin und Gradle."
+        # Through the payload, not the posting: `description` on HubJobPosting is
+        # a read-through property since 0017, deliberately read-only so a write
+        # cannot land on a detached attribute and vanish.
+        if row.payload is None:
+            row.payload = HubPostingPayload()
+        row.payload.description = "Wir suchen Verstärkung mit Kotlin und Gradle."
         await s.commit()
 
         hits = await service.search_employers(s, q="kotlin")
