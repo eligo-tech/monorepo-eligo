@@ -38,6 +38,7 @@ from app.domain.hub.models import (
     HubCompanyLink,
     HubJobPosting,
     HubObservation,
+    HubPostingPayload,
 )
 from app.domain.hub.resolution import (
     extract_legal_form,
@@ -329,7 +330,6 @@ async def ingest(
                     hub_company_id=company.id,
                     observation_id=observation.id,
                     title=posting.title,
-                    description=posting.description,
                     occupation=posting.occupation,
                     berufsfeld=posting.berufsfeld,
                     region=posting.region,
@@ -353,7 +353,9 @@ async def ingest(
                     first_seen_at=now,
                     last_seen_at=now,
                     is_active=True,
-                    raw=posting.raw,
+                    payload=HubPostingPayload(
+                        raw=posting.raw, description=posting.description
+                    ),
                 )
             )
             postings_created += 1
@@ -377,7 +379,9 @@ async def ingest(
             row.region = posting.region
         if row.content_hash != content_hash:
             row.title = posting.title
-            row.description = posting.description
+            if row.payload is None:
+                row.payload = HubPostingPayload()
+            row.payload.description = posting.description
             row.occupation = posting.occupation
             row.employment_type = posting.employment_type
             row.location_text = posting.location_text
@@ -391,7 +395,7 @@ async def ingest(
             row.posted_at = posting.posted_at
             row.source_url = posting.source_url
             row.content_hash = content_hash
-            row.raw = posting.raw
+            row.payload.raw = posting.raw
         postings_updated += 1
 
     await session.flush()
@@ -556,9 +560,13 @@ async def fetch_missing_descriptions(
     # forever — which is exactly what happened in production until the run was
     # killed. One attempt per posting; the timestamp leaves room for a
     # deliberate retry policy later.
+    # `description_fetched_at IS NULL` alone is the "never attempted" marker —
+    # migration 0015 made it so, and it is now the ONLY test available here
+    # since the text itself moved to hub_posting_payload. Dropping the old
+    # `description IS NULL` arm changes nothing: 0015 backfilled the timestamp
+    # for every row that already carried text.
     stmt = select(HubJobPosting).where(
         HubJobPosting.is_active.is_(True),
-        HubJobPosting.description.is_(None),
         HubJobPosting.description_fetched_at.is_(None),
         HubJobPosting.source == adapter.name,
     )
@@ -598,7 +606,9 @@ async def fetch_missing_descriptions(
         # posting has been tried, not that it yielded something.
         row.description_fetched_at = dt.datetime.now(dt.UTC)
         if text:
-            row.description = text
+            if row.payload is None:
+                row.payload = HubPostingPayload()
+            row.payload.description = text
             stored += 1
         else:
             empty += 1
@@ -623,9 +633,14 @@ async def descriptions_progress(session: AsyncSession) -> dict[str, int]:
     ) or 0
     with_text = (
         await session.scalar(
-            select(func.count(HubJobPosting.id)).where(
+            select(func.count(HubJobPosting.id))
+            .join(
+                HubPostingPayload,
+                HubPostingPayload.hub_job_posting_id == HubJobPosting.id,
+            )
+            .where(
                 HubJobPosting.is_active.is_(True),
-                HubJobPosting.description.is_not(None),
+                HubPostingPayload.description.is_not(None),
             )
         )
     ) or 0
@@ -907,7 +922,16 @@ def _term_matches(term: str, name_hit_ids: list | None = None):
         func.lower(HubJobPosting.occupation).like(needle),
     ]
     if SEARCH_AD_TEXT:
-        fields.append(func.lower(HubJobPosting.description).like(needle))
+        # Cold table, so this is a membership test rather than another column on
+        # hub_job_postings — same reasoning as the company arm below: keep every
+        # arm resolvable without dragging a second table into the join filter.
+        fields.append(
+            HubJobPosting.id.in_(
+                select(HubPostingPayload.hub_job_posting_id).where(
+                    func.lower(HubPostingPayload.description).like(needle)
+                )
+            )
+        )
     # The company arm is added ONLY when some company actually matched by name,
     # and as a literal id list rather than a correlated subquery. When nothing
     # matched — the common case; "embedded" matches no company name — the arm

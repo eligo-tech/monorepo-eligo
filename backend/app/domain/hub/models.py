@@ -54,7 +54,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
@@ -233,7 +233,6 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     )
 
     title: Mapped[str] = mapped_column(String(300), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The source's own occupation taxonomy label (BA: `hauptberuf`).
     occupation: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # The coarser occupational FIELD (BA: `berufsfeld`, 144 values).
@@ -301,4 +300,60 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # The source's own record, kept verbatim for grounding checks downstream.
+    # `raw` and `description` live in HubPostingPayload, not here — see that
+    # class for why. `payload` is selectin-loaded: one extra query per result
+    # set rather than one per row, and the DTO's `description` reads through it.
+    payload: Mapped["HubPostingPayload | None"] = relationship(
+        "HubPostingPayload",
+        back_populates="posting",
+        uselist=False,
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    @property
+    def description(self) -> str | None:
+        """Read-through so `HubJobPostingRead.from_attributes` still works.
+
+        Writers must go through `payload.description`; this is deliberately
+        read-only so a write cannot silently land on a detached attribute.
+        """
+        return self.payload.description if self.payload else None
+
+
+class HubPostingPayload(Base, TimestampMixin):
+    """The COLD half of a posting: bulk text nobody scans.
+
+    Split out for cache residency, not for tidiness. `hub_job_postings` carries
+    the columns search actually reads — title, occupation, city, dates, foreign
+    keys — and every sequential scan pays for the width of that table. With
+    `raw` and `description` inline the main heap measured **298 MB** against a
+    224 MB `shared_buffers`, so scans spilled to disk on every search. Without
+    them the hot rows are a few hundred bytes each and the table fits in cache.
+
+    Postgres already TOASTs the largest values out of line (208 MB of the 596 MB
+    total), which is why this is a smaller win than the column sizes suggest —
+    but the *inline* remainder was still most of the main heap.
+
+    `raw` is the archived source record, kept for provenance and read by nothing
+    in the codebase. `description` is the ad body, displayed in the UI and
+    searched only when `SEARCH_AD_TEXT` is on.
+
+    Shared corpus, so no `tenant_id` — same deliberate exception as the tables
+    it hangs off (see CLAUDE.md §2.6).
+    """
+
+    __tablename__ = "hub_posting_payload"
+
+    hub_job_posting_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("hub_job_postings.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
     raw: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    posting: Mapped["HubJobPosting"] = relationship(
+        "HubJobPosting", back_populates="payload"
+    )

@@ -202,3 +202,74 @@ async def test_the_endpoint_keeps_the_batch_count_distinct(postings) -> None:
     # The batch count is bounded by the batch, never the corpus.
     assert body["attempted"] <= 5
     assert body["corpus_attempted"] >= body["attempted"]
+
+
+# ---------------------------------------------------------------------------
+# The hot/cold split (migration 0017)
+# ---------------------------------------------------------------------------
+
+
+async def test_fetched_text_lands_in_the_cold_table_and_reads_back(postings) -> None:
+    """`description` moved to hub_posting_payload; both ends must still work.
+
+    The split is invisible from outside on purpose: writers go through
+    `payload.description`, readers get `posting.description` via the
+    read-through property that `HubJobPostingRead.from_attributes` depends on.
+    A regression here would silently empty the ad text in the UI while every
+    other test still passed, so it is pinned explicitly.
+    """
+    from app.domain.hub.models import HubPostingPayload
+    from app.domain.hub.schemas import HubJobPostingRead
+
+    adapter = _Adapter({"has-text": "Wir suchen Kotlin und Gradle."})
+    async with SessionLocal() as s:
+        await service.fetch_missing_descriptions(s, adapter=adapter, limit=10)
+
+    async with SessionLocal() as s:
+        # stored on the COLD table, not the hot one
+        stored = await s.scalar(
+            select(HubPostingPayload.description).join(
+                HubJobPosting,
+                HubJobPosting.id == HubPostingPayload.hub_job_posting_id,
+            ).where(HubJobPosting.external_id == "has-text")
+        )
+        assert stored == "Wir suchen Kotlin und Gradle."
+
+        # and reads back through the hot object, which is what the DTO uses
+        row = (
+            await s.execute(
+                select(HubJobPosting).where(HubJobPosting.external_id == "has-text")
+            )
+        ).scalar_one()
+        assert row.description == "Wir suchen Kotlin und Gradle."
+        assert HubJobPostingRead.model_validate(row).description == (
+            "Wir suchen Kotlin und Gradle."
+        )
+
+        # a posting the source had no text for reads as None, not as an error
+        empty = (
+            await s.execute(
+                select(HubJobPosting).where(HubJobPosting.external_id == "no-text-1")
+            )
+        ).scalar_one()
+        assert empty.description is None
+
+
+async def test_progress_counts_text_through_the_cold_table(postings) -> None:
+    """`descriptions_progress` must follow the text to its new home.
+
+    It counted `HubJobPosting.description IS NOT NULL`; that column no longer
+    exists, so a version of this that still compiled would report zero coverage
+    forever and the nightly pass would look like it had never run.
+    """
+    adapter = _Adapter({"has-text": "Kotlin."})
+    async with SessionLocal() as s:
+        await service.fetch_missing_descriptions(s, adapter=adapter, limit=10)
+
+    async with SessionLocal() as s:
+        progress = await service.descriptions_progress(s)
+
+    assert progress["active_postings"] == 3
+    assert progress["with_description"] == 1      # only "has-text" got text
+    assert progress["corpus_attempted"] == 3      # all three were tried
+    assert progress["remaining"] == 0
