@@ -1118,6 +1118,20 @@ async def _search_candidates(
     return candidates, terms, name_hits, posting_filters
 
 
+def _role_match(terms: list[str], name_hits: dict, posting_filters: list) -> list:
+    """What counts as a matching role. ONE definition.
+
+    The headline count, the evidence list, the relevance score and the total all
+    read from this. When the number and the roles under it were built from
+    different predicates, a search for "Embedded" showed "2 Rollen" above a
+    single Embedded role — a count that disagrees with the evidence beneath it is
+    worse than no count.
+    """
+    match: list = [HubJobPosting.is_active.is_(True), *posting_filters]
+    match.extend(_term_matches(term, name_hits[term]) for term in terms)
+    return match
+
+
 def _keyset(cursor: str | None, terms: list[str], roles):
     """Continue after a previous page, without OFFSET.
 
@@ -1180,6 +1194,7 @@ async def search_employers(
     limit: int = 40,
     roles_per_employer: int = 6,
     cursor: str | None = None,
+    min_relevance: int = 1,
 ) -> list[dict]:
     """Search the corpus and return EMPLOYERS, not company rows.
 
@@ -1215,8 +1230,7 @@ async def search_employers(
     # a single Embedded role. A count that disagrees with the evidence under it
     # is worse than no count; sharing the predicate makes them agree by
     # construction rather than by remembering to update both.
-    role_match: list = [HubJobPosting.is_active.is_(True), *posting_filters]
-    role_match.extend(_term_matches(term, name_hits[term]) for term in terms)
+    role_match = _role_match(terms, name_hits, posting_filters)
 
     roles = func.count(HubJobPosting.id)
     grouped = await session.execute(
@@ -1242,7 +1256,14 @@ async def search_employers(
         )
         .where(HubCompany.id.in_(candidates))
         .group_by(HubCompany.normalized_name)
-        .having(roles >= min_roles, *_keyset(cursor, terms, roles))
+        .having(
+            roles >= min_roles,
+            # "Only where the title says it." For a broad term the tail is
+            # mostly incidental mentions — "sap" matches an ad that lists it
+            # among nice-to-haves — and narrowing beats paging through them.
+            func.max(_role_relevance(terms)) >= min_relevance,
+            *_keyset(cursor, terms, roles),
+        )
         # Relevance first, volume only as a tie-break: among employers whose
         # titles name the role, more open roles is genuinely the better lead.
         .order_by(
@@ -1301,7 +1322,16 @@ async def search_employers(
             func.row_number()
             .over(
                 partition_by=HubCompany.normalized_name,
-                order_by=HubJobPosting.posted_at.desc().nulls_last(),
+                # Relevance FIRST, then recency. The employer's score is the max
+                # over its roles, so ordering the evidence by date alone showed
+                # a rel=4 employer beneath a role that does not demonstrate 4 —
+                # "citema systems, rel=4, HF-Entwicklungsingenieur" for a Python
+                # search, where the Python role existed but sat further down.
+                # The row that earned the score is the row worth showing first.
+                order_by=(
+                    _role_relevance(terms).desc(),
+                    HubJobPosting.posted_at.desc().nulls_last(),
+                ),
             )
             .label("rn"),
         )
@@ -1358,6 +1388,7 @@ async def count_employers(
     city: str | None = None,
     regions: list[str] | None = None,
     berufsfelder: list[str] | None = None,
+    min_relevance: int = 1,
 ) -> int:
     """How many employers the query matches in total.
 
@@ -1366,14 +1397,34 @@ async def count_employers(
     deliberately does not join postings: the roll-up and its role counts are the
     expensive half, and a total does not need them.
     """
-    candidates, _terms, _name_hits, _filters = await _search_candidates(
+    candidates, terms, name_hits, posting_filters = await _search_candidates(
         session, q=q, city=city, regions=regions, berufsfelder=berufsfelder
     )
-    total = await session.scalar(
-        select(func.count(func.distinct(HubCompany.normalized_name))).where(
-            HubCompany.id.in_(candidates)
+    if min_relevance <= 1:
+        # Nothing is excluded, so the cheap shape is also the correct one.
+        total = await session.scalar(
+            select(func.count(func.distinct(HubCompany.normalized_name))).where(
+                HubCompany.id.in_(candidates)
+            )
         )
+        return int(total or 0)
+
+    # Filtered: relevance only exists after the roll-up, so the count has to pay
+    # for the same grouping the search does. Approximating here would let the
+    # header promise pages that do not exist, which is worse than no header.
+    role_match = _role_match(terms, name_hits, posting_filters)
+    grouped = (
+        select(HubCompany.normalized_name)
+        .outerjoin(
+            HubJobPosting,
+            and_(HubJobPosting.hub_company_id == HubCompany.id, *role_match),
+        )
+        .where(HubCompany.id.in_(candidates))
+        .group_by(HubCompany.normalized_name)
+        .having(func.max(_role_relevance(terms)) >= min_relevance)
+        .subquery()
     )
+    total = await session.scalar(select(func.count()).select_from(grouped))
     return int(total or 0)
 
 

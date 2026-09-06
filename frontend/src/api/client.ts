@@ -111,6 +111,7 @@ export const api = {
     minRoles?: number
     limit?: number
     cursor?: string | null
+    minRelevance?: number
   }) => {
     const qs = new URLSearchParams()
     if (params.q) qs.set('q', params.q)
@@ -122,6 +123,8 @@ export const api = {
     if (params.minRoles) qs.set('min_roles', String(params.minRoles))
     qs.set('limit', String(params.limit ?? 40))
     if (params.cursor) qs.set('cursor', params.cursor)
+    if (params.minRelevance && params.minRelevance > 1)
+      qs.set('min_relevance', String(params.minRelevance))
     return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
 

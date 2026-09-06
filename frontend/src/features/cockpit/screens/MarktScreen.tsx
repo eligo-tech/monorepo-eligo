@@ -533,6 +533,9 @@ export function MarktScreen() {
   } | null>(null)
   const [regions, setRegions] = useState<string[]>([])
   const [berufsfelder, setBerufsfelder] = useState<string[]>([])
+  // "Only where the title says it." For a broad term the tail is incidental
+  // mentions, and narrowing beats paging through thousands of them.
+  const [titlesOnly, setTitlesOnly] = useState(false)
   const [activeSaved, setActiveSaved] = useState<string | null>(null)
   const [savedKey, setSavedKey] = useState(0)
 
@@ -548,9 +551,16 @@ export function MarktScreen() {
             regions: query.regions,
             berufsfelder: query.berufsfelder,
             limit: PAGE_SIZE,
+            minRelevance: titlesOnly ? 3 : 1,
           })
         : Promise.resolve({ items: [], total: 0, next_cursor: null }),
-    [query?.q, query?.city, query?.regions.join('|'), query?.berufsfelder.join('|')],
+    [
+      query?.q,
+      query?.city,
+      query?.regions.join('|'),
+      query?.berufsfelder.join('|'),
+      titlesOnly,
+    ],
   )
   // Pages 2..n, appended. Kept apart from `results` so a new search resets them
   // by construction rather than by remembering to clear them.
@@ -574,13 +584,14 @@ export function MarktScreen() {
         berufsfelder: query.berufsfelder,
         limit: PAGE_SIZE,
         cursor,
+        minRelevance: titlesOnly ? 3 : 1,
       })
       setMore((prev) => [...prev, ...page.items])
       setCursor(page.next_cursor)
     } finally {
       setLoadingMore(false)
     }
-  }, [query, cursor])
+  }, [query, cursor, titlesOnly])
 
   const run = useCallback(() => {
     setActiveSaved(null)
@@ -763,6 +774,28 @@ export function MarktScreen() {
             <Search className="h-4 w-4" />
             {results.loading ? 'Sucht…' : 'Suchen'}
           </Button>
+          {/* Not a checkbox in a filter drawer: for a broad term this changes
+              the answer more than any other control on the screen. */}
+          <button
+            type="button"
+            onClick={() => setTitlesOnly((v) => !v)}
+            aria-pressed={titlesOnly}
+            title="Nur Rollen, deren Titel den Suchbegriff nennt — statt Anzeigen, die ihn nebenbei erwähnen"
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[13px] transition-colors',
+              titlesOnly
+                ? 'border-mint-400/40 bg-mint-400/10 text-cockpit-text'
+                : 'border-cockpit-line text-cockpit-dim hover:text-cockpit-text',
+            )}
+          >
+            <Check
+              className={cn(
+                'h-3.5 w-3.5',
+                titlesOnly ? 'text-mint-400' : 'text-cockpit-faint',
+              )}
+            />
+            nur Titel-Treffer
+          </button>
           {hasCriteria && !alreadySaved && (
             <Button
               onClick={saveCurrent}
