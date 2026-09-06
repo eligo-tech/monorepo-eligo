@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import base64
 import hashlib
 import html
 import json
@@ -1029,39 +1030,24 @@ def _role_relevance(terms: list[str]):
     )
 
 
-async def search_employers(
+
+
+async def _search_candidates(
     session: AsyncSession,
     *,
-    q: str | None = None,
-    city: str | None = None,
-    regions: list[str] | None = None,
-    berufsfelder: list[str] | None = None,
-    min_roles: int = 0,
-    limit: int = 40,
-    roles_per_employer: int = 6,
-) -> list[dict]:
-    """Search the corpus and return EMPLOYERS, not company rows.
+    q: str | None,
+    city: str | None,
+    regions: list[str] | None,
+    berufsfelder: list[str] | None,
+):
+    """Which employers the query matches, and the pieces built along the way.
 
-    Two deliberate departures from the old listing:
+    Extracted so the search and its TOTAL cannot drift: two copies of "what
+    counts as a candidate" would eventually disagree, and the count would then
+    promise a page that does not exist.
 
-    * **Rolled up by identity.** `name_place` gives one row per site, so a
-      discounter with 200 branches produced 200 rows and buried every specialist
-      employer beneath it. Grouping by `normalized_name` turns that into
-      "Netto — 203 Standorte, 1,240 offene Rollen", which is one useful BD row
-      instead of 203 useless ones.
-    * **Matched on ROLES as well as names.** A recruiter asks "who is hiring
-      embedded engineers near Stuttgart", so a company qualifies when its
-      postings match, and the matching postings come back with it — the answer
-      has to show its own evidence.
-
-    Searchable text today is company name, city, posting title and occupation.
-    Posting descriptions are not stored (the source's search endpoint does not
-    return them), so this is keyword matching, not semantic retrieval.
-
-    `regions` and `berufsfelder` are OR-within, AND-across: several Bundesländer
-    widen the area, a Berufsfeld narrows within it. Both filter on POSTING
-    fields, so an employer qualifies when a matching role does — a nationwide
-    chain is not excluded from "Bayern" because its head office sits elsewhere.
+    Returns the candidate id select, the parsed terms, the per-term company-name
+    hits, and the posting-side filters.
     """
     candidates = select(HubCompany.id)
 
@@ -1129,6 +1115,99 @@ async def search_employers(
             )
         )
 
+    return candidates, terms, name_hits, posting_filters
+
+
+def _keyset(cursor: str | None, terms: list[str], roles):
+    """Continue after a previous page, without OFFSET.
+
+    `OFFSET n` re-runs the whole GROUP BY and discards n rows, so page six costs
+    what page one did plus the waste — on a corpus this size that is seconds per
+    page, paid again on every page. A keyset asks "what comes after this point"
+    and stays flat however deep the reader goes.
+
+    The sort is (relevance DESC, roles DESC, name ASC): mixed directions, so a
+    row-value comparison will not express it and the three cases are spelled out.
+    And because relevance and roles are AGGREGATES, this belongs in HAVING —
+    in WHERE the columns do not exist yet.
+    """
+    if not cursor:
+        return []
+    position = _decode_cursor(cursor)
+    if position is None:
+        return []
+    rel, role_count, name = position
+    relevance = func.max(_role_relevance(terms))
+    return [
+        or_(
+            relevance < rel,
+            and_(relevance == rel, roles < role_count),
+            and_(
+                relevance == rel,
+                roles == role_count,
+                HubCompany.normalized_name > name,
+            ),
+        )
+    ]
+
+
+def encode_cursor(hit: dict) -> str:
+    """Opaque position in the result order: (relevance, open_roles, name)."""
+    raw = json.dumps(
+        [hit["relevance"], hit["open_roles"], hit["normalized_name"]],
+        separators=(",", ":"),
+    )
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+
+def _decode_cursor(cursor: str) -> tuple[int, int, str] | None:
+    """None for anything unreadable — a bad cursor restarts, never 500s."""
+    try:
+        rel, roles, name = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        return int(rel), int(roles), str(name)
+    except Exception:
+        return None
+
+
+async def search_employers(
+    session: AsyncSession,
+    *,
+    q: str | None = None,
+    city: str | None = None,
+    regions: list[str] | None = None,
+    berufsfelder: list[str] | None = None,
+    min_roles: int = 0,
+    limit: int = 40,
+    roles_per_employer: int = 6,
+    cursor: str | None = None,
+) -> list[dict]:
+    """Search the corpus and return EMPLOYERS, not company rows.
+
+    Two deliberate departures from the old listing:
+
+    * **Rolled up by identity.** `name_place` gives one row per site, so a
+      discounter with 200 branches produced 200 rows and buried every specialist
+      employer beneath it. Grouping by `normalized_name` turns that into
+      "Netto — 203 Standorte, 1,240 offene Rollen", which is one useful BD row
+      instead of 203 useless ones.
+    * **Matched on ROLES as well as names.** A recruiter asks "who is hiring
+      embedded engineers near Stuttgart", so a company qualifies when its
+      postings match, and the matching postings come back with it — the answer
+      has to show its own evidence.
+
+    Searchable text today is company name, city, posting title and occupation.
+    Posting descriptions are not stored (the source's search endpoint does not
+    return them), so this is keyword matching, not semantic retrieval.
+
+    `regions` and `berufsfelder` are OR-within, AND-across: several Bundesländer
+    widen the area, a Berufsfeld narrows within it. Both filter on POSTING
+    fields, so an employer qualifies when a matching role does — a nationwide
+    chain is not excluded from "Bayern" because its head office sits elsewhere.
+    """
+    candidates, terms, name_hits, posting_filters = await _search_candidates(
+        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder
+    )
+
     # ONE predicate for what counts as a matching role, used for both the
     # headline number and the evidence list below. Previously the number was
     # SUM(open_postings_count) — every active posting at the employer — while
@@ -1163,7 +1242,7 @@ async def search_employers(
         )
         .where(HubCompany.id.in_(candidates))
         .group_by(HubCompany.normalized_name)
-        .having(roles >= min_roles)
+        .having(roles >= min_roles, *_keyset(cursor, terms, roles))
         # Relevance first, volume only as a tie-break: among employers whose
         # titles name the role, more open roles is genuinely the better lead.
         .order_by(
@@ -1270,6 +1349,32 @@ async def search_employers(
         }
         for row in groups
     ]
+
+
+async def count_employers(
+    session: AsyncSession,
+    *,
+    q: str | None = None,
+    city: str | None = None,
+    regions: list[str] | None = None,
+    berufsfelder: list[str] | None = None,
+) -> int:
+    """How many employers the query matches in total.
+
+    Counts DISTINCT employers over the same candidate set the search uses, so
+    "312 Unternehmen · stärkste 40 gezeigt" is honest rather than a guess. It
+    deliberately does not join postings: the roll-up and its role counts are the
+    expensive half, and a total does not need them.
+    """
+    candidates, _terms, _name_hits, _filters = await _search_candidates(
+        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder
+    )
+    total = await session.scalar(
+        select(func.count(func.distinct(HubCompany.normalized_name))).where(
+            HubCompany.id.in_(candidates)
+        )
+    )
+    return int(total or 0)
 
 
 # --------------------------------------------------------------------------

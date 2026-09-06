@@ -40,6 +40,7 @@ import type {
   HubJobPostingDTO,
   HubCorpusStatsDTO,
   HubEmployerHitDTO,
+  HubSearchPageDTO,
   HubFacetsDTO,
   SavedSearchDTO,
 } from '@/api/types'
@@ -79,6 +80,9 @@ const dateDe = (iso: string | null) =>
     : '—'
 
 const de = (n: number) => n.toLocaleString('de-DE')
+
+/** Employers per page. Small enough to scan, large enough to be worth a click. */
+const PAGE_SIZE = 40
 
 /** Search words go into a RegExp, so their metacharacters must be inert. */
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -535,7 +539,7 @@ export function MarktScreen() {
   const stats = useAsync<HubCorpusStatsDTO>(() => api.hubStats(), [])
   const facets = useAsync<HubFacetsDTO>(() => api.hubFacets(), [])
   const saved = useAsync<SavedSearchDTO[]>(() => api.savedSearches(), [savedKey])
-  const results = useAsync<HubEmployerHitDTO[]>(
+  const results = useAsync<HubSearchPageDTO>(
     () =>
       query
         ? api.hubSearch({
@@ -543,11 +547,40 @@ export function MarktScreen() {
             city: query.city,
             regions: query.regions,
             berufsfelder: query.berufsfelder,
-            limit: 40,
+            limit: PAGE_SIZE,
           })
-        : Promise.resolve([]),
+        : Promise.resolve({ items: [], total: 0, next_cursor: null }),
     [query?.q, query?.city, query?.regions.join('|'), query?.berufsfelder.join('|')],
   )
+  // Pages 2..n, appended. Kept apart from `results` so a new search resets them
+  // by construction rather than by remembering to clear them.
+  const [more, setMore] = useState<HubEmployerHitDTO[]>([])
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  useEffect(() => {
+    setMore([])
+    setCursor(results.data?.next_cursor ?? null)
+  }, [results.data])
+
+  const loadMore = useCallback(async () => {
+    if (!query || !cursor) return
+    setLoadingMore(true)
+    try {
+      const page = await api.hubSearch({
+        q: query.q,
+        city: query.city,
+        regions: query.regions,
+        berufsfelder: query.berufsfelder,
+        limit: PAGE_SIZE,
+        cursor,
+      })
+      setMore((prev) => [...prev, ...page.items])
+      setCursor(page.next_cursor)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [query, cursor])
 
   const run = useCallback(() => {
     setActiveSaved(null)
@@ -611,7 +644,7 @@ export function MarktScreen() {
   }, [run])
 
   const s = stats.data
-  const hits = results.data ?? []
+  const hits = [...(results.data?.items ?? []), ...more]
   const totalRoles = useMemo(
     () => hits.reduce((sum, h) => sum + h.open_roles, 0),
     [hits],
@@ -802,7 +835,15 @@ export function MarktScreen() {
             <p className="font-mono text-[13px] text-cockpit-faint">
               <span className="text-cockpit-text">{de(hits.length)}</span> Unternehmen ·{' '}
               <span className="text-cockpit-text">{de(totalRoles)}</span> offene Rollen
-              {hits.length >= 40 && <span> · nur die stärksten 40 gezeigt</span>}
+              {/* The corpus total, not the page total. "nur die stärksten 40"
+                  said neither how many exist nor what they were strongest of. */}
+              {(results.data?.total ?? 0) > hits.length && (
+                <span>
+                  {' '}
+                  · von <span className="text-cockpit-text">{de(results.data?.total ?? 0)}</span>{' '}
+                  Treffern, stärkste zuerst
+                </span>
+              )}
             </p>
 
             {hits.length === 0 ? (
@@ -818,6 +859,23 @@ export function MarktScreen() {
                 {hits.map((hit) => (
                   <EmployerCard key={hit.normalized_name} hit={hit} terms={queryTerms} />
                 ))}
+                {/* Keyset, not OFFSET: page six costs what page one did, so
+                    "am I missing anything" stays answerable without paying for
+                    the whole aggregate again on every click. */}
+                {cursor && (
+                  <div className="flex justify-center pt-2">
+                    <Button onClick={loadMore} disabled={loadingMore}>
+                      {loadingMore
+                        ? 'Lädt…'
+                        : `Weitere ${de(
+                            Math.min(
+                              PAGE_SIZE,
+                              Math.max((results.data?.total ?? 0) - hits.length, 0),
+                            ),
+                          )} laden`}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </>
