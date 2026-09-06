@@ -89,3 +89,39 @@ class WorkPermitStatus(str, enum.Enum):
     REQUIRES_SPONSORSHIP = "requires_sponsorship"
     NONE = "none"
     UNKNOWN = "unknown"
+
+
+class InteractionType(str, enum.Enum):
+    """How a recruiter touched a manager.
+
+    Deliberately coarse. The mailbox/calendar integration will want finer
+    grain, and guessing that shape before it exists produces categories nobody
+    fills in.
+    """
+
+    CALL = "call"
+    EMAIL = "email"
+    MEETING = "meeting"
+    MESSAGE = "message"
+    NOTE = "note"
+
+
+#: Provenances that owe a GDPR Art. 14 notification when they carry personal
+#: data: the subject did not give it to us, so they must be told we hold it.
+#: One definition, used by both the enrichment agent and the managers domain —
+#: two copies of this set would drift and the drift would be a compliance gap.
+ART14_SOURCES = frozenset(
+    {ConfidenceSource.THIRD_PARTY_SOURCE, ConfidenceSource.PUBLIC_WEB}
+)
+
+
+def owes_art14_notice(source: ConfidenceSource | str | None) -> bool:
+    """True when personal data from this source owes an Art. 14 notice."""
+    if source is None:
+        return False
+    if isinstance(source, str):
+        try:
+            source = ConfidenceSource(source)
+        except ValueError:
+            return False
+    return source in ART14_SOURCES

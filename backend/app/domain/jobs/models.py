@@ -22,6 +22,12 @@ class Job(Base, IDMixin, TenantMixin, TimestampMixin):
         ForeignKey("companies.id"), nullable=True, index=True
     )
 
+    # Who owns this mandate. Nullable: a role can be logged before the contact
+    # is known, and backfilling a person you have not met is not possible.
+    manager_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("managers.id"), nullable=True, index=True
+    )
+
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # Radius (km) around the location used by the deterministic location filter.
     location_radius_km: Mapped[int | None] = mapped_column(Integer, nullable=True)

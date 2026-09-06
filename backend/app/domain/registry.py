@@ -12,6 +12,7 @@ from app.domain.companies import models as company_models  # noqa: F401
 from app.domain.documents import models as document_models  # noqa: F401
 from app.domain.hub import models as hub_models  # noqa: F401
 from app.domain.jobs import models as job_models  # noqa: F401
+from app.domain.managers import models as manager_models  # noqa: F401
 from app.domain.matching import models as matching_models  # noqa: F401
 from app.domain.pipeline import models as pipeline_models  # noqa: F401
 from app.domain.searches import models as saved_search_models  # noqa: F401
