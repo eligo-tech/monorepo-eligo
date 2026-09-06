@@ -468,3 +468,139 @@ async def test_no_snippet_when_the_title_already_says_it(corpus) -> None:
             headline = f"{role.title or ''} {role.occupation or ''}".lower()
             if "embedded" in headline:
                 assert getattr(role, "match_snippet", None) is None
+
+
+# ---------------------------------------------------------------------------
+# Relevance ranking (deterministic half of layer 4)
+# ---------------------------------------------------------------------------
+
+
+async def test_the_best_match_outranks_the_biggest_employer(corpus) -> None:
+    """Ordering by role COUNT made the biggest employer the best answer.
+
+    That is backwards for a search. An employer with one role whose TITLE names
+    the query beats an employer with several that merely mention it, and volume
+    only breaks ties between equally relevant hits.
+    """
+    import uuid
+
+    from app.domain.hub.models import HubCompany, HubJobPosting
+
+    now = dt.datetime.now(dt.UTC)
+    async with SessionLocal() as s:
+        # One exact title match.
+        precise = HubCompany(
+            name="Precise GmbH",
+            normalized_name="precise",
+            dedupe_key=f"k-{uuid.uuid4()}",
+            resolution_basis="name_place",
+            source="test",
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+        # Several roles that only carry the term in the occupation label.
+        bulky = HubCompany(
+            name="Bulky AG",
+            normalized_name="bulky",
+            dedupe_key=f"k-{uuid.uuid4()}",
+            resolution_basis="name_place",
+            source="test",
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+        s.add_all([precise, bulky])
+        await s.flush()
+
+        s.add(
+            HubJobPosting(
+                hub_company_id=precise.id,
+                title="Senior Kotlin Entwickler (m/w/d)",
+                source="test",
+                external_id=f"p-{uuid.uuid4()}",
+                content_hash=str(uuid.uuid4()),
+                first_seen_at=now,
+                last_seen_at=now,
+                is_active=True,
+            )
+        )
+        for i in range(5):
+            s.add(
+                HubJobPosting(
+                    hub_company_id=bulky.id,
+                    # Both terms present, but only in the OCCUPATION label —
+                    # the category the source assigned, not a title anyone wrote.
+                    title="Mitarbeiter Verwaltung",
+                    occupation="Kotlin Entwickler Spezialist",
+                    source="test",
+                    external_id=f"b{i}-{uuid.uuid4()}",
+                    content_hash=str(uuid.uuid4()),
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    is_active=True,
+                )
+            )
+        await s.commit()
+
+        hits = await service.search_employers(s, q="kotlin entwickler")
+
+    names = [h["name"] for h in hits]
+    assert "Precise GmbH" in names, "the exact title match must surface"
+    # one role beats five, because the title answers the query
+    assert names.index("Precise GmbH") < names.index("Bulky AG")
+    precise_hit = next(h for h in hits if h["name"] == "Precise GmbH")
+    bulky_hit = next(h for h in hits if h["name"] == "Bulky AG")
+    assert precise_hit["relevance"] > bulky_hit["relevance"]
+    assert precise_hit["open_roles"] < bulky_hit["open_roles"]
+
+
+async def test_every_employer_in_the_result_carries_its_evidence(corpus) -> None:
+    """A flat LIMIT spent the evidence budget on whoever came first.
+
+    Searching a corpus where one employer holds most of the matches, the roles
+    query hit its cap before reaching the rest, and later employers arrived with
+    an empty role list — an entry in a result list carrying none of the evidence
+    the list exists to show. The window numbers rows per employer instead.
+    """
+    import uuid
+
+    from app.domain.hub.models import HubCompany, HubJobPosting
+
+    now = dt.datetime.now(dt.UTC)
+    async with SessionLocal() as s:
+        for idx, (label, count) in enumerate(
+            [("Giant", 30), ("Small One", 1), ("Small Two", 1)]
+        ):
+            company = HubCompany(
+                name=f"{label} GmbH",
+                normalized_name=label.lower().replace(" ", "-"),
+                dedupe_key=f"k-{uuid.uuid4()}",
+                resolution_basis="name_place",
+                source="test",
+                first_seen_at=now,
+                last_seen_at=now,
+            )
+            s.add(company)
+            await s.flush()
+            for i in range(count):
+                s.add(
+                    HubJobPosting(
+                        hub_company_id=company.id,
+                        title="Zerspanungsmechaniker (m/w/d)",
+                        source="test",
+                        external_id=f"{idx}-{i}-{uuid.uuid4()}",
+                        content_hash=str(uuid.uuid4()),
+                        first_seen_at=now,
+                        last_seen_at=now,
+                        is_active=True,
+                    )
+                )
+        await s.commit()
+
+        hits = await service.search_employers(
+            s, q="zerspanungsmechaniker", roles_per_employer=3
+        )
+
+    assert len(hits) >= 3
+    for hit in hits:
+        assert hit["matching_roles"], f"{hit['name']} came back with no evidence"
+        assert len(hit["matching_roles"]) <= 3
