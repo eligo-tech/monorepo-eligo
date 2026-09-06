@@ -375,3 +375,96 @@ async def test_search_reaches_the_ad_text_once_it_is_stored(corpus) -> None:
 
         hits = await service.search_employers(s, q="kotlin")
     assert [h["name"] for h in hits] == ["Embedded Systems GmbH"]
+
+
+# ---------------------------------------------------------------------------
+# Match snippets — why a role is in the result list
+# ---------------------------------------------------------------------------
+
+
+def test_snippet_returns_the_words_around_the_match() -> None:
+    from app.domain.hub.service import _snippet
+
+    text = (
+        "Wir sind ein Team in Berlin und bauen moderne Web-Anwendungen. " * 3
+        + "Unser Stack ist TypeScript, React und Node.js, dazu Postgres. "
+        + "Wir bieten flexible Arbeitszeiten und ein Jobticket. " * 3
+    )
+    out = _snippet(text, ["typescript"])
+    assert "TypeScript" in out
+    # framed by context, not the whole ad
+    assert len(out) < len(text)
+    # elided at both ends because the match sits in the middle of a long ad
+    assert out.startswith("…") and out.endswith("…")
+
+
+def test_snippet_is_none_when_nothing_matches() -> None:
+    from app.domain.hub.service import _snippet
+
+    assert _snippet("Wir suchen eine Pflegefachkraft.", ["typescript"]) is None
+    assert _snippet(None, ["typescript"]) is None
+    assert _snippet("irgendwas", []) is None
+
+
+def test_snippet_does_not_start_or_end_mid_word() -> None:
+    from app.domain.hub.service import _snippet
+
+    text = "Aussergewoehnliche Faehigkeiten " * 8 + "TypeScript " + "und weiteres " * 8
+    out = _snippet(text, ["typescript"])
+    assert not out.strip("…").startswith(" ")
+    # the fragment is built from whole words
+    assert "  " not in out
+
+
+@pytest.mark.skipif(
+    not service.SEARCH_AD_TEXT,
+    reason="ad-text matching is off, so no body-only match can occur",
+)
+async def test_a_body_only_match_carries_its_evidence(corpus) -> None:
+    """The point: a role whose TITLE does not contain the term must explain itself.
+
+    Without this the screen shows "Cloud Engineer Spezialist:in" under a
+    TypeScript search and looks broken — the reason it matched is real but
+    invisible, which is exactly the assertion-vs-evidence distinction the
+    result list was designed around.
+    """
+    from sqlalchemy import select
+
+    from app.domain.hub.models import HubJobPosting, HubPostingPayload
+
+    async with SessionLocal() as s:
+        row = (
+            await s.execute(
+                select(HubJobPosting).where(HubJobPosting.external_id == "e1")
+            )
+        ).scalar_one()
+        if row.payload is None:
+            row.payload = HubPostingPayload()
+        row.payload.description = (
+            "Fuer unser Portal suchen wir Verstaerkung. Der Stack umfasst "
+            "TypeScript, React und Node.js in einem modernen Umfeld."
+        )
+        await s.commit()
+
+        hits = await service.search_employers(s, q="typescript")
+
+    roles = [r for h in hits for r in h["matching_roles"]]
+    assert roles, "the body match should surface the role"
+    snippets = [getattr(r, "match_snippet", None) for r in roles]
+    assert any(sn and "TypeScript" in sn for sn in snippets)
+
+
+@pytest.mark.skipif(
+    not service.SEARCH_AD_TEXT,
+    reason="ad-text matching is off",
+)
+async def test_no_snippet_when_the_title_already_says_it(corpus) -> None:
+    """A snippet under a role whose title carries the term is noise, not evidence."""
+    async with SessionLocal() as s:
+        hits = await service.search_employers(s, q="embedded")
+
+    for hit in hits:
+        for role in hit["matching_roles"]:
+            headline = f"{role.title or ''} {role.occupation or ''}".lower()
+            if "embedded" in headline:
+                assert getattr(role, "match_snippet", None) is None

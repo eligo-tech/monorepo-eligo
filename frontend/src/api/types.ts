@@ -295,6 +295,9 @@ export interface HubJobPostingDTO {
   title: string
   /** Full ad text. NULL until the nightly job has fetched it for this posting. */
   description: string | null
+  /** The words that made this role match — present only when the term is in
+   *  the ad body and not the title, i.e. only when the hit needs explaining. */
+  match_snippet?: string | null
   occupation: string | null
   /** Coarse occupational field — stamped from the crawl shard, not the record. */
   berufsfeld: string | null
