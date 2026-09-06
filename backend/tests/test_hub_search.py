@@ -693,3 +693,128 @@ async def test_an_unreadable_cursor_restarts_rather_than_failing(corpus) -> None
     assert [h["normalized_name"] for h in junk] == [
         h["normalized_name"] for h in first
     ]
+
+
+async def test_title_only_filter_drops_incidental_mentions(corpus) -> None:
+    """Narrowing, for the queries where paging is the wrong tool.
+
+    A broad term matches thousands of ads that merely mention it — "sap" hits an
+    ad listing it among nice-to-haves, and on the live corpus 2,072 employers
+    match. Nobody reaches page 52, so the useful control is "only where the
+    title says it", not more pages.
+    """
+    import uuid
+
+    from app.domain.hub.models import HubCompany, HubJobPosting
+
+    now = dt.datetime.now(dt.UTC)
+    async with SessionLocal() as s:
+        for label, in_title in (("Titled", True), ("Passing", False)):
+            company = HubCompany(
+                name=f"{label} GmbH",
+                normalized_name=label.lower(),
+                dedupe_key=f"k-{uuid.uuid4()}",
+                resolution_basis="name_place",
+                source="test",
+                first_seen_at=now,
+                last_seen_at=now,
+            )
+            s.add(company)
+            await s.flush()
+            s.add(
+                HubJobPosting(
+                    hub_company_id=company.id,
+                    title="Bauzeichner (m/w/d)" if in_title else "Sachbearbeitung",
+                    occupation=None if in_title else "Bauzeichner Umfeld",
+                    source="test",
+                    external_id=f"{label}-{uuid.uuid4()}",
+                    content_hash=str(uuid.uuid4()),
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    is_active=True,
+                )
+            )
+        await s.commit()
+
+        everything = await service.search_employers(s, q="bauzeichner")
+        titles_only = await service.search_employers(
+            s, q="bauzeichner", min_relevance=3
+        )
+        total_all = await service.count_employers(s, q="bauzeichner")
+        total_titles = await service.count_employers(
+            s, q="bauzeichner", min_relevance=3
+        )
+
+    names_all = {h["name"] for h in everything}
+    names_titles = {h["name"] for h in titles_only}
+    assert {"Titled GmbH", "Passing GmbH"} <= names_all
+    assert "Titled GmbH" in names_titles
+    assert "Passing GmbH" not in names_titles
+    # The header must not promise pages the filter has removed.
+    assert total_titles == len(titles_only)
+    assert total_titles < total_all
+
+
+async def test_the_role_shown_first_is_the_one_that_earned_the_score(corpus) -> None:
+    """An employer's score is the MAX over its roles, so the evidence must lead
+    with the role that reached it.
+
+    Ordered by date alone, "citema systems · rel=4" appeared above
+    "HF-Entwicklungsingenieur" for a Python search — the Python role existed but
+    sat further down, so the top line contradicted the badge beside it.
+    """
+    import uuid
+
+    from app.domain.hub.models import HubCompany, HubJobPosting
+
+    now = dt.datetime.now(dt.UTC)
+    async with SessionLocal() as s:
+        company = HubCompany(
+            name="Mixed GmbH",
+            normalized_name="mixed",
+            dedupe_key=f"k-{uuid.uuid4()}",
+            resolution_basis="name_place",
+            source="test",
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+        s.add(company)
+        await s.flush()
+        # The NEWER posting is the weaker match, so date ordering alone would
+        # put the wrong one on top.
+        s.add(
+            HubJobPosting(
+                hub_company_id=company.id,
+                title="Vertriebsmitarbeiter (m/w/d)",
+                occupation="Schweisser Umfeld",
+                source="test",
+                external_id=f"weak-{uuid.uuid4()}",
+                content_hash=str(uuid.uuid4()),
+                posted_at=now,
+                first_seen_at=now,
+                last_seen_at=now,
+                is_active=True,
+            )
+        )
+        s.add(
+            HubJobPosting(
+                hub_company_id=company.id,
+                title="Schweisser (m/w/d)",
+                source="test",
+                external_id=f"strong-{uuid.uuid4()}",
+                content_hash=str(uuid.uuid4()),
+                posted_at=now - dt.timedelta(days=30),
+                first_seen_at=now,
+                last_seen_at=now,
+                is_active=True,
+            )
+        )
+        await s.commit()
+
+        hits = await service.search_employers(s, q="schweisser")
+
+    hit = next(h for h in hits if h["name"] == "Mixed GmbH")
+    assert hit["relevance"] == 4
+    assert "Schweisser (m/w/d)" == hit["matching_roles"][0].title, (
+        "the badge says the title names the term; the first role must show it"
+    )

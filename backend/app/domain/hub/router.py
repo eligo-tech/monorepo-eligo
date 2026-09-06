@@ -76,6 +76,12 @@ async def search_hub_employers(
     region: list[str] | None = Query(default=None, description="Bundesland; repeatable"),
     berufsfeld: list[str] | None = Query(default=None, description="repeatable"),
     min_roles: int = Query(default=0, ge=0),
+    min_relevance: int = Query(
+        default=1,
+        ge=1,
+        le=4,
+        description="1 = any mention, 3 = the title names it, 4 = the title names every term",
+    ),
     limit: int = Query(default=40, ge=1, le=200),
     cursor: str | None = Query(
         default=None, description="opaque; from a previous page's next_cursor"
@@ -99,6 +105,7 @@ async def search_hub_employers(
         min_roles=min_roles,
         limit=limit,
         cursor=cursor,
+        min_relevance=min_relevance,
     )
     tracked = await service.tracked_company_ids(db, tenant_id=tenant_id)
     out: list[HubEmployerHit] = []
@@ -118,7 +125,12 @@ async def search_hub_employers(
     # pages, and it is a second aggregate over the same candidate set.
     total = (
         await service.count_employers(
-            db, q=q, city=city, regions=region, berufsfelder=berufsfeld
+            db,
+            q=q,
+            city=city,
+            regions=region,
+            berufsfelder=berufsfeld,
+            min_relevance=min_relevance,
         )
         if cursor is None
         else 0
