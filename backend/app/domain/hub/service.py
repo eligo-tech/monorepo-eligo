@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import hashlib
+import html
 import json
 import uuid
 
@@ -945,6 +946,52 @@ def _term_matches(term: str, name_hit_ids: list | None = None):
     return or_(*fields)
 
 
+
+def _snippet(text: str | None, terms: list[str], width: int = 150) -> str | None:
+    """The fragment of ad text that made this posting match.
+
+    Ad-text search broke the screen's own rule. `MarktScreen` puts it well: an
+    employer in a result list without its matching roles is an assertion; with
+    them it is evidence. Once a term can match the BODY, the role title stops
+    carrying that evidence — "Cloud Engineer Spezialist:in" under a TypeScript
+    search looks like a bug until you can see the words that matched.
+
+    Returned only when the term is absent from title and occupation, i.e. only
+    when the match would otherwise be unexplained. A snippet under a role whose
+    title already says "TypeScript" is noise.
+    """
+    if not text or not terms:
+        return None
+    low = text.lower()
+    found = [(t, low.find(t)) for t in terms if low.find(t) >= 0]
+    if not found:
+        return None
+    # Centre on the window that covers the MOST query terms, not on the earliest
+    # match. Searching "typescript entwickler" against a Deutsche Bahn ad, the
+    # earliest hit was "Entwickler:in" in a sentence about career paths — true,
+    # but it explains nothing. The window naming both words is the evidence.
+    def coverage(pos: int) -> tuple[int, int]:
+        window = low[max(0, pos - width // 3) : pos + width]
+        return (sum(t in window for t in terms), -pos)
+
+    at = max((pos for _, pos in found), key=coverage)
+    start = max(0, at - width // 3)
+    end = min(len(text), at + width)
+    # Trim to whitespace so the fragment does not begin or end mid-word.
+    if start > 0:
+        space = text.find(" ", start)
+        start = space + 1 if 0 <= space < at else start
+    if end < len(text):
+        space = text.rfind(" ", at, end)
+        end = space if space > at else end
+    # The source ships ad text with markdown emphasis and HTML entities
+    # ("**TypeScript**", "&#160;"). Harmless in a stored blob, but a snippet is
+    # read by a human, so it gets unescaped and stripped of the markers.
+    fragment = html.unescape(text[start:end]).replace("**", "")
+    fragment = " ".join(fragment.split())
+    return f"{'…' if start > 0 else ''}{fragment}{'…' if end < len(text) else ''}"
+
+
 async def search_employers(
     session: AsyncSession,
     *,
@@ -1127,6 +1174,17 @@ async def search_employers(
     for posting, name in (await session.execute(role_stmt.limit(limit * 40))).all():
         bucket = matched.setdefault(name, [])
         if len(bucket) < roles_per_employer:
+            # Transient, set for the search response only: it is a property of
+            # THIS query, not of the posting, so it is not a column.
+            headline = f"{posting.title or ''} {posting.occupation or ''}".lower()
+            # Explain the terms the headline does NOT already account for.
+            # "Webentwickler Portalloesungen" answers "entwickler" but says
+            # nothing about "typescript", and suppressing the snippet because
+            # ONE term matched left exactly that half unexplained.
+            unexplained = [t for t in terms if t not in headline]
+            posting.match_snippet = (
+                _snippet(posting.description, unexplained) if unexplained else None
+            )
             bucket.append(posting)
 
     return [

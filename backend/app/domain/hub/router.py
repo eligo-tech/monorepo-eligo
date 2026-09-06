@@ -22,6 +22,7 @@ from app.domain.hub.gate import PreconditionFailed
 from app.domain.searches import service as searches_service
 from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
+    HubJobPostingHit,
     DescriptionFetchRequest,
     HubCompanyLinkRead,
     HubCorpusStats,
@@ -101,7 +102,7 @@ async def search_hub_employers(
             {
                 **hit,
                 "matching_roles": [
-                    HubJobPostingRead.model_validate(r) for r in hit["matching_roles"]
+                    HubJobPostingHit.model_validate(r) for r in hit["matching_roles"]
                 ],
             }
         )

@@ -80,6 +80,9 @@ const dateDe = (iso: string | null) =>
 
 const de = (n: number) => n.toLocaleString('de-DE')
 
+/** Search words go into a RegExp, so their metacharacters must be inert. */
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 /**
  * The source emits ASCII-folded region codes — `BADEN_WUERTTEMBERG`,
  * `THUERINGEN`. Title-casing them alone leaves "Baden-Wuerttemberg", so the 16
@@ -293,8 +296,34 @@ function SavedSearches({
   )
 }
 
+/**
+ * The matched fragment, with the searched words picked out.
+ *
+ * Splitting on the terms rather than regex-replacing into HTML keeps this
+ * XSS-free: the ad text is third-party content and never becomes markup.
+ */
+function Snippet({ text, terms }: { text: string; terms: string[] }) {
+  const useful = terms.filter((t) => t.length > 1)
+  const parts = useful.length
+    ? text.split(new RegExp(`(${useful.map(escapeRe).join('|')})`, 'gi'))
+    : [text]
+  return (
+    <p className="mt-1.5 text-[13px] leading-relaxed text-cockpit-dim">
+      {parts.map((part, i) =>
+        useful.some((t) => t.toLowerCase() === part.toLowerCase()) ? (
+          <mark key={i} className="rounded bg-mint-400/20 px-0.5 text-cockpit-text">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </p>
+  )
+}
+
 /** One role, expandable to its full ad text when the corpus has it. */
-function RoleRow({ role }: { role: HubJobPostingDTO }) {
+function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
   const [open, setOpen] = useState(false)
   const link = role.source_url ?? role.detail_url
   return (
@@ -342,6 +371,10 @@ function RoleRow({ role }: { role: HubJobPostingDTO }) {
           )}
         </span>
       </div>
+      {/* Why this role is here at all, when its title does not say so. */}
+      {!open && role.match_snippet && (
+        <Snippet text={role.match_snippet} terms={terms} />
+      )}
       {open && role.description && (
         <p className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 text-[13px] leading-relaxed text-cockpit-dim">
           {role.description}
@@ -351,7 +384,7 @@ function RoleRow({ role }: { role: HubJobPostingDTO }) {
   )
 }
 
-function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
+function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] }) {
   const [tracked, setTracked] = useState(hit.tracked)
   const [saving, setSaving] = useState(false)
   const identity = IDENTITY[hit.resolution_basis] ?? IDENTITY.name_place
@@ -428,7 +461,7 @@ function EmployerCard({ hit }: { hit: HubEmployerHitDTO }) {
       {hit.matching_roles.length > 0 && (
         <ul className="mt-3 space-y-1 border-t border-cockpit-line/60 pt-2.5">
           {hit.matching_roles.map((role) => (
-            <RoleRow key={role.id} role={role} />
+            <RoleRow key={role.id} role={role} terms={terms} />
           ))}
           {hit.open_roles > hit.matching_roles.length && (
             <li className="px-0 pt-1 font-mono text-[12px] text-cockpit-faint">
@@ -582,6 +615,12 @@ export function MarktScreen() {
   const totalRoles = useMemo(
     () => hits.reduce((sum, h) => sum + h.open_roles, 0),
     [hits],
+  )
+  // The EXECUTED query's words, not the draft — the snippets belong to the
+  // results on screen, so highlighting must not shift while someone retypes.
+  const queryTerms = useMemo(
+    () => (query?.q ?? '').toLowerCase().split(/\s+/).filter(Boolean),
+    [query?.q],
   )
 
   return (
@@ -777,7 +816,7 @@ export function MarktScreen() {
             ) : (
               <div className="space-y-3">
                 {hits.map((hit) => (
-                  <EmployerCard key={hit.normalized_name} hit={hit} />
+                  <EmployerCard key={hit.normalized_name} hit={hit} terms={queryTerms} />
                 ))}
               </div>
             )}

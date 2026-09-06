@@ -156,6 +156,18 @@ class HubFacets(BaseModel):
     berufsfelder: list[FacetValue] = Field(default_factory=list)
 
 
+class HubJobPostingHit(HubJobPostingRead):
+    """A posting as it appears in a SEARCH result.
+
+    `match_snippet` is a property of the query, not of the posting, which is why
+    it lives on this subclass rather than on the stored model: it is the piece
+    of ad text that made this row match, and it is None when the title already
+    contains the term and no explanation is needed.
+    """
+
+    match_snippet: str | None = None
+
+
 class HubEmployerHit(BaseModel):
     """One employer in a search result — a rollup, not a single corpus row."""
 
@@ -171,7 +183,7 @@ class HubEmployerHit(BaseModel):
     website_domain: str | None = None
     hub_company_ids: list[uuid.UUID] = Field(default_factory=list)
     # The roles that justify the hit — the answer carries its own evidence.
-    matching_roles: list[HubJobPostingRead] = Field(default_factory=list)
+    matching_roles: list[HubJobPostingHit] = Field(default_factory=list)
     tracked: bool = False
 
 
