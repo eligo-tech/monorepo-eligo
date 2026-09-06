@@ -176,6 +176,9 @@ class HubEmployerHit(BaseModel):
     # How many corpus rows (sites) this employer collapses into.
     sites: int
     open_roles: int
+    #: 4 = the title names every search term, 1 = only the ad body mentions one.
+    #: Surfaced so a weak hit is visibly weak rather than silently mixed in.
+    relevance: int = 1
     cities: list[str] = Field(default_factory=list)
     city_count: int
     resolution_basis: str

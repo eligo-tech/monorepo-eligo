@@ -28,7 +28,7 @@ import html
 import json
 import uuid
 
-from sqlalchemy import Select, and_, case, func, or_, select, update
+from sqlalchemy import Select, and_, case, func, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -992,6 +992,43 @@ def _snippet(text: str | None, terms: list[str], width: int = 150) -> str | None
     return f"{'…' if start > 0 else ''}{fragment}{'…' if end < len(text) else ''}"
 
 
+
+def _role_relevance(terms: list[str]):
+    """How strongly one posting answers the query. Deterministic, no model.
+
+    Ordering by role COUNT made the biggest employer the best answer, which is
+    backwards for a search: a discounter with five loosely-matching ads outranked
+    the company with one exact one. Measured on "typescript entwickler", the top
+    hit was an employer whose roles mention TypeScript in passing, while
+    "Web-Engineer (React / TypeScript)" sat far below.
+
+    Where a term appears is the signal:
+
+      4  the title contains EVERY term        "Fullstack TypeScript Developer"
+      3  the title contains SOME term          "Webentwickler ..." for two terms
+      2  only the occupation label does        "Softwareentwickler/in"
+      1  only the ad body does                 "...Grundkenntnisse in TypeScript"
+
+    A title is written to name the job; a body mentions everything the job
+    touches. That difference is exactly the precision problem the snippets
+    exposed — a business analyst needing conversational TypeScript scored the
+    same as a TypeScript engineer.
+
+    This is the deterministic half of layer 4 (CLAUDE.md §2.2). An LLM re-rank
+    belongs ON TOP of this, within the set already filtered, never instead of it.
+    """
+    if not terms:
+        return literal(1)
+    title = [func.lower(HubJobPosting.title).like(f"%{t}%") for t in terms]
+    occupation = [func.lower(HubJobPosting.occupation).like(f"%{t}%") for t in terms]
+    return case(
+        (and_(*title), 4),
+        (or_(*title), 3),
+        (or_(*occupation), 2),
+        else_=1,
+    )
+
+
 async def search_employers(
     session: AsyncSession,
     *,
@@ -1113,6 +1150,9 @@ async def search_employers(
             # emits ("Netto Marken-Discount Stiftung & Co. KG" vs the same plus
             # a branch suffix).
             func.min(HubCompany.name).label("name"),
+            # The employer is as relevant as its BEST role. Summing would let
+            # volume win again by another route, which is the thing being fixed.
+            func.max(_role_relevance(terms)).label("relevance"),
         )
         # OUTER join with the predicate in the ON clause: an employer that
         # matched by name but has no matching role still appears, honestly
@@ -1124,7 +1164,13 @@ async def search_employers(
         .where(HubCompany.id.in_(candidates))
         .group_by(HubCompany.normalized_name)
         .having(roles >= min_roles)
-        .order_by(roles.desc(), func.min(HubCompany.name))
+        # Relevance first, volume only as a tie-break: among employers whose
+        # titles name the role, more open roles is genuinely the better lead.
+        .order_by(
+            func.max(_role_relevance(terms)).desc(),
+            roles.desc(),
+            func.min(HubCompany.name),
+        )
         .limit(limit)
     )
     groups = grouped.all()
@@ -1163,15 +1209,36 @@ async def search_employers(
 
     # The roles that justify each hit. Filtered by the same query, so the result
     # shows why the employer matched rather than an arbitrary sample.
-    role_stmt = (
-        select(HubJobPosting, HubCompany.normalized_name)
+    # Numbered PER EMPLOYER, not globally. A flat `LIMIT limit * 40` spent its
+    # budget on whoever came first: searching "pflegefachkraft", Alloheim's 144
+    # matching roles exhausted it and employers further down arrived with no
+    # roles at all — an entry in the result list carrying none of the evidence
+    # the list exists to show. The window makes the cost limit x
+    # roles_per_employer regardless of how lopsided the corpus is.
+    ranked_roles = (
+        select(
+            HubJobPosting.id.label("posting_id"),
+            HubCompany.normalized_name.label("employer"),
+            func.row_number()
+            .over(
+                partition_by=HubCompany.normalized_name,
+                order_by=HubJobPosting.posted_at.desc().nulls_last(),
+            )
+            .label("rn"),
+        )
         .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
         # The SAME predicate that produced the count above.
         .where(HubCompany.normalized_name.in_(names), *role_match)
-        .order_by(HubJobPosting.posted_at.desc().nulls_last())
+        .subquery()
+    )
+    role_stmt = (
+        select(HubJobPosting, ranked_roles.c.employer)
+        .join(ranked_roles, ranked_roles.c.posting_id == HubJobPosting.id)
+        .where(ranked_roles.c.rn <= roles_per_employer)
+        .order_by(ranked_roles.c.employer, ranked_roles.c.rn)
     )
     matched: dict[str, list[HubJobPosting]] = {}
-    for posting, name in (await session.execute(role_stmt.limit(limit * 40))).all():
+    for posting, name in (await session.execute(role_stmt)).all():
         bucket = matched.setdefault(name, [])
         if len(bucket) < roles_per_employer:
             # Transient, set for the search response only: it is a property of
@@ -1193,6 +1260,7 @@ async def search_employers(
             "name": row.name,
             "sites": row.sites,
             "open_roles": int(row.roles or 0),
+            "relevance": int(row.relevance or 1),
             "cities": cities.get(row.normalized_name, [])[:6],
             "city_count": len(cities.get(row.normalized_name, [])),
             "resolution_basis": basis.get(row.normalized_name, "name_place"),
