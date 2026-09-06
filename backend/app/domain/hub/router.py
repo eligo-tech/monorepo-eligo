@@ -23,6 +23,7 @@ from app.domain.searches import service as searches_service
 from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
     HubJobPostingHit,
+    HubSearchPage,
     DescriptionFetchRequest,
     HubCompanyLinkRead,
     HubCorpusStats,
@@ -68,7 +69,7 @@ async def hub_facets(
     return HubFacets.model_validate(await service.corpus_facets(db))
 
 
-@router.get("/search", response_model=list[HubEmployerHit])
+@router.get("/search", response_model=HubSearchPage)
 async def search_hub_employers(
     q: str | None = Query(default=None, description="name, city, role or occupation"),
     city: str | None = None,
@@ -76,9 +77,12 @@ async def search_hub_employers(
     berufsfeld: list[str] | None = Query(default=None, description="repeatable"),
     min_roles: int = Query(default=0, ge=0),
     limit: int = Query(default=40, ge=1, le=200),
+    cursor: str | None = Query(
+        default=None, description="opaque; from a previous page's next_cursor"
+    ),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
-) -> list[HubEmployerHit]:
+) -> HubSearchPage:
     """Search the corpus and return employers, rolled up across their sites.
 
     This is the recruiter-facing entry point. The unrolled `/hub/companies`
@@ -94,6 +98,7 @@ async def search_hub_employers(
         berufsfelder=berufsfeld,
         min_roles=min_roles,
         limit=limit,
+        cursor=cursor,
     )
     tracked = await service.tracked_company_ids(db, tenant_id=tenant_id)
     out: list[HubEmployerHit] = []
@@ -109,7 +114,22 @@ async def search_hub_employers(
         # An employer counts as tracked when ANY of its sites is.
         item.tracked = any(cid in tracked for cid in hit["hub_company_ids"])
         out.append(item)
-    return out
+    # Counted once, on the first page only: it does not change as the reader
+    # pages, and it is a second aggregate over the same candidate set.
+    total = (
+        await service.count_employers(
+            db, q=q, city=city, regions=region, berufsfelder=berufsfeld
+        )
+        if cursor is None
+        else 0
+    )
+    return HubSearchPage(
+        items=out,
+        total=total,
+        # A short page is the last page; a full one may or may not be, and
+        # offering a cursor that returns nothing is cheaper than a count per page.
+        next_cursor=service.encode_cursor(hits[-1]) if len(hits) == limit else None,
+    )
 
 
 @router.get("/companies", response_model=list[HubCompanyRead])

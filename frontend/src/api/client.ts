@@ -9,6 +9,7 @@ import type {
   HubCompanyLinkDTO,
   HubCorpusStatsDTO,
   HubEmployerHitDTO,
+  HubSearchPageDTO,
   HubFacetsDTO,
   HubJobPostingDTO,
   SavedSearchDTO,
@@ -109,6 +110,7 @@ export const api = {
     berufsfelder?: string[]
     minRoles?: number
     limit?: number
+    cursor?: string | null
   }) => {
     const qs = new URLSearchParams()
     if (params.q) qs.set('q', params.q)
@@ -119,7 +121,8 @@ export const api = {
     params.berufsfelder?.forEach((b) => qs.append('berufsfeld', b))
     if (params.minRoles) qs.set('min_roles', String(params.minRoles))
     qs.set('limit', String(params.limit ?? 40))
-    return request<HubEmployerHitDTO[]>(`/hub/search?${qs}`)
+    if (params.cursor) qs.set('cursor', params.cursor)
+    return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
 
   /** This workspace's standing market questions. */

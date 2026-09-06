@@ -257,6 +257,15 @@ export interface HubEmployerHitDTO {
  * in the nightly job's directive union — deepen the corpus where this workspace
  * actually recruits. Saving one crawls nothing; the scheduled job acts on it.
  */
+/** One page of employer results. */
+export interface HubSearchPageDTO {
+  items: HubEmployerHitDTO[]
+  /** Employers matching the query in total — not just on this page. */
+  total: number
+  /** Pass back as `cursor` for the next page; null means this was the last. */
+  next_cursor: string | null
+}
+
 export interface SavedSearchDTO {
   id: string
   tenant_id: string

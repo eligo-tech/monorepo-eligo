@@ -190,6 +190,22 @@ class HubEmployerHit(BaseModel):
     tracked: bool = False
 
 
+class HubSearchPage(BaseModel):
+    """One page of employer results.
+
+    An envelope rather than a bare list because a page without its total is not
+    interpretable: "40 employers" reads as the whole answer when it is the first
+    40 of 312. `next_cursor` is opaque and keyset-based — deep pages cost what
+    shallow ones do, which OFFSET cannot promise.
+    """
+
+    items: list[HubEmployerHit] = Field(default_factory=list)
+    #: Employers matching the query in total, not just on this page.
+    total: int = 0
+    #: Pass back as `cursor` for the next page. None means this was the last.
+    next_cursor: str | None = None
+
+
 RELATIONSHIPS = ("watching", "prospect", "client", "ignored")
 
 

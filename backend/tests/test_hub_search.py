@@ -276,15 +276,18 @@ async def client() -> AsyncClient:
 
 
 async def test_search_endpoint_reports_tracking_per_employer(client, corpus) -> None:
-    hits = (await client.get("/api/v1/hub/search?q=Netto")).json()
+    page = (await client.get("/api/v1/hub/search?q=Netto")).json()
+    hits = page["items"]
     assert hits[0]["tracked"] is False
+    # The envelope carries the whole answer's size, not just this page's.
+    assert page["total"] >= len(hits)
 
     # Tracking ONE branch marks the whole employer as tracked.
     await client.put(
         f"/api/v1/hub/companies/{hits[0]['hub_company_ids'][0]}/track",
         json={"relationship": "prospect"},
     )
-    again = (await client.get("/api/v1/hub/search?q=Netto")).json()
+    again = (await client.get("/api/v1/hub/search?q=Netto")).json()["items"]
     assert again[0]["tracked"] is True
 
 
@@ -294,7 +297,7 @@ async def test_filters_are_repeatable_query_params(client, corpus) -> None:
             "/api/v1/hub/search?region=BADEN_WUERTTEMBERG&region=BAYERN"
             "&berufsfeld=Softwareentwicklung"
         )
-    ).json()
+    ).json()["items"]
     assert [h["name"] for h in hits] == ["Embedded Systems GmbH"]
     assert hits[0]["matching_roles"][0]["berufsfeld"] == "Softwareentwicklung"
 
@@ -604,3 +607,89 @@ async def test_every_employer_in_the_result_carries_its_evidence(corpus) -> None
     for hit in hits:
         assert hit["matching_roles"], f"{hit['name']} came back with no evidence"
         assert len(hit["matching_roles"]) <= 3
+
+
+# ---------------------------------------------------------------------------
+# Keyset pagination
+# ---------------------------------------------------------------------------
+
+
+async def test_paging_covers_every_employer_exactly_once(corpus) -> None:
+    """The property that makes "am I missing anything" answerable.
+
+    Keyset paging is only trustworthy if walking the cursor visits each employer
+    once. A wrong comparison silently drops rows at a page boundary or repeats
+    them, and either failure is invisible on page one — which is the only page
+    anyone checks by hand.
+    """
+    import uuid
+
+    from app.domain.hub.models import HubCompany, HubJobPosting
+
+    now = dt.datetime.now(dt.UTC)
+    async with SessionLocal() as s:
+        # Deliberately mixed relevance AND mixed role counts, so the walk has to
+        # get all three sort keys right, not just the first.
+        plan = [("Alpha", 3, True), ("Beta", 1, True), ("Gamma", 2, False),
+                ("Delta", 1, False), ("Epsilon", 5, True)]
+        for label, count, in_title in plan:
+            company = HubCompany(
+                name=f"{label} GmbH",
+                normalized_name=label.lower(),
+                dedupe_key=f"k-{uuid.uuid4()}",
+                resolution_basis="name_place",
+                source="test",
+                first_seen_at=now,
+                last_seen_at=now,
+            )
+            s.add(company)
+            await s.flush()
+            for i in range(count):
+                s.add(
+                    HubJobPosting(
+                        hub_company_id=company.id,
+                        title="Galvaniseur (m/w/d)" if in_title else "Fachkraft",
+                        occupation=None if in_title else "Galvaniseur",
+                        source="test",
+                        external_id=f"{label}-{i}-{uuid.uuid4()}",
+                        content_hash=str(uuid.uuid4()),
+                        first_seen_at=now,
+                        last_seen_at=now,
+                        is_active=True,
+                    )
+                )
+        await s.commit()
+
+        expected = await service.count_employers(s, q="galvaniseur")
+        assert expected >= 5
+
+        seen: list[str] = []
+        cursor = None
+        for _ in range(20):  # bounded: a cursor bug must not hang the test
+            page = await service.search_employers(
+                s, q="galvaniseur", limit=2, cursor=cursor
+            )
+            if not page:
+                break
+            seen.extend(h["normalized_name"] for h in page)
+            if len(page) < 2:
+                break
+            cursor = service.encode_cursor(page[-1])
+
+    assert len(seen) == len(set(seen)), f"an employer was returned twice: {seen}"
+    assert len(seen) == expected, f"walked {len(seen)} of {expected} employers"
+
+
+async def test_an_unreadable_cursor_restarts_rather_than_failing(corpus) -> None:
+    """A cursor is opaque, so a stale or mangled one is a normal event.
+
+    Returning the first page is the recoverable answer; raising turns a bookmark
+    someone kept from last week into a 500.
+    """
+    async with SessionLocal() as s:
+        first = await service.search_employers(s, q="embedded")
+        junk = await service.search_employers(s, q="embedded", cursor="not-base64!!")
+
+    assert [h["normalized_name"] for h in junk] == [
+        h["normalized_name"] for h in first
+    ]
