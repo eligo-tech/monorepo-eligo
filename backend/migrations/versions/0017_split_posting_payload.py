@@ -86,7 +86,10 @@ def upgrade() -> None:
             f"INSERT INTO hub_posting_payload "
             f"(hub_job_posting_id, raw, description) "
             f"SELECT id, COALESCE({raw_expr}, '{{}}'), {desc_expr} "
-            f"FROM hub_job_postings "
+            # `WHERE true` is load-bearing on SQLite: after a bare SELECT its
+            # parser cannot tell an upsert's ON CONFLICT from a join's ON, and
+            # fails with "near DO: syntax error". Documented SQLite quirk.
+            f"FROM hub_job_postings WHERE true "
             f"ON CONFLICT (hub_job_posting_id) DO NOTHING"
         )
 

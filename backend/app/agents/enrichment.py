@@ -19,7 +19,7 @@ import uuid
 from pydantic import BaseModel, Field
 
 from app.agents.base import Agent, AgentResult
-from app.domain.common.enums import ConfidenceSource
+from app.domain.common.enums import ConfidenceSource, owes_art14_notice
 from app.domain.verification.schemas import ProposedChange
 from app.domain.verification.service import Postcondition
 
@@ -78,10 +78,7 @@ class EnrichmentAgent(Agent[EnrichmentInput]):
                     confidence=gap.confidence,
                 )
             )
-            if gap.source in {
-                ConfidenceSource.THIRD_PARTY_SOURCE,
-                ConfidenceSource.PUBLIC_WEB,
-            }:
+            if owes_art14_notice(gap.source):
                 gdpr_art14_required = True
 
         if gdpr_art14_required:
