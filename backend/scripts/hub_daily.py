@@ -95,6 +95,9 @@ _RESULT_CEILING = 10_000
 _PAGE_CEILING = 100
 _DESCRIPTION_BATCH_SIZE = 25
 _DESCRIPTION_BATCH_ATTEMPTS = 4
+#: Attempts per crawl page. A page cut off by the hosting proxy is transient and
+#: a slice is idempotent, so re-sending it is cheaper than losing the shard.
+_PAGE_ATTEMPTS = 3
 
 # The default shard set: all of Germany, 16 ways. Chosen because it is the
 # coarsest exhaustive key whose largest daily shard stays under the cap.
@@ -126,25 +129,51 @@ async def _ingest_region(
     }
 
     for page in range(1, min(max_pages, _PAGE_CEILING) + 1):
-        response = await client.post(
-            "/hub/ingest",
-            json={
-                "source": "bundesagentur",
-                # Passed to the source's full-text parameter, which reaches
-                # posting descriptions the corpus does not store.
-                "what": what,
-                "berufsfeld": berufsfeld,
-                "where": region,
-                "radius_km": radius_km,
-                "published_since_days": since_days,
-                "page": page,
-                "size": 100,
-                # No max_age_minutes: the scheduled job wants the real thing,
-                # never a cached answer. Freshness reuse exists for retries.
-            },
-        )
-        response.raise_for_status()
-        summary = response.json()
+        summary = None
+        for attempt in range(_PAGE_ATTEMPTS):
+            response = await client.post(
+                "/hub/ingest",
+                json={
+                    "source": "bundesagentur",
+                    # Passed to the source's full-text parameter, which reaches
+                    # posting descriptions the corpus does not store.
+                    "what": what,
+                    "berufsfeld": berufsfeld,
+                    "where": region,
+                    "radius_km": radius_km,
+                    "published_since_days": since_days,
+                    "page": page,
+                    "size": 100,
+                    # No max_age_minutes: the scheduled job wants the real
+                    # thing, never a cached answer. Freshness reuse exists for
+                    # retries.
+                },
+            )
+            try:
+                response.raise_for_status()
+                summary = response.json()
+                break
+            except Exception as exc:
+                # The same failure the description batches already handle: a
+                # request that outlives the hosting proxy comes back 5xx even
+                # though every upstream call succeeded. On 2026-09-07 exactly
+                # one shard — "Immobilienwirtschaft und Facility-Management" —
+                # went quiet for 62s and then 500'd, and with no retry here that
+                # single cut-off failed the whole nightly run: the sweep had
+                # already reached 100.1% coverage and still exited 1.
+                #
+                # A crawl slice is idempotent (upserts keyed on the source id),
+                # so re-sending one is safe and costs the source one more page.
+                if attempt == _PAGE_ATTEMPTS - 1:
+                    raise
+                wait = min(2**attempt * 5, 60)
+                print(
+                    f"    page {page} failed ({type(exc).__name__}: {exc}) — "
+                    f"retrying in {wait}s",
+                    file=sys.stderr,
+                )
+                await asyncio.sleep(wait)
+
         if created_external_ids is not None:
             created_external_ids.update(summary.get("posting_external_ids_created", []))
         if page == 1 and primary:
