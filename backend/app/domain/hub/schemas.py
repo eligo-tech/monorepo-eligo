@@ -16,6 +16,8 @@ from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.domain.common.enums import ConfidenceSource
+
 
 class HubCompanyRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -207,6 +209,39 @@ class HubSearchPage(BaseModel):
 
 
 RELATIONSHIPS = ("watching", "prospect", "client", "ignored")
+
+
+class AdoptManagerInput(BaseModel):
+    """The contact captured while adopting, if one is known.
+
+    Every field optional but `full_name`: a company without a contact is not yet
+    workable, and a placeholder person is worse than none — it would put an
+    unsourced natural person into the record.
+    """
+
+    full_name: str = Field(min_length=1, max_length=200)
+    role_title: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    #: Defaults to self-reported, which owes no Art. 14 notice. Choosing a
+    #: third-party origin is what queues one.
+    source: ConfidenceSource = ConfidenceSource.SELF_REPORTED
+    source_detail: str | None = Field(default=None, max_length=500)
+
+
+class AdoptCompanyRequest(BaseModel):
+    manager: AdoptManagerInput | None = None
+
+
+class AdoptCompanyResult(BaseModel):
+    """What the crossing produced — company, link, and the contact if given."""
+
+    company_id: uuid.UUID
+    company_name: str
+    hub_company_id: uuid.UUID
+    manager_id: uuid.UUID | None = None
+    #: True when the captured contact owes a GDPR Art. 14 notification.
+    art14_outstanding: bool = False
 
 
 class HubCompanyLinkRead(BaseModel):

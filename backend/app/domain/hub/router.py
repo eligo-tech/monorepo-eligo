@@ -22,6 +22,8 @@ from app.domain.hub.gate import PreconditionFailed
 from app.domain.searches import service as searches_service
 from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
+    AdoptCompanyRequest,
+    AdoptCompanyResult,
     HubJobPostingHit,
     HubSearchPage,
     DescriptionFetchRequest,
@@ -246,6 +248,49 @@ async def list_hub_observations(
 # --------------------------------------------------------------------------
 # Overlay (tenant-scoped) — where the tenant genuinely selects rows
 # --------------------------------------------------------------------------
+
+
+@router.post(
+    "/companies/{hub_company_id}/adopt",
+    response_model=AdoptCompanyResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def adopt_hub_company(
+    hub_company_id: uuid.UUID,
+    payload: AdoptCompanyRequest | None = None,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> AdoptCompanyResult:
+    """Take a corpus company into this workspace, optionally with a contact.
+
+    The crossing from shared observation to system-of-record, so it goes through
+    the verification gate and leaves a receipt — see `service.adopt_company`.
+    """
+    try:
+        company, link, manager = await service.adopt_company(
+            db,
+            tenant_id=tenant_id,
+            hub_company_id=hub_company_id,
+            manager=(
+                payload.manager.model_dump() if payload and payload.manager else None
+            ),
+        )
+    except service.AlreadyAdopted as exc:
+        # 409, not 400: the request was well-formed and the state is the
+        # objection. The caller wants the existing id, not a validation lecture.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"already adopted as company {exc}",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return AdoptCompanyResult(
+        company_id=company.id,
+        company_name=company.name,
+        hub_company_id=link.hub_company_id,
+        manager_id=manager.id if manager else None,
+        art14_outstanding=bool(manager and manager.art14_outstanding),
+    )
 
 
 @router.get("/links", response_model=list[HubCompanyLinkRead])

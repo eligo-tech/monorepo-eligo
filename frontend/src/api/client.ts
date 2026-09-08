@@ -8,6 +8,7 @@ import type {
   HubCompanyDTO,
   HubCompanyLinkDTO,
   HubCorpusStatsDTO,
+  AdoptResultDTO,
   HubEmployerHitDTO,
   HubSearchPageDTO,
   HubFacetsDTO,
@@ -127,6 +128,27 @@ export const api = {
       qs.set('min_relevance', String(params.minRelevance))
     return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
+
+  /**
+   * Take a corpus employer into this workspace, optionally with a contact.
+   * The crossing from shared observation to system-of-record — it goes through
+   * the verification gate server-side and leaves a receipt.
+   */
+  adoptHubCompany: (
+    hubCompanyId: string,
+    manager?: {
+      full_name: string
+      role_title?: string | null
+      email?: string | null
+      phone?: string | null
+      source?: string
+      source_detail?: string | null
+    } | null,
+  ) =>
+    request<AdoptResultDTO>(`/hub/companies/${hubCompanyId}/adopt`, {
+      method: 'POST',
+      body: JSON.stringify({ manager: manager ?? null }),
+    }),
 
   /** This workspace's standing market questions. */
   savedSearches: () => request<SavedSearchDTO[]>('/searches'),

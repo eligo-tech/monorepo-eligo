@@ -49,7 +49,11 @@ from app.domain.hub.resolution import (
     normalize_company_name,
     normalize_domain,
 )
+from app.domain.common.enums import ConfidenceSource
+from app.domain.companies.models import Company
 from app.domain.hub.schemas import IngestRequest, IngestSummary, RejectedRecord
+from app.domain.verification import service as verification
+from app.domain.verification.schemas import ProposedChange
 
 logger = get_logger(__name__)
 
@@ -1468,6 +1472,135 @@ async def track_company(
     await session.commit()
     await session.refresh(link)
     return link
+
+
+class AlreadyAdopted(Exception):
+    """This corpus company is already one of the tenant's own."""
+
+
+async def adopt_company(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    hub_company_id: uuid.UUID,
+    actor: str | None = None,
+    manager: dict | None = None,
+) -> tuple[Company, HubCompanyLink, object | None]:
+    """Take a corpus company into this tenant's system-of-record.
+
+    THE crossing. Everything before it is observation of the outside world:
+    shared, re-crawlable, asserting nothing about anyone's record. This is the
+    moment a public fact becomes a tenant's own row, and per CLAUDE.md §2.6 that
+    is exactly where a receipt is owed — not at ingest, which would put a million
+    market observations into the audit ledger, and not at tracking, which asserts
+    nothing.
+
+    So the write goes through `verify_and_commit` rather than around it, with
+    the corpus row as the evidence and a postcondition that re-reads the record
+    afterwards: the same discipline as `documents/gate.py` — propose, check
+    against real state, persist, then prove the row landed.
+
+    `manager` is optional and separate. A company with no contact is not yet
+    workable for a recruiter, so capturing one here saves a round trip — but the
+    person is usually unknown at adopt time, and inventing a placeholder would
+    put an unsourced natural person into the record. Absent means absent.
+    """
+    from app.domain.managers.models import Manager
+
+    hub_company = await session.scalar(
+        select(HubCompany).where(HubCompany.id == hub_company_id)
+    )
+    if hub_company is None:
+        raise ValueError(f"no corpus company {hub_company_id}")
+
+    link = await session.scalar(
+        select(HubCompanyLink).where(
+            HubCompanyLink.tenant_id == tenant_id,
+            HubCompanyLink.hub_company_id == hub_company_id,
+        )
+    )
+    if link is not None and link.company_id is not None:
+        raise AlreadyAdopted(str(link.company_id))
+
+    company = Company(
+        tenant_id=tenant_id,
+        name=hub_company.name,
+        domain=hub_company.website_domain,
+        location=hub_company.city,
+        # Adopting is what makes an observed employer an account. Tracking one
+        # is interest; this is the commitment, so it says so on the record.
+        is_client=True,
+        source=f"hub:{hub_company.source}",
+    )
+    session.add(company)
+    await session.flush()
+
+    if link is None:
+        link = HubCompanyLink(
+            tenant_id=tenant_id,
+            hub_company_id=hub_company_id,
+            relationship="client",
+        )
+        session.add(link)
+    link.company_id = company.id
+    link.relationship = "client"
+    await session.flush()
+
+    async def _prove_it_landed(_session: AsyncSession, _change) -> None:
+        """Re-query the record and prove the crossing happened.
+
+        A receipt that says a row was written, written before anyone looked, is
+        the failure mode the gate exists to prevent.
+        """
+        landed = await _session.scalar(
+            select(Company).where(
+                Company.id == company.id, Company.tenant_id == tenant_id
+            )
+        )
+        if landed is None:
+            raise RuntimeError("adoption did not land in companies")
+
+    await verification.verify_and_commit(
+        session,
+        change=ProposedChange(
+            tenant_id=tenant_id,
+            entity_type="company",
+            entity_id=company.id,
+            field="hub_company_id",
+            proposed_value=str(hub_company_id),
+            # The corpus row IS the evidence, and it came from a public source.
+            source=ConfidenceSource.PUBLIC_WEB,
+            source_detail=(
+                f"hub_companies/{hub_company_id} · {hub_company.source} · "
+                f"resolved by {hub_company.resolution_basis}"
+            ),
+            confidence=1.0,
+        ),
+        agent="recruiter_adopt_company",
+        apply_hook=_prove_it_landed,
+        actor=actor,
+    )
+
+    created_manager = None
+    if manager and (manager.get("full_name") or "").strip():
+        created_manager = Manager(
+            tenant_id=tenant_id,
+            company_id=company.id,
+            full_name=manager["full_name"].strip(),
+            role_title=manager.get("role_title"),
+            email=manager.get("email"),
+            phone=manager.get("phone"),
+            source=manager.get("source") or ConfidenceSource.SELF_REPORTED.value,
+            source_detail=manager.get("source_detail"),
+        )
+        session.add(created_manager)
+
+    await session.commit()
+    await session.refresh(company)
+    await session.refresh(link)
+    if created_manager is not None:
+        await session.refresh(created_manager)
+    return company, link, created_manager
 
 
 async def untrack_company(
