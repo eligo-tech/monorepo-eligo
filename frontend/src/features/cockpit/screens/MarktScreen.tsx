@@ -36,6 +36,7 @@ import {
 } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type {
+  AdoptResultDTO,
   FacetValueDTO,
   HubJobPostingDTO,
   HubCorpusStatsDTO,
@@ -388,8 +389,137 @@ function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
   )
 }
 
+/**
+ * Adopting an employer — the crossing from shared corpus to this workspace.
+ *
+ * The contact is optional and that is deliberate: a company without one is not
+ * yet workable for a recruiter, so capturing it here saves a round trip, but
+ * the person is usually unknown at this moment and a placeholder would put an
+ * unsourced natural person into the record.
+ *
+ * The Quelle selector is the only field with legal weight. Data the subject did
+ * not give us owes a GDPR Art. 14 notification, so it defaults to "selbst
+ * genannt" (owes nothing) and choosing otherwise queues one — visible
+ * afterwards under the workspace's Art.-14 queue rather than buried.
+ */
+function AdoptDialog({
+  hit,
+  onClose,
+  onAdopted,
+}: {
+  hit: HubEmployerHitDTO
+  onClose: () => void
+  onAdopted: (result: AdoptResultDTO) => void
+}) {
+  const [name, setName] = useState('')
+  const [role, setRole] = useState('')
+  const [email, setEmail] = useState('')
+  const [source, setSource] = useState('self_reported')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await api.adoptHubCompany(
+        hit.hub_company_ids[0],
+        name.trim()
+          ? {
+              full_name: name.trim(),
+              role_title: role.trim() || null,
+              email: email.trim() || null,
+              source,
+              source_detail: source === 'self_reported' ? null : hit.website_domain,
+            }
+          : null,
+      )
+      onAdopted(result)
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 409
+          ? 'Dieses Unternehmen gehört bereits zu diesem Workspace.'
+          : 'Übernahme fehlgeschlagen.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <Panel className="w-full max-w-md space-y-4 p-5">
+        <div>
+          <h3 className="text-[16px] font-semibold text-cockpit-text">
+            {hit.name} übernehmen
+          </h3>
+          <p className="mt-1 text-[13px] text-cockpit-dim">
+            Legt das Unternehmen in diesem Workspace an. Der Vorgang wird
+            protokolliert.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <p className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
+            Ansprechpartner (optional)
+          </p>
+          <input
+            className={FIELD}
+            placeholder="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          {name.trim() && (
+            <>
+              <input
+                className={FIELD}
+                placeholder="Rolle, z. B. Head of Engineering"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              />
+              <input
+                className={FIELD}
+                placeholder="E-Mail"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <select
+                className={FIELD}
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+              >
+                <option value="self_reported">Quelle: selbst genannt</option>
+                <option value="public_web">Quelle: öffentlich gefunden</option>
+                <option value="third_party_source">Quelle: Dritte</option>
+              </select>
+              {source !== 'self_reported' && (
+                <p className="text-[12px] leading-relaxed text-gold-400">
+                  Nicht vom Betroffenen selbst erhalten — eine Information nach
+                  Art. 14 DSGVO wird fällig und vorgemerkt.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+
+        {error && <p className="text-[13px] text-coral-400">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Abbrechen</Button>
+          <Button tone="primary" onClick={submit} disabled={busy}>
+            {busy ? 'Übernimmt…' : 'Übernehmen'}
+          </Button>
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
 function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] }) {
   const [tracked, setTracked] = useState(hit.tracked)
+  const [adopting, setAdopting] = useState(false)
+  const [adopted, setAdopted] = useState(false)
+  const [art14, setArt14] = useState(false)
   const [saving, setSaving] = useState(false)
   const identity = IDENTITY[hit.resolution_basis] ?? IDENTITY.name_place
   // Tracking is per corpus row; a rolled-up employer is tracked via its first
@@ -449,6 +579,20 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
             {tracked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
             {tracked ? 'Beobachtet' : 'Beobachten'}
           </Button>
+          {/* Beobachten is interest and asserts nothing; this is the crossing
+              into the workspace's own record, so it reads as a commitment and
+              is confirmed in a dialog rather than fired by one click. */}
+          {adopted ? (
+            <span className="flex items-center gap-1.5 text-mint-400" title="Als Kunde übernommen">
+              <Check className="h-4 w-4" />
+              Kunde
+            </span>
+          ) : (
+            <Button onClick={() => setAdopting(true)} disabled={!anchorId}>
+              <UserRound className="h-4 w-4" />
+              Übernehmen
+            </Button>
+          )}
         </span>
       </div>
 
@@ -461,6 +605,24 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
           </span>
         )}
       </p>
+
+      {adopting && (
+        <AdoptDialog
+          hit={hit}
+          onClose={() => setAdopting(false)}
+          onAdopted={(result) => {
+            setAdopting(false)
+            setAdopted(true)
+            setArt14(result.art14_outstanding)
+          }}
+        />
+      )}
+      {art14 && (
+        <p className="mt-1.5 text-[12px] leading-relaxed text-gold-400">
+          Ansprechpartner angelegt — Information nach Art. 14 DSGVO ist fällig
+          und vorgemerkt.
+        </p>
+      )}
 
       {hit.matching_roles.length > 0 && (
         <ul className="mt-3 space-y-1 border-t border-cockpit-line/60 pt-2.5">

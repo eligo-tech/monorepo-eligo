@@ -266,6 +266,16 @@ export interface HubSearchPageDTO {
   next_cursor: string | null
 }
 
+/** What the corpus→CRM crossing produced. */
+export interface AdoptResultDTO {
+  company_id: string
+  company_name: string
+  hub_company_id: string
+  manager_id: string | null
+  /** True when the captured contact owes a GDPR Art. 14 notification. */
+  art14_outstanding: boolean
+}
+
 export interface SavedSearchDTO {
   id: string
   tenant_id: string
