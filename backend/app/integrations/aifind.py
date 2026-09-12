@@ -159,6 +159,26 @@ def _name(first: object, last: object) -> str:
     return " ".join(f"{first or ''} {last or ''}".split())
 
 
+def _scalar(value: object) -> str | None:
+    """One string from a field the source types inconsistently.
+
+    `employment` comes back as a scalar on jobs ("Permanent") and as a LIST on
+    candidates (["Contract", "Permanent"]) — a candidate can be open to several
+    arrangements, a mandate is one. Assuming the scalar shape drove a DataError
+    on the first real import, 391 candidates in.
+
+    Joined rather than truncated to the first: "open to contract or permanent"
+    is the fact, and dropping half of it silently narrows a candidate's
+    availability.
+    """
+    if value is None or value == "" or value == []:
+        return None
+    if isinstance(value, (list, tuple)):
+        parts = [str(v).strip() for v in value if str(v).strip()]
+        return ", ".join(parts) or None
+    return str(value).strip() or None
+
+
 def _hits(payload: dict, operation: str) -> list[dict]:
     return ((payload.get("data") or {}).get(operation) or {}).get("hits") or []
 
@@ -185,7 +205,7 @@ def parse_managers(payload: dict) -> list[AiFindManager]:
             AiFindManager(
                 external_id=str(hit["id"]),
                 full_name=full,
-                job_title=(hit.get("job_title") or None),
+                job_title=_scalar(hit.get("job_title")),
                 company_external_id=(
                     str(company["id"]) if company.get("id") else None
                 ),
@@ -205,9 +225,9 @@ def parse_candidates(payload: dict) -> list[AiFindCandidate]:
             AiFindCandidate(
                 external_id=str(hit["id"]),
                 full_name=full,
-                job_title=(hit.get("job_title") or None),
-                employment=(hit.get("employment") or None),
-                postal_code=(address.get("zip") or None),
+                job_title=_scalar(hit.get("job_title")),
+                employment=_scalar(hit.get("employment")),
+                postal_code=_scalar(address.get("zip")),
             )
         )
     return out
@@ -229,8 +249,8 @@ def parse_jobs(payload: dict) -> list[AiFindJob]:
                 external_id=str(hit["id"]),
                 title=" ".join(str(hit["title"]).split()),
                 is_open=bool(hit.get("isOpen")),
-                priority=(hit.get("priority") or None),
-                employment=(hit.get("employment") or None),
+                priority=_scalar(hit.get("priority")),
+                employment=_scalar(hit.get("employment")),
                 company=(
                     AiFindCompany(
                         external_id=str(company["id"]),

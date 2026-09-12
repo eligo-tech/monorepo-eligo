@@ -315,3 +315,46 @@ async def test_another_workspace_sees_none_of_it() -> None:
             select(func.count(Manager.id)).where(Manager.tenant_id == theirs)
         )
     assert count == 0
+
+
+def test_a_field_the_source_types_inconsistently_is_coerced() -> None:
+    """`employment` is a scalar on jobs and a LIST on candidates.
+
+    A candidate can be open to several arrangements; a mandate is one thing.
+    Assuming the scalar shape drove a DataError on the first real import, 391
+    candidates in — the kind of defect only live data produces.
+
+    Joined rather than truncated to the first entry: "open to contract or
+    permanent" is the fact, and keeping half of it silently narrows someone's
+    availability.
+    """
+    payload = {
+        "data": {
+            "candidates": {
+                "hits": [
+                    {
+                        "id": "k1",
+                        "first_name": "Tania",
+                        "last_name": "Zuniga",
+                        "job_title": "Site Reliability Engineer",
+                        "employment": ["Contract", "Permanent"],
+                        "address": {"zip": "80331"},
+                    },
+                    {
+                        "id": "k2",
+                        "first_name": "Samir",
+                        "last_name": "Abou Kamal",
+                        "job_title": "Senior Project Manager SAP EMEA",
+                        "employment": [],
+                        "address": None,
+                    },
+                ]
+            }
+        }
+    }
+    first, second = aifind.parse_candidates(payload)
+    assert first.employment == "Contract, Permanent"
+    assert first.postal_code == "80331"
+    # an empty list is absence, not an empty string
+    assert second.employment is None
+    assert second.postal_code is None
