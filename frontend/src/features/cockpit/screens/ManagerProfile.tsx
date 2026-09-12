@@ -98,7 +98,7 @@ function Line({ label, children }: { label: string; children: React.ReactNode })
   if (children === null || children === undefined || children === '') return null
   return (
     <div className="flex gap-3 py-1">
-      <span className="w-[4.5rem] shrink-0 font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
+      <span className="w-[4rem] shrink-0 font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
         {label}
       </span>
       <span className="min-w-0 flex-1 break-words text-[13px] leading-relaxed text-cockpit-text">
@@ -400,7 +400,7 @@ export function ManagerProfile({
           )}
         </div>
 
-        <aside className="w-full shrink-0 lg:w-[22rem]">
+        <aside className="w-full shrink-0 lg:w-[27rem]">
           <RailSection title="Erreichbar">
             <Line label="Mail">
               {manager.email && (
