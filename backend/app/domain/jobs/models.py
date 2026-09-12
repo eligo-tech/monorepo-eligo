@@ -48,3 +48,8 @@ class Job(Base, IDMixin, TenantMixin, TimestampMixin):
     salary_currency: Mapped[str] = mapped_column(String(3), default="EUR")
 
     status: Mapped[str] = mapped_column(String(30), default="open", nullable=False)
+    #: Identity in the system this row was imported from. Unique per
+    #: (tenant, external_source, external_id) so a re-import updates instead of
+    #: duplicating.
+    external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    external_source: Mapped[str | None] = mapped_column(String(80), nullable=True)

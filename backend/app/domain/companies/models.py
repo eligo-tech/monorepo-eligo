@@ -21,6 +21,10 @@ class Company(Base, IDMixin, TenantMixin, TimestampMixin):
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: Identity in the system this row was imported from. Unique per
+    #: (tenant, source, external_id) so a re-import updates instead of
+    #: duplicating. `source` above names the system.
+    external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     industry: Mapped[str | None] = mapped_column(String(120), nullable=True)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
