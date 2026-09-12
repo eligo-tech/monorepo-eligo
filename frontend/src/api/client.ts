@@ -86,7 +86,10 @@ export const api = {
   },
   jobs: () => request<JobDTO[]>('/jobs'),
   /** Client + prospect companies — used to name the client on a mandate. */
-  companies: () => request<CompanyDTO[]>('/companies'),
+  /** The tenant's own accounts. `limit` matters: the default is 100 and an
+   *  imported book runs to hundreds, so a caller building a name lookup must
+   *  ask for all of them or most rows resolve to nothing. */
+  companies: (limit = 500) => request<CompanyDTO[]>(`/companies?limit=${limit}`),
   /** Market corpus: companies aggregated from public sources, most actively
    *  hiring first. Distinct from /companies, which is the tenant's own CRM. */
   hubCompanies: (params?: { q?: string; hiringOnly?: boolean; limit?: number }) => {
@@ -163,6 +166,8 @@ export const api = {
 
   /** People we hold data on who have not been informed (GDPR Art. 14). */
   managersOwingArt14: () => request<ManagerDTO[]>('/managers/art14-outstanding'),
+
+  manager: (id: string) => request<ManagerDTO>(`/managers/${id}`),
 
   managerInteractions: (id: string) =>
     request<ManagerInteractionDTO[]>(`/managers/${id}/interactions`),

@@ -14,14 +14,15 @@
 // rather than a headcount: "how many people do I hold data on who have not been
 // told" is the question with a deadline attached.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Building2, Check, Mail, Phone, Search, ShieldAlert, UserRound } from 'lucide-react'
 import { api } from '@/api/client'
-import type { CompanyDTO, ManagerDTO, ManagerInteractionDTO } from '@/api/types'
+import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Panel, SectionHeader } from '../ui/primitives'
-import { Button, FIELD } from '../ui/forms'
+import { ManagerDrawer } from './ManagerDrawer'
+import { FIELD } from '../ui/forms'
 
 const dateDe = (iso: string | null) =>
   iso
@@ -52,44 +53,23 @@ const SOURCE_LABEL: Record<string, { text: string; owes: boolean }> = {
 function ManagerRow({
   manager,
   companyName,
-  onNotified,
+  onOpen,
 }: {
   manager: ManagerDTO
   companyName: string
-  onNotified: (updated: ManagerDTO) => void
+  onOpen: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const [history, setHistory] = useState<ManagerInteractionDTO[] | null>(null)
-  const [busy, setBusy] = useState(false)
   const source = SOURCE_LABEL[manager.source] ?? {
     text: manager.source,
     owes: false,
   }
-
-  const toggle = useCallback(async () => {
-    const next = !open
-    setOpen(next)
-    if (next && history === null) {
-      // Loaded on demand: 650 contacts x their history is not a page load.
-      setHistory(await api.managerInteractions(manager.id).catch(() => []))
-    }
-  }, [open, history, manager.id])
-
-  const markNotified = useCallback(async () => {
-    setBusy(true)
-    try {
-      onNotified(await api.markManagerArt14Notified(manager.id))
-    } finally {
-      setBusy(false)
-    }
-  }, [manager.id, onNotified])
 
   return (
     <li className="border-b border-cockpit-line/40 py-2.5 last:border-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <button
           type="button"
-          onClick={toggle}
+          onClick={onOpen}
           className="text-left text-[15px] text-cockpit-text transition-colors hover:text-mint-400"
         >
           {manager.full_name}
@@ -118,12 +98,18 @@ function ManagerRow({
               {manager.phone}
             </span>
           )}
-          {/* The obligation, where it is actionable rather than in a report. */}
+          {manager.last_contact_at && (
+            <span title="Letzter Kontakt laut Quelle">
+              {dateDe(manager.last_contact_at)}
+            </span>
+          )}
+          {/* The obligation is visible in the list and dischargeable in the
+              drawer — a row is the wrong place for an action with consequences. */}
           {manager.art14_outstanding ? (
-            <Button onClick={markNotified} disabled={busy} tone="primary">
+            <span className="flex items-center gap-1 text-gold-400">
               <ShieldAlert className="h-3.5 w-3.5" />
-              {busy ? 'Speichert…' : 'Art. 14 erledigt'}
-            </Button>
+              Art. 14 offen
+            </span>
           ) : (
             <span
               title={`Herkunft: ${source.text}${
@@ -139,32 +125,6 @@ function ManagerRow({
         </span>
       </div>
 
-      {open && (
-        <div className="mt-2 rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2">
-          {history === null ? (
-            <p className="font-mono text-[12px] text-cockpit-faint">lädt Verlauf…</p>
-          ) : history.length === 0 ? (
-            <p className="text-[13px] text-cockpit-dim">
-              Noch kein Kontaktverlauf. Anrufe, Mails und Termine erscheinen hier,
-              sobald sie erfasst werden.
-            </p>
-          ) : (
-            <ul className="space-y-1.5">
-              {history.map((entry) => (
-                <li key={entry.id} className="flex gap-3 text-[13px]">
-                  <span className="w-24 shrink-0 font-mono text-[12px] text-cockpit-faint">
-                    {dateDe(entry.occurred_at)}
-                  </span>
-                  <span className="w-20 shrink-0 text-cockpit-dim">
-                    {entry.interaction_type}
-                  </span>
-                  <span className="text-cockpit-text">{entry.summary ?? '—'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
     </li>
   )
 }
@@ -173,6 +133,7 @@ export function ManagerScreen() {
   const [draft, setDraft] = useState('')
   const [query, setQuery] = useState('')
   const [overrides, setOverrides] = useState<Record<string, ManagerDTO>>({})
+  const [selected, setSelected] = useState<ManagerDTO | null>(null)
 
   // Debounced: the search hits the database, and 650 rows is enough that a
   // request per keystroke is felt.
@@ -278,13 +239,22 @@ export function ManagerScreen() {
                   key={manager.id}
                   manager={manager}
                   companyName={companyName(manager.company_id)}
-                  onNotified={(updated) =>
-                    setOverrides((prev) => ({ ...prev, [updated.id]: updated }))
-                  }
+                  onOpen={() => setSelected(manager)}
                 />
               ))}
             </ul>
           </Panel>
+        )}
+
+        {selected && (
+          <ManagerDrawer
+            manager={overrides[selected.id] ?? selected}
+            companyName={companyName(selected.company_id)}
+            onClose={() => setSelected(null)}
+            onNotified={(updated) =>
+              setOverrides((prev) => ({ ...prev, [updated.id]: updated }))
+            }
+          />
         )}
 
         {rows.length === 200 && (

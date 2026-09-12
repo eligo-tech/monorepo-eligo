@@ -30,6 +30,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 from app.domain.common.enums import ConfidenceSource, owes_art14_notice
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
+from app.domain.common.types import JSONList
 
 
 class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
@@ -64,6 +65,23 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     #: outstanding, which is why `art14_outstanding` reads it rather than a bool
     #: that could be flipped without anything having been sent.
     art14_notified_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    #: "MNGR197" — the reference a recruiter reads out on a call.
+    external_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    street: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: What the person is open to — "Looks for: Contract".
+    looks_for: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    skills: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    tags: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    #: Taken from the source rather than derived from `interactions`: the source
+    #: knows about contact that predates anything we imported, and recomputing
+    #: it from our own rows would quietly move the date backwards.
+    last_contact_at: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -122,5 +140,9 @@ class ManagerInteraction(Base, IDMixin, TenantMixin, TimestampMixin):
         DateTime(timezone=True), nullable=False, index=True
     )
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Identity in the system this note came from, so a re-import updates the
+    #: same row instead of appending the conversation again.
+    external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    external_source: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     manager: Mapped["Manager"] = relationship("Manager", back_populates="interactions")

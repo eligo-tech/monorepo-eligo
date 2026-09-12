@@ -19,6 +19,7 @@ nothing rather than to the wrong account.
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 import uuid
 
 from sqlalchemy import select
@@ -28,9 +29,23 @@ from app.domain.candidates.models import Candidate
 from app.domain.common.enums import ConfidenceSource
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
-from app.domain.managers.models import Manager
+from app.domain.managers.models import Manager, ManagerInteraction
 
 SOURCE = "aifind"
+
+
+def _as_datetime(value: str | None) -> dt.datetime | None:
+    """ISO-8601 with a Z suffix -> aware datetime.
+
+    `fromisoformat` rejects the trailing Z on older Pythons and the source uses
+    it everywhere, so it is normalised rather than trusted.
+    """
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 @dataclasses.dataclass
@@ -48,6 +63,7 @@ class ImportSummary:
     #: fact about the import, not an implementation detail.
     jobs_without_company: int = 0
     jobs_without_manager: int = 0
+    notes_created: int = 0
 
     def as_dict(self) -> dict[str, int]:
         return dataclasses.asdict(self)
@@ -126,6 +142,25 @@ async def import_aifind(
             # hang, and inventing a placeholder company to hold them would put
             # a fictional account in the record.
             continue
+        # Written on create AND update, for the same reason candidates are: the
+        # first import predated the detail pass, so its rows hold a name, a role
+        # and nothing to call the person with.
+        detail = {
+            "full_name": record.full_name,
+            "role_title": record.job_title,
+            "first_name": record.first_name,
+            "last_name": record.last_name,
+            "department": record.department,
+            "email": record.email,
+            "phone": record.phone,
+            "external_code": record.code,
+            "looks_for": record.looks_for,
+            "street": record.street,
+            "postal_code": record.postal_code,
+            "city": record.city,
+            "country": record.country,
+            "last_contact_at": _as_datetime(record.last_contact_at),
+        }
         row = existing_managers.get(record.external_id)
         if row is None:
             row = Manager(
@@ -135,6 +170,8 @@ async def import_aifind(
                 role_title=record.job_title,
                 external_id=record.external_id,
                 external_source=SOURCE,
+                skills=list(record.skills),
+                tags=list(record.tags),
                 # The recruiter's own CRM record, entered by them. Not collected
                 # from a third party by US, so no Art. 14 notice falls due here
                 # — the obligation, if any, arose when they first recorded the
@@ -148,11 +185,17 @@ async def import_aifind(
             summary.managers_created += 1
         else:
             changed = False
-            if row.full_name != record.full_name:
-                row.full_name = record.full_name
+            for attr, value in detail.items():
+                # Absent in the source is not "delete what we have": a detail
+                # call that failed would otherwise blank a good record.
+                if value is not None and getattr(row, attr) != value:
+                    setattr(row, attr, value)
+                    changed = True
+            if record.skills and list(row.skills or []) != list(record.skills):
+                row.skills = list(record.skills)
                 changed = True
-            if record.job_title and row.role_title != record.job_title:
-                row.role_title = record.job_title
+            if record.tags and list(row.tags or []) != list(record.tags):
+                row.tags = list(record.tags)
                 changed = True
             if row.company_id != company.id:
                 # People move. That is the single most valuable signal in
@@ -162,6 +205,45 @@ async def import_aifind(
             summary.managers_updated += int(changed)
         manager_by_external[record.external_id] = row
     await session.flush()
+
+    # --- the conversation history ------------------------------------------
+    # This is the part of a CRM that cannot be re-derived. A company can be
+    # re-crawled and a mandate re-entered; "Budgets gerade low, nochmal im
+    # November" exists only because someone wrote it down after a call.
+    existing_notes = {
+        row.external_id: row
+        for row in await session.scalars(
+            select(ManagerInteraction).where(
+                ManagerInteraction.tenant_id == tenant_id,
+                ManagerInteraction.external_source == SOURCE,
+                ManagerInteraction.external_id.is_not(None),
+            )
+        )
+    }
+    for record in managers:
+        manager_row = manager_by_external.get(record.external_id)
+        if manager_row is None:
+            continue
+        for note in record.notes:
+            if note.external_id in existing_notes:
+                continue
+            session.add(
+                ManagerInteraction(
+                    tenant_id=tenant_id,
+                    manager_id=manager_row.id,
+                    # The source's own category ("BD Call", "Meeting Notes") is
+                    # kept verbatim rather than mapped onto InteractionType: a
+                    # forced mapping would turn a category someone chose into a
+                    # near-miss, and the recruiter's word is the useful one.
+                    interaction_type=note.category or "note",
+                    occurred_at=_as_datetime(note.created_at)
+                    or dt.datetime.now(dt.UTC),
+                    summary=note.text,
+                    external_id=note.external_id,
+                    external_source=SOURCE,
+                )
+            )
+            summary.notes_created += 1
 
     # --- jobs --------------------------------------------------------------
     existing_jobs = await _by_external_id(
@@ -215,22 +297,58 @@ async def import_aifind(
     )
     for record in candidates or []:
         row = existing_candidates.get(record.external_id)
+        # Written on create AND on update: the first import ran before the
+        # detail pass existed, so the rows it made carry a name and a title and
+        # nothing else. Re-running must fill them in rather than decide they
+        # already exist and move on.
+        fields = {
+            "full_name": record.full_name,
+            "current_title": record.job_title,
+            "employment_type": record.employment,
+            "first_name": record.first_name,
+            "last_name": record.last_name,
+            "sex": record.sex,
+            "name_prefix": record.name_prefix,
+            "date_of_birth": record.date_of_birth,
+            "email": record.email,
+            "xing_url": record.xing_url,
+            "current_company": record.current_company,
+            "industry": record.industry,
+            "street": record.street,
+            "postal_code": record.postal_code,
+            "city": record.city,
+            "country": record.country,
+            # `location` is what the matcher's radius filter reads, and the
+            # source has no single field for it — composed from the parts that
+            # exist rather than left empty.
+            "location": ", ".join(
+                p for p in (record.city, record.country) if p
+            )
+            or None,
+        }
         if row is None:
             session.add(
                 Candidate(
                     tenant_id=tenant_id,
-                    full_name=record.full_name,
-                    current_title=record.job_title,
-                    postal_code=record.postal_code,
-                    employment_type=record.employment,
                     external_id=record.external_id,
                     external_source=SOURCE,
+                    skills=list(record.skills),
+                    **{k: v for k, v in fields.items() if v is not None},
                 )
             )
             summary.candidates_created += 1
-        elif row.full_name != record.full_name:
-            row.full_name = record.full_name
-            summary.candidates_updated += 1
+        else:
+            changed = False
+            for attr, value in fields.items():
+                # Absent in the source is not "delete what we have": a detail
+                # call that failed would otherwise blank a good record.
+                if value is not None and getattr(row, attr) != value:
+                    setattr(row, attr, value)
+                    changed = True
+            if record.skills and list(row.skills or []) != list(record.skills):
+                row.skills = list(record.skills)
+                changed = True
+            summary.candidates_updated += int(changed)
 
     await session.commit()
     return summary
