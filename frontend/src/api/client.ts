@@ -10,6 +10,8 @@ import type {
   HubCorpusStatsDTO,
   AdoptResultDTO,
   HubEmployerHitDTO,
+  ManagerDTO,
+  ManagerInteractionDTO,
   HubSearchPageDTO,
   HubFacetsDTO,
   HubJobPostingDTO,
@@ -149,6 +151,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ manager: manager ?? null }),
     }),
+
+  /** Contacts in this workspace. `q` matches name, role or company. */
+  managers: (params?: { q?: string; companyId?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', params.q)
+    if (params?.companyId) qs.set('company_id', params.companyId)
+    qs.set('limit', String(params?.limit ?? 200))
+    return request<ManagerDTO[]>(`/managers?${qs}`)
+  },
+
+  /** People we hold data on who have not been informed (GDPR Art. 14). */
+  managersOwingArt14: () => request<ManagerDTO[]>('/managers/art14-outstanding'),
+
+  managerInteractions: (id: string) =>
+    request<ManagerInteractionDTO[]>(`/managers/${id}/interactions`),
+
+  /** Records that the subject has been informed. Its own call, not a PATCH
+   *  field: it asserts something happened in the world. */
+  markManagerArt14Notified: (id: string) =>
+    request<ManagerDTO>(`/managers/${id}/art14-notified`, { method: 'POST' }),
 
   /** This workspace's standing market questions. */
   savedSearches: () => request<SavedSearchDTO[]>('/searches'),

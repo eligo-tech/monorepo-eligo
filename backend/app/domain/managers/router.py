@@ -24,12 +24,13 @@ router = APIRouter(prefix="/managers", tags=["managers"])
 @router.get("", response_model=list[ManagerRead])
 async def list_managers(
     company_id: uuid.UUID | None = Query(default=None),
+    q: str | None = Query(default=None, description="name, role or company"),
     limit: int = Query(default=100, ge=1, le=500),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> list[ManagerRead]:
     rows = await service.list_managers(
-        db, tenant_id=tenant_id, company_id=company_id, limit=limit
+        db, tenant_id=tenant_id, company_id=company_id, q=q, limit=limit
     )
     return [ManagerRead.model_validate(r) for r in rows]
 

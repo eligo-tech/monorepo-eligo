@@ -276,6 +276,39 @@ export interface AdoptResultDTO {
   art14_outstanding: boolean
 }
 
+/** A hiring manager — the person a mandate belongs to. Tenant-scoped only. */
+export interface ManagerDTO {
+  id: string
+  company_id: string
+  full_name: string
+  first_name: string | null
+  last_name: string | null
+  role_title: string | null
+  department: string | null
+  email: string | null
+  phone: string | null
+  linkedin_url: string | null
+  /** Where this person's data came from — decides the Art. 14 obligation. */
+  source: string
+  source_detail: string | null
+  art14_notified_at: string | null
+  /** Derived server-side: a notice is owed and has not been sent. */
+  art14_outstanding: boolean
+  notes: string | null
+  status: string
+  created_at: string
+}
+
+export interface ManagerInteractionDTO {
+  id: string
+  manager_id: string
+  candidate_id: string | null
+  job_id: string | null
+  interaction_type: string
+  occurred_at: string
+  summary: string | null
+}
+
 export interface SavedSearchDTO {
   id: string
   tenant_id: string
