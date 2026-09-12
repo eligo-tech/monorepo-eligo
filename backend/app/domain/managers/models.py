@@ -52,6 +52,8 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    xing_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    facebook_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     # --- provenance: not optional, and not addable later ------------------
     #: Where this person's data came from. Drives the Art. 14 obligation.

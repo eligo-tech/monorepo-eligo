@@ -74,6 +74,8 @@ class ManagerRead(BaseModel):
     email: str | None
     phone: str | None
     linkedin_url: str | None
+    xing_url: str | None = None
+    facebook_url: str | None = None
     source: str
     source_detail: str | None
     art14_notified_at: dt.datetime | None

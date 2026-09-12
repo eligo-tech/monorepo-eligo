@@ -137,6 +137,9 @@ query manager($id: ID!) {
     sex
     email
     code
+    linkedIn_url
+    xing_url
+    facebook_url
     skills
     tags
     employment
@@ -213,6 +216,9 @@ class AiFindManager:
     city: str | None = None
     country: str | None = None
     last_contact_at: str | None = None
+    linkedin_url: str | None = None
+    xing_url: str | None = None
+    facebook_url: str | None = None
     skills: list[str] = dataclasses.field(default_factory=list)
     tags: list[str] = dataclasses.field(default_factory=list)
     notes: list[AiFindNote] = dataclasses.field(default_factory=list)
@@ -491,6 +497,12 @@ def parse_manager_detail(payload: dict, notes: list | None = None) -> AiFindMana
         city=_first(hit.get("addresses"), "city"),
         country=_first(hit.get("addresses"), "country"),
         last_contact_at=_scalar(hit.get("lastContactAt")),
+        # `linkedIn_url` — capital I mid-word, in a schema that is otherwise
+        # snake_case. Spelled `linkedin_url` it silently returns nothing, which
+        # looks exactly like a contact with no profile.
+        linkedin_url=_scalar(hit.get("linkedIn_url")),
+        xing_url=_scalar(hit.get("xing_url")),
+        facebook_url=_scalar(hit.get("facebook_url")),
         skills=[str(x).strip() for x in (hit.get("skills") or []) if str(x).strip()],
         tags=[str(x).strip() for x in (hit.get("tags") or []) if str(x).strip()],
         notes=list(notes or []),
