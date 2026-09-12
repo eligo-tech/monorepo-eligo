@@ -225,3 +225,67 @@ async def test_search_stays_inside_the_workspace(company) -> None:
             payload=ManagerCreate(company_id=company, full_name="Marc Götte"),
         )
         assert await service.list_managers(s, tenant_id=OTHER_TENANT, q="götte") == []
+
+
+async def test_the_profile_carries_its_own_counts(company) -> None:
+    """The stat strip needs numbers the list row does not have.
+
+    Counted on the single read so the profile is one request, and set as
+    transient attributes rather than columns: they are facts ABOUT the row, and
+    storing them would mean keeping two numbers in step with the tables that
+    produce them.
+    """
+    import datetime as dt
+
+    from app.domain.jobs.models import Job
+    from app.domain.managers.schemas import ManagerInteractionCreate
+
+    async with SessionLocal() as s:
+        m = await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(company_id=company, full_name="Mathias Ams"),
+        )
+        s.add_all(
+            [
+                Job(tenant_id=TENANT, title="Head of R&D", manager_id=m.id, status="open"),
+                Job(tenant_id=TENANT, title="Alt", manager_id=m.id, status="closed"),
+            ]
+        )
+        await s.commit()
+        await service.log_interaction(
+            s,
+            tenant_id=TENANT,
+            manager_id=m.id,
+            payload=ManagerInteractionCreate(
+                interaction_type=InteractionType.CALL,
+                summary="BD call",
+                occurred_at=dt.datetime(2026, 7, 3, tzinfo=dt.UTC),
+            ),
+        )
+
+    async with SessionLocal() as s:
+        profile = await service.get_manager(s, tenant_id=TENANT, manager_id=m.id)
+
+    assert profile.job_count == 2
+    # the strip shows OPEN mandates: a closed one is not work waiting to be done
+    assert profile.open_job_count == 1
+    assert profile.note_count == 1
+
+
+async def test_counts_do_not_leak_another_workspaces_mandates(company) -> None:
+    from app.domain.jobs.models import Job
+
+    async with SessionLocal() as s:
+        m = await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(company_id=company, full_name="Nur Unsere"),
+        )
+        # same manager id, another tenant's job row — must not be counted
+        s.add(Job(tenant_id=OTHER_TENANT, title="Fremd", manager_id=m.id, status="open"))
+        await s.commit()
+
+    async with SessionLocal() as s:
+        profile = await service.get_manager(s, tenant_id=TENANT, manager_id=m.id)
+    assert profile.job_count == 0

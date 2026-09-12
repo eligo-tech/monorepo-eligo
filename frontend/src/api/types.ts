@@ -308,6 +308,10 @@ export interface ManagerDTO {
   skills?: string[]
   tags?: string[]
   last_contact_at?: string | null
+  /** Present only on the single-manager read; the list does not pay for them. */
+  job_count?: number
+  open_job_count?: number
+  note_count?: number
 }
 
 export interface ManagerInteractionDTO {
