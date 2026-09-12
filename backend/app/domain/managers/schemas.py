@@ -98,3 +98,10 @@ class ManagerRead(BaseModel):
     #: From the source, not derived from `interactions` — it knows about contact
     #: that predates anything imported here.
     last_contact_at: dt.datetime | None = None
+
+    #: Facts ABOUT the row rather than columns on it — how much work and how
+    #: much relationship sits behind this contact. Present only on the single
+    #: -manager read; the list does not pay for them.
+    job_count: int = 0
+    open_job_count: int = 0
+    note_count: int = 0

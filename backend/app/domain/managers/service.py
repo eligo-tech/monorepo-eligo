@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domain.companies.models import Company
+from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
 from app.domain.managers.schemas import (
     ManagerCreate,
@@ -76,11 +77,35 @@ async def list_managers(
 async def get_manager(
     session: AsyncSession, *, tenant_id: uuid.UUID, manager_id: uuid.UUID
 ) -> Manager | None:
-    return await session.scalar(
+    manager = await session.scalar(
         select(Manager)
         .options(selectinload(Manager.interactions))
         .where(Manager.id == manager_id, Manager.tenant_id == tenant_id)
     )
+    if manager is None:
+        return None
+    # Counted here rather than in the router so the profile is one request. Set
+    # as transient attributes: they are facts ABOUT the row, not columns on it,
+    # and storing them would mean keeping two numbers in step with the tables
+    # that produce them.
+    manager.job_count = (
+        await session.scalar(
+            select(func.count(Job.id)).where(
+                Job.tenant_id == tenant_id, Job.manager_id == manager_id
+            )
+        )
+    ) or 0
+    manager.open_job_count = (
+        await session.scalar(
+            select(func.count(Job.id)).where(
+                Job.tenant_id == tenant_id,
+                Job.manager_id == manager_id,
+                Job.status == "open",
+            )
+        )
+    ) or 0
+    manager.note_count = len(manager.interactions)
+    return manager
 
 
 async def create_manager(

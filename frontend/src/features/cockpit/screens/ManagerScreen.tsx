@@ -21,7 +21,7 @@ import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Panel, SectionHeader } from '../ui/primitives'
-import { ManagerDrawer } from './ManagerDrawer'
+import { ManagerProfile } from './ManagerProfile'
 import { FIELD } from '../ui/forms'
 
 const dateDe = (iso: string | null) =>
@@ -247,7 +247,7 @@ export function ManagerScreen() {
         )}
 
         {selected && (
-          <ManagerDrawer
+          <ManagerProfile
             manager={overrides[selected.id] ?? selected}
             companyName={companyName(selected.company_id)}
             onClose={() => setSelected(null)}
