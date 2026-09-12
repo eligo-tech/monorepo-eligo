@@ -181,3 +181,47 @@ async def test_update_does_not_touch_the_art14_timestamp(company) -> None:
         assert updated.phone == "+49 30 123456"
         assert updated.art14_notified_at is None
         assert updated.art14_outstanding is True
+
+
+async def test_search_finds_a_contact_by_their_employer(company) -> None:
+    """A recruiter remembers "the CTO at Bergfreunde" as often as a name.
+
+    With 650 contacts imported, a name-only search sends them scrolling an
+    alphabetical list — so the company name is searchable too.
+    """
+    async with SessionLocal() as s:
+        await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(
+                company_id=company, full_name="Marc Götte", role_title="Leiter IT"
+            ),
+        )
+        await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(
+                company_id=company, full_name="Sophia Erber", role_title="HR"
+            ),
+        )
+
+        by_name = await service.list_managers(s, tenant_id=TENANT, q="götte")
+        by_role = await service.list_managers(s, tenant_id=TENANT, q="leiter")
+        by_company = await service.list_managers(s, tenant_id=TENANT, q="bayoonet")
+        no_match = await service.list_managers(s, tenant_id=TENANT, q="zzzz")
+
+    assert [m.full_name for m in by_name] == ["Marc Götte"]
+    assert [m.full_name for m in by_role] == ["Marc Götte"]
+    # the fixture company is "Bayoonet AG" — both contacts work there
+    assert len(by_company) == 2
+    assert no_match == []
+
+
+async def test_search_stays_inside_the_workspace(company) -> None:
+    async with SessionLocal() as s:
+        await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(company_id=company, full_name="Marc Götte"),
+        )
+        assert await service.list_managers(s, tenant_id=OTHER_TENANT, q="götte") == []

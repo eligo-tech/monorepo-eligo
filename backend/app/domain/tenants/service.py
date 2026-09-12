@@ -17,6 +17,15 @@ async def get_or_create(
     )
     tenant = result.scalar_one_or_none()
     if tenant is not None:
+        # Follow a rename. The name is only ever a label — the mapping is
+        # `clerk_org_id`, which a rename does not touch — but a tenant list that
+        # still says "recruits-test" after the org became "eligo" is a list
+        # nobody trusts, and the drift is silent because this used to return
+        # early. Only written when it actually changed, so the common request
+        # still issues no UPDATE.
+        if name and tenant.name != name:
+            tenant.name = name
+            await session.commit()
         return tenant
     tenant = Tenant(clerk_org_id=clerk_org_id, name=name)
     session.add(tenant)

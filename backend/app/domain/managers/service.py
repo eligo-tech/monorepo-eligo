@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,11 +45,28 @@ async def list_managers(
     *,
     tenant_id: uuid.UUID,
     company_id: uuid.UUID | None = None,
+    q: str | None = None,
     limit: int = 100,
 ) -> list[Manager]:
+    """This workspace's contacts, optionally narrowed.
+
+    `q` searches the person AND their employer, because a recruiter looking for
+    a contact remembers one or the other — "the CTO at Bergfreunde" is as common
+    a way in as the name. Searching only the name would send them scrolling
+    through an alphabetical list of 650.
+    """
     stmt = select(Manager).where(Manager.tenant_id == tenant_id)
     if company_id is not None:
         stmt = stmt.where(Manager.company_id == company_id)
+    if q and q.strip():
+        needle = f"%{q.strip().lower()}%"
+        stmt = stmt.join(Company, Company.id == Manager.company_id).where(
+            or_(
+                func.lower(Manager.full_name).like(needle),
+                func.lower(Manager.role_title).like(needle),
+                func.lower(Company.name).like(needle),
+            )
+        )
     result = await session.execute(
         stmt.order_by(Manager.full_name).limit(limit)
     )
