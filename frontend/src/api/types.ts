@@ -288,6 +288,8 @@ export interface ManagerDTO {
   email: string | null
   phone: string | null
   linkedin_url: string | null
+  xing_url?: string | null
+  facebook_url?: string | null
   /** Where this person's data came from — decides the Art. 14 obligation. */
   source: string
   source_detail: string | null

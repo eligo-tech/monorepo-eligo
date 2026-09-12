@@ -160,6 +160,9 @@ async def import_aifind(
             "city": record.city,
             "country": record.country,
             "last_contact_at": _as_datetime(record.last_contact_at),
+            "linkedin_url": record.linkedin_url,
+            "xing_url": record.xing_url,
+            "facebook_url": record.facebook_url,
         }
         row = existing_managers.get(record.external_id)
         if row is None:
