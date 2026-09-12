@@ -297,6 +297,17 @@ export interface ManagerDTO {
   notes: string | null
   status: string
   created_at: string
+  /** "MNGR197" — the reference a recruiter reads out on a call. */
+  external_code?: string | null
+  street?: string | null
+  postal_code?: string | null
+  city?: string | null
+  country?: string | null
+  /** What the person is open to — "Looks for: Contract". */
+  looks_for?: string | null
+  skills?: string[]
+  tags?: string[]
+  last_contact_at?: string | null
 }
 
 export interface ManagerInteractionDTO {
@@ -307,6 +318,7 @@ export interface ManagerInteractionDTO {
   interaction_type: string
   occurred_at: string
   summary: string | null
+  external_source?: string | null
 }
 
 export interface SavedSearchDTO {

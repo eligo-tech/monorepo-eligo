@@ -358,3 +358,333 @@ def test_a_field_the_source_types_inconsistently_is_coerced() -> None:
     # an empty list is absence, not an empty string
     assert second.employment is None
     assert second.postal_code is None
+
+
+CANDIDATE_DETAIL_PAYLOAD = {
+    "data": {
+        "candidate": {
+            "id": "k1",
+            "first_name": "Samir",
+            "last_name": "Abou Kamal",
+            "sex": None,
+            "name_prefix": "",
+            "date_of_birth": "1979-05-31T00:00:00.000Z",
+            "email": "samir.kamal@example.test",
+            "xing_url": "",
+            "job_title": "Senior Project Manager SAP EMEA",
+            "current_company": "",
+            "industry": "",
+            "employment": [],
+            "skills": ["Agile", "SAP", " ", "data migration"],
+            "tags": [],
+            "address": {
+                "street": "",
+                "zip": "",
+                "city": "München",
+                "country": "Germany",
+                "addition": None,
+            },
+        }
+    }
+}
+
+
+def test_detail_gives_the_skills_the_list_query_never_returns() -> None:
+    """The reason the detail pass exists.
+
+    A hard filter cannot filter on a job title. The list query returns no skills
+    at all, so 391 people were unmatchable until this.
+    """
+    c = aifind.parse_candidate_detail(CANDIDATE_DETAIL_PAYLOAD)
+    assert c is not None
+    # a list, not a sentence — the matcher reads individual skills
+    assert c.skills == ["Agile", "SAP", "data migration"]
+    assert c.email == "samir.kamal@example.test"
+    assert c.city == "München"
+    assert c.country == "Germany"
+
+
+def test_a_birth_date_keeps_no_invented_precision() -> None:
+    """`date_of_birth` is a String column, so a midnight-UTC timestamp would be
+    stored verbatim — precision the record does not have."""
+    c = aifind.parse_candidate_detail(CANDIDATE_DETAIL_PAYLOAD)
+    assert c.date_of_birth == "1979-05-31"
+
+
+def test_empty_strings_from_the_source_read_as_absent() -> None:
+    """The source returns "" for fields nobody filled in. Stored as-is they
+    become empty values that look like answers."""
+    c = aifind.parse_candidate_detail(CANDIDATE_DETAIL_PAYLOAD)
+    assert c.name_prefix is None
+    assert c.xing_url is None
+    assert c.current_company is None
+    assert c.street is None
+    assert c.employment is None
+
+
+def test_a_detail_reimport_fills_in_rows_the_list_pass_created() -> None:
+    """The first import predated the detail pass, so its rows carry a name and a
+    title and nothing else. Re-running must enrich them, not skip them because
+    they already exist."""
+    import asyncio
+
+    async def run():
+        tenant = uuid.uuid4()
+        thin = aifind.parse_candidates(
+            {
+                "data": {
+                    "candidates": {
+                        "hits": [
+                            {
+                                "id": "k1",
+                                "first_name": "Samir",
+                                "last_name": "Abou Kamal",
+                                "job_title": "Senior Project Manager SAP EMEA",
+                                "employment": [],
+                                "address": None,
+                            }
+                        ]
+                    }
+                }
+            }
+        )
+        async with SessionLocal() as s:
+            first = await importer.import_aifind(
+                s, tenant_id=tenant, companies=[], managers=[], jobs=[],
+                candidates=thin,
+            )
+        assert first.candidates_created == 1
+
+        rich = [aifind.parse_candidate_detail(CANDIDATE_DETAIL_PAYLOAD)]
+        async with SessionLocal() as s:
+            second = await importer.import_aifind(
+                s, tenant_id=tenant, companies=[], managers=[], jobs=[],
+                candidates=rich,
+            )
+            from app.domain.candidates.models import Candidate
+
+            row = await s.scalar(
+                select(Candidate).where(
+                    Candidate.tenant_id == tenant, Candidate.external_id == "k1"
+                )
+            )
+        assert second.candidates_created == 0
+        assert second.candidates_updated == 1
+        assert row.skills == ["Agile", "SAP", "data migration"]
+        assert row.email == "samir.kamal@example.test"
+        assert row.city == "München"
+        assert row.location == "München, Germany"
+
+    asyncio.run(run())
+
+
+def test_a_failed_detail_call_never_blanks_a_good_record() -> None:
+    """Absent in the source is not "delete what we have"."""
+    import asyncio
+
+    async def run():
+        tenant = uuid.uuid4()
+        rich = [aifind.parse_candidate_detail(CANDIDATE_DETAIL_PAYLOAD)]
+        async with SessionLocal() as s:
+            await importer.import_aifind(
+                s, tenant_id=tenant, companies=[], managers=[], jobs=[],
+                candidates=rich,
+            )
+        # the thin list record: everything the detail gave is missing here
+        thin = aifind.parse_candidates(
+            {
+                "data": {
+                    "candidates": {
+                        "hits": [
+                            {
+                                "id": "k1",
+                                "first_name": "Samir",
+                                "last_name": "Abou Kamal",
+                                "job_title": "Senior Project Manager SAP EMEA",
+                                "employment": [],
+                                "address": None,
+                            }
+                        ]
+                    }
+                }
+            }
+        )
+        async with SessionLocal() as s:
+            await importer.import_aifind(
+                s, tenant_id=tenant, companies=[], managers=[], jobs=[],
+                candidates=thin,
+            )
+            from app.domain.candidates.models import Candidate
+
+            row = await s.scalar(
+                select(Candidate).where(
+                    Candidate.tenant_id == tenant, Candidate.external_id == "k1"
+                )
+            )
+        assert row.email == "samir.kamal@example.test"
+        assert row.skills == ["Agile", "SAP", "data migration"]
+        assert row.city == "München"
+
+    asyncio.run(run())
+
+
+MANAGER_DETAIL_PAYLOAD = {
+    "data": {
+        "manager": {
+            "id": "m1",
+            "first_name": "Mathias",
+            "last_name": "Ams",
+            "job_title": "Head of R&D",
+            "department": "",
+            "industry": "",
+            "sex": "M",
+            "email": "mathias.ams@example.test",
+            "code": "MNGR197",
+            "skills": ["Bereichsleitung", "R&D"],
+            "tags": ["R&D", "PerSie"],
+            "employment": ["Contract"],
+            "lastContactAt": "2026-07-03T12:47:44.002Z",
+            "company": {"id": "c1", "name": "Conrad Electronic SE"},
+            # LISTS, not the singular the profile screen implies
+            "telephones": [{"number": "+49 7681 2023947"}, {"number": "+49 999"}],
+            "addresses": [
+                {
+                    "street": "Erwin-Sick-Straße 1",
+                    "zip": "79183",
+                    "city": "Waldkirch",
+                    "country": "Germany",
+                }
+            ],
+        }
+    }
+}
+
+NOTES_PAYLOAD = {
+    "data": {
+        "contactNotes": {
+            "total": 2,
+            "notes": [
+                {
+                    "id": "n1",
+                    "note": "T: Neuer AP ist Andreas Hagel für die Projekte.",
+                    "category": "BD Call",
+                    "createdAt": "2026-07-03T12:47:43.992Z",
+                },
+                {
+                    "id": "n2",
+                    "note": "Unternehmenskontext & Fachbereich.",
+                    "category": "Meeting Notes",
+                    "createdAt": "2026-02-10T11:01:31.857Z",
+                },
+                # a dated blank is not a record
+                {"id": "n3", "note": "  ", "category": "BD Call", "createdAt": None},
+            ],
+        }
+    }
+}
+
+
+def test_manager_detail_reads_the_list_shaped_contact_fields() -> None:
+    """`telephones` and `addresses` are LISTS even though the profile shows one.
+
+    Reading them as objects returns nothing and looks exactly like a contact
+    with no phone number — a silent empty import rather than an error.
+    """
+    notes = aifind.parse_notes(NOTES_PAYLOAD)
+    m = aifind.parse_manager_detail(MANAGER_DETAIL_PAYLOAD, notes)
+    assert m is not None
+    assert m.phone == "+49 7681 2023947"
+    assert m.city == "Waldkirch"
+    assert m.postal_code == "79183"
+    assert m.code == "MNGR197"
+    # "Looks for: Contract" — a list in the source, one line in the UI
+    assert m.looks_for == "Contract"
+    assert m.skills == ["Bereichsleitung", "R&D"]
+    assert m.tags == ["R&D", "PerSie"]
+    assert m.department is None  # "" is absence, not an answer
+
+
+def test_notes_drop_the_blank_ones() -> None:
+    notes = aifind.parse_notes(NOTES_PAYLOAD)
+    assert [n.category for n in notes] == ["BD Call", "Meeting Notes"]
+    assert notes[0].text.startswith("T: Neuer AP")
+
+
+def test_importing_notes_twice_does_not_replay_the_conversation() -> None:
+    """Notes are append-only in effect: a second run must add nothing.
+
+    Without an external id on the interaction, every import would write the same
+    three calls again, and a contact history that grows on its own is worse than
+    none — it cannot be read.
+    """
+    import asyncio
+
+    async def run():
+        tenant = uuid.uuid4()
+        companies = aifind.parse_companies(COMPANIES_PAYLOAD)
+        detailed = [
+            aifind.parse_manager_detail(
+                MANAGER_DETAIL_PAYLOAD, aifind.parse_notes(NOTES_PAYLOAD)
+            )
+        ]
+        async with SessionLocal() as s:
+            first = await importer.import_aifind(
+                s, tenant_id=tenant, companies=companies, managers=detailed, jobs=[]
+            )
+        async with SessionLocal() as s:
+            second = await importer.import_aifind(
+                s, tenant_id=tenant, companies=companies, managers=detailed, jobs=[]
+            )
+            from app.domain.managers.models import ManagerInteraction
+
+            total = await s.scalar(
+                select(func.count(ManagerInteraction.id)).where(
+                    ManagerInteraction.tenant_id == tenant
+                )
+            )
+            row = await s.scalar(
+                select(Manager).where(
+                    Manager.tenant_id == tenant, Manager.external_id == "m1"
+                )
+            )
+        assert first.notes_created == 2
+        assert second.notes_created == 0
+        assert total == 2
+        # the detail landed on the row, not just in the summary
+        assert row.phone == "+49 7681 2023947"
+        assert row.external_code == "MNGR197"
+        assert row.looks_for == "Contract"
+        assert row.last_contact_at is not None
+
+    asyncio.run(run())
+
+
+def test_the_sources_own_category_is_kept_verbatim() -> None:
+    """"BD Call" is the recruiter's word for it. Mapping it onto our
+    InteractionType enum would turn a chosen category into a near-miss."""
+    import asyncio
+
+    async def run():
+        tenant = uuid.uuid4()
+        companies = aifind.parse_companies(COMPANIES_PAYLOAD)
+        detailed = [
+            aifind.parse_manager_detail(
+                MANAGER_DETAIL_PAYLOAD, aifind.parse_notes(NOTES_PAYLOAD)
+            )
+        ]
+        async with SessionLocal() as s:
+            await importer.import_aifind(
+                s, tenant_id=tenant, companies=companies, managers=detailed, jobs=[]
+            )
+            from app.domain.managers.models import ManagerInteraction
+
+            kinds = list(
+                await s.scalars(
+                    select(ManagerInteraction.interaction_type).where(
+                        ManagerInteraction.tenant_id == tenant
+                    )
+                )
+            )
+        assert sorted(kinds) == ["BD Call", "Meeting Notes"]
+
+    asyncio.run(run())

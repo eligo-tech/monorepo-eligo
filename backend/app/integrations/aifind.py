@@ -24,6 +24,7 @@ it is more code than an API client normally would be.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import dataclasses
 import hashlib
@@ -86,6 +87,80 @@ query candidates($q: String, $size: Int!, $from: Int!, $sort: Sort) {
 """,
 }
 
+#: The per-candidate detail. Probed field by field against the live type rather
+#: than guessed, because introspection is off: each name was asked for on its
+#: own and kept only when the server accepted it.
+#:
+#: What the source does NOT have is worth recording, because "we hold no phone
+#: numbers" and "we did not ask for them" are different facts about a CRM.
+#: Absent from the Candidate type entirely: phone, linkedin_url, languages,
+#: education, working_experience, motivation, notice_period, availability,
+#: salary of any kind, total_years_experience. The list screens do not hide
+#: them — the API does not expose them.
+CANDIDATE_DETAIL_QUERY = """
+query candidate($id: ID!) {
+  candidate(id: $id) {
+    id
+    first_name
+    last_name
+    sex
+    name_prefix
+    date_of_birth
+    email
+    xing_url
+    job_title
+    current_company
+    industry
+    employment
+    skills
+    tags
+    address { street zip city country addition }
+  }
+}
+"""
+
+
+#: Per-manager detail. Probed field by field like the candidate one, and the
+#: names matter: the server is snake_case for most fields but camelCase for
+#: `lastContactAt`, and `telephones`/`addresses` are LISTS rather than the
+#: singular `phone`/`address` the UI implies. Guessing any of that would have
+#: produced an empty import that looked like missing data.
+MANAGER_DETAIL_QUERY = """
+query manager($id: ID!) {
+  manager(id: $id) {
+    id
+    first_name
+    last_name
+    job_title
+    department
+    industry
+    sex
+    email
+    code
+    skills
+    tags
+    employment
+    lastContactAt
+    company { id name }
+    telephones { number }
+    addresses { street zip city country }
+  }
+}
+"""
+
+#: The conversation history. A ROOT query, not a field on Manager — which is why
+#: every `manager { notes }` spelling came back absent. `refId` is the only
+#: required key on NoteSearchInput.
+CONTACT_NOTES_QUERY = """
+query contactNotes($payload: NoteSearchInput!) {
+  contactNotes(payload: $payload) {
+    total
+    notes { id note category createdAt }
+  }
+}
+"""
+
+
 #: The variables each list screen sends, minus paging. `onlySelf: False` matters:
 #: the app defaults to the signed-in user's own records, and an import that
 #: inherits that default silently misses every colleague's book.
@@ -108,11 +183,39 @@ DEFAULT_VARIABLES: dict[str, dict] = {
 
 
 @dataclasses.dataclass(frozen=True)
+class AiFindNote:
+    """One dated entry from the contact history — the relationship itself."""
+
+    external_id: str
+    category: str | None
+    text: str
+    created_at: str | None
+
+
+@dataclasses.dataclass(frozen=True)
 class AiFindManager:
     external_id: str
     full_name: str
     job_title: str | None = None
     company_external_id: str | None = None
+    # --- detail only --------------------------------------------------------
+    first_name: str | None = None
+    last_name: str | None = None
+    department: str | None = None
+    industry: str | None = None
+    sex: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    code: str | None = None
+    looks_for: str | None = None
+    street: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
+    last_contact_at: str | None = None
+    skills: list[str] = dataclasses.field(default_factory=list)
+    tags: list[str] = dataclasses.field(default_factory=list)
+    notes: list[AiFindNote] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -123,11 +226,32 @@ class AiFindCompany:
 
 @dataclasses.dataclass(frozen=True)
 class AiFindCandidate:
+    """A candidate. The list screen fills the first few; detail fills the rest.
+
+    `skills` is the field that matters and the reason the detail pass exists: a
+    hard filter cannot filter on a job title, and the list query returns no
+    skills at all. With it, 391 people become matchable against the corpus.
+    """
+
     external_id: str
     full_name: str
     job_title: str | None = None
     employment: str | None = None
     postal_code: str | None = None
+    # --- detail only --------------------------------------------------------
+    first_name: str | None = None
+    last_name: str | None = None
+    sex: str | None = None
+    name_prefix: str | None = None
+    date_of_birth: str | None = None
+    email: str | None = None
+    xing_url: str | None = None
+    current_company: str | None = None
+    industry: str | None = None
+    street: str | None = None
+    city: str | None = None
+    country: str | None = None
+    skills: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -276,6 +400,122 @@ def parse_jobs(payload: dict) -> list[AiFindJob]:
     return jobs
 
 
+
+def _date_only(value: object) -> str | None:
+    """1979-05-31T00:00:00.000Z -> 1979-05-31.
+
+    `date_of_birth` is a String column here, so the timestamp would be stored
+    verbatim — a birth date with a midnight UTC timestamp attached reads as
+    precision the record does not have.
+    """
+    text = _scalar(value)
+    return text.split("T")[0] if text else None
+
+
+def parse_candidate_detail(payload: dict) -> AiFindCandidate | None:
+    """One candidate's full record. Pure, like every other parser here."""
+    hit = (payload.get("data") or {}).get("candidate")
+    if not hit or not hit.get("id"):
+        return None
+    full = _name(hit.get("first_name"), hit.get("last_name"))
+    if not full:
+        return None
+    address = hit.get("address") or {}
+    skills = hit.get("skills") or []
+    return AiFindCandidate(
+        external_id=str(hit["id"]),
+        full_name=full,
+        job_title=_scalar(hit.get("job_title")),
+        employment=_scalar(hit.get("employment")),
+        postal_code=_scalar(address.get("zip")),
+        first_name=_scalar(hit.get("first_name")),
+        last_name=_scalar(hit.get("last_name")),
+        sex=_scalar(hit.get("sex")),
+        name_prefix=_scalar(hit.get("name_prefix")),
+        date_of_birth=_date_only(hit.get("date_of_birth")),
+        email=_scalar(hit.get("email")),
+        xing_url=_scalar(hit.get("xing_url")),
+        current_company=_scalar(hit.get("current_company")),
+        industry=_scalar(hit.get("industry")),
+        street=_scalar(address.get("street")),
+        city=_scalar(address.get("city")),
+        country=_scalar(address.get("country")),
+        # Kept as a LIST: `Candidate.skills` is a JSON column and the matcher
+        # reads individual skills. Flattening to a string here would make the
+        # hard filter do string search over a sentence.
+        skills=[str(x).strip() for x in skills if str(x).strip()],
+    )
+
+
+
+def _first(values: object, key: str) -> str | None:
+    """First entry of a list-of-objects field.
+
+    `telephones` and `addresses` are lists because a person can have several.
+    The profile screen shows one, and a CRM row has one column, so the first is
+    taken — and the fact that the rest are dropped is stated here rather than
+    discovered later by someone wondering where a second number went.
+    """
+    if not isinstance(values, (list, tuple)) or not values:
+        return None
+    first = values[0]
+    return _scalar(first.get(key)) if isinstance(first, dict) else None
+
+
+def parse_manager_detail(payload: dict, notes: list | None = None) -> AiFindManager | None:
+    """One manager's full record, with their conversation history attached."""
+    hit = (payload.get("data") or {}).get("manager")
+    if not hit or not hit.get("id"):
+        return None
+    full = _name(hit.get("first_name"), hit.get("last_name"))
+    if not full:
+        return None
+    company = hit.get("company") or {}
+    return AiFindManager(
+        external_id=str(hit["id"]),
+        full_name=full,
+        job_title=_scalar(hit.get("job_title")),
+        company_external_id=str(company["id"]) if company.get("id") else None,
+        first_name=_scalar(hit.get("first_name")),
+        last_name=_scalar(hit.get("last_name")),
+        department=_scalar(hit.get("department")),
+        industry=_scalar(hit.get("industry")),
+        sex=_scalar(hit.get("sex")),
+        email=_scalar(hit.get("email")),
+        phone=_first(hit.get("telephones"), "number"),
+        code=_scalar(hit.get("code")),
+        # "Looks for: Contract" — a list in the source, one line in the UI.
+        looks_for=_scalar(hit.get("employment")),
+        street=_first(hit.get("addresses"), "street"),
+        postal_code=_first(hit.get("addresses"), "zip"),
+        city=_first(hit.get("addresses"), "city"),
+        country=_first(hit.get("addresses"), "country"),
+        last_contact_at=_scalar(hit.get("lastContactAt")),
+        skills=[str(x).strip() for x in (hit.get("skills") or []) if str(x).strip()],
+        tags=[str(x).strip() for x in (hit.get("tags") or []) if str(x).strip()],
+        notes=list(notes or []),
+    )
+
+
+def parse_notes(payload: dict) -> list[AiFindNote]:
+    """Contact history. An empty note is dropped — a dated blank is not a record."""
+    node = (payload.get("data") or {}).get("contactNotes") or {}
+    out = []
+    for note in node.get("notes") or []:
+        text = _scalar(note.get("note"))
+        if not note.get("id") or not text:
+            continue
+        out.append(
+            AiFindNote(
+                external_id=str(note["id"]),
+                category=_scalar(note.get("category")),
+                text=text,
+                created_at=_scalar(note.get("createdAt")),
+            )
+        )
+    return out
+
+
 PARSERS = {
     "companies": parse_companies,
     "managers": parse_managers,
@@ -389,3 +629,117 @@ async def fetch_all(
             break
         offset += got
     return records
+
+async def fetch_candidate_details(
+    client: httpx.AsyncClient,
+    *,
+    token: str,
+    external_ids: list[str],
+    concurrency: int = 4,
+    on_progress=None,
+) -> list[AiFindCandidate]:
+    """One detail call per candidate, paced.
+
+    The source has no bulk detail query — the list returns six fields and
+    everything else needs `candidate(id:)`. That is 391 requests against someone
+    else's production API, so it runs a few at a time rather than all at once:
+    politeness toward a system we are a guest on, and a semaphore is the whole
+    of the mechanism.
+
+    A single failed record is skipped, not fatal. Losing one candidate's skills
+    is a gap; losing the run because of one is an outage.
+    """
+    semaphore = asyncio.Semaphore(concurrency)
+    results: list[AiFindCandidate] = []
+
+    async def one(external_id: str) -> None:
+        async with semaphore:
+            try:
+                response = await client.post(
+                    GRAPHQL_URL,
+                    headers={"authorization": f"Bearer {token}"},
+                    json={
+                        "operationName": "candidate",
+                        "query": CANDIDATE_DETAIL_QUERY,
+                        "variables": {"id": external_id},
+                    },
+                )
+                response.raise_for_status()
+                body = response.json()
+                if body.get("errors"):
+                    return
+                record = parse_candidate_detail(body)
+                if record is not None:
+                    results.append(record)
+            except Exception:
+                return
+            finally:
+                if on_progress is not None:
+                    on_progress(len(results))
+
+    await asyncio.gather(*(one(i) for i in external_ids))
+    return results
+
+async def fetch_manager_details(
+    client: httpx.AsyncClient,
+    *,
+    token: str,
+    external_ids: list[str],
+    concurrency: int = 4,
+    with_notes: bool = True,
+) -> list[AiFindManager]:
+    """Detail plus conversation history, one manager at a time, paced.
+
+    Two calls per manager when notes are wanted — 650 contacts is 1,300 requests
+    against someone else's production API, so a semaphore keeps a handful in
+    flight rather than all of them.
+
+    A failed manager is skipped, not fatal: losing one person's history is a
+    gap, losing the run because of one is an outage.
+    """
+    semaphore = asyncio.Semaphore(concurrency)
+    results: list[AiFindManager] = []
+
+    async def one(external_id: str) -> None:
+        async with semaphore:
+            try:
+                detail = await client.post(
+                    GRAPHQL_URL,
+                    headers={"authorization": f"Bearer {token}"},
+                    json={
+                        "operationName": "manager",
+                        "query": MANAGER_DETAIL_QUERY,
+                        "variables": {"id": external_id},
+                    },
+                )
+                detail.raise_for_status()
+                body = detail.json()
+                if body.get("errors"):
+                    return
+
+                notes: list[AiFindNote] = []
+                if with_notes:
+                    try:
+                        response = await client.post(
+                            GRAPHQL_URL,
+                            headers={"authorization": f"Bearer {token}"},
+                            json={
+                                "operationName": "contactNotes",
+                                "query": CONTACT_NOTES_QUERY,
+                                "variables": {"payload": {"refId": external_id}},
+                            },
+                        )
+                        if response.status_code == 200:
+                            notes = parse_notes(response.json())
+                    except Exception:
+                        # The person is worth importing even without the history.
+                        notes = []
+
+                record = parse_manager_detail(body, notes)
+                if record is not None:
+                    results.append(record)
+            except Exception:
+                return
+
+    await asyncio.gather(*(one(i) for i in external_ids))
+    return results

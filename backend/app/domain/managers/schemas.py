@@ -28,6 +28,7 @@ class ManagerInteractionRead(BaseModel):
     interaction_type: str
     occurred_at: dt.datetime
     summary: str | None
+    external_source: str | None = None
 
 
 class ManagerCreate(BaseModel):
@@ -82,3 +83,18 @@ class ManagerRead(BaseModel):
     notes: str | None
     status: str
     created_at: dt.datetime
+
+    # --- detail, from the source's own profile ----------------------------
+    #: "MNGR197" — the reference a recruiter reads out on a call.
+    external_code: str | None = None
+    street: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
+    #: What the person is open to — "Looks for: Contract".
+    looks_for: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    #: From the source, not derived from `interactions` — it knows about contact
+    #: that predates anything imported here.
+    last_contact_at: dt.datetime | None = None
