@@ -68,6 +68,11 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Identity in the system this row was imported from. Unique per
+    #: (tenant, external_source, external_id) so a re-import updates instead of
+    #: duplicating.
+    external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    external_source: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="active", nullable=False)
 
     interactions: Mapped[list["ManagerInteraction"]] = relationship(

@@ -22,6 +22,11 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
     __tablename__ = "candidates"
 
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    #: Identity in the system this row was imported from. Unique per
+    #: (tenant, external_source, external_id) so a re-import updates instead of
+    #: duplicating.
+    external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    external_source: Mapped[str | None] = mapped_column(String(80), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
