@@ -326,9 +326,9 @@ def parse_managers(payload: dict) -> list[AiFindManager]:
     out = []
     for hit in _hits(payload, "managers"):
         full = _name(hit.get("first_name"), hit.get("last_name"))
-        if not hit.get("id") or not full:
-            # A person with no name is not a contact. Importing one would put an
-            # unidentifiable natural person into the record.
+        if not hit.get("id") or not full or is_tombstone(full):
+            # A person with no name is not a contact, and a tombstone is not a
+            # person. Either would put a placeholder into the record.
             continue
         company = hit.get("company") or {}
         out.append(
@@ -454,6 +454,22 @@ def parse_candidate_detail(payload: dict) -> AiFindCandidate | None:
 
 
 
+#: Names the source uses as a TOMBSTONE rather than as a person. aiFind keeps
+#: the row when an account is removed and renames it, so the record still
+#: carries a role and skills but no human and no way to reach one. Importing
+#: them puts placeholders in a contact list where they read as real people —
+#: five arrived in the first run, titled "Leitung HR Allianz", "Recruiter",
+#: "HR Managerin".
+#:
+#: Matched exactly rather than by substring: a real person can be called
+#: "Userkamp" and deleting them would be worse than keeping a tombstone.
+TOMBSTONE_NAMES = frozenset({"deleted user", "geloeschter benutzer", "gelöschter benutzer"})
+
+
+def is_tombstone(full_name: str) -> bool:
+    return " ".join(full_name.split()).casefold() in TOMBSTONE_NAMES
+
+
 def _first(values: object, key: str) -> str | None:
     """First entry of a list-of-objects field.
 
@@ -474,7 +490,7 @@ def parse_manager_detail(payload: dict, notes: list | None = None) -> AiFindMana
     if not hit or not hit.get("id"):
         return None
     full = _name(hit.get("first_name"), hit.get("last_name"))
-    if not full:
+    if not full or is_tombstone(full):
         return None
     company = hit.get("company") or {}
     return AiFindManager(

@@ -254,6 +254,17 @@ export function ManagerProfile({
                   <span className="text-gold-400">Art. 14 offen</span>
                 </>
               )}
+              {(manager.duplicate_count ?? 1) > 1 && (
+                <>
+                  <span>/</span>
+                  <span
+                    className="text-gold-400"
+                    title="Dieselbe E-Mail existiert mehrfach — in der Quelle doppelt angelegt"
+                  >
+                    {manager.duplicate_count} Datensätze
+                  </span>
+                </>
+              )}
             </div>
 
             <h1 className="mt-2 truncate text-[44px] font-semibold leading-none tracking-tight text-cockpit-text">

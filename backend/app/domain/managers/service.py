@@ -71,7 +71,57 @@ async def list_managers(
     result = await session.execute(
         stmt.order_by(Manager.full_name).limit(limit)
     )
-    return list(result.scalars().all())
+    rows = list(result.scalars().all())
+    await _annotate_duplicates(session, tenant_id=tenant_id, rows=rows)
+    return rows
+
+
+async def _annotate_duplicates(
+    session: AsyncSession, *, tenant_id: uuid.UUID, rows: list[Manager]
+) -> None:
+    """Mark contacts that share an e-mail address with another row.
+
+    The source genuinely holds the same person twice — "Mick Drahtschmid" exists
+    as MNGR571 and MNGR572, created seconds apart, same address. The import
+    copies both faithfully, which is correct: they ARE two records, and merging
+    them here would silently pick a winner and would be undone by the next run,
+    since idempotency is keyed on the source id.
+
+    So they are flagged, not merged. The reader decides; the importer does not
+    guess.
+
+    The test is e-mail AND name together, because e-mail alone is not identity:
+    `info@occhio.com` is a shared company mailbox listed by three different
+    people, and `huehn.a@eplan.de` sits on Anna Vogel's record as well as Anna
+    Huehn's — a typo in the source. Matching on the address alone would call
+    all of those duplicates of each other, which is a worse error than missing
+    one: it accuses two real colleagues of being the same person.
+
+    Set as a transient attribute: it is a fact about the SET being displayed,
+    not a property of the row.
+    """
+    emails = {
+        (r.email or "").strip().lower() for r in rows if (r.email or "").strip()
+    }
+    counts: dict[tuple[str, str], int] = {}
+    if emails:
+        result = await session.execute(
+            select(
+                func.lower(Manager.email),
+                func.lower(Manager.full_name),
+                func.count(Manager.id),
+            )
+            .where(
+                Manager.tenant_id == tenant_id,
+                func.lower(Manager.email).in_(emails),
+            )
+            .group_by(func.lower(Manager.email), func.lower(Manager.full_name))
+        )
+        counts = {(email, name): n for email, name, n in result.all() if n > 1}
+    for row in rows:
+        email = (row.email or "").strip().lower()
+        name = (row.full_name or "").strip().lower()
+        row.duplicate_count = counts.get((email, name), 1) if email else 1
 
 
 async def get_manager(
@@ -105,6 +155,7 @@ async def get_manager(
         )
     ) or 0
     manager.note_count = len(manager.interactions)
+    await _annotate_duplicates(session, tenant_id=tenant_id, rows=[manager])
     return manager
 
 

@@ -104,6 +104,11 @@ class ManagerRead(BaseModel):
     #: Facts ABOUT the row rather than columns on it — how much work and how
     #: much relationship sits behind this contact. Present only on the single
     #: -manager read; the list does not pay for them.
+    #: How many contacts in this workspace share this e-mail address. 1 means
+    #: unique. Flagged rather than merged: the source really does hold two
+    #: records, and picking a winner is the reader's call, not the importer's.
+    duplicate_count: int = 1
+
     job_count: int = 0
     open_job_count: int = 0
     note_count: int = 0
