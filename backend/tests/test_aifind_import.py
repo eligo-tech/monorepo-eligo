@@ -688,3 +688,55 @@ def test_the_sources_own_category_is_kept_verbatim() -> None:
         assert sorted(kinds) == ["BD Call", "Meeting Notes"]
 
     asyncio.run(run())
+
+
+def test_a_tombstone_is_not_imported_as_a_person() -> None:
+    """aiFind renames a removed account to "Deleted User" and keeps the row.
+
+    It still carries a role and skills, so it survives every "is the name
+    empty?" check and lands in the contact list looking like a real person —
+    five did, titled "Leitung HR Allianz", "Recruiter", "HR Managerin".
+    """
+    payload = {
+        "data": {
+            "managers": {
+                "hits": [
+                    {
+                        "id": "t1",
+                        "first_name": "Deleted",
+                        "last_name": "User",
+                        "job_title": "Leitung HR Allianz",
+                        "company": {"id": "c1", "name": "Conrad Electronic SE"},
+                    },
+                    {
+                        "id": "m1",
+                        "first_name": "Stefan ",
+                        "last_name": "Graf",
+                        "job_title": "Head of IT",
+                        "company": {"id": "c1", "name": "Conrad Electronic SE"},
+                    },
+                ]
+            }
+        }
+    }
+    assert [m.full_name for m in aifind.parse_managers(payload)] == ["Stefan Graf"]
+
+
+def test_a_real_person_is_not_mistaken_for_a_tombstone() -> None:
+    """Matched exactly, not by substring: someone really can be called
+    "Userkamp", and deleting them is worse than keeping a placeholder."""
+    payload = {
+        "data": {
+            "managers": {
+                "hits": [
+                    {
+                        "id": "r1",
+                        "first_name": "Dieter",
+                        "last_name": "Userkamp",
+                        "company": {"id": "c1", "name": "Conrad Electronic SE"},
+                    }
+                ]
+            }
+        }
+    }
+    assert [m.full_name for m in aifind.parse_managers(payload)] == ["Dieter Userkamp"]

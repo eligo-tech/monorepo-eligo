@@ -311,6 +311,8 @@ export interface ManagerDTO {
   tags?: string[]
   last_contact_at?: string | null
   /** Present only on the single-manager read; the list does not pay for them. */
+  /** Contacts in this workspace sharing this e-mail. 1 = unique. */
+  duplicate_count?: number
   job_count?: number
   open_job_count?: number
   note_count?: number

@@ -289,3 +289,108 @@ async def test_counts_do_not_leak_another_workspaces_mandates(company) -> None:
     async with SessionLocal() as s:
         profile = await service.get_manager(s, tenant_id=TENANT, manager_id=m.id)
     assert profile.job_count == 0
+
+
+async def test_contacts_sharing_an_email_are_flagged_not_merged(company) -> None:
+    """The source really does hold the same person twice.
+
+    "Mick Drahtschmid" exists as MNGR571 and MNGR572, created seconds apart with
+    the same address. Merging them here would silently pick a winner and would
+    be undone by the next import, since idempotency is keyed on the source id.
+    So both rows stand and both say so.
+    """
+    async with SessionLocal() as s:
+        for _ in range(2):
+            await service.create_manager(
+                s,
+                tenant_id=TENANT,
+                payload=ManagerCreate(
+                    company_id=company,
+                    full_name="Mick Drahtschmid",
+                    email="md@bevis.digital",
+                ),
+            )
+        await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(
+                company_id=company, full_name="Einzelstueck", email="solo@example.test"
+            ),
+        )
+        rows = await service.list_managers(s, tenant_id=TENANT)
+
+    by_name = {r.full_name: r for r in rows}
+    assert by_name["Mick Drahtschmid"].duplicate_count == 2
+    assert by_name["Einzelstueck"].duplicate_count == 1
+    # both rows survive — nothing was collapsed
+    assert sum(1 for r in rows if r.full_name == "Mick Drahtschmid") == 2
+
+
+async def test_a_contact_without_an_email_is_not_a_duplicate_of_every_other(
+    company,
+) -> None:
+    """Absent e-mail must not group. Treating "" as a shared key would mark
+    every incomplete record as a duplicate of all the others."""
+    async with SessionLocal() as s:
+        for name in ("Ohne Mail Eins", "Ohne Mail Zwei"):
+            await service.create_manager(
+                s,
+                tenant_id=TENANT,
+                payload=ManagerCreate(company_id=company, full_name=name, email=None),
+            )
+        rows = await service.list_managers(s, tenant_id=TENANT)
+
+    for row in rows:
+        if row.full_name.startswith("Ohne Mail"):
+            assert row.duplicate_count == 1
+
+
+async def test_duplicates_do_not_count_across_workspaces(company) -> None:
+    async with SessionLocal() as s:
+        await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(
+                company_id=company, full_name="Geteilt", email="same@example.test"
+            ),
+        )
+        rows = await service.list_managers(s, tenant_id=TENANT)
+    # another workspace holding the same address is not our duplicate
+    assert [r for r in rows if r.full_name == "Geteilt"][0].duplicate_count == 1
+
+
+async def test_a_shared_company_mailbox_is_not_a_duplicate(company) -> None:
+    """E-mail alone is not identity.
+
+    `info@occhio.com` is listed by three different people at Occhio, and
+    `huehn.a@eplan.de` sits on Anna Vogel's record as well as Anna Huehn's — a
+    typo in the source. Matching on the address alone calls all of them
+    duplicates, which is worse than missing one: it accuses two real colleagues
+    of being the same person.
+    """
+    async with SessionLocal() as s:
+        for name in ("Fabian Huber", "Burkhardt Gumpricht"):
+            await service.create_manager(
+                s,
+                tenant_id=TENANT,
+                payload=ManagerCreate(
+                    company_id=company, full_name=name, email="info@occhio.com"
+                ),
+            )
+        # ...while the genuine double entry still is one
+        for _ in range(2):
+            await service.create_manager(
+                s,
+                tenant_id=TENANT,
+                payload=ManagerCreate(
+                    company_id=company,
+                    full_name="Mick Drahtschmid",
+                    email="md@bevis.digital",
+                ),
+            )
+        rows = await service.list_managers(s, tenant_id=TENANT)
+
+    by_name = {r.full_name: r for r in rows}
+    assert by_name["Fabian Huber"].duplicate_count == 1
+    assert by_name["Burkhardt Gumpricht"].duplicate_count == 1
+    assert by_name["Mick Drahtschmid"].duplicate_count == 2

@@ -98,6 +98,16 @@ function ManagerRow({
               {manager.phone}
             </span>
           )}
+          {/* The source holds some people twice. Said plainly on the row so the
+              reader is not left wondering whether they misread the list. */}
+          {(manager.duplicate_count ?? 1) > 1 && (
+            <span
+              className="text-gold-400"
+              title="Dieselbe E-Mail-Adresse existiert mehrfach — in der Quelle doppelt angelegt"
+            >
+              Dublette
+            </span>
+          )}
           {manager.last_contact_at && (
             <span title="Letzter Kontakt laut Quelle">
               {dateDe(manager.last_contact_at)}
