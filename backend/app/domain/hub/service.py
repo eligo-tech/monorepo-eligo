@@ -899,7 +899,11 @@ def _companies_matching(term: str):
     )
 
 
-def _term_matches(term: str, name_hit_ids: list | None = None):
+def _term_matches(
+    term: str,
+    name_hit_ids: list | None = None,
+    description_ids: list | None = None,
+):
     """One search word, matched against everything a posting can be found by.
 
     Includes the ad TEXT, so once descriptions are stored a search reaches the
@@ -928,17 +932,13 @@ def _term_matches(term: str, name_hit_ids: list | None = None):
         func.lower(HubJobPosting.title).like(needle),
         func.lower(HubJobPosting.occupation).like(needle),
     ]
-    if SEARCH_AD_TEXT:
-        # Cold table, so this is a membership test rather than another column on
-        # hub_job_postings — same reasoning as the company arm below: keep every
-        # arm resolvable without dragging a second table into the join filter.
-        fields.append(
-            HubJobPosting.id.in_(
-                select(HubPostingPayload.hub_job_posting_id).where(
-                    func.lower(HubPostingPayload.description).like(needle)
-                )
-            )
-        )
+    if SEARCH_AD_TEXT and description_ids:
+        # A literal id list, NOT a subquery. The subquery version reached across
+        # tables from inside the OR and cost a full sequential scan; see
+        # `_description_hits`. Empty or None means the arm is dropped: nothing
+        # matched, or the term is too common for its ad-text hits to mean
+        # anything.
+        fields.append(HubJobPosting.id.in_(description_ids))
     # The company arm is added ONLY when some company actually matched by name,
     # and as a literal id list rather than a correlated subquery. When nothing
     # matched — the common case; "embedded" matches no company name — the arm
@@ -1051,7 +1051,7 @@ async def _search_candidates(
     promise a page that does not exist.
 
     Returns the candidate id select, the parsed terms, the per-term company-name
-    hits, and the posting-side filters.
+    hits, the per-term ad-text hits, and the posting-side filters.
     """
     candidates = select(HubCompany.id)
 
@@ -1065,10 +1065,13 @@ async def _search_candidates(
     # Resolve the company-name side FIRST, one cheap indexed query per term, so
     # the posting predicate below stays single-table. See `_term_matches`.
     name_hits: dict[str, list] = {}
+    description_hits: dict[str, list | None] = {}
     for term in terms:
         name_hits[term] = list(
             (await session.execute(_companies_matching(term))).scalars().all()
         )
+        if SEARCH_AD_TEXT:
+            description_hits[term] = await _description_hits(session, term)
 
     if terms:
         by_company = select(HubCompany.id).where(
@@ -1092,7 +1095,10 @@ async def _search_candidates(
         # that made this unservable by any index.
         by_role = select(HubJobPosting.hub_company_id).where(
             HubJobPosting.is_active.is_(True),
-            *[_term_matches(term, name_hits[term]) for term in terms],
+            *[
+                _term_matches(term, name_hits[term], description_hits.get(term))
+                for term in terms
+            ],
         )
         candidates = candidates.where(
             or_(HubCompany.id.in_(by_company), HubCompany.id.in_(by_role))
@@ -1119,10 +1125,51 @@ async def _search_candidates(
             )
         )
 
-    return candidates, terms, name_hits, posting_filters
+    return candidates, terms, name_hits, description_hits, posting_filters
 
 
-def _role_match(terms: list[str], name_hits: dict, posting_filters: list) -> list:
+#: How many ad-text hits a term may have before its description arm is dropped.
+#: Roughly 10% of the ~211,000 active ads: a word in more than one ad in ten is
+#: not a discriminator in prose — "erfahrung" is in 38% of them, "und" in 71%.
+#: Deliberately an absolute number rather than a share of a live count, so the
+#: cutoff does not need a second query to know itself; it is a cliff, not a
+#: measurement. Past it the arm is DROPPED rather than resolved: fetching 150,000
+#: ids costs seconds and then matches nearly everything, making the search both
+#: slower AND less useful. Title and occupation still apply, so the term is never
+#: ignored — only its weakest evidence is.
+_AD_TEXT_HIT_CAP = 21_000
+
+
+async def _description_hits(session: AsyncSession, term: str) -> list | None:
+    """Postings whose ad TEXT contains the term, as concrete ids.
+
+    Resolved up front rather than left as a subquery inside the OR, for exactly
+    the reason the company arm is: `p.id IN (select ... from hub_posting_payload)`
+    reaches across tables, so the planner abandons the bitmap scan and walks
+    every posting. EXPLAIN on "sap": a sequential scan over 211,004 rows to keep
+    7,419, with the payload lookup as a SubPlan — 2.62s, against 0.99s for the
+    same answer with the ids resolved first.
+
+    Returns None when the term is too common to be worth matching on (see
+    `_AD_TEXT_HIT_CAP`); the caller then omits the arm entirely. The LIMIT is
+    cap + 1 so one row past the cliff is enough to know we are past it — the
+    150,479 rows holding "und" are never fetched.
+    """
+    result = await session.execute(
+        select(HubPostingPayload.hub_job_posting_id)
+        .where(func.lower(HubPostingPayload.description).like(f"%{term}%"))
+        .limit(_AD_TEXT_HIT_CAP + 1)
+    )
+    ids = list(result.scalars().all())
+    return None if len(ids) > _AD_TEXT_HIT_CAP else ids
+
+
+def _role_match(
+    terms: list[str],
+    name_hits: dict,
+    posting_filters: list,
+    description_hits: dict | None = None,
+) -> list:
     """What counts as a matching role. ONE definition.
 
     The headline count, the evidence list, the relevance score and the total all
@@ -1131,8 +1178,11 @@ def _role_match(terms: list[str], name_hits: dict, posting_filters: list) -> lis
     single Embedded role — a count that disagrees with the evidence beneath it is
     worse than no count.
     """
+    hits = description_hits or {}
     match: list = [HubJobPosting.is_active.is_(True), *posting_filters]
-    match.extend(_term_matches(term, name_hits[term]) for term in terms)
+    match.extend(
+        _term_matches(term, name_hits[term], hits.get(term)) for term in terms
+    )
     return match
 
 
@@ -1223,7 +1273,13 @@ async def search_employers(
     fields, so an employer qualifies when a matching role does — a nationwide
     chain is not excluded from "Bayern" because its head office sits elsewhere.
     """
-    candidates, terms, name_hits, posting_filters = await _search_candidates(
+    (
+        candidates,
+        terms,
+        name_hits,
+        description_hits,
+        posting_filters,
+    ) = await _search_candidates(
         session, q=q, city=city, regions=regions, berufsfelder=berufsfelder
     )
 
@@ -1234,7 +1290,7 @@ async def search_employers(
     # a single Embedded role. A count that disagrees with the evidence under it
     # is worse than no count; sharing the predicate makes them agree by
     # construction rather than by remembering to update both.
-    role_match = _role_match(terms, name_hits, posting_filters)
+    role_match = _role_match(terms, name_hits, posting_filters, description_hits)
 
     roles = func.count(HubJobPosting.id)
     grouped = await session.execute(
@@ -1401,7 +1457,13 @@ async def count_employers(
     deliberately does not join postings: the roll-up and its role counts are the
     expensive half, and a total does not need them.
     """
-    candidates, terms, name_hits, posting_filters = await _search_candidates(
+    (
+        candidates,
+        terms,
+        name_hits,
+        description_hits,
+        posting_filters,
+    ) = await _search_candidates(
         session, q=q, city=city, regions=regions, berufsfelder=berufsfelder
     )
     if min_relevance <= 1:
@@ -1416,7 +1478,7 @@ async def count_employers(
     # Filtered: relevance only exists after the roll-up, so the count has to pay
     # for the same grouping the search does. Approximating here would let the
     # header promise pages that do not exist, which is worse than no header.
-    role_match = _role_match(terms, name_hits, posting_filters)
+    role_match = _role_match(terms, name_hits, posting_filters, description_hits)
     grouped = (
         select(HubCompany.normalized_name)
         .outerjoin(
