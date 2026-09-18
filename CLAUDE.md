@@ -77,9 +77,13 @@ everything else:
 - **Ingestion is a scheduled job. No user, no UI.** Filling the shared corpus is
   never a user action — no button, no request handler, no page load may crawl a
   public source. Presentation reads; a cron writes.
-- **The shared corpus holds company-level facts only, never natural persons.**
-  People (managers, candidates) live exclusively in tenant-scoped tables, with
-  provenance and the GDPR Art. 14 flow.
+- **The shared corpus holds public facts — including persons a public source
+  names.** A contact person in a public job ad ("Ihre Ansprechpartnerin: Frau X")
+  is public and may be stored and shown to every workspace, as published and with
+  its source URL. This is a product decision (2026-09-18), not a red flag — do not
+  redact it. What stays tenant-only: anything a tenant imported or enriched
+  (ATS imports, CVs, provider emails/phones, LinkedIn/XING profiles), and every
+  `managers` row, which carries provenance and the GDPR Art. 14 flow.
 
 It also carries the data classification table and the GDPR/SOC 2 obligation map,
 including what is **not** yet built — nothing here may be described to a customer

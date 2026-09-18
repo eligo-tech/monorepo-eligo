@@ -82,51 +82,45 @@ triggered this crawl?" has no good answer while "the nightly job ran at 03:17"
 is auditable; and an operator endpoint reachable by any tenant leaks
 `/hub/crawl-profiles`, the union of every workspace's saved-search terms.
 
-### RULE 2 — The shared corpus holds company-level facts only. Never natural persons.
+### RULE 2 — The shared corpus holds public facts. Persons only as a public source published them.
 
 `hub_companies`, `hub_job_postings`, `hub_observations` may hold legal name,
-address, geo, register/VAT identifiers, industry, postings, and retrieval
-evidence. They may **not** hold names, e-mails, phone numbers or profiles of
-people — no hiring managers, no Geschäftsführer, no ad authors.
+address, geo, register/VAT identifiers, industry, postings, retrieval evidence
+— **and persons named in a public source** (the contact in a job ad, a sole
+trader's company name).
+
+**Not a violation — do not flag it:** a real person's name, title or the contact
+route an ad gives, inside a public ad text or a field derived from it. The
+product owner decided (2026-09-18) that this is public and shareable. Do not
+propose redacting it.
+
+**A violation — flag it:**
+
+1. A person in `hub_*` whose value did **not** come from a public source via
+   scheduled ingestion — an ATS/aiFind import, a CV, a mailbox, a note, a
+   recruiter edit, a tenant's `managers` row flowing back into the corpus.
+2. A person in `hub_*` with no provenance (posting/URL + fetch time).
+3. Enrichment in the shared layer: email/phone from a data provider, a
+   LinkedIn/XING profile, a guessed `vorname.nachname@` address. That is tenant
+   work and belongs in `managers`.
+4. Anything that makes a person impossible to suppress: erasure still needs the
+   suppression list (ARCHITECTURE.md §3), because the next crawl re-inserts a
+   deleted row.
 
 ```bash
-# A person-shaped COLUMN on a shared table is a violation.
-grep -nE "first_name|last_name|email|phone|person|contact" backend/app/domain/hub/models.py
+# What feeds hub_* must be an ingestion adapter, never tenant data.
+grep -rn "Hub[A-Za-z]*(" backend/app/domain --include=*.py | grep -v "domain/hub/"
 # Shared tables must not carry tenant_id (see RULE 3).
 grep -n "TenantMixin" backend/app/domain/hub/models.py   # only HubCompanyLink may
 ```
 
-**A grep over column names is not sufficient, and assuming it was is how the
-live violation survived.** A sole trader IS the company, so `hub_companies.name`
-holds personal data while every column stays company-shaped — "Andreas Uwe
-Weiss" was in the corpus with no flag. No check over the word `name` finds a
-person inside a column called `name`.
+`resolution.looks_like_natural_person` still screens at ingest and sets
+`suspected_natural_person`. It keeps persons findable for the suppression list;
+it is a marker, not a ban.
 
-The value-level screen is `resolution.looks_like_natural_person`, applied at
-ingest and surfaced as `suspected_natural_person`. When reviewing a change that
-adds a shared column or a new source, ask what the *values* can contain, not
-just what the column is called:
-
-```bash
-# (-k "flagg" matches all three screening tests; a selector that silently
-#  deselects everything is the same false green this rule exists to prevent)
-cd backend && .venv/bin/python -m pytest tests/test_hub_resolution.py -q -k flagg
-# And for a new adapter: does anything person-shaped reach `raw`?
-grep -n "raw=" backend/app/domain/hub/adapters/*.py
-```
-
-The screen flags; it does not remedy. Erasure still needs a suppression list
-(ARCHITECTURE.md §3) — deleting a row does not help while tonight's crawl
-re-inserts it.
-
-Why: a shared table of personal data makes one data subject's erasure reach
-across every customer, and makes us controller of personal data we are
-simultaneously distributing. Persons live only in tenant-scoped tables, carry
-provenance, and route through the GDPR Art. 14 flow.
-
-Edge case that must stay handled: **sole traders** (Einzelunternehmen,
-Freiberufler) whose company name *is* a person's name. Personal data despite
-sitting in a company field — must be flaggable and suppressible.
+Adopting a corpus person into a tenant's `managers` is the crossing that owes
+work: `source=third_party`, `source_detail` = the ad URL, a receipt, and the
+Art. 14 notice.
 
 ### RULE 3 — The tenant boundary is a table, not a column on shared data.
 
@@ -168,7 +162,7 @@ wrong.
 
 | Class | Where | tenant_id | personal data |
 |---|---|---|---|
-| Public corpus | `hub_companies`, `hub_job_postings`, `hub_observations` | no | **must be no** |
+| Public corpus | `hub_companies`, `hub_job_postings`, `hub_observations` | no | **only as a public source published it, with provenance** |
 | Tenant overlay | `hub_company_link` | yes | no |
 | Tenant record | `companies`, `jobs`, `applications` | yes | no |
 | Personal data | `candidates`, `managers` | yes | **yes** |
