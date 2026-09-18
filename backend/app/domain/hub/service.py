@@ -1709,3 +1709,251 @@ async def tracked_company_ids(
         )
     )
     return set(rows.scalars().all())
+
+
+# --------------------------------------------------------------------------
+# Workspace — watched employers and the people their ads name
+# --------------------------------------------------------------------------
+
+#: Ads read per employer when looking for contacts. Newest first, so a large
+#: employer (Deutsche Bahn: 185 sites) answers with its current contacts
+#: rather than timing out on its history.
+CONTACT_POSTINGS_LIMIT = 300
+#: Evidence rows kept per person. The count says how often; a handful of
+#: quotes is enough to judge whether the parser read the ad right.
+CONTACT_EVIDENCE_LIMIT = 5
+
+
+async def _sibling_company_ids(
+    session: AsyncSession, *, normalized_name: str
+) -> list[uuid.UUID]:
+    """Every corpus row of one employer — one row per site under `name_place`."""
+    rows = await session.execute(
+        select(HubCompany.id).where(HubCompany.normalized_name == normalized_name)
+    )
+    return list(rows.scalars().all())
+
+
+async def workspace_companies(
+    session: AsyncSession, *, tenant_id: uuid.UUID
+) -> list[dict]:
+    """The employers this tenant watches, prospects or has adopted.
+
+    `ignored` links are left out: they exist to hide a company from Markt, not
+    to list it. Rolled up by `normalized_name` like search does, because the
+    link points at one site while the employer is all of them.
+    """
+    links = [
+        link
+        for link in await list_links(session, tenant_id=tenant_id, limit=1000)
+        if link.relationship != "ignored"
+    ]
+    if not links:
+        return []
+    anchors = {
+        c.id: c
+        for c in (
+            await session.execute(
+                select(HubCompany).where(
+                    HubCompany.id.in_([link.hub_company_id for link in links])
+                )
+            )
+        ).scalars()
+    }
+    names = {c.normalized_name for c in anchors.values()}
+    sites = (
+        await session.execute(
+            select(HubCompany.id, HubCompany.normalized_name, HubCompany.city).where(
+                HubCompany.normalized_name.in_(names)
+            )
+        )
+    ).all()
+    name_of = {row.id: row.normalized_name for row in sites}
+    postings = (
+        await session.execute(
+            select(
+                HubJobPosting.hub_company_id,
+                func.count(HubJobPosting.id),
+                func.max(HubJobPosting.posted_at),
+            )
+            .where(
+                HubJobPosting.hub_company_id.in_(list(name_of)),
+                HubJobPosting.is_active.is_(True),
+            )
+            .group_by(HubJobPosting.hub_company_id)
+        )
+    ).all()
+
+    roll: dict[str, dict] = {
+        n: {"sites": 0, "cities": [], "open_roles": 0, "last_posted_at": None}
+        for n in names
+    }
+    for row in sites:
+        entry = roll[row.normalized_name]
+        entry["sites"] += 1
+        if row.city and row.city not in entry["cities"]:
+            entry["cities"].append(row.city)
+    for company_id, count, last in postings:
+        entry = roll[name_of[company_id]]
+        entry["open_roles"] += count
+        if last is not None:
+            last = last if last.tzinfo else last.replace(tzinfo=dt.UTC)
+            if entry["last_posted_at"] is None or last > entry["last_posted_at"]:
+                entry["last_posted_at"] = last
+
+    out = []
+    for link in links:
+        anchor = anchors.get(link.hub_company_id)
+        if anchor is None:
+            continue
+        entry = roll[anchor.normalized_name]
+        out.append(
+            {
+                "hub_company_id": anchor.id,
+                "name": anchor.name,
+                "normalized_name": anchor.normalized_name,
+                "website_domain": anchor.website_domain,
+                "resolution_basis": anchor.resolution_basis,
+                "cities": entry["cities"][:6],
+                "city_count": len(entry["cities"]),
+                "sites": entry["sites"],
+                "open_roles": entry["open_roles"],
+                "last_posted_at": entry["last_posted_at"],
+                "relationship": link.relationship,
+                "note": link.note,
+                "company_id": link.company_id,
+                "watched_since": link.created_at,
+            }
+        )
+    # Most active hiring first — that is where a call lands on a live need.
+    out.sort(key=lambda w: (-w["open_roles"], w["name"].lower()))
+    return out
+
+
+async def company_contacts(
+    session: AsyncSession, *, tenant_id: uuid.UUID, hub_company_id: uuid.UUID
+) -> dict | None:
+    """The people an employer's public ads name as contacts, with evidence.
+
+    Reads ad texts already in the corpus — no fetch, so this is a presentation
+    read under ARCHITECTURE.md RULE 1, and RULE 2 allows a person as a public
+    source published them. Nothing is written: a contact reaches the record
+    only when a recruiter adopts it into `managers`.
+
+    Covers every site of the employer, active ads first: a contact named in a
+    closed ad is still the person who hired for that team last month.
+    """
+    from app.domain.hub.contacts import company_mailboxes, extract_contacts, person_key
+    from app.domain.hub.schemas import ba_detail_url
+    from app.domain.managers.models import Manager
+
+    anchor = await get_company(session, hub_company_id=hub_company_id)
+    if anchor is None:
+        return None
+    ids = await _sibling_company_ids(session, normalized_name=anchor.normalized_name)
+
+    rows = (
+        await session.execute(
+            select(HubJobPosting, HubPostingPayload.description)
+            .outerjoin(
+                HubPostingPayload,
+                HubPostingPayload.hub_job_posting_id == HubJobPosting.id,
+            )
+            .where(HubJobPosting.hub_company_id.in_(ids))
+            .order_by(
+                HubJobPosting.is_active.desc(),
+                HubJobPosting.posted_at.desc().nulls_last(),
+            )
+            .limit(CONTACT_POSTINGS_LIMIT)
+        )
+    ).all()
+
+    people: dict[str, dict] = {}
+    mailboxes: dict[str, int] = {}
+    with_text = 0
+    for posting, description in rows:
+        if not description:
+            continue
+        with_text += 1
+        for email in company_mailboxes(description):
+            mailboxes[email] = mailboxes.get(email, 0) + 1
+        for mention in extract_contacts(description):
+            key = person_key(mention.first_name, mention.last_name)
+            evidence = {
+                "posting_id": posting.id,
+                "posting_title": posting.title,
+                "url": posting.source_url
+                or ba_detail_url(posting.source, posting.external_id),
+                "posted_at": posting.posted_at,
+                "is_active": posting.is_active,
+                "quote": mention.quote,
+            }
+            person = people.get(key)
+            if person is None:
+                people[key] = {
+                    "key": key,
+                    "full_name": mention.full_name,
+                    "salutation": mention.salutation,
+                    "first_name": mention.first_name,
+                    "last_name": mention.last_name,
+                    "role_title": mention.role_title,
+                    "email": mention.email,
+                    "phone": mention.phone,
+                    "mention_count": 1,
+                    "evidence": [evidence],
+                    "manager_id": None,
+                }
+                continue
+            person["mention_count"] += 1
+            if len(person["evidence"]) < CONTACT_EVIDENCE_LIMIT:
+                person["evidence"].append(evidence)
+            # Rows arrive newest first, so the first value seen is the current
+            # one; later ads only fill what it left empty. "Frau Weber" in one
+            # ad and "Jutta Weber" in the next become Jutta Weber.
+            if person["first_name"] is None and mention.first_name:
+                person["first_name"] = mention.first_name
+                person["full_name"] = mention.full_name
+            for field in ("salutation", "role_title", "email", "phone"):
+                if person[field] is None and getattr(mention, field):
+                    person[field] = getattr(mention, field)
+
+    # This workspace's own view: adopted company, and who it already holds.
+    link = await session.scalar(
+        select(HubCompanyLink).where(
+            HubCompanyLink.tenant_id == tenant_id,
+            HubCompanyLink.hub_company_id.in_(ids),
+            HubCompanyLink.company_id.is_not(None),
+        )
+    )
+    company_id = link.company_id if link else None
+    if company_id is not None and people:
+        managers = (
+            await session.execute(
+                select(Manager).where(
+                    Manager.tenant_id == tenant_id, Manager.company_id == company_id
+                )
+            )
+        ).scalars()
+        held = {
+            person_key(m.first_name, m.last_name or m.full_name.split()[-1]): m.id
+            for m in managers
+        }
+        for key, person in people.items():
+            person["manager_id"] = held.get(key)
+
+    contacts = sorted(
+        people.values(),
+        key=lambda p: (-p["mention_count"], p["last_name"].lower()),
+    )
+    return {
+        "hub_company_id": anchor.id,
+        "company_name": anchor.name,
+        "company_id": company_id,
+        "contacts": contacts,
+        "mailboxes": [
+            {"email": email, "mention_count": count}
+            for email, count in sorted(mailboxes.items(), key=lambda kv: -kv[1])
+        ],
+        "postings_scanned": len(rows),
+        "postings_with_text": with_text,
+    }

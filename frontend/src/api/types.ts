@@ -486,3 +486,57 @@ export interface CVExtractionResultDTO {
   candidate_id: string | null
   text_chars: number
 }
+/** One watched employer, rolled up across its sites (`/hub/workspace`). */
+export interface WorkspaceCompanyDTO {
+  hub_company_id: string
+  name: string
+  normalized_name: string
+  website_domain: string | null
+  resolution_basis: 'vat' | 'register' | 'domain' | 'name_place'
+  cities: string[]
+  city_count: number
+  sites: number
+  open_roles: number
+  last_posted_at: string | null
+  relationship: HubCompanyLinkDTO['relationship']
+  note: string | null
+  /** The workspace's own company row, once adopted. */
+  company_id: string | null
+  watched_since: string
+}
+
+/** The ad that names a contact, and the line that does. */
+export interface ContactEvidenceDTO {
+  posting_id: string
+  posting_title: string
+  url: string | null
+  posted_at: string | null
+  is_active: boolean
+  quote: string
+}
+
+/** A person a public job ad names as the contact. Nothing is stored until adopted. */
+export interface ContactCandidateDTO {
+  key: string
+  full_name: string
+  salutation: 'Frau' | 'Herr' | null
+  first_name: string | null
+  last_name: string
+  role_title: string | null
+  email: string | null
+  phone: string | null
+  mention_count: number
+  evidence: ContactEvidenceDTO[]
+  /** Set when this workspace already holds the person as a manager. */
+  manager_id: string | null
+}
+
+export interface CompanyContactsDTO {
+  hub_company_id: string
+  company_name: string
+  company_id: string | null
+  contacts: ContactCandidateDTO[]
+  mailboxes: { email: string; mention_count: number }[]
+  postings_scanned: number
+  postings_with_text: number
+}
