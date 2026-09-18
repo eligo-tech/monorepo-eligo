@@ -286,6 +286,16 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
         DateTime(timezone=True), nullable=True, index=True
     )
 
+    # The same "attempted" marker for the partner-board page behind
+    # `source_url` (adapters/partner_pages.py), for the same reason: a page that
+    # 404s or sits behind a bot check yields no text, and selecting on the text
+    # alone would pick it again every night. `source_page_status` is the HTTP
+    # code, or 0 skipped host / 1 robots.txt / 2 network error.
+    source_page_fetched_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    source_page_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # SHA-256 of the meaningful fields — an unchanged posting only bumps
     # `last_seen_at` instead of rewriting the row.
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -354,6 +364,17 @@ class HubPostingPayload(Base, TimestampMixin):
     )
     raw: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Readable text of the partner-board page `source_url` points at — where
+    #: the contact block often is when the BA text gives only `bewerbung@`.
+    #: Public, as published (ARCHITECTURE.md RULE 2), with its fetch recorded
+    #: in `source_page_observation_id`.
+    source_page_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Where the fetch actually landed after redirects — the URL the evidence
+    #: is shown with.
+    source_page_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    source_page_observation_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(), ForeignKey("hub_observations.id"), nullable=True
+    )
 
     posting: Mapped["HubJobPosting"] = relationship(
         "HubJobPosting", back_populates="payload"

@@ -54,9 +54,30 @@ _SALUTED = re.compile(rf"\b(?P<sal>Frau|Herrn?) +(?P<name>{_NAME})")
 #: "Ansprechpartnerin: Jutta Dziobek" — a contact label, then a bare name.
 #: Requires the colon or a line break: "Ansprechpartner für Patienten" is a
 #: duty in a task list, not a person, and is the commonest false positive.
+#: Gendered spellings the boards use: "Ansprechpartner*in", "Recruiter:in".
+_GENDER = r"(?:in|\*in|:in|_in|In|\(in\))?"
+_LABEL = (
+    rf"(?:Ansprechpartner{_GENDER}|Ansprechperson|Kontaktperson|Kontakt|Recruiter{_GENDER})"
+)
 _LABELLED = re.compile(
-    rf"\b(?:Ihr(?:e)?\s+)?(?:Ansprechpartner(?:in)?|Ansprechperson|Kontaktperson|Kontakt)"
+    rf"\b(?:Ihr(?:e)?\s+|Dein(?:e)?\s+)?{_LABEL}"
     rf"\s*(?::|\n)\s*(?P<name>{_NAME})"
+)
+
+#: A contact HEADING, the partner-board layout: a short line naming the
+#: function, then the name alone on its own line.
+#:
+#:     Deine Ansprechperson für weitere Fragen
+#:     Kathrin Telega
+#:     Junior People & Culture Business Partner
+#:
+#: The heading line must be short and end the line (no sentence after the
+#: label), and the name must stand alone on its line. That is what separates
+#: it from a duty in a task list — "Ansprechpartner für Bürgerinnen und Bürger,
+#: Kommunen, Behörden …" runs on and never has a bare name under it.
+_HEADED = re.compile(
+    rf"(?m)^[^\n]{{0,30}}\b{_LABEL}\w*[^\n.!?]{{0,45}}:? *\n\s*"
+    rf"(?P<name>{_NAME}) *(?=$|[,/(|–]| - )"
 )
 
 #: Words that follow "Frau"/"Herr" without being a name, or that a greedy name
@@ -70,7 +91,16 @@ _NOT_NAMES = {
     "Am", "An", "Auf", "Aus", "Straße", "Str", "Platz", "Weg", "Gmbh", "Ag",
     "Als", "Wenn", "Nehmen", "Du", "Dein", "Deine", "Frau", "Herr", "Herrn",
     "Machen", "Neue", "Dienstort", "Bewerbungsformular", "Talent", "Recruiting",
+    # Site furniture on partner-board pages, left over after the markup goes.
+    "Job", "Jobs", "Cookie", "Cookies", "Einstellungen", "Datenschutz", "Impressum",
+    "Kontakt", "Team", "Login", "Menü", "Suche", "Merken", "Teilen",
 }
+
+#: A single word after "Frau"/"Herr" that names a unit, not a person:
+#: "Frau Bewerbermanagement". Suffix-matched, so "Leitner" stays a surname.
+_UNIT_WORD = re.compile(
+    r"(?i)(management|abteilung|referat|bereich|team|service|verwaltung|zentrale)$"
+)
 
 #: The name is a company if a legal form follows it: "Vision Consulting GmbH".
 _LEGAL_FORM_AFTER = re.compile(r"^ *(?:GmbH|gGmbH|mbH|AG|KG|SE|e\. ?V\.|OHG|UG|GbR|Gmb)\b")
@@ -96,7 +126,7 @@ _ROLE_HINT = re.compile(
     r"(?i)(leit|referent|recruit|talent|personal|human|people|hr\b|manager|"
     r"direktor|geschäftsführ|inhaber|assistenz|sachbearbeit|business partner|"
     r"ausbild|koordinat|verwaltung|vorstand|bereich|abteilung|team|chef|head|"
-    r"lead|officer|partner|spezialist|berater|pflegedienst)"
+    r"lead|officer|partner|spezialist|berater|pflegedienst|prokurist)"
 )
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}")
@@ -201,6 +231,8 @@ def _trim_name(raw: str, following: str) -> tuple[str | None, str | None]:
     names = bare()
     if not names or names[0] in _NOT_NAMES or tokens[-1] in _NOT_NAMES:
         return None, None
+    if any(_UNIT_WORD.search(t) for t in names):
+        return None, None
     return " ".join(tokens), role
 
 
@@ -214,6 +246,22 @@ def _split(name: str) -> tuple[str | None, str]:
     return parts[0], " ".join(parts[1:])
 
 
+def _plausible_role(role: str) -> str | None:
+    """A role, or None if the phrase is really an address, a URL or a company
+    line that happened to contain a role word ("www.hacker-partner.de",
+    "Oblak & Partner GmbH & Co KG"). "Projektmanager bei X GmbH" keeps the
+    part before "bei"."""
+    role = role.strip(" ,–-/")
+    if re.search(r"(?i)www\.|https?:|\.(de|com|at|ch)\b|[@\d]", role):
+        return None
+    if re.search(r"\b(GmbH|gGmbH|mbH|AG|KG|SE|e\. ?V\.|KdöR|Co\.?)\b", role):
+        head = re.split(r"\s+bei\s+", role, maxsplit=1)
+        return head[0] if len(head) == 2 and _ROLE_HINT.search(head[0]) else None
+    if not _ROLE_HINT.search(role) or _LABEL_WORD.search(role):
+        return None
+    return role
+
+
 def _role_near(text: str, start: int, end: int) -> str | None:
     """The person's function, from the phrase right after or right before
     the name: "Frau Katrin Wolter (Pflegedienstleitung)", "…, Leitung Human
@@ -222,13 +270,13 @@ def _role_near(text: str, start: int, end: int) -> str | None:
     m = re.match(r"\s*\(([^)\n]{3,60})\)", after) or re.match(
         r" *[,–-] *([^,\n.;:()]{3,60})", after
     )
-    if (
-        m
-        and _ROLE_HINT.search(m.group(1))
-        and not _LABEL_WORD.search(m.group(1))
-        and not re.search(r"[@\d]", m.group(1))
-    ):
-        return m.group(1).strip(" ,–-/")
+    if m and (role := _plausible_role(m.group(1))):
+        return role
+    # The partner-board layout puts the role on its own line under the name:
+    # "Kathrin Telega\nJunior People & Culture Business Partner".
+    m = re.match(r" *\n\s*([^\n]{3,60})\n", after + "\n")
+    if m and (role := _plausible_role(m.group(1))):
+        return role
     # Before the name, same line: walk back over words until grammar starts.
     line = text[: start].rsplit("\n", 1)[-1]
     words: list[str] = []
@@ -245,10 +293,7 @@ def _role_near(text: str, start: int, end: int) -> str | None:
         words.insert(0, bare)
         if len(words) == 4:
             break
-    role = " ".join(words)
-    if role and _ROLE_HINT.search(role) and not _LABEL_WORD.search(role):
-        return role
-    return None
+    return _plausible_role(" ".join(words)) if words else None
 
 
 def _email_for(window: str, first: str | None, last: str) -> str | None:
@@ -339,14 +384,17 @@ def _quote(text: str, start: int, end: int) -> str:
 def extract_contacts(text: str | None) -> list[ContactMention]:
     """Every person an ad text names as a contact, in order of appearance.
 
-    Two forms are recognised, both of which put a person in front of a reader
-    on purpose:
+    Three forms are recognised, each of which puts a person in front of a
+    reader on purpose:
 
       * a salutation — "Frau Katrin Wolter", "Herrn Dr. Benjamin Schmidt",
         "Herr Trippner" (surname only is the formal German form);
       * a contact label with at least first + last name — "Ansprechpartnerin:
-        Jutta Dziobek". A single bare word after a label is not accepted: it
-        is as likely to be a department as a person.
+        Jutta Dziobek", "Recruiter*in: Jana Lawinsky". A single bare word after
+        a label is not accepted: it is as likely to be a department as a person;
+      * a contact heading with the name alone on the next line — the
+        partner-board layout ("Deine Ansprechperson für weitere Fragen" /
+        "Kathrin Telega" / "Junior People & Culture Business Partner").
     """
     if not text:
         return []
@@ -396,6 +444,12 @@ def extract_contacts(text: str | None) -> list[ContactMention]:
                     name = f"{name} {wrapped}"
                     end = clean.find(wrapped, end) + len(wrapped)
             add(m.start(), end, name, sal, lead_role)
+
+    for m in _HEADED.finditer(clean):
+        name, lead_role = _trim_name(m.group("name"), clean[m.end() :])
+        if name and len([p for p in name.split() if not re.fullmatch(_TITLE, p)]) >= 2:
+            start = clean.find(name, m.start("name"))
+            add(start, start + len(name), name, None, lead_role)
 
     for m in _LABELLED.finditer(clean):
         name, lead_role = _trim_name(m.group("name"), clean[m.end() :])

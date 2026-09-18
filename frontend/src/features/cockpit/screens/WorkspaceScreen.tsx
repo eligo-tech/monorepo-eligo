@@ -188,21 +188,29 @@ function ContactRow({
         <ul className="mt-2.5 space-y-2">
           {contact.evidence.map((e) => (
             <li
-              key={e.posting_id}
+              key={`${e.posting_id}-${e.origin}`}
               className="rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2"
             >
               <div className="flex flex-wrap items-baseline gap-x-3 font-mono text-[12px] text-cockpit-faint">
                 <span className="font-sans text-[13px] text-cockpit-dim">{e.posting_title}</span>
                 {!e.is_active && <Chip>geschlossen</Chip>}
                 <span className="ml-auto">{dateDe(e.posted_at)}</span>
+                {/* Same words as Markt: "Anzeige" is the BA text, "Quelle" the
+                    partner-board page the nightly job read. */}
                 {e.url && (
                   <a
                     href={e.url}
                     target="_blank"
                     rel="noreferrer noopener"
                     className="flex items-center gap-1 hover:text-mint-400"
+                    title={
+                      e.origin === 'quelle'
+                        ? 'Genannt auf der Partnerseite der Anzeige'
+                        : 'Genannt im Anzeigentext der Bundesagentur'
+                    }
                   >
-                    Anzeige <ExternalLink className="h-3 w-3" />
+                    {e.origin === 'quelle' ? 'Quelle' : 'Anzeige'}{' '}
+                    <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
               </div>

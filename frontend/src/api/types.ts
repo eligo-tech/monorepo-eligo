@@ -509,6 +509,8 @@ export interface WorkspaceCompanyDTO {
 export interface ContactEvidenceDTO {
   posting_id: string
   posting_title: string
+  /** Which public text named the person: the BA ad or the partner-board page. */
+  origin: 'anzeige' | 'quelle'
   url: string | null
   posted_at: string | null
   is_active: boolean

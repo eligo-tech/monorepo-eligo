@@ -380,7 +380,11 @@ class ContactEvidence(BaseModel):
 
     posting_id: uuid.UUID
     posting_title: str
-    #: The employer's ad when the source has one, else the agency's page.
+    #: Which public text named the person: the BA ad ("anzeige") or the
+    #: partner-board page it links to ("quelle").
+    origin: Literal["anzeige", "quelle"]
+    #: The page the quote is from — the BA page for "anzeige", the partner
+    #: page (after redirects) for "quelle".
     url: str | None
     posted_at: dt.datetime | None
     is_active: bool
