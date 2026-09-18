@@ -182,3 +182,15 @@ async def test_partner_pages_stop_when_the_backlog_is_empty() -> None:
     # 20 + 5, then one call that reports nothing left — not 20 more calls.
     assert requested == [_PARTNER_BATCH_SIZE, _PARTNER_BATCH_SIZE, _PARTNER_BATCH_SIZE]
     assert result["attempted"] == 25
+
+
+async def test_partner_pages_script_refuses_to_run_without_credentials(monkeypatch) -> None:
+    """The standalone workflow must fail loudly, not silently read nothing."""
+    import sys
+
+    from scripts import hub_partner_pages
+
+    monkeypatch.delenv("ELIGO_API_BASE", raising=False)
+    monkeypatch.delenv("ELIGO_INGEST_TOKEN", raising=False)
+    monkeypatch.setattr(sys, "argv", ["hub_partner_pages"])
+    assert await hub_partner_pages.main() == 2
