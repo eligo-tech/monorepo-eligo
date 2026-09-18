@@ -16,6 +16,8 @@ import type {
   HubFacetsDTO,
   HubJobPostingDTO,
   SavedSearchDTO,
+  WorkspaceCompanyDTO,
+  CompanyContactsDTO,
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
@@ -164,6 +166,20 @@ export const api = {
     return request<ManagerDTO[]>(`/managers?${qs}`)
   },
 
+  /** Add a contact at one of this workspace's own companies. */
+  createManager: (body: {
+    company_id: string
+    full_name: string
+    first_name?: string | null
+    last_name?: string | null
+    role_title?: string | null
+    email?: string | null
+    phone?: string | null
+    linkedin_url?: string | null
+    source?: string
+    source_detail?: string | null
+  }) => request<ManagerDTO>('/managers', { method: 'POST', body: JSON.stringify(body) }),
+
   /** People we hold data on who have not been informed (GDPR Art. 14). */
   managersOwingArt14: () => request<ManagerDTO[]>('/managers/art14-outstanding'),
 
@@ -206,6 +222,14 @@ export const api = {
   /** Open roles for one hub company. */
   hubCompanyPostings: (id: string) =>
     request<HubJobPostingDTO[]>(`/hub/companies/${id}/postings?limit=200`),
+
+  /** The employers this workspace watches, rolled up across their sites. */
+  hubWorkspace: () => request<WorkspaceCompanyDTO[]>('/hub/workspace'),
+
+  /** People an employer's public ads name as contacts. Reads the corpus;
+   *  fetches and stores nothing. */
+  hubCompanyContacts: (id: string) =>
+    request<CompanyContactsDTO>(`/hub/companies/${id}/contacts`),
 
   /** Mark this workspace's interest in a corpus company. Idempotent. */
   trackHubCompany: (id: string, relationship: HubCompanyLinkDTO['relationship'] = 'watching') =>

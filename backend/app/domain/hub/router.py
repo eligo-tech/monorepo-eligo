@@ -24,6 +24,7 @@ from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
     AdoptCompanyRequest,
     AdoptCompanyResult,
+    CompanyContacts,
     HubJobPostingHit,
     HubSearchPage,
     DescriptionFetchRequest,
@@ -37,6 +38,7 @@ from app.domain.hub.schemas import (
     IngestRequest,
     IngestSummary,
     TrackRequest,
+    WorkspaceCompany,
 )
 
 router = APIRouter(prefix="/hub", tags=["hub"])
@@ -302,6 +304,36 @@ async def list_hub_links(
     """This tenant's view of the corpus: what they watch, prospect, or ignore."""
     rows = await service.list_links(db, tenant_id=tenant_id, relationship=relationship)
     return [HubCompanyLinkRead.model_validate(r) for r in rows]
+
+
+@router.get("/workspace", response_model=list[WorkspaceCompany])
+async def list_workspace(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[WorkspaceCompany]:
+    """The employers this workspace watches, rolled up across their sites."""
+    rows = await service.workspace_companies(db, tenant_id=tenant_id)
+    return [WorkspaceCompany.model_validate(r) for r in rows]
+
+
+@router.get("/companies/{hub_company_id}/contacts", response_model=CompanyContacts)
+async def get_company_contacts(
+    hub_company_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> CompanyContacts:
+    """People this employer's public ads name as contacts, with the ad lines.
+
+    A read over ad texts already in the corpus — it fetches nothing and
+    stores nothing. Saving a person is `adopt` (with a manager) or
+    `POST /managers`, both explicit.
+    """
+    result = await service.company_contacts(
+        db, tenant_id=tenant_id, hub_company_id=hub_company_id
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "hub company not found")
+    return CompanyContacts.model_validate(result)
 
 
 @router.put(

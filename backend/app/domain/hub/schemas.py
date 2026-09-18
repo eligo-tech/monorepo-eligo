@@ -19,6 +19,15 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 from app.domain.common.enums import ConfidenceSource
 
 
+def ba_detail_url(source: str, external_id: str | None) -> str | None:
+    """The agency's own page for a posting, from its reference number."""
+    if source == "bundesagentur" and external_id:
+        return "https://www.arbeitsagentur.de/jobsuche/jobdetail/" + quote(
+            external_id, safe=""
+        )
+    return None
+
+
 class HubCompanyRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -107,12 +116,7 @@ class HubJobPostingRead(BaseModel):
         for every posting already in the corpus. `source_url` keeps its narrower
         meaning — the EMPLOYER's own ad — so the two are not conflated.
         """
-        if self.source == "bundesagentur" and self.external_id:
-            return (
-                "https://www.arbeitsagentur.de/jobsuche/jobdetail/"
-                + quote(self.external_id, safe="")
-            )
-        return None
+        return ba_detail_url(self.source, self.external_id)
 
 
 class HubObservationRead(BaseModel):
@@ -339,3 +343,87 @@ class DescriptionFetchRequest(BaseModel):
     """
 
     external_ids: list[str] = Field(min_length=1, max_length=25)
+
+
+# --------------------------------------------------------------------------
+# Workspace — the companies this tenant watches, and the people behind them
+# --------------------------------------------------------------------------
+
+
+class WorkspaceCompany(BaseModel):
+    """One watched employer, rolled up across its sites the way Markt shows it.
+
+    Tracking stores ONE corpus row (the first site); everything counted here
+    spans every site with the same `normalized_name`, so "mgm technology
+    partners" reads as one employer with four offices, not four strangers.
+    """
+
+    hub_company_id: uuid.UUID
+    name: str
+    normalized_name: str
+    website_domain: str | None
+    resolution_basis: str
+    cities: list[str]
+    city_count: int
+    sites: int
+    open_roles: int
+    last_posted_at: dt.datetime | None
+    relationship: str
+    note: str | None
+    #: The tenant's own `companies` row once adopted; None while only watched.
+    company_id: uuid.UUID | None
+    watched_since: dt.datetime
+
+
+class ContactEvidence(BaseModel):
+    """The ad that names the person, and the line that does."""
+
+    posting_id: uuid.UUID
+    posting_title: str
+    #: The employer's ad when the source has one, else the agency's page.
+    url: str | None
+    posted_at: dt.datetime | None
+    is_active: bool
+    quote: str
+
+
+class ContactCandidate(BaseModel):
+    """A person a public ad names as the contact for a vacancy.
+
+    Read from the ad texts already in the corpus on every request — nothing is
+    stored until a recruiter adopts the person into `managers`, which is where
+    provenance and the Art. 14 notice attach.
+    """
+
+    key: str
+    full_name: str
+    salutation: str | None
+    first_name: str | None
+    last_name: str
+    role_title: str | None
+    email: str | None
+    phone: str | None
+    #: How many of this employer's ads name them — a recruiter named in twelve
+    #: ads is the talent-acquisition desk; one named once is a hiring manager.
+    mention_count: int
+    evidence: list[ContactEvidence]
+    #: Set when this workspace already holds the person as a manager.
+    manager_id: uuid.UUID | None = None
+
+
+class CompanyMailbox(BaseModel):
+    email: str
+    mention_count: int
+
+
+class CompanyContacts(BaseModel):
+    hub_company_id: uuid.UUID
+    company_name: str
+    #: The tenant's `companies` row, if adopted — decides whether saving a
+    #: contact adopts the company first or adds a manager to it.
+    company_id: uuid.UUID | None
+    contacts: list[ContactCandidate]
+    mailboxes: list[CompanyMailbox]
+    #: Coverage, so "no contacts" can be told apart from "no ad texts yet".
+    postings_scanned: int
+    postings_with_text: int
