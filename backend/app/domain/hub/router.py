@@ -431,6 +431,28 @@ async def fetch_descriptions(
     return {**result, **await service.descriptions_progress(db)}
 
 
+@router.post("/partner-pages/fetch")
+async def fetch_partner_pages(
+    # Small by default: each page is a paced request, and the whole batch runs
+    # inside one HTTP call a proxy may time out. The nightly script loops.
+    limit: int = Query(default=25, ge=1, le=200),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Read partner-board pages behind `source_url`. Machine-only (RULE 1).
+
+    One page per posting, robots.txt respected, paced per host; watched
+    employers first. See `adapters/partner_pages.py` for what is skipped and why.
+    """
+    from app.domain.hub.adapters.partner_pages import PartnerPageFetcher
+
+    async with PartnerPageFetcher() as fetcher:
+        result = await service.fetch_missing_partner_pages(
+            db, fetcher=fetcher, limit=limit
+        )
+    return {**result, **await service.partner_pages_progress(db)}
+
+
 @router.get("/descriptions/progress")
 async def descriptions_progress(
     _tenant_id: uuid.UUID = Depends(get_current_tenant),

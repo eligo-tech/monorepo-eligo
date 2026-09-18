@@ -6,7 +6,12 @@ import json
 
 import httpx
 
-from scripts.hub_daily import _DESCRIPTION_BATCH_SIZE, _fetch_descriptions
+from scripts.hub_daily import (
+    _DESCRIPTION_BATCH_SIZE,
+    _PARTNER_BATCH_SIZE,
+    _fetch_descriptions,
+    _fetch_partner_pages,
+)
 
 
 async def test_description_top_up_uses_proxy_safe_batches() -> None:
@@ -125,3 +130,55 @@ async def test_a_page_cut_off_by_the_proxy_is_retried_not_lost() -> None:
     assert attempts == 2, "the first response was a 500; it should have retried"
     assert totals["postings"] == 2
     assert totals["available"] == 3
+
+
+def _partner_handler(backlog: int, requested: list[int]):
+    remaining = backlog
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal remaining
+        assert request.url.path == "/hub/partner-pages/fetch"
+        batch = int(request.url.params["limit"])
+        requested.append(batch)
+        done = min(batch, remaining)
+        remaining -= done
+        return httpx.Response(
+            200,
+            json={
+                "attempted": done,
+                "stored": done // 2,
+                "failed": done - done // 2,
+                "skipped": 0,
+                "with_source_url": backlog,
+                "source_page_attempted": backlog - remaining,
+                "source_page_read": 0,
+            },
+        )
+
+    return handler
+
+
+async def test_partner_pages_respect_the_nightly_budget() -> None:
+    requested: list[int] = []
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_partner_handler(10_000, requested)),
+        base_url="https://example.test",
+    ) as client:
+        result = await _fetch_partner_pages(client, budget=45)
+
+    assert requested == [_PARTNER_BATCH_SIZE, _PARTNER_BATCH_SIZE, 5]
+    assert result["attempted"] == 45
+    assert result["source_page_attempted"] == 45
+
+
+async def test_partner_pages_stop_when_the_backlog_is_empty() -> None:
+    requested: list[int] = []
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_partner_handler(25, requested)),
+        base_url="https://example.test",
+    ) as client:
+        result = await _fetch_partner_pages(client, budget=400)
+
+    # 20 + 5, then one call that reports nothing left — not 20 more calls.
+    assert requested == [_PARTNER_BATCH_SIZE, _PARTNER_BATCH_SIZE, _PARTNER_BATCH_SIZE]
+    assert result["attempted"] == 25

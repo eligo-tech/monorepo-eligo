@@ -76,6 +76,14 @@ never swept merely because they lack text; the separate manual bulk workflow is
 the only owner of historical backlog. A same-day rerun creates no rows and makes
 no description calls.
 
+**Partner-board pages are read within a nightly budget.** A third of postings
+link to the same vacancy on a partner board (jobexport, get-in-it, persy, …),
+and those pages often name the contact the BA text leaves out. After the ad
+text, the job reads up to `--partner-pages` of them (default 400), employers a
+workspace watches first, one page per posting, robots.txt respected and paced
+per host. Each page is attempted once, so the backlog drains night by night
+instead of being re-read.
+
 Exits non-zero if any shard fails, so the scheduler's own failure notification
 is the monitoring (SOC 2 CC7.2).
 """
@@ -95,6 +103,9 @@ _RESULT_CEILING = 10_000
 _PAGE_CEILING = 100
 _DESCRIPTION_BATCH_SIZE = 25
 _DESCRIPTION_BATCH_ATTEMPTS = 4
+#: Partner pages per request. Each is a paced external fetch (~1 s), and the
+#: batch runs inside one HTTP call the hosting proxy may cut off.
+_PARTNER_BATCH_SIZE = 20
 #: Attempts per crawl page. A page cut off by the hosting proxy is transient and
 #: a slice is idempotent, so re-sending it is cheaper than losing the shard.
 _PAGE_ATTEMPTS = 3
@@ -284,6 +295,44 @@ async def _fetch_descriptions(
     }
 
 
+async def _fetch_partner_pages(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
+    """Read up to `budget` partner-board pages, in proxy-sized batches.
+
+    Stops early when the server reports nothing left to attempt. A batch that
+    keeps failing ends the step (and fails the run) rather than looping.
+    """
+    totals = {"attempted": 0, "stored": 0, "failed": 0, "skipped": 0}
+    latest: dict[str, int] = {}
+    while totals["attempted"] < budget:
+        size = min(_PARTNER_BATCH_SIZE, budget - totals["attempted"])
+        result: dict[str, int] | None = None
+        for attempt in range(_DESCRIPTION_BATCH_ATTEMPTS):
+            try:
+                response = await client.post(f"/hub/partner-pages/fetch?limit={size}")
+                response.raise_for_status()
+                result = response.json()
+                break
+            except Exception as exc:
+                wait = min(2 ** attempt * 5, 60)
+                print(
+                    f"  partner-page batch failed ({type(exc).__name__}: {exc}) — "
+                    f"retrying in {wait}s",
+                    file=sys.stderr,
+                )
+                if attempt < _DESCRIPTION_BATCH_ATTEMPTS - 1:
+                    await asyncio.sleep(wait)
+        if result is None:
+            raise RuntimeError(
+                f"partner-page batch failed after {_DESCRIPTION_BATCH_ATTEMPTS} attempts"
+            )
+        latest = result
+        for key in totals:
+            totals[key] += result[key]
+        if result["attempted"] == 0:
+            break  # backlog empty
+    return {**latest, **totals}
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -328,6 +377,13 @@ async def main() -> int:
         dest="descriptions",
         action="store_false",
         help="skip ad-text fetches for postings newly inserted by this run",
+    )
+    parser.add_argument(
+        "--partner-pages",
+        type=int,
+        default=400,
+        help="partner-board pages to read this run (0 = off). Watched employers "
+        "first; each page is attempted once, so the backlog drains over nights.",
     )
     parser.add_argument(
         "--no-profiles",
@@ -514,6 +570,19 @@ async def main() -> int:
                 failures.append("descriptions")
         elif args.descriptions:
             print("  Anzeigentexte: keine neuen Rollen in diesem Lauf")
+
+        # --- partner-board pages: where the named contact often is ----------
+        if args.partner_pages > 0:
+            try:
+                q = await _fetch_partner_pages(client, budget=args.partner_pages)
+                print(
+                    f"  Partnerseiten: {q['attempted']} geprüft, +{q['stored']} gelesen "
+                    f"({q['failed']} Fehler, {q['skipped']} übersprungen) · "
+                    f"{q['source_page_read']}/{q['with_source_url']} gelesen"
+                )
+            except Exception as exc:
+                print(f"  partner-page fetch FAILED: {exc}", file=sys.stderr)
+                failures.append("partner-pages")
 
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.

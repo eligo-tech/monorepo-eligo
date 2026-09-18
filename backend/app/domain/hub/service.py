@@ -628,6 +628,107 @@ async def fetch_missing_descriptions(
     return {"attempted": len(rows), "stored": stored, "empty": empty}
 
 
+async def fetch_missing_partner_pages(
+    session: AsyncSession,
+    *,
+    fetcher,
+    limit: int = 100,
+) -> dict[str, int]:
+    """Read the partner-board page behind `source_url`, watched employers first.
+
+    Same shape as `fetch_missing_descriptions`: never-attempted rows only,
+    stamped on every outcome, so an interrupted run costs nothing and a page
+    that 404s is not picked again tomorrow.
+
+    Order is the demand signal: postings of employers ANY workspace watches
+    come first, because that is where a recruiter will press "Ansprechpartner
+    finden". Only the ordering reads `hub_company_link`; nothing about which
+    tenant watches what leaves this function.
+
+    Every fetch — including a refusal by robots.txt or a skipped host — lands
+    as one `hub_observations` row: the corpus's evidence of what was retrieved,
+    when, and with what result.
+    """
+    import hashlib
+
+    from app.domain.hub.adapters.partner_pages import STATUS_ROBOTS
+
+    watched_names = select(HubCompany.normalized_name).where(
+        HubCompany.id.in_(select(HubCompanyLink.hub_company_id))
+    )
+    watched = HubJobPosting.hub_company_id.in_(
+        select(HubCompany.id).where(HubCompany.normalized_name.in_(watched_names))
+    )
+    rows = (
+        await session.execute(
+            select(HubJobPosting)
+            .where(
+                HubJobPosting.is_active.is_(True),
+                HubJobPosting.source_url.is_not(None),
+                HubJobPosting.source_page_fetched_at.is_(None),
+            )
+            .order_by(case((watched, 0), else_=1), HubJobPosting.posted_at.desc().nulls_last())
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    stored = failed = skipped = 0
+    for row in rows:
+        page = await fetcher.fetch(row.source_url)
+        now = dt.datetime.now(dt.UTC)
+        observation = HubObservation(
+            source="partner_page",
+            request_url=row.source_url[:1000],
+            http_status=page.status if page.status >= 100 else None,
+            robots_allowed=page.status != STATUS_ROBOTS,
+            record_count=1 if page.text else 0,
+            content_hash=(
+                hashlib.sha256(page.text.encode()).hexdigest() if page.text else None
+            ),
+            fetched_at=now,
+            note=(page.note or None) and page.note[:500],
+        )
+        session.add(observation)
+        await session.flush()
+        row.source_page_fetched_at = now
+        row.source_page_status = page.status
+        if page.text:
+            if row.payload is None:
+                row.payload = HubPostingPayload()
+            row.payload.source_page_text = page.text
+            row.payload.source_page_url = (page.final_url or row.source_url)[:1000]
+            row.payload.source_page_observation_id = observation.id
+            stored += 1
+        elif page.status < 100:
+            skipped += 1
+        else:
+            failed += 1
+    await session.commit()
+    logger.info(
+        "partner pages: attempted=%d stored=%d failed=%d skipped=%d",
+        len(rows), stored, failed, skipped,
+    )
+    return {"attempted": len(rows), "stored": stored, "failed": failed, "skipped": skipped}
+
+
+async def partner_pages_progress(session: AsyncSession) -> dict[str, int]:
+    """How many active postings have a partner page, and how many were read."""
+    base = select(func.count(HubJobPosting.id)).where(
+        HubJobPosting.is_active.is_(True), HubJobPosting.source_url.is_not(None)
+    )
+    return {
+        "with_source_url": (await session.scalar(base)) or 0,
+        "source_page_attempted": (
+            await session.scalar(base.where(HubJobPosting.source_page_fetched_at.is_not(None)))
+        )
+        or 0,
+        "source_page_read": (
+            await session.scalar(base.where(HubJobPosting.source_page_status == 200))
+        )
+        or 0,
+    }
+
+
 async def descriptions_progress(session: AsyncSession) -> dict[str, int]:
     """How much of the active corpus is searchable by its text."""
     total = (
@@ -1854,7 +1955,12 @@ async def company_contacts(
 
     rows = (
         await session.execute(
-            select(HubJobPosting, HubPostingPayload.description)
+            select(
+                HubJobPosting,
+                HubPostingPayload.description,
+                HubPostingPayload.source_page_text,
+                HubPostingPayload.source_page_url,
+            )
             .outerjoin(
                 HubPostingPayload,
                 HubPostingPayload.hub_job_posting_id == HubJobPosting.id,
@@ -1871,19 +1977,39 @@ async def company_contacts(
     people: dict[str, dict] = {}
     mailboxes: dict[str, int] = {}
     with_text = 0
-    for posting, description in rows:
-        if not description:
+    for posting, description, page_text, page_url in rows:
+        # Two public texts per posting: the BA ad ("Anzeige") and, when the
+        # nightly job has read it, the partner-board page ("Quelle"). The same
+        # person named in both is one mention per text, merged below.
+        texts = [
+            (
+                "anzeige",
+                description,
+                ba_detail_url(posting.source, posting.external_id) or posting.source_url,
+            ),
+            ("quelle", page_text, page_url or posting.source_url),
+        ]
+        texts = [(origin, text, url) for origin, text, url in texts if text]
+        if not texts:
             continue
         with_text += 1
-        for email in company_mailboxes(description):
-            mailboxes[email] = mailboxes.get(email, 0) + 1
-        for mention in extract_contacts(description):
+        seen_here: set[str] = set()
+        mentions = []
+        for origin, text, url in texts:
+            for email in company_mailboxes(text):
+                mailboxes[email] = mailboxes.get(email, 0) + 1
+            for mention in extract_contacts(text):
+                mentions.append((origin, url, mention))
+        for origin, url, mention in mentions:
             key = person_key(mention.first_name, mention.last_name)
+            # One posting counts once per person, whichever text named them.
+            first_in_posting = key not in seen_here
+            seen_here.add(key)
             evidence = {
                 "posting_id": posting.id,
                 "posting_title": posting.title,
-                "url": posting.source_url
-                or ba_detail_url(posting.source, posting.external_id),
+                "origin": origin,
+                "url": url,
                 "posted_at": posting.posted_at,
                 "is_active": posting.is_active,
                 "quote": mention.quote,
@@ -1904,7 +2030,8 @@ async def company_contacts(
                     "manager_id": None,
                 }
                 continue
-            person["mention_count"] += 1
+            if first_in_posting:
+                person["mention_count"] += 1
             if len(person["evidence"]) < CONTACT_EVIDENCE_LIMIT:
                 person["evidence"].append(evidence)
             # Rows arrive newest first, so the first value seen is the current
