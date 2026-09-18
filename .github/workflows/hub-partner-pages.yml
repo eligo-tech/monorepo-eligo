@@ -1,0 +1,48 @@
+# Partner-board pages only — operator-triggered.
+#
+# The nightly ingest already reads up to 400 partner pages, but only after its
+# import (1–2 h in). This runs just that step, for "read the Quelle pages now"
+# or to drain the backlog faster than 400 a night.
+#
+# Same machine credential and endpoint as the nightly job, so it is subject to
+# the same operator-only authorization (ARCHITECTURE.md RULE 1). Safe to run
+# while the nightly job runs: the server claims each batch with
+# FOR UPDATE SKIP LOCKED and attempts every page once.
+name: Hub · partner pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: "Partner pages to read this run (watched employers first)"
+        required: false
+        default: "400"
+
+concurrency:
+  # Two manual runs would only split the same backlog; queue the second.
+  group: hub-partner-pages
+  cancel-in-progress: false
+
+jobs:
+  partner-pages:
+    runs-on: ubuntu-latest
+    # ~0.5 s per page measured live (60 pages in 25 s), paced per host. 2,000
+    # pages is well inside this; larger budgets should be split across runs.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Read partner pages
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+          BUDGET: ${{ github.event.inputs.budget || '400' }}
+        run: python -m scripts.hub_partner_pages --budget "$BUDGET"

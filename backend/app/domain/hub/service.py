@@ -638,7 +638,8 @@ async def fetch_missing_partner_pages(
 
     Same shape as `fetch_missing_descriptions`: never-attempted rows only,
     stamped on every outcome, so an interrupted run costs nothing and a page
-    that 404s is not picked again tomorrow.
+    that 404s is not picked again tomorrow. Concurrent runs claim disjoint
+    batches (`SKIP LOCKED`).
 
     Order is the demand signal: postings of employers ANY workspace watches
     come first, because that is where a recruiter will press "Ansprechpartner
@@ -669,6 +670,12 @@ async def fetch_missing_partner_pages(
             )
             .order_by(case((watched, 0), else_=1), HubJobPosting.posted_at.desc().nulls_last())
             .limit(limit)
+            # The nightly job and the manual "partner pages" workflow may run at
+            # once. Without this both select the same never-attempted rows and
+            # fetch every page twice. Rows are held until the batch commits;
+            # the other run skips them and takes the next ones. (A no-op on
+            # SQLite, which has one writer anyway.)
+            .with_for_update(skip_locked=True, of=HubJobPosting)
         )
     ).scalars().all()
 
