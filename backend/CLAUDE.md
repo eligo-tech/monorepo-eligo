@@ -200,10 +200,12 @@ These are enforced in code. Do not route around them.
   `last_seen_at` goes stale while the vacancy is live; sweeping on that basis
   closes real roles. Deactivation is only sound after a pass that re-sees
   everything currently listed.
-- **The shared corpus holds company-level facts only — never natural persons.**
-  No hiring managers, no Geschäftsführer, no ad authors. A shared table holding
-  personal data would make one subject's erasure reach across every customer.
-  Persons live only in tenant-scoped tables, with provenance and the Art. 14 flow.
+- **The shared corpus holds public facts — persons only as a public source named
+  them.** A contact person in a public job ad may be stored in the corpus as
+  published, with provenance (posting/URL + fetch time); do not redact it.
+  Tenant-sourced or enriched person data (imports, CVs, provider emails/phones,
+  LinkedIn/XING) never enters `hub_*` — it lives in `managers`/`candidates` with
+  the Art. 14 flow. See ARCHITECTURE.md RULE 2.
 - Erasure in a re-ingesting system needs a **suppression list, not a delete**: the
   next crawl re-inserts a deleted row. See ARCHITECTURE.md §3 — not yet built.
 

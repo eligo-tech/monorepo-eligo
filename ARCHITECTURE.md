@@ -69,33 +69,44 @@ good answer while "the nightly job ran at 03:17" is auditable; and an operator
 endpoint reachable by any tenant leaks `/hub/crawl-profiles` — the union of every
 workspace's saved-search terms.
 
-### RULE 2 — The shared corpus holds company-level facts only. Never natural persons.
+### RULE 2 — The shared corpus holds public facts. Persons are allowed only as a public source published them.
 
 `hub_*` tables may contain: legal name, address, geo, register/VAT identifiers,
-industry, job postings, and the evidence of how each was retrieved.
+industry, job postings, the evidence of how each was retrieved — **and persons
+named in a public source**, such as the contact in a job ad ("Ihre
+Ansprechpartnerin: Frau Sophie Bennicke, Personalreferentin").
 
-They may **not** contain: names, e-mail addresses, phone numbers, or profiles of
-people — no hiring managers, no Geschäftsführer, no authors of a job ad.
+**Decision (product owner, 2026-09-18):** a person the employer names in a public
+job ad was published for exactly this purpose: to be contacted about the
+vacancy. Storing and showing that in the shared corpus is intended, not a
+violation. Do not flag it as a red flag and do not redact it from ad texts.
 
-Why: a shared table holding personal data means one data subject's erasure or
-objection reaches across every customer, and it makes us controller of personal
-data we are simultaneously distributing to third parties. Keeping persons out of
-the shared layer keeps that entire class of problem in the tenant layer, where
-consent, purpose and retention are already per-customer.
+The conditions that make it hold:
 
-**Persons live only in tenant-scoped tables** (`managers`, `candidates`), carry
-provenance, and route through the GDPR Art. 14 flow when sourced from a third
-party.
+1. **Public source only.** The value must arrive through scheduled ingestion
+   from a public source: job ad, partner job board, career page, Impressum.
+   Anything a tenant brought in (ATS/aiFind imports, CVs, mailbox, notes,
+   recruiter edits) is tenant data and never enters `hub_*` (RULE 3). This
+   includes a person a tenant adopted into `managers`; that row does not flow
+   back.
+2. **Provenance per person.** Every person in the corpus traces to the posting /
+   URL and fetch time it came from (`hub_observations`). No public source, no
+   place in the shared corpus.
+3. **As published, nothing more.** Store what the source says: name, title, and
+   the contact route the ad itself gives. Enrichment (email/phone from a data
+   provider, a LinkedIn/XING profile) is tenant work and lands in `managers`,
+   not in the shared layer.
+4. **Still personal data under GDPR.** Public does not mean exempt: the
+   suppression list (§3) must be able to hold a person back from re-ingestion,
+   and adopting a person into a tenant's `managers` sets `source=third_party`
+   and owes the Art. 14 notice.
 
-Edge case, and it is not hypothetical: **sole traders** (Einzelunternehmen,
-Freiberufler) trade under their own name, so `hub_companies.name` is personal
-data while every column stays company-shaped. "Andreas Uwe Weiss" sat in the
-corpus unflagged, and a grep over column names can never find a person inside a
-column called `name`.
-
+**Sole traders** (Einzelunternehmen, Freiberufler) trade under their own name, so
+`hub_companies.name` can be a person — "Andreas Uwe Weiss". That is public
+register/posting data and allowed under the same conditions.
 `resolution.looks_like_natural_person` screens at ingest and sets
-`suspected_natural_person` — a screen, not a verdict, tuned to over-include. It
-flags; it does not remedy. Erasure still needs the suppression list below.
+`suspected_natural_person` so such rows stay findable for the suppression list;
+the flag marks, it does not forbid.
 
 ### RULE 3 — The tenant boundary is a table, not a column on shared data.
 
@@ -118,10 +129,10 @@ the model is wrong.
 
 | Class | Contains | Where | Tenant-scoped | Personal data |
 |---|---|---|---|---|
-| **Public corpus** | company identity, address, postings, fetch evidence | `hub_companies`, `hub_job_postings`, `hub_observations` | no | **must be no** |
+| **Public corpus** | company identity, address, postings, fetch evidence, persons as named by a public source | `hub_companies`, `hub_job_postings`, `hub_observations` | no | **only as published, with provenance** (RULE 2) |
 | **Tenant overlay** | tracked/prospect flags, notes, adoption link | `hub_company_link` | yes | no |
 | **Tenant record** | clients, mandates, pipeline | `companies`, `jobs`, `applications` | yes | no |
-| **Personal data** | candidates, managers/contacts | `candidates`, `managers` | yes | **yes** |
+| **Personal data** | candidates, managers/contacts (incl. anything enriched or tenant-sourced) | `candidates`, `managers` | yes | **yes** |
 | **Audit** | receipts, enrichment records | `receipts`, `enrichment_records` | yes | references only |
 
 ---
@@ -135,7 +146,7 @@ apart at the schema level.
 | Obligation | What the architecture must do | Status |
 |---|---|---|
 | **Art. 5(1)(b)** purpose limitation | each source adapter records why it exists and what it may be used for | ⚠ adapters have docstrings, no machine-readable purpose |
-| **Art. 5(1)(c)** minimisation | corpus stores no persons (RULE 2); raw payloads pruned | ⚠ `hub_job_postings.raw` retains full source records indefinitely |
+| **Art. 5(1)(c)** minimisation | corpus holds persons only as a public source published them (RULE 2); raw payloads pruned | ⚠ `hub_job_postings.raw` retains full source records indefinitely |
 | **Art. 5(1)(e)** storage limitation | postings deactivate + expire; observations have a retention window | ❌ not implemented — no retention job |
 | **Art. 6(1)(f)** lawful basis | documented Legitimate Interest Assessment per source | ❌ not written |
 | **Art. 14** third-party collection notice | any *person* ingested from a public source flags an Art. 14 duty | ✅ `agents/enrichment.py`; must extend to `managers` |
@@ -179,8 +190,8 @@ that cannot be retrofitted by a script — it must live in the ingest path.
 | **P (Privacy)** | data classification and retention documented | ⚠ classification here; retention missing |
 
 Note for auditors: the shared corpus is **not** a tenant-isolation gap. It holds
-no personal data and no customer data — only public facts about companies, which
-would be identical for any observer. Customer data remains RLS-isolated.
+no customer data — only public facts, including persons as a public job ad names
+them, which would be identical for any observer. Customer data remains RLS-isolated.
 
 ---
 
@@ -207,7 +218,7 @@ job measures and prints its own coverage every run rather than assuming it.
 2. Retention/pruning of `raw` payloads and stale postings (Art. 5(1)(e))
 3. The scheduled ingestion job itself, with failure alerting (RULE 1, CC7.2)
 4. A written LIA + RoPA + sub-processor list (Art. 6/28/30)
-5. Art. 14 wiring for `managers` once that domain exists
+5. Art. 14 wiring for `managers` (incl. persons adopted from the corpus)
 
 Nothing here should be described to a customer as "GDPR compliant" or "SOC 2
 compliant" until 1–4 exist. The architecture is *shaped* to make them

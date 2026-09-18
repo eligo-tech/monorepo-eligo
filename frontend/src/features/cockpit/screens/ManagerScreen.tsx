@@ -5,10 +5,10 @@
 // that wins the next mandate is with a person rather than a legal entity.
 //
 // It is deliberately NOT part of the shared market corpus — see ARCHITECTURE.md
-// RULE 2. A manager is a natural person, so a shared table holding one would
-// make a single erasure request reach across every workspace. Contacts stay
-// tenant-scoped, carry provenance, and route through the GDPR Art. 14 flow when
-// they come from a public source.
+// RULE 2. The corpus may show a person as a public ad names them; a Manager is
+// this workspace's relationship with that person (imports, enriched contact
+// details, notes), so it stays tenant-scoped, carries provenance, and routes
+// through the GDPR Art. 14 flow when it comes from a public source.
 //
 // That provenance is the reason this screen leads with an obligation counter
 // rather than a headcount: "how many people do I hold data on who have not been

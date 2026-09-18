@@ -152,13 +152,14 @@ class HubCompany(Base, IDMixin, TimestampMixin):
     # A sole trader (Einzelunternehmen, Freiberufler) often trades under their
     # own name, so THIS ROW's `name` can itself be personal data even though
     # every column here is company-shaped — "Andreas Uwe Weiss" is in the corpus
-    # today. RULE 2 says the shared corpus holds no natural persons; that rule
-    # was unenforceable because no check over column NAMES can catch a person
-    # sitting in a column called `name`.
+    # today. That is public data and allowed (RULE 2: persons as a public
+    # source published them), but it must stay findable for the suppression
+    # list, and no check over column NAMES can catch a person sitting in a
+    # column called `name`.
     #
     # A SCREEN, not a verdict (`resolution.looks_like_natural_person`), tuned to
     # over-include: a false positive costs a visible flag, a false negative
-    # silently keeps personal data in a shared cross-tenant table. It hides and
+    # leaves a person the suppression list cannot find. It hides and
     # deletes nothing by itself — §2.2's rule that a fuzzy judgement may surface
     # something for a human but never decide it. Acting on the flag (suppression,
     # Art. 14/17) is the next step.

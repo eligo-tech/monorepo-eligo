@@ -108,9 +108,10 @@ def test_a_name_without_a_place_does_not_resolve() -> None:
 
 
 def test_a_persons_name_used_as_a_company_is_flagged() -> None:
-    """RULE 2's real hole: a sole trader IS the company, so `name` is personal
-    data while every column stays company-shaped. All of these are in the live
-    corpus."""
+    """A sole trader IS the company, so `name` is personal data while every
+    column stays company-shaped. Allowed under RULE 2 (public source), but it
+    must be flagged so the suppression list can find it. All of these are in
+    the live corpus."""
     from app.domain.hub.resolution import looks_like_natural_person
 
     for name in (

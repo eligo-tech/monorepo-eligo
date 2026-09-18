@@ -6,10 +6,11 @@ and the relationship that wins the next mandate is with a person — not with a
 legal entity.
 
 **These rows are personal data, and that decides where they live.**
-ARCHITECTURE.md RULE 2 forbids natural persons in the shared `hub_*` corpus: a
-person in a shared table means one erasure request reaches across every
-customer, and it would make us controller of personal data we simultaneously
-distribute to third parties. So managers are tenant-scoped like candidates, and
+ARCHITECTURE.md RULE 2 lets the shared `hub_*` corpus hold a person only as a
+public source published them (the contact named in a job ad). A manager is more
+than that: it is this tenant's relationship — imported contacts, enriched
+emails/phones, LinkedIn/XING, notes — none of which may leave the tenant. So
+managers are tenant-scoped like candidates, and
 `company_id` points at the tenant's OWN `companies` row — never at a corpus
 company. Adopting a corpus company into `companies` is the gated crossing that
 already leaves a receipt; a manager is added after it, not instead of it.
