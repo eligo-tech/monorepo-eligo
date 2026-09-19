@@ -658,10 +658,12 @@ async def fetch_missing_partner_pages(
 ) -> dict[str, int]:
     """Read the partner-board page behind `source_url`, watched employers first.
 
-    Same shape as `fetch_missing_descriptions`: never-attempted rows only,
+    Same shape as `fetch_missing_descriptions`: never-attempted rows,
     stamped on every outcome, so an interrupted run costs nothing and a page
-    that 404s is not picked again tomorrow. Concurrent runs claim disjoint
-    batches (`SKIP LOCKED`).
+    that 404s is not picked again tomorrow. The one exception is 429/503 —
+    "not now", not "not ever" — which becomes eligible again after
+    `PARTNER_RETRY_AFTER_DAYS`. Concurrent runs claim disjoint batches
+    (`SKIP LOCKED`).
 
     Order is the demand signal: postings of employers ANY workspace watches
     come first, because that is where a recruiter will press "Ansprechpartner
@@ -674,7 +676,11 @@ async def fetch_missing_partner_pages(
     """
     import hashlib
 
-    from app.domain.hub.adapters.partner_pages import STATUS_ROBOTS, strip_control
+    from app.domain.hub.adapters.partner_pages import (
+        STATUS_ROBOTS,
+        THROTTLED,
+        strip_control,
+    )
 
     names = await _watched_employer_names()
     watched = (
@@ -690,7 +696,15 @@ async def fetch_missing_partner_pages(
             .where(
                 HubJobPosting.is_active.is_(True),
                 HubJobPosting.source_url.is_not(None),
-                HubJobPosting.source_page_fetched_at.is_(None),
+                or_(
+                    HubJobPosting.source_page_fetched_at.is_(None),
+                    and_(
+                        HubJobPosting.source_page_status.in_(THROTTLED),
+                        HubJobPosting.source_page_fetched_at
+                        < dt.datetime.now(dt.UTC)
+                        - dt.timedelta(days=PARTNER_RETRY_AFTER_DAYS),
+                    ),
+                ),
             )
             .order_by(case((watched, 0), else_=1), HubJobPosting.posted_at.desc().nulls_last())
             .limit(limit)
@@ -1848,6 +1862,10 @@ async def tracked_company_ids(
 # --------------------------------------------------------------------------
 # Workspace — watched employers and the people their ads name
 # --------------------------------------------------------------------------
+
+#: A partner page that answered 429/503 ("not now") is tried again after this
+#: many days instead of never; every other outcome is final.
+PARTNER_RETRY_AFTER_DAYS = 7
 
 #: Ads read per employer when looking for contacts. Newest first, so a large
 #: employer (Deutsche Bahn: 185 sites) answers with its current contacts

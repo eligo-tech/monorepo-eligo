@@ -54,7 +54,17 @@ SKIPPED_HOSTS: dict[str, str] = {
     "www.jobvector.de": "blocks crawlers (HTTP 403)",
     "jobvector.de": "blocks crawlers (HTTP 403)",
     "jobs.ams.at": "rendered in JavaScript, no text in the HTML",
+    # Measured on the first production run (2026-09-19): 190 of 400 attempts
+    # answered 429 — not a rate limit but Vercel's "Security Checkpoint" bot
+    # challenge, returned to any automated client at any pace.
+    "baugpt.com": "bot-check (Vercel Security Checkpoint, HTTP 429)",
+    "www.baugpt.com": "bot-check (Vercel Security Checkpoint, HTTP 429)",
 }
+
+#: Answers that mean "not now" rather than "not ever". A posting that gets one
+#: becomes eligible again after `RETRY_AFTER_DAYS` (see the service), and the
+#: host is not asked again for the rest of the batch.
+THROTTLED = frozenset({429, 503})
 
 #: Status codes stored for outcomes that are not an HTTP response.
 STATUS_SKIPPED = 0  # host on SKIPPED_HOSTS
@@ -141,6 +151,10 @@ class PartnerPageFetcher:
         self._ua = user_agent or settings.hub_user_agent
         self._robots: dict[str, robotparser.RobotFileParser] = {}
         self._last_hit: dict[str, float] = {}
+        #: Hosts that answered 429/503 in this batch. Asking again seconds
+        #: later only earns the same answer and makes us the client they
+        #: are throttling for.
+        self._throttled: set[str] = set()
 
     async def __aenter__(self) -> PartnerPageFetcher:
         if self._client is None:
@@ -193,6 +207,8 @@ class PartnerPageFetcher:
         host = urlparse(url).netloc.lower()
         if host in SKIPPED_HOSTS:
             return PartnerPage(url, None, STATUS_SKIPPED, None, SKIPPED_HOSTS[host])
+        if host in self._throttled:
+            return PartnerPage(url, None, 429, None, "host throttled earlier in this batch")
         owns_client = self._client is None
         client = self._client or self._new_client()
         try:
@@ -209,6 +225,8 @@ class PartnerPageFetcher:
                 response = await client.get(url)
                 final = strip_control(str(response.url))
                 if response.status_code != 200:
+                    if response.status_code in THROTTLED:
+                        self._throttled.add(host)
                     return PartnerPage(url, final, response.status_code, None)
                 text = page_text(response.text)
             except Exception as exc:  # noqa: BLE001 — one page must not end a batch
