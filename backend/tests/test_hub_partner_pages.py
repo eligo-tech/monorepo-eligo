@@ -121,6 +121,31 @@ async def test_an_unexpected_error_is_a_failed_page_not_a_failed_batch() -> None
     assert page.status == STATUS_ERROR and page.note == "ValueError"
 
 
+async def test_a_throttling_host_is_asked_once_per_batch() -> None:
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        requested.append(request.url.path)
+        return httpx.Response(429)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fetcher = PartnerPageFetcher(client=client, per_host_delay=0)
+        pages = [await fetcher.fetch(f"https://busy.example/job/{i}") for i in range(3)]
+    assert [p.status for p in pages] == [429, 429, 429]
+    assert requested == ["/job/0"]  # the other two never left the building
+
+
+async def test_bot_checkpoint_hosts_are_skipped() -> None:
+    def boom(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("must not be requested")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(boom)) as client:
+        page = await PartnerPageFetcher(client=client).fetch("https://baugpt.com/jobs/x")
+    assert page.status == STATUS_SKIPPED
+
+
 async def test_robots_txt_is_respected() -> None:
     seen: list[str] = []
 
@@ -264,6 +289,27 @@ async def test_nightly_pass_reads_watched_first_and_records_evidence(corpus) -> 
         assert [(e["origin"], e["url"]) for e in telega_contact["evidence"]] == [
             ("quelle", "https://www.jobexport.de/detail/1?board=ba")
         ]
+
+
+async def test_throttled_pages_are_retried_after_a_week_and_others_never(corpus) -> None:
+    old = NOW - dt.timedelta(days=8)
+    async with SessionLocal() as s:
+        rows = (await s.execute(select(HubJobPosting).where(HubJobPosting.source_url.is_not(None)))).scalars().all()
+        by_url = {r.source_url: r for r in rows}
+        by_url["https://board.example/other"].source_page_fetched_at = old
+        by_url["https://board.example/other"].source_page_status = 429      # due again
+        by_url["https://www.jobexport.de/detail/1"].source_page_fetched_at = NOW
+        by_url["https://www.jobexport.de/detail/1"].source_page_status = 429  # too recent
+        by_url["https://www.heyjobs.co/x"].source_page_fetched_at = old
+        by_url["https://www.heyjobs.co/x"].source_page_status = 404           # final
+        await s.commit()
+
+        fetcher = FakeFetcher(
+            {"https://board.example/other": PartnerPage("https://board.example/other", None, 200, "Text")}
+        )
+        result = await service.fetch_missing_partner_pages(s, fetcher=fetcher, limit=10)
+    assert fetcher.calls == ["https://board.example/other"]
+    assert result["stored"] == 1
 
 
 async def test_no_partner_page_rows_means_no_fetch() -> None:
