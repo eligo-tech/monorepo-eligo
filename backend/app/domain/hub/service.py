@@ -628,6 +628,28 @@ async def fetch_missing_descriptions(
     return {"attempted": len(rows), "stored": stored, "empty": empty}
 
 
+async def _watched_employer_names() -> list[str]:
+    """Employers ANY workspace watches, as corpus `normalized_name`s only.
+
+    A deliberate cross-tenant read on the OWNER connection, same reasoning as
+    `searches.service.list_crawl_profiles`: the app role is RLS-bound, and an
+    ingest request is pinned to one tenant, so reading `hub_company_link`
+    through it sees that tenant's links alone — the "watched first" order
+    silently did nothing in production. Returns names of PUBLIC corpus
+    employers and nothing else: no tenant, no count, no link row. The crawler
+    learns what to read first, never who is interested.
+    """
+    from app.core.database import AdminSessionLocal
+
+    async with AdminSessionLocal() as admin:
+        rows = await admin.execute(
+            select(HubCompany.normalized_name)
+            .where(HubCompany.id.in_(select(HubCompanyLink.hub_company_id)))
+            .distinct()
+        )
+        return list(rows.scalars().all())
+
+
 async def fetch_missing_partner_pages(
     session: AsyncSession,
     *,
@@ -652,13 +674,15 @@ async def fetch_missing_partner_pages(
     """
     import hashlib
 
-    from app.domain.hub.adapters.partner_pages import STATUS_ROBOTS
+    from app.domain.hub.adapters.partner_pages import STATUS_ROBOTS, strip_control
 
-    watched_names = select(HubCompany.normalized_name).where(
-        HubCompany.id.in_(select(HubCompanyLink.hub_company_id))
-    )
-    watched = HubJobPosting.hub_company_id.in_(
-        select(HubCompany.id).where(HubCompany.normalized_name.in_(watched_names))
+    names = await _watched_employer_names()
+    watched = (
+        HubJobPosting.hub_company_id.in_(
+            select(HubCompany.id).where(HubCompany.normalized_name.in_(names))
+        )
+        if names
+        else literal(False)
     )
     rows = (
         await session.execute(
@@ -693,7 +717,7 @@ async def fetch_missing_partner_pages(
                 hashlib.sha256(page.text.encode()).hexdigest() if page.text else None
             ),
             fetched_at=now,
-            note=(page.note or None) and page.note[:500],
+            note=strip_control(page.note)[:500] if page.note else None,
         )
         session.add(observation)
         await session.flush()
@@ -702,7 +726,9 @@ async def fetch_missing_partner_pages(
         if page.text:
             if row.payload is None:
                 row.payload = HubPostingPayload()
-            row.payload.source_page_text = page.text
+            # Belt and braces: the fetcher already strips control characters,
+            # but a NUL reaching Postgres fails the entire batch.
+            row.payload.source_page_text = strip_control(page.text)
             row.payload.source_page_url = (page.final_url or row.source_url)[:1000]
             row.payload.source_page_observation_id = observation.id
             stored += 1

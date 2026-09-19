@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from app.core.database import SessionLocal
 from app.domain.hub import service
 from app.domain.hub.adapters.partner_pages import (
+    STATUS_ERROR,
     STATUS_ROBOTS,
     STATUS_SKIPPED,
     PartnerPage,
@@ -84,6 +85,15 @@ def test_site_furniture_is_not_a_person() -> None:
     assert extract_contacts(text) == []
 
 
+def test_nul_bytes_never_reach_the_database() -> None:
+    """Production, 2026-09-18: one gute-jobs.de page carried a NUL byte and
+    Postgres refused the whole batch ("invalid byte sequence ... 0x00").
+    SQLite stores it, so only this test stands between CI and that failure."""
+    text = page_text("<p>Ansprech\x00partnerin</p><p>Jana\x07 Beispiel\tHR</p>")
+    assert "\x00" not in text and "\x07" not in text
+    assert text.splitlines() == ["Ansprechpartnerin", "", "Jana Beispiel HR"]
+
+
 # --------------------------------------------------------------------------
 # The fetcher: refusals happen before any request
 # --------------------------------------------------------------------------
@@ -96,6 +106,19 @@ async def test_blocked_hosts_are_skipped_without_a_request() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(boom)) as client:
         page = await PartnerPageFetcher(client=client).fetch("https://www.heyjobs.co/de-de/jobs/1")
     assert page.status == STATUS_SKIPPED and page.text is None
+
+
+async def test_an_unexpected_error_is_a_failed_page_not_a_failed_batch() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        raise ValueError("charset nobody expected")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        page = await PartnerPageFetcher(client=client, per_host_delay=0).fetch(
+            "https://board.example/job/1"
+        )
+    assert page.status == STATUS_ERROR and page.note == "ValueError"
 
 
 async def test_robots_txt_is_respected() -> None:
