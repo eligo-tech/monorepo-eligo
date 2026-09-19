@@ -72,6 +72,18 @@ _DROP = re.compile(
 )
 
 
+#: C0 control characters except tab and newline. Postgres refuses NUL (0x00)
+#: in text outright — "invalid byte sequence for encoding UTF8: 0x00" — and
+#: one gute-jobs.de page carrying one failed the whole first production batch.
+#: SQLite stores it happily, which is why only production saw it.
+_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def strip_control(value: str) -> str:
+    """Remove control characters Postgres cannot store or no reader needs."""
+    return _CONTROL.sub("", value)
+
+
 def page_text(html: str | None) -> str:
     """Readable text of a job page, one visual line per line.
 
@@ -85,7 +97,7 @@ def page_text(html: str | None) -> str:
     text = re.sub(r"<!--[\s\S]*?-->", " ", text)
     text = re.sub(rf"</?(?:{_BLOCK_TAGS})\b[^>]*>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
-    text = html_lib.unescape(text).replace("\xa0", " ")
+    text = strip_control(html_lib.unescape(text)).replace("\xa0", " ")
     lines = [re.sub(r"[ \t\r\f\v]+", " ", line).strip() for line in text.split("\n")]
     # Collapse runs of empty lines to one: a blank line is a boundary, ten are noise.
     out: list[str] = []
@@ -184,17 +196,26 @@ class PartnerPageFetcher:
         owns_client = self._client is None
         client = self._client or self._new_client()
         try:
-            if not await self._robots_allow(client, url):
+            try:
+                allowed = await self._robots_allow(client, url)
+            except Exception as exc:  # noqa: BLE001 — same reasoning as below
+                return PartnerPage(
+                    url, None, STATUS_ERROR, None, f"robots: {type(exc).__name__}"
+                )
+            if not allowed:
                 return PartnerPage(url, None, STATUS_ROBOTS, None, "robots.txt disallows")
             await self._pace(host)
             try:
                 response = await client.get(url)
-            except httpx.HTTPError as exc:
+                final = strip_control(str(response.url))
+                if response.status_code != 200:
+                    return PartnerPage(url, final, response.status_code, None)
+                text = page_text(response.text)
+            except Exception as exc:  # noqa: BLE001 — one page must not end a batch
+                # Not only httpx.HTTPError: a malformed partner URL raises
+                # InvalidURL, a broken charset raises on `.text`. Every one of
+                # them is "this page failed", recorded like a 404.
                 return PartnerPage(url, None, STATUS_ERROR, None, type(exc).__name__)
-            final = str(response.url)
-            if response.status_code != 200:
-                return PartnerPage(url, final, response.status_code, None)
-            text = page_text(response.text)
             return PartnerPage(url, final, 200, text or None)
         finally:
             if owns_client:
