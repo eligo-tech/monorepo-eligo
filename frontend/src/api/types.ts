@@ -557,6 +557,19 @@ export interface ProjectDTO {
 }
 
 /** One company inside a project, with the corpus facts it points at. */
+/** A person attached to a company in a project — the enrichment step's output. */
+export interface ProjectContactDTO {
+  id: string
+  full_name: string
+  role_title: string | null
+  email: string | null
+  phone: string | null
+  linkedin_url: string | null
+  /** "public_web" (read from an ad or found by us) | "self_reported" | … */
+  source: string
+  art14_outstanding: boolean
+}
+
 export interface ProjectCompanyDTO {
   hub_company_id: string
   name: string
@@ -569,6 +582,7 @@ export interface ProjectCompanyDTO {
   note: string | null
   added_at: string
   company_id: string | null
+  contacts: ProjectContactDTO[]
   contact_count: number
 }
 

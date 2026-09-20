@@ -234,6 +234,26 @@ export const api = {
       body: JSON.stringify({ hub_company_ids: hubCompanyIds }),
     }),
 
+  /** Attach a person to a company in a project. A name is enough; `source`
+   *  decides the Art. 14 obligation and defaults to "found by us". */
+  addProjectContact: (
+    projectId: string,
+    hubCompanyId: string,
+    body: {
+      full_name: string
+      role_title?: string | null
+      email?: string | null
+      phone?: string | null
+      linkedin_url?: string | null
+      source?: string
+      source_detail?: string | null
+    },
+  ) =>
+    request<ManagerDTO>(
+      `/projects/${projectId}/companies/${hubCompanyId}/contacts`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
   async removeProjectCompany(id: string, hubCompanyId: string): Promise<void> {
     const res = await fetch(`${BASE}/projects/${id}/companies/${hubCompanyId}`, {
       method: 'DELETE',

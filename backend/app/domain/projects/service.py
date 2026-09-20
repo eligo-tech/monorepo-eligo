@@ -16,7 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.hub.models import HubCompany, HubCompanyLink, HubJobPosting
 from app.domain.managers.models import Manager
 from app.domain.projects.models import Project, ProjectCompany
-from app.domain.projects.schemas import ProjectCreate, ProjectUpdate
+from app.domain.projects.schemas import (
+    AddContactRequest,
+    ProjectCreate,
+    ProjectUpdate,
+)
 
 
 class DuplicateName(Exception):
@@ -176,6 +180,45 @@ async def _employer_rollup(
     }
 
 
+async def _contacts_by_company(
+    session: AsyncSession, *, tenant_id: uuid.UUID, company_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[dict]]:
+    """The people attached to each of this workspace's companies.
+
+    Read from `managers` every time rather than denormalised onto the project:
+    a contact's phone number, provenance and Art. 14 state belong to the
+    record, and a project must not be able to show a stale copy of them.
+    """
+    if not company_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(Manager)
+            .where(
+                Manager.tenant_id == tenant_id,
+                Manager.company_id.in_(company_ids),
+                Manager.status == "active",
+            )
+            .order_by(Manager.created_at)
+        )
+    ).scalars()
+    out: dict[uuid.UUID, list[dict]] = {}
+    for manager in rows:
+        out.setdefault(manager.company_id, []).append(
+            {
+                "id": manager.id,
+                "full_name": manager.full_name,
+                "role_title": manager.role_title,
+                "email": manager.email,
+                "phone": manager.phone,
+                "linkedin_url": manager.linkedin_url,
+                "source": manager.source,
+                "art14_outstanding": manager.art14_outstanding,
+            }
+        )
+    return out
+
+
 async def _adopted_and_contacts(
     session: AsyncSession, *, tenant_id: uuid.UUID, hub_company_ids: list[uuid.UUID]
 ) -> tuple[dict[uuid.UUID, uuid.UUID], dict[uuid.UUID, int]]:
@@ -286,8 +329,11 @@ async def project_detail(
     )
     hub_ids = [r.hub_company_id for r in rows]
     rollup = await _employer_rollup(session, hub_company_ids=hub_ids)
-    adopted, contacts = await _adopted_and_contacts(
+    adopted, _ = await _adopted_and_contacts(
         session, tenant_id=tenant_id, hub_company_ids=hub_ids
+    )
+    contacts_by_company = await _contacts_by_company(
+        session, tenant_id=tenant_id, company_ids=list(adopted.values())
     )
 
     companies = []
@@ -296,6 +342,7 @@ async def project_detail(
         if facts is None:
             continue  # corpus row gone; the membership is meaningless without it
         company_id = adopted.get(row.hub_company_id)
+        people = contacts_by_company.get(company_id, []) if company_id else []
         companies.append(
             {
                 "hub_company_id": row.hub_company_id,
@@ -309,7 +356,8 @@ async def project_detail(
                 "note": row.note,
                 "added_at": row.created_at,
                 "company_id": company_id,
-                "contact_count": contacts.get(company_id, 0) if company_id else 0,
+                "contacts": people,
+                "contact_count": len(people),
             }
         )
     companies.sort(key=lambda c: (-c["open_roles"], c["name"].lower()))
@@ -370,6 +418,60 @@ async def add_companies(
         added += 1
     await session.commit()
     return added
+
+
+async def add_contact(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    hub_company_id: uuid.UUID,
+    payload: "AddContactRequest",
+) -> "Manager":
+    """Attach a person to a company in this project — the enrichment step.
+
+    The company must be one of this workspace's own before a person can hang
+    off it, so a company still only watched is adopted first. That crossing
+    goes through the verification gate and leaves a receipt exactly as it does
+    from Markt; this is the same door, not a second one.
+    """
+    from app.domain.hub import service as hub_service
+
+    membership = await session.scalar(
+        select(ProjectCompany).where(
+            ProjectCompany.tenant_id == tenant_id,
+            ProjectCompany.project_id == project_id,
+            ProjectCompany.hub_company_id == hub_company_id,
+        )
+    )
+    if membership is None:
+        raise ValueError("company is not in this project")
+
+    adopted, _ = await _adopted_and_contacts(
+        session, tenant_id=tenant_id, hub_company_ids=[hub_company_id]
+    )
+    company_id = adopted.get(hub_company_id)
+    if company_id is None:
+        company, _link, _manager = await hub_service.adopt_company(
+            session, tenant_id=tenant_id, hub_company_id=hub_company_id
+        )
+        company_id = company.id
+
+    manager = Manager(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        full_name=payload.full_name.strip(),
+        role_title=payload.role_title,
+        email=payload.email or None,
+        phone=payload.phone or None,
+        linkedin_url=payload.linkedin_url or None,
+        source=payload.source.value,
+        source_detail=payload.source_detail,
+    )
+    session.add(manager)
+    await session.commit()
+    await session.refresh(manager)
+    return manager
 
 
 async def remove_company(

@@ -22,7 +22,11 @@ from app.domain.hub.models import HubCompany, HubJobPosting
 from app.domain.managers.models import Manager
 from app.domain.projects import service
 from app.domain.projects.models import Project, ProjectCompany
-from app.domain.projects.schemas import ProjectCreate, ProjectUpdate
+from app.domain.projects.schemas import (
+    AddContactRequest,
+    ProjectCreate,
+    ProjectUpdate,
+)
 
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")  # the auth-off default
 OTHER = uuid.uuid4()
@@ -323,3 +327,120 @@ async def test_routes(corpus) -> None:
 
         assert (await client.delete(f"/api/v1/projects/{project_id}")).status_code == 204
         assert (await client.get(f"/api/v1/projects/{project_id}")).status_code == 404
+
+
+# --------------------------------------------------------------------------
+# Enrichment: attaching a person to a company on the shortlist
+# --------------------------------------------------------------------------
+
+
+async def test_a_contact_needs_only_a_name(corpus) -> None:
+    """The point of the step is knowing WHO to call. An e-mail address is
+    often learned later, and demanding one would stop the step."""
+    project_id = await _project()
+    async with SessionLocal() as s:
+        await service.add_companies(
+            s, tenant_id=TENANT, project_id=project_id, hub_company_ids=[corpus["mgm"]]
+        )
+        manager = await service.add_contact(
+            s,
+            tenant_id=TENANT,
+            project_id=project_id,
+            hub_company_id=corpus["mgm"],
+            payload=AddContactRequest(full_name="Corina Freund"),
+        )
+        detail = await service.project_detail(s, tenant_id=TENANT, project_id=project_id)
+
+    assert (manager.email, manager.phone, manager.role_title) == (None, None, None)
+    # Found by us, not given by the subject: the notice is owed and visible.
+    assert manager.source == ConfidenceSource.PUBLIC_WEB.value
+    assert manager.art14_outstanding is True
+
+    company = detail["companies"][0]
+    assert [c["full_name"] for c in company["contacts"]] == ["Corina Freund"]
+    assert company["contact_count"] == 1
+    # Adding a person adopts the company, which is the gated crossing.
+    assert company["company_id"] is not None
+    assert detail["companies_with_contact"] == 1
+
+
+async def test_a_contact_the_subject_gave_us_owes_no_notice(corpus) -> None:
+    project_id = await _project()
+    async with SessionLocal() as s:
+        await service.add_companies(
+            s, tenant_id=TENANT, project_id=project_id, hub_company_ids=[corpus["mgm"]]
+        )
+        manager = await service.add_contact(
+            s,
+            tenant_id=TENANT,
+            project_id=project_id,
+            hub_company_id=corpus["mgm"],
+            payload=AddContactRequest(
+                full_name="Corina Freund",
+                role_title="Recruiterin",
+                linkedin_url="https://www.linkedin.com/in/example",
+                source=ConfidenceSource.SELF_REPORTED,
+            ),
+        )
+    assert manager.art14_outstanding is False
+    assert manager.linkedin_url == "https://www.linkedin.com/in/example"
+
+
+async def test_a_company_outside_the_project_takes_no_contact(corpus) -> None:
+    project_id = await _project()
+    async with SessionLocal() as s:
+        with pytest.raises(ValueError):
+            await service.add_contact(
+                s,
+                tenant_id=TENANT,
+                project_id=project_id,
+                hub_company_id=corpus["zalando"],
+                payload=AddContactRequest(full_name="Niemand"),
+            )
+
+
+async def test_contacts_read_through_to_the_record(corpus) -> None:
+    """A project shows the record's contact, never a copy: editing the manager
+    changes what the project reports."""
+    project_id = await _project()
+    async with SessionLocal() as s:
+        await service.add_companies(
+            s, tenant_id=TENANT, project_id=project_id, hub_company_ids=[corpus["mgm"]]
+        )
+        manager = await service.add_contact(
+            s,
+            tenant_id=TENANT,
+            project_id=project_id,
+            hub_company_id=corpus["mgm"],
+            payload=AddContactRequest(full_name="Corina Freund"),
+        )
+        manager.phone = "+49 341 1234567"
+        await s.commit()
+        detail = await service.project_detail(s, tenant_id=TENANT, project_id=project_id)
+    assert detail["companies"][0]["contacts"][0]["phone"] == "+49 341 1234567"
+
+
+async def test_contact_route(corpus) -> None:
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        project_id = (await client.post("/api/v1/projects", json={"name": "Shortlist"})).json()["id"]
+        await client.post(
+            f"/api/v1/projects/{project_id}/companies",
+            json={"hub_company_ids": [str(corpus["mgm"])]},
+        )
+        created = await client.post(
+            f"/api/v1/projects/{project_id}/companies/{corpus['mgm']}/contacts",
+            json={"full_name": "Corina Freund", "role_title": "Recruiterin"},
+        )
+        assert created.status_code == 201
+        assert created.json()["art14_outstanding"] is True
+
+        detail = (await client.get(f"/api/v1/projects/{project_id}")).json()
+        assert [c["full_name"] for c in detail["companies"][0]["contacts"]] == ["Corina Freund"]
+
+        missing = await client.post(
+            f"/api/v1/projects/{project_id}/companies/{corpus['zalando']}/contacts",
+            json={"full_name": "Niemand"},
+        )
+        assert missing.status_code == 404

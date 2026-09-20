@@ -31,7 +31,8 @@ src/
 │   ├── CommandBar.tsx          # wordmark, search, status chips, typeface switch, Clerk controls
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
 │   ├── useTypeface.ts          # the Jet · Mono · Heli switch
-│   ├── screens/                # CockpitScreen · KandidatenweltScreen
+│   ├── screens/                # CockpitScreen · MarktScreen · WorkspaceScreen · ProjekteScreen
+│   │   ├── ContactsPanel.tsx   # "Anreichern": contacts read out of a company's public ads
 │   │   └── kandidaten/         # KandidatenScreen · CandidateDrawer · DossierEditor · CvUploadModal
 │   ├── sections/               # SignalsPanel · Revenue (01) · JobScoring (02) · Process (03) · NextActions
 │   ├── ui/                     # primitives.tsx · forms.tsx · Gauge · ProcessStepper · ScoreBar · Carousel
@@ -49,6 +50,15 @@ follow automatically.
 **Screens are ordered as a drill-down** — `cockpit` → `kandidaten` →
 `kandidatenwelt`: the whole book of business, the pool it draws on, then one
 candidate's world. ←/→ moves between them; the URL hash names the active one.
+
+The client-side funnel runs `markt` → `workspace` → `projekte`: search the
+shared corpus, keep the employers worth watching, then group them under a name.
+**Projekte is the shortlist and the enrichment step**: every company on it
+should end up with a contact person, and the row says so either way. Two ways
+in, both landing in `managers` with provenance and the Art. 14 flag —
+`ContactsPanel` reads the people the company's own ads name, and "Person
+hinzufügen" takes one the recruiter found (a LinkedIn profile today, a data
+provider later). A name is the only required field.
 
 ### Parked surfaces
 
