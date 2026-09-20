@@ -7,6 +7,8 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.common.enums import ConfidenceSource
+
 
 class ProjectCreate(BaseModel):
     """A project needs a name and nothing else."""
@@ -18,6 +20,25 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     note: str | None = None
+
+
+class ProjectContactRead(BaseModel):
+    """A person attached to a company in this project.
+
+    The enrichment step's output: read from `managers`, so it carries the
+    provenance and the Art. 14 state the record already holds rather than a
+    copy that could drift.
+    """
+
+    id: uuid.UUID
+    full_name: str
+    role_title: str | None
+    email: str | None
+    phone: str | None
+    linkedin_url: str | None
+    #: "public_web" (read from an ad) | "self_reported" | "third_party_source".
+    source: str
+    art14_outstanding: bool
 
 
 class ProjectCompanyRead(BaseModel):
@@ -39,7 +60,10 @@ class ProjectCompanyRead(BaseModel):
     added_at: dt.datetime
     #: This workspace's own company row, once adopted from the corpus.
     company_id: uuid.UUID | None
-    #: Contacts this workspace already holds for it.
+    #: Contacts this workspace already holds for it — the shortlist shows
+    #: them inline, because "which company still has nobody" is the question
+    #: the enrichment step exists to answer.
+    contacts: list[ProjectContactRead] = Field(default_factory=list)
     contact_count: int
 
 
@@ -67,3 +91,25 @@ class AddCompaniesRequest(BaseModel):
     is already there is not an error, it is a no-op."""
 
     hub_company_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class AddContactRequest(BaseModel):
+    """A person to attach to a company in this project.
+
+    A NAME is the only requirement — the rest of a contact is often learned
+    later, and demanding an e-mail address up front would stop the step that
+    matters: knowing who to call at this company.
+
+    `source` decides the GDPR obligation and defaults to the one that owes a
+    notice: someone typed in from a LinkedIn profile or a career page was not
+    given to us by the subject. Choosing "self_reported" is a statement that
+    they were.
+    """
+
+    full_name: str = Field(min_length=1, max_length=200)
+    role_title: str | None = Field(default=None, max_length=200)
+    email: str | None = None
+    phone: str | None = None
+    linkedin_url: str | None = Field(default=None, max_length=300)
+    source: ConfidenceSource = ConfidenceSource.PUBLIC_WEB
+    source_detail: str | None = Field(default=None, max_length=500)

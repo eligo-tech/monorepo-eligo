@@ -4,6 +4,12 @@
 // screen is where forty interesting companies become a piece of work with a
 // name and a boundary: "TypeScript Berlin Q4", "Pflege Rhein-Main".
 //
+// The shortlist, and the enrichment step on it: every company should end up
+// with a contact person, and the screen's job is to show which ones do not.
+// A contact comes either out of the company's own ads ("Anreichern") or from
+// the recruiter, who found one somewhere the ads do not reach — today a
+// LinkedIn profile they looked up, later a data provider.
+//
 // A project stores a NAME and a set of corpus companies — nothing else, and
 // nothing copied. Sites, open roles and contacts are read back through that
 // membership, so a project can never show a number the corpus and the record
@@ -17,16 +23,20 @@ import {
   Building2,
   Check,
   FolderPlus,
+  Mail,
   MapPin,
+  Phone,
   Plus,
   Search,
+  Sparkles,
   Trash2,
-  Users,
+  UserPlus,
 } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type {
   ProjectCandidateDTO,
   ProjectCompanyDTO,
+  ProjectContactDTO,
   ProjectDTO,
   ProjectDetailDTO,
 } from '@/api/types'
@@ -254,12 +264,147 @@ function AddCompanies({
   )
 }
 
+/** One attached person. The source is visible because it decides the GDPR
+ *  obligation, and a contact with an outstanding notice must not look done. */
+function ContactLine({ contact }: { contact: ProjectContactDTO }) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
+      <span className="text-[14px] text-cockpit-text">{contact.full_name}</span>
+      {contact.role_title && (
+        <span className="text-[13px] text-cockpit-dim">{contact.role_title}</span>
+      )}
+      <span className="flex flex-wrap items-center gap-3 font-mono text-[12px] text-cockpit-dim">
+        {contact.phone && (
+          <a
+            href={`tel:${contact.phone.replace(/[^\d+]/g, '')}`}
+            className="flex items-center gap-1 hover:text-mint-400"
+          >
+            <Phone className="h-3.5 w-3.5 text-cockpit-faint" />
+            {contact.phone}
+          </a>
+        )}
+        {contact.email && (
+          <a href={`mailto:${contact.email}`} className="flex items-center gap-1 hover:text-mint-400">
+            <Mail className="h-3.5 w-3.5 text-cockpit-faint" />
+            {contact.email}
+          </a>
+        )}
+        {contact.linkedin_url && (
+          <a
+            href={contact.linkedin_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-mint-400"
+          >
+            LinkedIn
+          </a>
+        )}
+      </span>
+      {contact.art14_outstanding && (
+        <Chip tone="gold" className="ml-auto cursor-help">
+          <span title="Nicht vom Betroffenen selbst erhalten — die Information nach Art. 14 DSGVO ist fällig und unter „Manager“ vorgemerkt">
+            Art. 14 offen
+          </span>
+        </Chip>
+      )}
+    </li>
+  )
+}
+
+/** Add a person the ads do not name — looked up on LinkedIn, found on a career
+ *  page, or already known. A NAME is the whole requirement. */
+function AddContact({
+  projectId,
+  company,
+  onAdded,
+}: {
+  projectId: string
+  company: ProjectCompanyDTO
+  onAdded: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [role, setRole] = useState('')
+  const [self, setSelf] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    const value = name.trim()
+    if (!value) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.addProjectContact(projectId, company.hub_company_id, {
+        full_name: value,
+        role_title: role.trim() || null,
+        source: self ? 'self_reported' : 'public_web',
+      })
+      setName('')
+      setRole('')
+      setOpen(false)
+      onAdded()
+    } catch {
+      setError('Kontakt konnte nicht gespeichert werden.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button onClick={() => setOpen(true)}>
+        <UserPlus className="h-4 w-4" />
+        Person hinzufügen
+      </Button>
+    )
+  }
+
+  return (
+    <div className="w-full space-y-2 rounded-xl border border-cockpit-line bg-cockpit-inset p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          placeholder="Name — z. B. Corina Freund"
+          className={cn(FIELD, 'min-w-[16rem] flex-1')}
+        />
+        <input
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          placeholder="Rolle (optional)"
+          className={cn(FIELD, 'w-56')}
+        />
+        <Button onClick={() => setOpen(false)}>Abbrechen</Button>
+        <Button tone="primary" onClick={submit} disabled={busy || !name.trim()}>
+          {busy ? 'Speichert…' : 'Speichern'}
+        </Button>
+      </div>
+      {/* The only field with legal weight: data we found ourselves owes an
+          Art. 14 notice, data the person gave us does not. */}
+      <label className="flex items-center gap-2 text-[12px] text-cockpit-dim">
+        <input type="checkbox" checked={self} onChange={(e) => setSelf(e.target.checked)} />
+        Die Person hat mir diese Daten selbst gegeben (sonst: öffentlich gefunden,
+        Art.-14-Information wird fällig)
+      </label>
+      {error && <p className="text-[12px] text-coral-400">{error}</p>}
+    </div>
+  )
+}
+
 function CompanyRow({
+  projectId,
   company,
   onRemove,
+  onChanged,
 }: {
+  projectId: string
   company: ProjectCompanyDTO
   onRemove: () => void
+  onChanged: () => void
 }) {
   const [showContacts, setShowContacts] = useState(false)
   const [companyId, setCompanyId] = useState(company.company_id)
@@ -275,12 +420,13 @@ function CompanyRow({
         )}
         {company.contact_count > 0 ? (
           <Chip tone="mint">
-            {de(company.contact_count)}{' '}
-            {company.contact_count === 1 ? 'Ansprechpartner' : 'Ansprechpartner'}
+            {de(company.contact_count)} Ansprechpartner
           </Chip>
         ) : (
           <Chip tone="gold">
-            <span title="Noch niemand aus den Anzeigen übernommen">kein Kontakt</span>
+            <span title="Noch niemand hinterlegt — anreichern oder Person hinzufügen">
+              kein Kontakt
+            </span>
           </Chip>
         )}
 
@@ -294,12 +440,15 @@ function CompanyRow({
             <span className="text-[15px] text-cockpit-text">{de(company.open_roles)}</span> Rollen
           </span>
           <span title="Jüngste offene Anzeige">{dateDe(company.last_posted_at)}</span>
+          {/* Enrichment from the company's own ads: the contact the employer
+              published, with the ad line as evidence. */}
           <Button
             tone={showContacts ? 'primary' : 'ghost'}
             onClick={() => setShowContacts((v) => !v)}
+            title="Ansprechpartner aus den Anzeigen dieser Firma lesen"
           >
-            <Users className="h-4 w-4" />
-            Ansprechpartner finden
+            <Sparkles className="h-4 w-4" />
+            Anreichern
           </Button>
           <button
             type="button"
@@ -323,11 +472,31 @@ function CompanyRow({
         )}
       </p>
 
+      {/* The shortlist answer: who do I have at this company? */}
+      <div className="mt-2 flex flex-wrap items-start gap-3 border-t border-cockpit-line/40 pt-2">
+        {company.contacts.length > 0 ? (
+          <ul className="min-w-[18rem] flex-1">
+            {company.contacts.map((contact) => (
+              <ContactLine key={contact.id} contact={contact} />
+            ))}
+          </ul>
+        ) : (
+          <p className="min-w-[18rem] flex-1 py-1 text-[13px] text-cockpit-dim">
+            Noch kein Ansprechpartner. „Anreichern“ liest die Anzeigen dieser
+            Firma; wen sie nicht nennen, tragen Sie selbst ein.
+          </p>
+        )}
+        <AddContact projectId={projectId} company={company} onAdded={onChanged} />
+      </div>
+
       {showContacts && (
         <div className="mt-3 border-t border-cockpit-line/60 pt-3">
           <ContactsPanel
             company={{ hub_company_id: company.hub_company_id, company_id: companyId }}
-            onAdopted={setCompanyId}
+            onAdopted={(id) => {
+              setCompanyId(id)
+              onChanged()
+            }}
           />
         </div>
       )}
@@ -368,8 +537,14 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
         </Button>
         <h2 className="text-[22px] font-semibold text-cockpit-text">{detail.name}</h2>
         <span className="font-mono text-[13px] text-cockpit-faint">
-          {de(detail.company_count)} Firmen · {de(detail.companies_with_contact)} mit Kontakt ·{' '}
-          {de(detail.open_roles)} offene Rollen
+          {de(detail.company_count)} Firmen · {de(detail.companies_with_contact)} mit Kontakt
+          {detail.company_count > detail.companies_with_contact && (
+            <span className="text-gold-400">
+              {' '}
+              · {de(detail.company_count - detail.companies_with_contact)} offen
+            </span>
+          )}{' '}
+          · {de(detail.open_roles)} offene Rollen
         </span>
         <span className="ml-auto">
           <AddCompanies projectId={projectId} onAdded={setOverride} />
@@ -393,7 +568,9 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
           {detail.companies.map((company) => (
             <CompanyRow
               key={company.hub_company_id}
+              projectId={projectId}
               company={company}
+              onChanged={reload}
               onRemove={async () => {
                 await api.removeProjectCompany(projectId, company.hub_company_id).catch(() => {})
                 reload()

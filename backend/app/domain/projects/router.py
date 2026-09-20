@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_tenant
 from app.core.database import get_db
 from app.domain.projects import service
+from app.domain.managers.schemas import ManagerRead
 from app.domain.projects.schemas import (
     AddCompaniesRequest,
+    AddContactRequest,
     ProjectCreate,
     ProjectDetail,
     ProjectRead,
@@ -143,6 +145,37 @@ async def add_companies(
         db, tenant_id=tenant_id, project_id=project_id
     )
     return ProjectDetail.model_validate(detail)
+
+
+@router.post(
+    "/{project_id}/companies/{hub_company_id}/contacts",
+    response_model=ManagerRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_contact(
+    project_id: uuid.UUID,
+    hub_company_id: uuid.UUID,
+    payload: AddContactRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerRead:
+    """Attach a person to a company in this project — a name is enough.
+
+    For contacts a recruiter found themselves (a LinkedIn profile, a career
+    page, a phone call). Contacts read out of a public ad take the same door
+    via the Markt/Workspace "Übernehmen" action.
+    """
+    try:
+        manager = await service.add_contact(
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            hub_company_id=hub_company_id,
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return ManagerRead.model_validate(manager)
 
 
 @router.delete(
