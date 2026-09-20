@@ -542,3 +542,44 @@ export interface CompanyContactsDTO {
   postings_scanned: number
   postings_with_text: number
 }
+
+/** A project — the recruiter's own named grouping of target companies. */
+export interface ProjectDTO {
+  id: string
+  name: string
+  note: string | null
+  company_count: number
+  /** Companies in the project that already have a contact in this workspace. */
+  companies_with_contact: number
+  open_roles: number
+  created_at: string
+  updated_at: string
+}
+
+/** One company inside a project, with the corpus facts it points at. */
+export interface ProjectCompanyDTO {
+  hub_company_id: string
+  name: string
+  website_domain: string | null
+  cities: string[]
+  city_count: number
+  sites: number
+  open_roles: number
+  last_posted_at: string | null
+  note: string | null
+  added_at: string
+  company_id: string | null
+  contact_count: number
+}
+
+export interface ProjectDetailDTO extends ProjectDTO {
+  companies: ProjectCompanyDTO[]
+}
+
+/** A watched employer that could be added to a project. */
+export interface ProjectCandidateDTO {
+  hub_company_id: string
+  name: string
+  cities: string[]
+  open_roles: number
+}

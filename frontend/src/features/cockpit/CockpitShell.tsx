@@ -14,12 +14,20 @@ import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
 import { JobsScreen } from './screens/JobsScreen'
 import { ManagerScreen } from './screens/ManagerScreen'
 import { MarktScreen } from './screens/MarktScreen'
+import { ProjekteScreen } from './screens/ProjekteScreen'
 import { WorkspaceScreen } from './screens/WorkspaceScreen'
 import type { SectionOption } from './SectionPicker'
 import { useCockpitData } from './data/useCockpitData'
 import { useTypeface } from './useTypeface'
 
-export type ScreenKey = 'cockpit' | 'markt' | 'workspace' | 'managers' | 'jobs' | 'kandidaten'
+export type ScreenKey =
+  | 'cockpit'
+  | 'markt'
+  | 'workspace'
+  | 'projekte'
+  | 'managers'
+  | 'jobs'
+  | 'kandidaten'
 
 // The order the product reads in: the book of business, then the market it
 // draws on, then the part of it this workspace watches — the funnel from
@@ -28,6 +36,7 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'cockpit', label: 'Cockpit' },
   { key: 'markt', label: 'Markt' },
   { key: 'workspace', label: 'Workspace' },
+  { key: 'projekte', label: 'Projekte' },
   { key: 'managers', label: 'Manager', placeholder: true },
   { key: 'jobs', label: 'Jobs' },
   { key: 'kandidaten', label: 'Kandidaten' },
@@ -75,6 +84,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         {screen === 'cockpit' && <CockpitScreen state={state} />}
         {screen === 'markt' && <MarktScreen />}
         {screen === 'workspace' && <WorkspaceScreen />}
+        {screen === 'projekte' && <ProjekteScreen />}
         {screen === 'managers' && <ManagerScreen />}
         {screen === 'jobs' && <JobsScreen />}
         {screen === 'kandidaten' && <KandidatenScreen />}

@@ -16,6 +16,9 @@ import type {
   HubFacetsDTO,
   HubJobPostingDTO,
   SavedSearchDTO,
+  ProjectDTO,
+  ProjectDetailDTO,
+  ProjectCandidateDTO,
   WorkspaceCompanyDTO,
   CompanyContactsDTO,
   JobDTO,
@@ -192,6 +195,52 @@ export const api = {
    *  field: it asserts something happened in the world. */
   markManagerArt14Notified: (id: string) =>
     request<ManagerDTO>(`/managers/${id}/art14-notified`, { method: 'POST' }),
+
+  // --- Projects: named groupings of target companies ---------------------
+
+  projects: () => request<ProjectDTO[]>('/projects'),
+
+  /** A project needs a name and nothing else. 409 if the name is taken. */
+  createProject: (name: string) =>
+    request<ProjectDTO>('/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  project: (id: string) => request<ProjectDetailDTO>(`/projects/${id}`),
+
+  renameProject: (id: string, name: string) =>
+    request<ProjectDTO>(`/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  async deleteProject(id: string): Promise<void> {
+    const res = await fetch(`${BASE}/projects/${id}`, {
+      method: 'DELETE',
+      headers: await authHeaders(),
+    })
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+  },
+
+  /** Watched employers not yet in this project. */
+  projectCandidates: (id: string) =>
+    request<ProjectCandidateDTO[]>(`/projects/${id}/candidates`),
+
+  /** Put corpus companies in the project. Idempotent; returns the project. */
+  addProjectCompanies: (id: string, hubCompanyIds: string[]) =>
+    request<ProjectDetailDTO>(`/projects/${id}/companies`, {
+      method: 'POST',
+      body: JSON.stringify({ hub_company_ids: hubCompanyIds }),
+    }),
+
+  async removeProjectCompany(id: string, hubCompanyId: string): Promise<void> {
+    const res = await fetch(`${BASE}/projects/${id}/companies/${hubCompanyId}`, {
+      method: 'DELETE',
+      headers: await authHeaders(),
+    })
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+  },
 
   /** This workspace's standing market questions. */
   savedSearches: () => request<SavedSearchDTO[]>('/searches'),
