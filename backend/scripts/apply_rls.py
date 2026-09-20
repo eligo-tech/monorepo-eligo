@@ -88,12 +88,16 @@ async def _ensure_app_role(conn) -> None:
     await conn.execute(text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}"))
     await conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {role}"))
     await conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO {role}"))
-    # The blanket GRANT above would hand the runtime role UPDATE and DELETE on
-    # the receipt ledger, which is the whole point of it being append-only: one
-    # stolen application credential could otherwise rewrite history and
-    # recompute every hash. Triggers (migration 0014) refuse the operation even
-    # for the owner; this makes sure the app role never holds the privilege.
-    await conn.execute(text(f"REVOKE UPDATE, DELETE ON receipts FROM {role}"))
+    # The receipt ledger is append-only, and the TRIGGERS from migration 0014
+    # are what enforce it — they refuse UPDATE and DELETE for every role, the
+    # owner included. DELETE is revoked here as well; UPDATE is NOT, and that
+    # is deliberate: `enrichment_records.receipt_id` references `receipts`, so
+    # inserting an enrichment record takes a FOR KEY SHARE lock on the receipt,
+    # which Postgres refuses without UPDATE privilege. Revoking it broke every
+    # `verify_and_commit` in production ("permission denied for table
+    # receipts") while CI stayed green, because SQLite has no grants. See 0024.
+    await conn.execute(text(f"REVOKE DELETE ON receipts FROM {role}"))
+    await conn.execute(text(f"GRANT UPDATE ON receipts TO {role}"))
     print(f"  ✓ app role {role} ready (NOBYPASSRLS) + DML grants · {login}")
 
 

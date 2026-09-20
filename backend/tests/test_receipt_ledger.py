@@ -169,3 +169,21 @@ async def test_the_application_has_no_path_that_can_create_a_gap(tenant) -> None
     async with SessionLocal() as s:
         ok, reason = await service.verify_chain(s, tenant_id=tenant)
     assert ok, reason
+
+
+def test_provisioning_keeps_update_granted_on_receipts() -> None:
+    """A source-level guard, because CI's SQLite has no grants to test.
+
+    Revoking UPDATE on `receipts` looks like hardening and reads as harmless.
+    It is not: `enrichment_records.receipt_id` references `receipts`, so every
+    insert takes a FOR KEY SHARE lock there, which Postgres refuses without
+    UPDATE. That broke every verify_and_commit in production for weeks while
+    this suite stayed green. Immutability is enforced by the triggers above,
+    which refuse UPDATE for every role including the owner.
+    """
+    import pathlib
+
+    source = (pathlib.Path(__file__).parents[1] / "scripts" / "apply_rls.py").read_text()
+    assert "REVOKE UPDATE" not in source, "see migration 0024 — the FK needs UPDATE"
+    assert "GRANT UPDATE ON receipts" in source
+    assert "REVOKE DELETE ON receipts" in source
