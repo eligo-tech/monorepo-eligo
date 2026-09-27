@@ -350,31 +350,6 @@ class DescriptionFetchRequest(BaseModel):
 # --------------------------------------------------------------------------
 
 
-class WorkspaceCompany(BaseModel):
-    """One watched employer, rolled up across its sites the way Markt shows it.
-
-    Tracking stores ONE corpus row (the first site); everything counted here
-    spans every site with the same `normalized_name`, so "mgm technology
-    partners" reads as one employer with four offices, not four strangers.
-    """
-
-    hub_company_id: uuid.UUID
-    name: str
-    normalized_name: str
-    website_domain: str | None
-    resolution_basis: str
-    cities: list[str]
-    city_count: int
-    sites: int
-    open_roles: int
-    last_posted_at: dt.datetime | None
-    relationship: str
-    note: str | None
-    #: The tenant's own `companies` row once adopted; None while only watched.
-    company_id: uuid.UUID | None
-    watched_since: dt.datetime
-
-
 class ContactEvidence(BaseModel):
     """The ad that names the person, and the line that does."""
 

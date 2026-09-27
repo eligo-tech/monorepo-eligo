@@ -486,25 +486,6 @@ export interface CVExtractionResultDTO {
   candidate_id: string | null
   text_chars: number
 }
-/** One watched employer, rolled up across its sites (`/hub/workspace`). */
-export interface WorkspaceCompanyDTO {
-  hub_company_id: string
-  name: string
-  normalized_name: string
-  website_domain: string | null
-  resolution_basis: 'vat' | 'register' | 'domain' | 'name_place'
-  cities: string[]
-  city_count: number
-  sites: number
-  open_roles: number
-  last_posted_at: string | null
-  relationship: HubCompanyLinkDTO['relationship']
-  note: string | null
-  /** The workspace's own company row, once adopted. */
-  company_id: string | null
-  watched_since: string
-}
-
 /** The ad that names a contact, and the line that does. */
 export interface ContactEvidenceDTO {
   posting_id: string

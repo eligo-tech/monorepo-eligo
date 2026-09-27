@@ -1,7 +1,8 @@
-"""The workspace: watched employers, and the people their public ads name.
+"""Contacts read out of an employer's public ads.
 
-Both reads work over data already in the corpus. Nothing here fetches, and
-nothing is stored until a recruiter adopts a contact into `managers`.
+Works over data already in the corpus: nothing here fetches, and nothing is
+stored until a recruiter adopts a contact into `managers`. (The flat
+"workspace" listing this file also covered is gone — projects replaced it.)
 """
 
 from __future__ import annotations
@@ -89,27 +90,6 @@ async def employer() -> tuple[uuid.UUID, uuid.UUID]:
         return stuehlingen.id, weizen.id
 
 
-async def test_workspace_rolls_an_employer_up_across_its_sites(employer) -> None:
-    anchor, _ = employer
-    async with SessionLocal() as s:
-        await service.track_company(s, tenant_id=TENANT, hub_company_id=anchor, relationship="watching")
-        rows = await service.workspace_companies(s, tenant_id=TENANT)
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["sites"] == 2
-    assert sorted(row["cities"]) == ["Stühlingen", "Weizen"]
-    assert row["open_roles"] == 3  # the closed ad does not count
-    assert row["company_id"] is None
-
-
-async def test_workspace_is_per_tenant_and_hides_ignored(employer) -> None:
-    anchor, _ = employer
-    async with SessionLocal() as s:
-        await service.track_company(s, tenant_id=OTHER, hub_company_id=anchor, relationship="ignored")
-        assert await service.workspace_companies(s, tenant_id=TENANT) == []
-        assert await service.workspace_companies(s, tenant_id=OTHER) == []
-
-
 async def test_contacts_are_read_from_every_site_and_merged(employer) -> None:
     anchor, _ = employer
     async with SessionLocal() as s:
@@ -178,8 +158,6 @@ async def test_routes(employer) -> None:
     anchor, _ = employer
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
         await client.put(f"/api/v1/hub/companies/{anchor}/track", json={"relationship": "watching"})
-        workspace = (await client.get("/api/v1/hub/workspace")).json()
-        assert [w["name"] for w in workspace] == ["Sto SE & Co. KGaA"]
         contacts = await client.get(f"/api/v1/hub/companies/{anchor}/contacts")
         assert contacts.status_code == 200
         assert contacts.json()["contacts"][0]["full_name"] == "Sophie Bennicke"

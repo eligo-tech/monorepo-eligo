@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CockpitShell, isScreenKey, type ScreenKey } from './features/cockpit/CockpitShell'
+import { CockpitShell, resolveScreen, type ScreenKey } from './features/cockpit/CockpitShell'
 import { LandingPage } from './landing/LandingPage'
 import { authEnabled } from './auth/config'
 import { AuthGate } from './auth/AuthGate'
@@ -9,7 +9,7 @@ const DEFAULT_SCREEN: ScreenKey = 'cockpit'
 /** Which cockpit screen the URL asks for; null means the marketing landing page. */
 const hashScreen = (): ScreenKey | null => {
   const h = decodeURIComponent(window.location.hash.replace('#', ''))
-  return isScreenKey(h) ? h : null
+  return resolveScreen(h)
 }
 
 export default function App() {
