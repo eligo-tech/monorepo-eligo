@@ -12,9 +12,18 @@ import type {
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
+  ProcessJobDTO,
+  ProcessStepDTO,
 } from '@/api/types'
 import { buildSteps, PROCESS_STEPS } from './mock'
-import { demo, live, type Figure, type JobScore, type ProcessCard } from './types'
+import {
+  demo,
+  live,
+  type Figure,
+  type JobScore,
+  type ProcessCard,
+  type ProcessStep,
+} from './types'
 
 /**
  * Backend `PipelineStage` → index of the furthest *done* step in the cockpit's
@@ -64,8 +73,13 @@ const candidateRef = (candidateId: string): string => `#K-${candidateId.slice(0,
  */
 export function paceLabel(dwell: DwellStageDTO[]): { label: string; provenance: 'live' | 'demo' } {
   const relevant = dwell.filter((d) => d.key === 'presented' || d.key === 'interview')
-  if (relevant.length === 0) return { label: 'Ø — T bis Offer', provenance: 'demo' }
   const days = Math.round(relevant.reduce((sum, d) => sum + d.avg_days, 0))
+  // Zero is not a measurement: with one week of imported history the dwell
+  // query returns rows whose average is 0, and "Ø 0 T bis Offer" reads like a
+  // claim that placements are instant.
+  if (relevant.length === 0 || days === 0) {
+    return { label: 'Ø — T bis Offer', provenance: 'demo' }
+  }
   return { label: `Ø ${days} T bis Offer`, provenance: 'live' }
 }
 
@@ -120,6 +134,129 @@ export function toProcessCards(
     })
     // Furthest along first, like the mockup.
     .sort((a, b) => b.progress.value - a.progress.value)
+}
+
+/**
+ * Cards from the recruiter's own tracker (`/pipeline/processes`).
+ *
+ * This is the faithful path: the backend stores a row per step with its date
+ * and its verdict, so a card can say "presented 28.07., interview 14.08.,
+ * client said yes, final 17.09." instead of the single word "interview".
+ * `toProcessCards` above is the older, coarser join and stays for workspaces
+ * that have applications but no steps yet.
+ *
+ * Three states carry the tracker's meaning: a green cell is `done`, a red one
+ * is `out` (the process ended there), and the first unfinished step after the
+ * last done one is what we are waiting on.
+ */
+export function processCardsFromSteps(
+  processes: ProcessJobDTO[],
+  dwell: DwellStageDTO[],
+): ProcessCard[] {
+  const pace = paceLabel(dwell)
+  const cards: ProcessCard[] = []
+
+  for (const job of processes) {
+    for (const person of job.candidates) {
+      const byKey = new Map(person.steps.map((s) => [s.step_key, s]))
+      const out = person.steps.find((s) => s.outcome === 'out')
+
+      // Walk the canonical nine, then append any extra interview round the
+      // tracker recorded (a third appointment) right after the final one.
+      const keys: string[] = PROCESS_STEPS.map((s) => s.key)
+      const extra = person.steps
+        .map((s) => s.step_key)
+        .filter((k) => k.startsWith('interviewtermin_'))
+        .sort()
+      keys.splice(keys.indexOf('finaltermin') + 1, 0, ...extra)
+
+      let reached = -1
+      const steps: ProcessStep[] = keys.map((key, i) => {
+        const row = byKey.get(key)
+        const label =
+          row?.label ?? PROCESS_STEPS.find((s) => s.key === key)?.label ?? key
+        const done = !!row && (row.done_at !== null || row.outcome === 'pass')
+        if (done) reached = i
+        const state: ProcessStep['state'] =
+          row?.outcome === 'out' ? 'out' : done ? 'done' : 'pending'
+        return {
+          key: key as ProcessStep['key'],
+          label,
+          state,
+          meta: stepMeta(row),
+        }
+      })
+      // The step after the last completed one is the one in play — unless the
+      // process is over, in which case nothing is.
+      const next = steps.findIndex((s, i) => i > reached && s.state === 'pending')
+      if (!out && next !== -1) {
+        steps[next] = {
+          ...steps[next],
+          state: byKey.get(steps[next].key)?.scheduled_at ? 'current' : 'current',
+        }
+      }
+
+      cards.push({
+        id: person.application_id,
+        candidateRef: candidateRef(person.candidate_id),
+        candidateName: person.candidate_name,
+        role: job.job_title,
+        mandateRef: mandateRef(job.job_id),
+        client: job.company_name ?? '—',
+        paceLabel: pace.label,
+        pacePro: pace.provenance,
+        progress: live(
+          Math.round(((reached + 1) / steps.length) * 100),
+          'Aus den abgehakten Prozess-Schritten',
+        ),
+        fee: demo(0, 'Kein Honorarmodell hinterlegt'),
+        statusNote: out
+          ? `Abgesagt · ${out.label}`
+          : person.next_appointment
+            ? `Nächster Termin ${dateTimeDe(person.next_appointment)}`
+            : undefined,
+        steps,
+      })
+    }
+  }
+
+  // Grouped by mandate (the tracker's own shape), furthest along first inside.
+  return cards.sort(
+    (a, b) =>
+      a.mandateRef.localeCompare(b.mandateRef) || b.progress.value - a.progress.value,
+  )
+}
+
+/** The recruiter's clock. Appointments are agreed in German local time, and a
+ *  cockpit that renders them in the viewer's zone would show a Munich
+ *  interview at the wrong hour to anyone travelling. */
+const TZ = 'Europe/Berlin'
+
+/** "14.08. · 10:30", or the plain date when no time was agreed — midnight is
+ *  how a date-only cell ("25.08.") arrives. */
+function dateTimeDe(iso: string): string {
+  const when = new Date(iso)
+  const date = when.toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: TZ,
+  })
+  const time = when.toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: TZ,
+  })
+  return time === '00:00' ? date : `${date} · ${time}`
+}
+
+/** The mono caption under a step: when it is, or when it happened. */
+function stepMeta(row: ProcessStepDTO | undefined): string | undefined {
+  if (!row) return undefined
+  if (row.scheduled_at) {
+    return row.note ? `${dateTimeDe(row.scheduled_at)} · ${row.note}` : dateTimeDe(row.scheduled_at)
+  }
+  if (row.done_at) return dateTimeDe(row.done_at)
+  return row.note ?? undefined
 }
 
 /**

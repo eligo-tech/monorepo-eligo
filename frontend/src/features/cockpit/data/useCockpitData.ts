@@ -9,7 +9,7 @@ import { useAsync } from '@/hooks/useAsync'
 import { api } from '@/api/client'
 import type { JobDTO, MatchResultDTO } from '@/api/types'
 import { MOCK_COCKPIT } from './mock'
-import { toJobScores, toProcessCards } from './adapters'
+import { processCardsFromSteps, toJobScores, toProcessCards } from './adapters'
 import type { CockpitData } from './types'
 
 /** Which sections are showing live data — drives the section-header hints. */
@@ -34,7 +34,8 @@ const JOBSCORING_LIMIT = 8
 const settled = async <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null)
 
 async function loadCockpit(): Promise<CockpitState> {
-  const [board, candidates, jobs, companies, reporting] = await Promise.all([
+  const [processes, board, candidates, jobs, companies, reporting] = await Promise.all([
+    settled(api.processes()),
     settled(api.board()),
     settled(api.candidates()),
     settled(api.jobs()),
@@ -46,10 +47,17 @@ async function loadCockpit(): Promise<CockpitState> {
   const live: LiveSections = { processes: false, jobScores: false }
 
   // ── 03 Laufende Prozesse ──
-  // Needs the board plus the records it references. An empty join (no
-  // presented/interview/placed applications yet) keeps the demo cards rather
+  // Two sources, in order of fidelity. The recruiter's tracker
+  // (`/pipeline/processes`) carries a row per step with its date and verdict,
+  // so cards can show what actually happened. Where a workspace has
+  // applications but no steps yet, the coarse board join still produces cards
+  // from the Kanban stage alone. An empty result keeps the demo cards rather
   // than showing an empty board.
-  if (board && candidates && jobs && companies) {
+  const fromSteps = processes ? processCardsFromSteps(processes, reporting?.dwell ?? []) : []
+  if (fromSteps.length > 0) {
+    data.processes = fromSteps
+    live.processes = true
+  } else if (board && candidates && jobs && companies) {
     const cards = toProcessCards(board, candidates, jobs, companies, reporting?.dwell ?? [])
     if (cards.length > 0) {
       data.processes = cards

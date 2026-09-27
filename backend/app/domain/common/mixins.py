@@ -40,15 +40,25 @@ class TenantMixin:
 
 
 class TimestampMixin:
-    """Created/updated audit timestamps (UTC, DB-side defaults)."""
+    """Created/updated audit timestamps (UTC).
+
+    Both a DB-side default AND a client-side one, deliberately. The DB default
+    only exists on tables whose migration remembered to write it: migration
+    0025 did not, so inserting a project on Postgres failed with "null value in
+    column created_at" while every test passed — tests build their schema from
+    these models, where `create_all` carries the default. The client-side
+    `default` makes the insert correct whatever the table was built by.
+    """
 
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
+        default=func.now(),
         server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
+        default=func.now(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,

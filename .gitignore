@@ -29,6 +29,12 @@ venv/
 # Local assets only (design mockups, sample CVs). Anchored to the repo root —
 # a bare `data/` would also swallow source dirs like frontend/src/**/data/.
 /data/
+
+# The recruiter's process tracker: real candidate and client names. The
+# importer and its tests read it from here when it is present and skip when it
+# is not, so the file stays on the machines that need it and out of a history
+# no erasure request can reach.
+/docs/process_design/*.docx
 .data/
 
 DEPLOY.md

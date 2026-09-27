@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_tenant
 from app.core.database import get_db
 from app.domain.pipeline import service
+from app.domain.pipeline import steps as steps_mod
 from app.domain.pipeline.schemas import (
+    ProcessJobRead,
+    ProcessStepRead,
+    ProcessStepUpdate,
     ApplicationCreate,
     ApplicationRead,
     BoardColumn,
@@ -101,3 +105,53 @@ async def board(
         for stage, apps in grouped.items()
     ]
     return PipelineBoard(columns=columns)
+
+@router.get("/processes", response_model=list[ProcessJobRead])
+async def processes(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[ProcessJobRead]:
+    """"Laufende Prozesse": every mandate with a candidate in play, grouped
+    the way the recruiter's tracker groups them."""
+    return [
+        ProcessJobRead.model_validate(entry)
+        for entry in await service.processes(db, tenant_id=tenant_id)
+    ]
+
+
+@router.patch(
+    "/applications/{application_id}/steps/{step_key}", response_model=ProcessStepRead
+)
+async def set_step(
+    application_id: uuid.UUID,
+    step_key: str,
+    payload: ProcessStepUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ProcessStepRead:
+    """Set a date, a verdict or a note on one step. Idempotent per step."""
+    try:
+        row = await service.set_step(
+            db,
+            tenant_id=tenant_id,
+            application_id=application_id,
+            step_key=step_key,
+            scheduled_at=payload.scheduled_at,
+            done_at=payload.done_at,
+            outcome=payload.outcome,
+            note=payload.note,
+            actor=payload.actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return ProcessStepRead.model_validate(
+        {
+            "step_key": row.step_key,
+            "label": steps_mod.label_for(row.step_key),
+            "kind": steps_mod.kind_for(row.step_key),
+            "scheduled_at": row.scheduled_at,
+            "done_at": row.done_at,
+            "outcome": row.outcome,
+            "note": row.note,
+        }
+    )

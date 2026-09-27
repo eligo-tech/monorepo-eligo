@@ -12,6 +12,9 @@ const NODE: Record<ProcessStep['state'], string> = {
   done: 'border-mint-500 bg-mint-500 text-[#0f1a12]',
   current: 'border-mint-600 bg-transparent text-transparent',
   blocked: 'border-coral-400 bg-transparent text-transparent shadow-glow-coral',
+  // The tracker's red cell: filled coral, because the process ended here —
+  // visibly different from "blocked", where it is merely stuck.
+  out: 'border-coral-500 bg-coral-500 text-[#1a0f0f]',
   pending: 'border-[#25271f] bg-transparent text-transparent',
 }
 
@@ -19,6 +22,7 @@ const LABEL: Record<ProcessStep['state'], string> = {
   done: 'text-cockpit-text',
   current: 'text-cockpit-text',
   blocked: 'text-cockpit-text',
+  out: 'text-coral-400',
   pending: 'text-cockpit-faint',
 }
 

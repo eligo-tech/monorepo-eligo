@@ -23,6 +23,8 @@ import type {
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
+  ProcessJobDTO,
+  ProcessStepDTO,
   ReportingOverviewDTO,
 } from './types'
 
@@ -315,6 +317,26 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, res.statusText)
   },
   board: () => request<PipelineBoardDTO>('/pipeline/board'),
+
+  /** "Laufende Prozesse": mandates with their candidates and the nine steps,
+   *  as the recruiter's tracker records them. */
+  processes: () => request<ProcessJobDTO[]>('/pipeline/processes'),
+
+  /** Set a date, a verdict ("pass"/"out") or a note on one step. */
+  setProcessStep: (
+    applicationId: string,
+    stepKey: string,
+    body: {
+      scheduled_at?: string | null
+      done_at?: string | null
+      outcome?: 'open' | 'pass' | 'out' | null
+      note?: string | null
+    },
+  ) =>
+    request<ProcessStepDTO>(
+      `/pipeline/applications/${applicationId}/steps/${stepKey}`,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ),
   /** Rank the candidate pool against one job (hard filters → soft ranking). */
   matchJob: (jobId: string, includeRejected = true) =>
     request<MatchResultDTO[]>('/matching/job', {
