@@ -219,6 +219,7 @@ async def set_step(
     done_at: dt.datetime | None = None,
     outcome: str | None = None,
     note: str | None = None,
+    clear: list[str] | None = None,
     actor: str = "recruiter",
 ) -> ProcessStep:
     """Create or update one step, then re-derive the application's stage.
@@ -260,6 +261,10 @@ async def set_step(
         row.outcome = outcome
     if note is not None:
         row.note = note or None
+    for field in clear or ():
+        if field not in {"scheduled_at", "done_at", "note"}:
+            raise ValueError(f"cannot clear {field}")
+        setattr(row, field, None)
     await session.flush()
 
     current = await list_steps(

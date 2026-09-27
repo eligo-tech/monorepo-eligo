@@ -85,12 +85,19 @@ class ProcessStepUpdate(BaseModel):
 
     Every field optional: a recruiter sets the interview date today and the
     verdict next week, and forcing both at once would mean inventing one.
+
+    Omitting a field leaves it alone, so removing a value needs its own word:
+    `clear: ["scheduled_at"]` un-books an appointment. Without that, a
+    cancelled interview could only be overwritten, never taken back.
     """
 
     scheduled_at: dt.datetime | None = None
     done_at: dt.datetime | None = None
     outcome: Literal["open", "pass", "out"] | None = None
     note: str | None = None
+    clear: list[Literal["scheduled_at", "done_at", "note"]] = Field(
+        default_factory=list
+    )
     actor: str = "recruiter"
 
 

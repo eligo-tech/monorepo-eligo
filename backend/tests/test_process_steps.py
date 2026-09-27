@@ -270,3 +270,28 @@ async def test_routes(application) -> None:
             f"/api/v1/pipeline/applications/{application}/steps/kaffee", json={}
         )
         assert unknown.status_code == 404
+
+
+async def test_a_value_can_be_taken_back(application) -> None:
+    """A cancelled interview must be removable, not just overwritable —
+    omitting a field means "leave it alone", so clearing needs its own word."""
+    async with SessionLocal() as s:
+        await service.set_step(
+            s, tenant_id=TENANT, application_id=application, step_key="interview",
+            scheduled_at=dt.datetime(2026, 9, 21, 10, 0, tzinfo=dt.UTC), note="vor Ort",
+        )
+        await service.set_step(
+            s, tenant_id=TENANT, application_id=application, step_key="interview",
+            clear=["scheduled_at", "note"],
+        )
+        steps = await service.list_steps(s, tenant_id=TENANT, application_id=application)
+    assert steps[0].scheduled_at is None and steps[0].note is None
+
+
+async def test_clearing_an_unknown_field_is_refused(application) -> None:
+    async with SessionLocal() as s:
+        with pytest.raises(ValueError):
+            await service.set_step(
+                s, tenant_id=TENANT, application_id=application,
+                step_key="interview", clear=["outcome"],
+            )

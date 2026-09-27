@@ -140,6 +140,7 @@ async def set_step(
             done_at=payload.done_at,
             outcome=payload.outcome,
             note=payload.note,
+            clear=payload.clear,
             actor=payload.actor,
         )
     except ValueError as exc:

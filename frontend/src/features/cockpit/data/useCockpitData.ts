@@ -5,6 +5,8 @@
 // then overlay the sections the API can actually serve, per section — one failing
 // endpoint degrades one section, not the screen.
 
+import { useCallback, useState } from 'react'
+
 import { useAsync } from '@/hooks/useAsync'
 import { api } from '@/api/client'
 import type { JobDTO, MatchResultDTO } from '@/api/types'
@@ -22,6 +24,9 @@ export interface CockpitState {
   data: CockpitData
   loading: boolean
   live: LiveSections
+  /** Re-fetch after a write, so an edited step shows its new state without a
+   *  page reload. */
+  reload: () => void
 }
 
 /**
@@ -33,7 +38,7 @@ const JOBSCORING_LIMIT = 8
 
 const settled = async <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null)
 
-async function loadCockpit(): Promise<CockpitState> {
+async function loadCockpit(): Promise<Omit<CockpitState, 'reload'>> {
   const [processes, board, candidates, jobs, companies, reporting] = await Promise.all([
     settled(api.processes()),
     settled(api.board()),
@@ -84,7 +89,7 @@ async function loadCockpit(): Promise<CockpitState> {
   return { data, loading: false, live }
 }
 
-const FALLBACK: CockpitState = {
+const FALLBACK: Omit<CockpitState, 'reload'> = {
   data: MOCK_COCKPIT,
   loading: true,
   live: { processes: false, jobScores: false },
@@ -92,7 +97,9 @@ const FALLBACK: CockpitState = {
 
 /** Cockpit data, mock-backed and progressively overlaid with live values. */
 export function useCockpitData(): CockpitState {
-  const { data, loading } = useAsync(loadCockpit, [])
-  if (!data) return { ...FALLBACK, loading }
-  return { ...data, loading }
+  const [key, setKey] = useState(0)
+  const { data, loading } = useAsync(loadCockpit, [key])
+  const reload = useCallback(() => setKey((k) => k + 1), [])
+  if (!data) return { ...FALLBACK, loading, reload }
+  return { ...data, loading, reload }
 }
