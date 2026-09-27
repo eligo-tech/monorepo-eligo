@@ -96,6 +96,7 @@ def test_an_on_site_note_is_kept_beside_the_time() -> None:
     assert interview["note"] == "vor Ort"
 
 
+@pytest.mark.skipif(not SHEET.exists(), reason="process sheet not in this checkout")
 def test_company_headings_are_given_not_guessed() -> None:
     """Companies and mandates are indistinguishable in the file. Told that
     "Data 1442" is a company, the parser must believe it — which is the proof
