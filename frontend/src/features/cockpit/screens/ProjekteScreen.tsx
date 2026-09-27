@@ -583,6 +583,45 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
   )
 }
 
+/**
+ * Watched in Markt, in no project yet.
+ *
+ * Markt's "Beobachten" has to land somewhere visible. Without this the
+ * companies would exist only inside the "Firmen hinzufügen" picker — saved,
+ * then effectively lost.
+ */
+function UnassignedWatched({ reloadKey }: { reloadKey: number }) {
+  const watched = useAsync<ProjectCandidateDTO[]>(() => api.unassignedWatched(), [reloadKey])
+  const list = watched.data ?? []
+  if (list.length === 0) return null
+
+  return (
+    <Panel tone="inset" className="space-y-2 p-4">
+      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
+        Beobachtet, noch in keinem Projekt · {de(list.length)}
+      </p>
+      <ul className="flex flex-wrap gap-x-4 gap-y-1">
+        {list.slice(0, 24).map((company) => (
+          <li key={company.hub_company_id} className="text-[13px] text-cockpit-dim">
+            {company.name}
+            <span className="ml-1.5 font-mono text-[12px] text-cockpit-faint">
+              {de(company.open_roles)} Rollen
+            </span>
+          </li>
+        ))}
+        {list.length > 24 && (
+          <li className="font-mono text-[12px] text-cockpit-faint">
+            +{de(list.length - 24)} weitere
+          </li>
+        )}
+      </ul>
+      <p className="text-[12px] leading-relaxed text-cockpit-faint">
+        In einem Projekt auf „Firmen hinzufügen“ klicken, um sie zu übernehmen.
+      </p>
+    </Panel>
+  )
+}
+
 export function ProjekteScreen() {
   const [reloadKey, setReloadKey] = useState(0)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -597,8 +636,8 @@ export function ProjekteScreen() {
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
           Ihre Zielfirmen, gruppiert unter einem Namen. Ein Projekt hält die
-          Firmen aus dem Markt zusammen und zeigt, für welche davon schon ein
-          Ansprechpartner hinterlegt ist.
+          Firmen zusammen, die Sie im Markt beobachten, und zeigt pro Firma den
+          Ansprechpartner — aus den Anzeigen gelesen oder selbst eingetragen.
         </p>
       </header>
 
@@ -660,6 +699,8 @@ export function ProjekteScreen() {
                 />
               ))}
             </div>
+
+            <UnassignedWatched reloadKey={reloadKey} />
           </>
         )}
       </section>

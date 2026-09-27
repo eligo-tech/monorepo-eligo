@@ -56,6 +56,16 @@ async def create_project(
     )
 
 
+@router.get("/unassigned")
+async def unassigned_watched(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Watched employers not in any project — declared BEFORE /{project_id},
+    or the path parameter would swallow the word."""
+    return await service.unassigned_watched(db, tenant_id=tenant_id)
+
+
 @router.get("/{project_id}", response_model=ProjectDetail)
 async def get_project(
     project_id: uuid.UUID,

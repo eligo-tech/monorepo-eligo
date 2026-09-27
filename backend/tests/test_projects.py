@@ -444,3 +444,37 @@ async def test_contact_route(corpus) -> None:
             json={"full_name": "Niemand"},
         )
         assert missing.status_code == 404
+
+
+async def test_watched_companies_never_become_invisible(corpus) -> None:
+    """A company watched in Markt but in no project must still be listed.
+
+    Otherwise "Beobachten" saves something the recruiter can then only find
+    inside a picker — which is how a saved thing quietly disappears.
+    """
+    project_id = await _project()
+    async with SessionLocal() as s:
+        await hub_service.track_company(s, tenant_id=TENANT, hub_company_id=corpus["mgm"])
+        await hub_service.track_company(s, tenant_id=TENANT, hub_company_id=corpus["zalando"])
+
+        before = await service.unassigned_watched(s, tenant_id=TENANT)
+        assert sorted(c["name"] for c in before) == ["Zalando SE", "mgm technology partners"]
+
+        await service.add_companies(
+            s, tenant_id=TENANT, project_id=project_id, hub_company_ids=[corpus["mgm"]]
+        )
+        after = await service.unassigned_watched(s, tenant_id=TENANT)
+        assert [c["name"] for c in after] == ["Zalando SE"]
+        # Ignored employers are hidden here too, and another workspace sees none.
+        assert await service.unassigned_watched(s, tenant_id=OTHER) == []
+
+
+async def test_unassigned_route(corpus) -> None:
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        async with SessionLocal() as s:
+            await hub_service.track_company(s, tenant_id=TENANT, hub_company_id=corpus["zalando"])
+        listed = await client.get("/api/v1/projects/unassigned")
+        assert listed.status_code == 200
+        assert [c["name"] for c in listed.json()] == ["Zalando SE"]

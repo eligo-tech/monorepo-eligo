@@ -31,7 +31,7 @@ src/
 │   ├── CommandBar.tsx          # wordmark, search, status chips, typeface switch, Clerk controls
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
 │   ├── useTypeface.ts          # the Jet · Mono · Heli switch
-│   ├── screens/                # CockpitScreen · MarktScreen · WorkspaceScreen · ProjekteScreen
+│   ├── screens/                # CockpitScreen · MarktScreen · ProjekteScreen
 │   │   ├── ContactsPanel.tsx   # "Anreichern": contacts read out of a company's public ads
 │   │   └── kandidaten/         # KandidatenScreen · CandidateDrawer · DossierEditor · CvUploadModal
 │   ├── sections/               # SignalsPanel · Revenue (01) · JobScoring (02) · Process (03) · NextActions
@@ -51,8 +51,13 @@ follow automatically.
 `kandidatenwelt`: the whole book of business, the pool it draws on, then one
 candidate's world. ←/→ moves between them; the URL hash names the active one.
 
-The client-side funnel runs `markt` → `workspace` → `projekte`: search the
-shared corpus, keep the employers worth watching, then group them under a name.
+The client-side funnel runs `markt` → `projekte`: search the shared corpus,
+keep the employers worth watching ("Beobachten"), then group them under a name.
+There was briefly a flat `workspace` screen between the two; it listed every
+watched company and nothing else, which projects subsumed. `resolveScreen`
+maps the retired hash onto `projekte` so old links still land somewhere.
+Companies watched but in no project appear at the foot of Projekte — a saved
+thing must never be visible only inside a picker.
 **Projekte is the shortlist and the enrichment step**: every company on it
 should end up with a contact person, and the row says so either way. Two ways
 in, both landing in `managers` with provenance and the Art. 14 flag —

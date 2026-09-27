@@ -38,7 +38,6 @@ from app.domain.hub.schemas import (
     IngestRequest,
     IngestSummary,
     TrackRequest,
-    WorkspaceCompany,
 )
 
 router = APIRouter(prefix="/hub", tags=["hub"])
@@ -304,16 +303,6 @@ async def list_hub_links(
     """This tenant's view of the corpus: what they watch, prospect, or ignore."""
     rows = await service.list_links(db, tenant_id=tenant_id, relationship=relationship)
     return [HubCompanyLinkRead.model_validate(r) for r in rows]
-
-
-@router.get("/workspace", response_model=list[WorkspaceCompany])
-async def list_workspace(
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
-) -> list[WorkspaceCompany]:
-    """The employers this workspace watches, rolled up across their sites."""
-    rows = await service.workspace_companies(db, tenant_id=tenant_id)
-    return [WorkspaceCompany.model_validate(r) for r in rows]
 
 
 @router.get("/companies/{hub_company_id}/contacts", response_model=CompanyContacts)

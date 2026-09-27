@@ -19,7 +19,6 @@ import type {
   ProjectDTO,
   ProjectDetailDTO,
   ProjectCandidateDTO,
-  WorkspaceCompanyDTO,
   CompanyContactsDTO,
   JobDTO,
   MatchResultDTO,
@@ -223,6 +222,9 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, res.statusText)
   },
 
+  /** Watched employers that are in no project yet. */
+  unassignedWatched: () => request<ProjectCandidateDTO[]>('/projects/unassigned'),
+
   /** Watched employers not yet in this project. */
   projectCandidates: (id: string) =>
     request<ProjectCandidateDTO[]>(`/projects/${id}/candidates`),
@@ -291,9 +293,6 @@ export const api = {
   /** Open roles for one hub company. */
   hubCompanyPostings: (id: string) =>
     request<HubJobPostingDTO[]>(`/hub/companies/${id}/postings?limit=200`),
-
-  /** The employers this workspace watches, rolled up across their sites. */
-  hubWorkspace: () => request<WorkspaceCompanyDTO[]>('/hub/workspace'),
 
   /** People an employer's public ads name as contacts. Reads the corpus;
    *  fetches and stores nothing. */

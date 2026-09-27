@@ -495,6 +495,43 @@ async def remove_company(
     return True
 
 
+async def unassigned_watched(
+    session: AsyncSession, *, tenant_id: uuid.UUID
+) -> list[dict]:
+    """Employers watched in Markt that are in NO project yet.
+
+    Without this they would exist only inside the "add companies" picker —
+    saved, then invisible. The Projekte screen shows them as the bucket work
+    starts from.
+    """
+    in_any_project = select(ProjectCompany.hub_company_id).where(
+        ProjectCompany.tenant_id == tenant_id
+    )
+    watched = list(
+        (
+            await session.execute(
+                select(HubCompanyLink.hub_company_id).where(
+                    HubCompanyLink.tenant_id == tenant_id,
+                    HubCompanyLink.relationship != "ignored",
+                    HubCompanyLink.hub_company_id.not_in(in_any_project),
+                )
+            )
+        ).scalars()
+    )
+    rollup = await _employer_rollup(session, hub_company_ids=watched)
+    out = [
+        {
+            "hub_company_id": hub_id,
+            "name": facts["name"],
+            "cities": facts["cities"][:4],
+            "open_roles": facts["open_roles"],
+        }
+        for hub_id, facts in rollup.items()
+    ]
+    out.sort(key=lambda c: (-c["open_roles"], c["name"].lower()))
+    return out
+
+
 async def candidate_companies(
     session: AsyncSession, *, tenant_id: uuid.UUID, project_id: uuid.UUID
 ) -> list[dict]:

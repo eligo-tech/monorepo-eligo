@@ -15,7 +15,6 @@ import { JobsScreen } from './screens/JobsScreen'
 import { ManagerScreen } from './screens/ManagerScreen'
 import { MarktScreen } from './screens/MarktScreen'
 import { ProjekteScreen } from './screens/ProjekteScreen'
-import { WorkspaceScreen } from './screens/WorkspaceScreen'
 import type { SectionOption } from './SectionPicker'
 import { useCockpitData } from './data/useCockpitData'
 import { useTypeface } from './useTypeface'
@@ -23,7 +22,6 @@ import { useTypeface } from './useTypeface'
 export type ScreenKey =
   | 'cockpit'
   | 'markt'
-  | 'workspace'
   | 'projekte'
   | 'managers'
   | 'jobs'
@@ -35,7 +33,6 @@ export type ScreenKey =
 export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'cockpit', label: 'Cockpit' },
   { key: 'markt', label: 'Markt' },
-  { key: 'workspace', label: 'Workspace' },
   { key: 'projekte', label: 'Projekte' },
   { key: 'managers', label: 'Manager', placeholder: true },
   { key: 'jobs', label: 'Jobs' },
@@ -44,6 +41,13 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
 
 export const isScreenKey = (v: string): v is ScreenKey =>
   SCREENS.some((s) => s.key === v)
+
+/** Links and bookmarks from before Projekte replaced the flat Workspace list.
+ *  One line is cheaper than a dead hash that silently lands on the cockpit. */
+const RETIRED: Record<string, ScreenKey> = { workspace: 'projekte' }
+
+export const resolveScreen = (hash: string): ScreenKey | null =>
+  isScreenKey(hash) ? hash : (RETIRED[hash] ?? null)
 
 export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: ScreenKey }) {
   const state = useCockpitData()
@@ -61,7 +65,8 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
   useEffect(() => {
     const onHash = () => {
       const h = window.location.hash.replace('#', '')
-      if (isScreenKey(h)) setScreen(h)
+      const next = resolveScreen(h)
+      if (next) setScreen(next)
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -83,7 +88,6 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
       <main className="mx-auto max-w-[1560px] px-6 pb-24 pt-8">
         {screen === 'cockpit' && <CockpitScreen state={state} />}
         {screen === 'markt' && <MarktScreen />}
-        {screen === 'workspace' && <WorkspaceScreen />}
         {screen === 'projekte' && <ProjekteScreen />}
         {screen === 'managers' && <ManagerScreen />}
         {screen === 'jobs' && <JobsScreen />}
