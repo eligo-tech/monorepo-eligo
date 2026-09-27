@@ -184,6 +184,10 @@ export function processCardsFromSteps(
           label,
           state,
           meta: stepMeta(row),
+          scheduledAt: row?.scheduled_at ?? null,
+          doneAt: row?.done_at ?? null,
+          outcome: (row?.outcome as ProcessStep['outcome']) ?? 'open',
+          note: row?.note ?? null,
         }
       })
       // The step after the last completed one is the one in play — unless the
@@ -216,6 +220,7 @@ export function processCardsFromSteps(
             ? `Nächster Termin ${dateTimeDe(person.next_appointment)}`
             : undefined,
         steps,
+        editable: true,
       })
     }
   }

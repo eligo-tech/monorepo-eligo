@@ -331,6 +331,9 @@ export const api = {
       done_at?: string | null
       outcome?: 'open' | 'pass' | 'out' | null
       note?: string | null
+      /** Fields to empty. Omitting a field means "unchanged", so taking a
+       *  value back needs saying so. */
+      clear?: ('scheduled_at' | 'done_at' | 'note')[]
     },
   ) =>
     request<ProcessStepDTO>(

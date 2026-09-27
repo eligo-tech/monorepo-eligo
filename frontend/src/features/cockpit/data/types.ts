@@ -141,6 +141,12 @@ export interface ProcessStep {
   meta?: string
   /** Two-party sub-chips (Kand. / Kunde, Offer / Zusage) and whether each is met. */
   chips?: { label: string; done: boolean }[]
+  /** The stored values behind the step, when it came from the record. The
+   *  editor needs what IS, not the formatted caption. */
+  scheduledAt?: string | null
+  doneAt?: string | null
+  outcome?: 'open' | 'pass' | 'out'
+  note?: string | null
 }
 
 export interface ProcessCard {
@@ -159,6 +165,10 @@ export interface ProcessCard {
   /** Status pill next to the title, e.g. "Mündl. Zusage · Vertrag ausstehend". */
   statusNote?: string
   steps: ProcessStep[]
+  /** True when the card is one process in the record, so its steps can be
+   *  edited. Demo cards and the coarse board join are read-only: there is no
+   *  row to write to. */
+  editable?: boolean
 }
 
 // ── Nächste beste Aktionen ──────────────────────────────────────────────────

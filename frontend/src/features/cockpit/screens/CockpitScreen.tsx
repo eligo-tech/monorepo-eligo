@@ -9,7 +9,7 @@ import { SignalsPanel } from '../sections/SignalsPanel'
 import type { CockpitState } from '../data/useCockpitData'
 
 export function CockpitScreen({ state }: { state: CockpitState }) {
-  const { data, live } = state
+  const { data, live, reload } = state
 
   return (
     <div className="space-y-10">
@@ -26,7 +26,7 @@ export function CockpitScreen({ state }: { state: CockpitState }) {
       <SignalsPanel signals={data.signals} />
       <RevenueSection slides={data.slides} />
       <JobScoringSection rows={data.jobScores} isLive={live.jobScores} />
-      <ProcessSection cards={data.processes} isLive={live.processes} />
+      <ProcessSection cards={data.processes} isLive={live.processes} onChanged={reload} />
       <NextActionsSection actions={data.actions} />
     </div>
   )

@@ -1,7 +1,15 @@
 // "03 Laufende Prozesse" — one card per live placement, with the nine-step
-// stepper. Cards come from the pipeline board when the backend is reachable.
+// stepper. Cards come from the recruiter's tracker (process steps) when the
+// backend is reachable, else from the coarse pipeline board.
+//
+// Tapping a step opens its editor — the header has promised "Schritte
+// antippen" since the mockup. Only cards backed by real process rows are
+// editable; a demo card has nothing to write to.
+
+import { useState } from 'react'
 
 import { ProgressRing } from '../ui/Gauge'
+import { StepEditor } from '../ui/StepEditor'
 import { ProcessStepper } from '../ui/ProcessStepper'
 import { Chip, Money, Panel, SectionHeader } from '../ui/primitives'
 import type { ProcessCard, ProcessStep } from '../data/types'
@@ -10,11 +18,18 @@ export function ProcessSection({
   cards,
   isLive,
   onStepClick,
+  onChanged,
 }: {
   cards: ProcessCard[]
   isLive: boolean
   onStepClick?: (card: ProcessCard, step: ProcessStep) => void
+  /** Called after a step was written, so the cockpit can re-read it. */
+  onChanged?: () => void
 }) {
+  const [editing, setEditing] = useState<{ card: ProcessCard; step: ProcessStep } | null>(
+    null,
+  )
+
   return (
     <section className="space-y-5">
       <SectionHeader
@@ -70,7 +85,16 @@ export function ProcessSection({
               <div className="mt-6">
                 <ProcessStepper
                   steps={card.steps}
-                  onStepClick={onStepClick ? (step) => onStepClick(card, step) : undefined}
+                  onStepClick={
+                    card.editable
+                      ? (step) => {
+                          setEditing({ card, step })
+                          onStepClick?.(card, step)
+                        }
+                      : onStepClick
+                        ? (step) => onStepClick(card, step)
+                        : undefined
+                  }
                 />
               </div>
             </Panel>
@@ -83,6 +107,15 @@ export function ProcessSection({
           ° Demo-Prozesse — sobald Bewerbungen den Status „vorgestellt" erreichen, kommen
           die Karten aus der Pipeline.
         </p>
+      )}
+
+      {editing && (
+        <StepEditor
+          card={editing.card}
+          step={editing.step}
+          onClose={() => setEditing(null)}
+          onSaved={() => onChanged?.()}
+        />
       )}
     </section>
   )
