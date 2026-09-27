@@ -114,18 +114,24 @@ export interface JobScore {
 // ── 03 Laufende Prozesse ────────────────────────────────────────────────────
 
 /** The nine steps of a live placement process, as drawn in the mockups. */
+/** The nine canonical steps, plus the tracker's repeat interview rounds
+ *  ("interviewtermin_3"): a third round happens, and a closed union would have
+ *  to drop it. */
 export type ProcessStepKey =
   | 'vorgestellt'
   | 'feedback-1'
-  | 'vorbereitung'
   | 'interview'
+  | 'vorbereitung'
   | 'feedback-2'
-  | 'final-vorb'
   | 'finaltermin'
+  | 'final-vorb'
   | 'offer'
   | 'vertrag'
+  | `interviewtermin_${number}`
 
-export type StepState = 'done' | 'current' | 'blocked' | 'pending'
+/** `out` is the tracker's red cell: the client said no and the process stops.
+ *  Distinct from `blocked`, where someone still owes us an answer. */
+export type StepState = 'done' | 'current' | 'blocked' | 'pending' | 'out'
 
 export interface ProcessStep {
   key: ProcessStepKey

@@ -8,16 +8,20 @@
 
 import { demo, type CockpitData, type PeriodKey, type ProcessStep, type RevenuePanel } from './types'
 
-/** Labels of the nine process steps, in order. Single source of truth — the
- *  stepper, the progress ring and the stage mapping in adapters.ts all read it. */
+/** The nine process steps, in the order docs/process_design sets out. Single
+ *  source of truth — stepper, progress ring and stage mapping all read it.
+ *  **Termin vor Vorbereitung**: you agree the appointment, then prepare the
+ *  candidate for it. This list had preparation first, which meant preparing
+ *  someone for a meeting that did not exist yet; the backend's
+ *  `pipeline/steps.py` is the same order. */
 export const PROCESS_STEPS: { key: ProcessStep['key']; label: string }[] = [
   { key: 'vorgestellt', label: 'Vorgestellt' },
   { key: 'feedback-1', label: 'Feedback' },
-  { key: 'vorbereitung', label: 'Vorbereitung' },
-  { key: 'interview', label: 'Interview' },
+  { key: 'interview', label: 'Interviewtermin' },
+  { key: 'vorbereitung', label: 'Interview-Vorb.' },
   { key: 'feedback-2', label: 'Feedback' },
-  { key: 'final-vorb', label: 'Final-Vorb.' },
   { key: 'finaltermin', label: 'Finaltermin' },
+  { key: 'final-vorb', label: 'Final-Vorb.' },
   { key: 'offer', label: 'Offer & Zusage' },
   { key: 'vertrag', label: 'Vertrag' },
 ]

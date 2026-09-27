@@ -578,3 +578,36 @@ export interface ProjectCandidateDTO {
   cities: string[]
   open_roles: number
 }
+
+/** One checklist step of a candidate's process — the tracker as data. */
+export interface ProcessStepDTO {
+  step_key: string
+  label: string
+  /** "appointment" (has a date/time) | "feedback" (pass/out) | "milestone". */
+  kind: string
+  scheduled_at: string | null
+  done_at: string | null
+  /** "open" | "pass" | "out" — the tracker's uncoloured / green / red cell. */
+  outcome: string
+  note: string | null
+}
+
+export interface ProcessCandidateDTO {
+  application_id: string
+  candidate_id: string
+  candidate_name: string
+  stage: string
+  presented_at: string | null
+  next_appointment: string | null
+  note: string | null
+  steps: ProcessStepDTO[]
+}
+
+/** One mandate with every candidate running on it ("Laufende Prozesse"). */
+export interface ProcessJobDTO {
+  job_id: string
+  job_title: string
+  company_id: string | null
+  company_name: string | null
+  candidates: ProcessCandidateDTO[]
+}
