@@ -295,3 +295,24 @@ async def test_clearing_an_unknown_field_is_refused(application) -> None:
                 s, tenant_id=TENANT, application_id=application,
                 step_key="interview", clear=["outcome"],
             )
+
+
+async def test_the_write_answers_with_a_timezone(application) -> None:
+    """A client compares what came back against what it sent. SQLite drops the
+    tzinfo a timezone-aware column keeps on Postgres, so without normalising
+    the two look like different instants and a good save reads as a failure."""
+    from app.main import app as fastapi_app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app), base_url="http://t"
+    ) as client:
+        sent = "2026-11-05T12:30:00Z"
+        body = (
+            await client.patch(
+                f"/api/v1/pipeline/applications/{application}/steps/interview",
+                json={"scheduled_at": sent},
+            )
+        ).json()
+    returned = dt.datetime.fromisoformat(body["scheduled_at"])
+    assert returned.tzinfo is not None
+    assert returned == dt.datetime(2026, 11, 5, 12, 30, tzinfo=dt.UTC)

@@ -170,10 +170,11 @@ async def list_steps(
     return sorted(rows.scalars().all(), key=lambda s: (s.position, s.step_key))
 
 
-def _utc(value: dt.datetime | None) -> dt.datetime | None:
+def as_utc(value: dt.datetime | None) -> dt.datetime | None:
     """SQLite hands back naive datetimes even for a timezone-aware column, so
-    the API would emit different shapes on SQLite and Postgres. Normalise once,
-    here, rather than in every caller."""
+    the API would emit different shapes on SQLite and Postgres. Every endpoint
+    that returns a stored timestamp goes through this: a client comparing what
+    it sent against what came back must not see two different instants."""
     if value is None or value.tzinfo is not None:
         return value
     return value.replace(tzinfo=dt.UTC)
@@ -368,12 +369,12 @@ async def processes(
                 "candidate_id": candidate.id,
                 "candidate_name": candidate.full_name,
                 "stage": app.stage,
-                "presented_at": _utc(
+                "presented_at": as_utc(
                     next((s.done_at for s in steps if s.step_key == "vorgestellt"), None)
                 ),
                 "next_appointment": min(
                     (
-                        _utc(s.scheduled_at)
+                        as_utc(s.scheduled_at)
                         for s in steps
                         if s.scheduled_at is not None and s.outcome == "open"
                     ),
@@ -385,8 +386,8 @@ async def processes(
                         "step_key": s.step_key,
                         "label": steps_mod.label_for(s.step_key),
                         "kind": steps_mod.kind_for(s.step_key),
-                        "scheduled_at": _utc(s.scheduled_at),
-                        "done_at": _utc(s.done_at),
+                        "scheduled_at": as_utc(s.scheduled_at),
+                        "done_at": as_utc(s.done_at),
                         "outcome": s.outcome,
                         "note": s.note,
                     }
