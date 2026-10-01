@@ -254,14 +254,18 @@ function dateTimeDe(iso: string): string {
   return time === '00:00' ? date : `${date} · ${time}`
 }
 
-/** The mono caption under a step: when it is, or when it happened. */
+/**
+ * The mono caption under a step: when it is (or was), and what was noted.
+ *
+ * Both, not one of them. The note used to be dropped whenever the step also
+ * carried a done date, so a recruiter who wrote "blabla test" against a date
+ * saw only the date and reasonably concluded the note had not saved.
+ */
 function stepMeta(row: ProcessStepDTO | undefined): string | undefined {
   if (!row) return undefined
-  if (row.scheduled_at) {
-    return row.note ? `${dateTimeDe(row.scheduled_at)} · ${row.note}` : dateTimeDe(row.scheduled_at)
-  }
-  if (row.done_at) return dateTimeDe(row.done_at)
-  return row.note ?? undefined
+  const when = row.scheduled_at ?? row.done_at
+  const parts = [when ? dateTimeDe(when) : null, row.note].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : undefined
 }
 
 /**
