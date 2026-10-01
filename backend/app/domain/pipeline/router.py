@@ -150,8 +150,8 @@ async def set_step(
             "step_key": row.step_key,
             "label": steps_mod.label_for(row.step_key),
             "kind": steps_mod.kind_for(row.step_key),
-            "scheduled_at": row.scheduled_at,
-            "done_at": row.done_at,
+            "scheduled_at": service.as_utc(row.scheduled_at),
+            "done_at": service.as_utc(row.done_at),
             "outcome": row.outcome,
             "note": row.note,
         }

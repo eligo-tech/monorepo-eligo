@@ -8,9 +8,9 @@
 // so the input shows and returns that wall clock whatever zone the viewer's
 // laptop is in — a Munich interview must not read 09:30 in London.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Trash2, X } from 'lucide-react'
-import { api } from '@/api/client'
+import { ApiError, api } from '@/api/client'
 import { cn } from '@/lib/cn'
 import { Panel } from './primitives'
 import { Button, FIELD } from './forms'
@@ -51,15 +51,29 @@ function toBerlinInput(iso: string | null | undefined): string {
   return new Date(at.getTime() + berlinOffsetMs(at)).toISOString().slice(0, 16)
 }
 
-/** '2026-09-22T16:30' read as Berlin local → the ISO instant to store. */
+/**
+ * '2026-09-22T16:30' read as Berlin local → the ISO instant to store.
+ *
+ * Strict on purpose. `Date.parse` is not: it reads '02.10.2026, 14:00' — what
+ * a browser without `datetime-local` support puts in a plain text field — as
+ * the 10th of February, and a wrong date saved silently is the worst outcome
+ * available here. Anything that is not exactly a local date-and-time returns
+ * `null`, and the caller refuses to save rather than send nothing.
+ */
+const LOCAL_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/
+
 function fromBerlinInput(value: string): string | null {
-  if (!value) return null
-  const asIfUtc = Date.parse(`${value}:00Z`)
-  if (Number.isNaN(asIfUtc)) return null
+  const m = LOCAL_DATETIME.exec(value.trim())
+  if (!m) return null
+  const [, year, month, day, hour, minute] = m
+  const asIfUtc = Date.UTC(+year, +month - 1, +day, +hour, +minute)
   // The offset depends on the date itself (summer vs winter time), so it is
   // read at roughly the right instant and then applied.
-  const offset = berlinOffsetMs(new Date(asIfUtc))
-  return new Date(asIfUtc - offset).toISOString()
+  const iso = new Date(asIfUtc - berlinOffsetMs(new Date(asIfUtc))).toISOString()
+  // Round-trip check: a month of 13 satisfies the pattern and Date.UTC rolls
+  // it into next year without complaint. If the instant does not render back
+  // as the very string that was typed, it is not that moment.
+  return toBerlinInput(iso) === value.trim().slice(0, 16) ? iso : null
 }
 
 const OUTCOMES: {
@@ -101,7 +115,27 @@ export function StepEditor({
   const [note, setNote] = useState(step.note ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const terminRef = useRef<HTMLInputElement>(null)
+
   const save = async () => {
+    // A half-filled date input (a day but no time, say) reports an EMPTY value
+    // in Chrome. Sending that would leave the field unchanged and close the
+    // dialog, which reads exactly like "it did not save" — so ask first.
+    if (terminRef.current?.validity.badInput) {
+      setError('Termin unvollständig — bitte Datum und Uhrzeit angeben.')
+      return
+    }
+    const scheduledIso = scheduled ? fromBerlinInput(scheduled) : null
+    if (scheduled && !scheduledIso) {
+      setError('Termin nicht lesbar — bitte Datum und Uhrzeit angeben.')
+      return
+    }
+    const doneIso = doneOn ? fromBerlinInput(`${doneOn}T00:00`) : null
+    if (doneOn && !doneIso) {
+      setError('Datum „erledigt am" nicht lesbar.')
+      return
+    }
+
     setBusy(true)
     setError(null)
     // Anything the recruiter emptied is cleared explicitly — leaving a field
@@ -111,17 +145,35 @@ export function StepEditor({
     if (!doneOn && step.doneAt) clear.push('done_at')
     if (!note.trim() && step.note) clear.push('note')
     try {
-      await api.setProcessStep(card.id, step.key, {
-        scheduled_at: scheduled ? fromBerlinInput(scheduled) : undefined,
-        done_at: doneOn ? fromBerlinInput(`${doneOn}T00:00`) : undefined,
+      const saved = await api.setProcessStep(card.id, step.key, {
+        scheduled_at: scheduledIso ?? undefined,
+        done_at: doneIso ?? undefined,
         outcome,
         note: note.trim() || undefined,
         clear,
       })
+      // Check the answer instead of assuming it. The endpoint returns the
+      // stored row, so a write that quietly changed nothing is visible here
+      // rather than to the recruiter a day later.
+      // Compare the INSTANT, not the text: the server answers
+      // '2026-10-05T07:15:00Z' where the client sent '…:00.000Z'.
+      const sameMoment = (a: string | null, b: string | null) =>
+        a === b || (!!a && !!b && new Date(a).getTime() === new Date(b).getTime())
+      if (!sameMoment(saved.scheduled_at ?? null, scheduledIso ?? null)) {
+        setError('Der Termin wurde nicht übernommen — bitte erneut versuchen.')
+        setBusy(false)
+        return
+      }
       onSaved()
       onClose()
-    } catch {
-      setError('Konnte nicht gespeichert werden.')
+    } catch (e) {
+      setError(
+        e instanceof ApiError && (e.status === 401 || e.status === 403)
+          ? 'Sitzung abgelaufen — bitte neu anmelden.'
+          : e instanceof ApiError
+            ? `Konnte nicht gespeichert werden (HTTP ${e.status}).`
+            : 'Konnte nicht gespeichert werden — keine Antwort vom Server.',
+      )
       setBusy(false)
     }
   }
@@ -158,6 +210,7 @@ export function StepEditor({
             </span>
             <div className="flex items-center gap-2">
               <input
+                ref={terminRef}
                 type="datetime-local"
                 value={scheduled}
                 onChange={(e) => setScheduled(e.target.value)}
