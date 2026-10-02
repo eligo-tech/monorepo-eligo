@@ -106,6 +106,16 @@ _DESCRIPTION_BATCH_ATTEMPTS = 4
 #: Partner pages per request. Each is a paced external fetch (~1 s), and the
 #: batch runs inside one HTTP call the hosting proxy may cut off.
 _PARTNER_BATCH_SIZE = 20
+
+
+class SourceDown(Exception):
+    """The source is not answering at all — every remaining shard would fail.
+
+    2026-10-02: `rest.arbeitsagentur.de` stopped accepting connections and the
+    run spent 49 minutes retrying 57 pages before reporting failure. One clear
+    message beats a wall of identical ones, and the shards it skips have
+    nothing to fetch anyway.
+    """
 #: Attempts per crawl page. A page cut off by the hosting proxy is transient and
 #: a slice is idempotent, so re-sending it is cheaper than losing the shard.
 _PAGE_ATTEMPTS = 3
@@ -160,6 +170,10 @@ async def _ingest_region(
                     # retries.
                 },
             )
+            # 422 + "unreachable" is the API saying the SOURCE is down, not
+            # that this request was wrong. Retrying cannot help.
+            if response.status_code == 422 and "unreachable" in response.text:
+                raise SourceDown(response.json().get("detail", response.text)[:200])
             try:
                 response.raise_for_status()
                 summary = response.json()
@@ -451,6 +465,8 @@ async def main() -> int:
             print(f"  probe failed: {exc}", file=sys.stderr)
             shard_plan = []
 
+        source_down: str | None = None
+
         # --- primary sweep -------------------------------------------------
         if not args.by_region and shard_plan:
             for entry in shard_plan:
@@ -469,6 +485,8 @@ async def main() -> int:
                         f"cap — splitting by Bundesland",
                         file=sys.stderr,
                     )
+                if source_down:
+                    break
                 for sub in sub_shards:
                     try:
                         totals = await _ingest_region(
@@ -482,6 +500,12 @@ async def main() -> int:
                             primary=True,
                             created_external_ids=created_external_ids,
                         )
+                    except SourceDown as exc:
+                        print(f"  SOURCE DOWN: {exc} — skipping the rest of the sweep",
+                              file=sys.stderr)
+                        source_down = str(exc)
+                        failures.append("source-unreachable")
+                        break
                     except Exception as exc:
                         print(f"    FAILED: {exc}", file=sys.stderr)
                         failures.append(field)
@@ -491,6 +515,8 @@ async def main() -> int:
             regions = []  # the field sweep replaces the regional one
 
         for region in regions:
+            if source_down:
+                break
             print(f"  {region}")
             try:
                 totals = await _ingest_region(
@@ -503,6 +529,12 @@ async def main() -> int:
                     primary=True,
                     created_external_ids=created_external_ids,
                 )
+            except SourceDown as exc:
+                print(f"  SOURCE DOWN: {exc} — skipping the rest of the sweep",
+                      file=sys.stderr)
+                source_down = str(exc)
+                failures.append("source-unreachable")
+                break
             except Exception as exc:
                 # One bad region must not silently shrink the corpus refresh.
                 print(f"    FAILED: {exc}", file=sys.stderr)
@@ -514,7 +546,7 @@ async def main() -> int:
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.
         # --- saved searches: crawl what workspaces actually watch ---------
-        if args.profiles:
+        if args.profiles and not source_down:
             try:
                 response = await client.get("/hub/crawl-profiles")
                 response.raise_for_status()
@@ -555,7 +587,9 @@ async def main() -> int:
                     print(f"  mark-crawled failed: {exc}", file=sys.stderr)
 
         # --- ad text for what people actually search -----------------------
-        if args.descriptions and created_external_ids:
+        if source_down and args.descriptions:
+            print("  Anzeigentexte: übersprungen — Quelle nicht erreichbar")
+        elif args.descriptions and created_external_ids:
             try:
                 d = await _fetch_descriptions(
                     client, external_ids=created_external_ids

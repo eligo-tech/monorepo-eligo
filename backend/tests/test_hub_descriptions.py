@@ -80,7 +80,7 @@ async def test_a_posting_without_text_is_never_requested_twice(postings) -> None
         first = await service.fetch_missing_descriptions(
             s, adapter=adapter, limit=10, delay=0
         )
-    assert first == {"attempted": 3, "stored": 1, "empty": 2}
+    assert first == {"attempted": 3, "stored": 1, "empty": 2, "source_unreachable": False}
     assert sorted(adapter.calls) == ["has-text", "no-text-1", "no-text-2"]
 
     # Second pass: nothing is left to try, and NOTHING is re-requested.
@@ -106,7 +106,7 @@ async def test_exact_scope_never_falls_through_to_backlog(postings) -> None:
             delay=0,
         )
 
-    assert result == {"attempted": 1, "stored": 1, "empty": 0}
+    assert result == {"attempted": 1, "stored": 1, "empty": 0, "source_unreachable": False}
     assert adapter.calls == ["no-text-2"]
 
 
@@ -273,3 +273,40 @@ async def test_progress_counts_text_through_the_cold_table(postings) -> None:
     assert progress["with_description"] == 1      # only "has-text" got text
     assert progress["corpus_attempted"] == 3      # all three were tried
     assert progress["remaining"] == 0
+
+
+async def test_an_outage_stops_the_pass_without_retiring_the_postings(postings) -> None:
+    """A source that is DOWN is not a posting without text.
+
+    2026-10-02: `rest.arbeitsagentur.de` stopped answering. Every transport
+    error used to be swallowed as "no text" and the posting stamped as tried —
+    so one bad afternoon would have permanently retired whatever was in the
+    batch, and the corpus would never learn those ads' text.
+    """
+    from app.domain.hub.adapters.bundesagentur import SourceUnreachable
+
+    class _Down(_Adapter):
+        async def fetch_description(self, external_id: str) -> str | None:
+            self.calls.append(external_id)
+            raise SourceUnreachable("ConnectTimeout")
+
+    adapter = _Down({})
+    async with SessionLocal() as s:
+        result = await service.fetch_missing_descriptions(
+            s, adapter=adapter, limit=10, delay=0
+        )
+
+    assert result["source_unreachable"] is True
+    assert result["attempted"] == 0
+    # It gave up after the first failure rather than hammering a dead source.
+    assert len(adapter.calls) == 1
+    # And nothing was stamped, so tomorrow's run tries them again.
+    async with SessionLocal() as s:
+        stamped = (
+            await s.execute(
+                select(HubJobPosting).where(
+                    HubJobPosting.description_fetched_at.is_not(None)
+                )
+            )
+        ).scalars().all()
+    assert stamped == []

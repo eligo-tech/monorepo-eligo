@@ -45,6 +45,15 @@ from app.domain.hub.adapters.base import (
 logger = get_logger(__name__)
 
 SOURCE_NAME = "bundesagentur"
+
+
+class SourceUnreachable(Exception):
+    """The source did not answer at all — not the same as answering "nothing".
+
+    A per-posting fetch that cannot reach the source must say so: marking the
+    posting as attempted would retire it permanently over an outage that lasts
+    an afternoon.
+    """
 _SEARCH_PATH = "/pc/v6/jobs"
 # Full ad text lives behind a per-record call, keyed on base64 of the reference
 # number. The search endpoint never returns it — which is why the corpus could
@@ -249,8 +258,27 @@ class BundesagenturAdapter:
         fetched_at = dt.datetime.now(dt.UTC)
         headers = {"X-API-Key": self._api_key, "User-Agent": self._user_agent}
 
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.get(url, params=params, headers=headers)
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(url, params=params, headers=headers)
+        except httpx.HTTPError as exc:
+            # A TRANSPORT failure — the source refusing the connection, timing
+            # out, or hanging up mid-response. Same class of event as an HTTP
+            # error and handled the same way: returned, not raised, so it lands
+            # as an observation saying the source was unreachable.
+            #
+            # Raising instead turned a source outage into HTTP 500 from our own
+            # API: on 2026-10-02 `rest.arbeitsagentur.de` stopped answering and
+            # the nightly job spent 49 minutes retrying 57 pages before failing,
+            # with nothing in the corpus to say why.
+            logger.warning("bundesagentur unreachable: %s for %s", type(exc).__name__, url)
+            return FetchResult(
+                source=self.name,
+                request_url=url,
+                fetched_at=fetched_at,
+                http_status=None,
+                note=f"source unreachable: {type(exc).__name__}",
+            )
 
         if response.status_code != 200:
             logger.warning(
@@ -286,8 +314,14 @@ class BundesagenturAdapter:
         encoded = base64.b64encode(external_id.encode()).decode()
         url = f"{self._base_url}{_DETAIL_PATH}/{encoded}"
         headers = {"X-API-Key": self._api_key, "User-Agent": self._user_agent}
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.get(url, headers=headers)
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            # Unreachable is not "no text": the caller must be able to tell a
+            # posting with no description from a source that is down, or it
+            # stamps the posting as attempted and never asks again.
+            raise SourceUnreachable(f"{type(exc).__name__} for {url}") from exc
 
         if response.status_code != 200:
             logger.info(
