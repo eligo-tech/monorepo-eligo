@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 
 from scripts.hub_daily import (
     _DESCRIPTION_BATCH_SIZE,
@@ -194,3 +195,66 @@ async def test_partner_pages_script_refuses_to_run_without_credentials(monkeypat
     monkeypatch.delenv("ELIGO_INGEST_TOKEN", raising=False)
     monkeypatch.setattr(sys, "argv", ["hub_partner_pages"])
     assert await hub_partner_pages.main() == 2
+
+
+async def test_a_dead_source_stops_the_sweep_instead_of_retrying_it() -> None:
+    """2026-10-02: the source stopped answering and the run spent 49 minutes
+    retrying 57 pages. A 422 saying the SOURCE is unreachable cannot be fixed
+    by asking again, so it aborts the sweep with one clear message."""
+    import httpx
+
+    from scripts.hub_daily import SourceDown, _ingest_region
+
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            422, json={"detail": "ingest precondition failed: source unreachable: ConnectTimeout"}
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://example.test"
+    ) as client:
+        with pytest.raises(SourceDown):
+            await _ingest_region(
+                client, region="Bayern", radius_km=0, since_days=1, max_pages=100
+            )
+
+    assert calls == 1, "a dead source must not be retried"
+
+
+async def test_an_ordinary_5xx_is_still_retried(monkeypatch) -> None:
+    """The opposite case, which cost a green run on 2026-09-07: a request that
+    outlived the proxy comes back 5xx and IS worth repeating."""
+    import asyncio
+
+    import httpx
+
+    from scripts.hub_daily import _PAGE_ATTEMPTS, _ingest_region
+
+    # The backoff is real seconds in production and dead time here. Bind the
+    # real sleep first: a replacement that looks up `asyncio.sleep` at call
+    # time finds itself, recurses, and the retry loop swallows the error —
+    # which made this test "pass" with a single attempt.
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(asyncio, "sleep", lambda _s: real_sleep(0))
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(500, text="proxy gave up")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://example.test"
+    ) as client:
+        try:
+            await _ingest_region(
+                client, region="Bayern", radius_km=0, since_days=1, max_pages=1
+            )
+        except Exception:
+            pass
+
+    assert calls == _PAGE_ATTEMPTS

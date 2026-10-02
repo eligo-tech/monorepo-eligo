@@ -599,18 +599,30 @@ async def fetch_missing_descriptions(
     else:
         stmt = stmt.order_by(HubJobPosting.posted_at.desc().nulls_last())
 
+    from app.domain.hub.adapters.bundesagentur import SourceUnreachable
+
     rows = (await session.execute(stmt.limit(limit))).scalars().all()
-    stored = empty = 0
+    stored = empty = attempted = 0
+    unreachable = False
     for row in rows:
         try:
             text = await adapter.fetch_description(row.external_id)
+        except SourceUnreachable as exc:
+            # The source is down, not this posting. Stop, and leave every
+            # remaining row UNSTAMPED: marking them attempted would retire
+            # them permanently over an outage, and the text is the whole
+            # reason the corpus is searchable.
+            logger.warning("descriptions: source unreachable, stopping pass (%s)", exc)
+            unreachable = True
+            break
         except Exception as exc:
-            # One unreachable posting must not end the run.
+            # One bad posting must not end the run.
             logger.info("description fetch failed for %s: %s", row.external_id, exc)
             text = None
-        # Stamped on every outcome, including failure: the point is that this
-        # posting has been tried, not that it yielded something.
+        # Stamped on every outcome a SOURCE gave us, including "no text": the
+        # point is that this posting has been tried, not that it yielded.
         row.description_fetched_at = dt.datetime.now(dt.UTC)
+        attempted += 1
         if text:
             if row.payload is None:
                 row.payload = HubPostingPayload()
@@ -623,9 +635,15 @@ async def fetch_missing_descriptions(
     await session.commit()
 
     logger.info(
-        "descriptions: attempted=%d stored=%d empty=%d", len(rows), stored, empty
+        "descriptions: attempted=%d stored=%d empty=%d unreachable=%s",
+        attempted, stored, empty, unreachable,
     )
-    return {"attempted": len(rows), "stored": stored, "empty": empty}
+    return {
+        "attempted": attempted,
+        "stored": stored,
+        "empty": empty,
+        "source_unreachable": unreachable,
+    }
 
 
 async def _watched_employer_names() -> list[str]:

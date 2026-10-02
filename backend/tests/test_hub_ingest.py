@@ -568,3 +568,45 @@ async def test_tracking_an_unknown_company_is_404(client) -> None:
 async def test_unknown_hub_company_is_404(client) -> None:
     resp = await client.get(f"/api/v1/hub/companies/{uuid.uuid4()}")
     assert resp.status_code == 404
+
+
+async def test_an_unreachable_source_is_evidence_not_a_crash() -> None:
+    """A transport failure must come back as a FetchResult.
+
+    2026-10-02: the source stopped accepting connections. `client.get` raised,
+    the exception escaped the adapter, and our own API answered HTTP 500 — so
+    the nightly job retried 57 pages over 49 minutes and the corpus recorded
+    nothing about the outage. A failed fetch is still evidence.
+    """
+    import httpx
+
+    from app.domain.hub.adapters.bundesagentur import (
+        BundesagenturAdapter,
+        SourceUnreachable,
+    )
+    from app.domain.hub.adapters.base import SourceQuery
+
+    def dead(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("no route to host")
+
+    adapter = BundesagenturAdapter()
+    transport = httpx.MockTransport(dead)
+    original = httpx.AsyncClient
+
+    class _Patched(original):  # type: ignore[misc,valid-type]
+        def __init__(self, **kwargs):
+            kwargs["transport"] = transport
+            super().__init__(**kwargs)
+
+    httpx.AsyncClient = _Patched  # type: ignore[misc]
+    try:
+        result = await adapter.fetch(SourceQuery(what="python"))
+        assert result.http_status is None
+        assert result.postings == []
+        assert "unreachable" in (result.note or "")
+
+        # The per-posting call says so loudly instead of looking like "no text".
+        with pytest.raises(SourceUnreachable):
+            await adapter.fetch_description("10001-1003370640-S")
+    finally:
+        httpx.AsyncClient = original  # type: ignore[misc]
