@@ -57,7 +57,12 @@ def check_fetch(result: FetchResult) -> list[GateOutcome]:
         GateOutcome(
             "http_ok",
             result.http_status == 200,
-            f"HTTP {result.http_status}",
+            # The note says WHY — "source unreachable: ConnectTimeout" rather
+            # than a bare "HTTP None". The caller decides whether to retry
+            # from this message, so hiding the reason in the observation made
+            # the nightly job retry a dead source for 49 minutes.
+            f"HTTP {result.http_status}"
+            + (f" — {result.note}" if result.note else ""),
         ),
     ]
     for outcome in outcomes:

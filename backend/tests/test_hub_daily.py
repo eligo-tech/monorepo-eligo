@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 
 import httpx
 import pytest
@@ -197,32 +198,88 @@ async def test_partner_pages_script_refuses_to_run_without_credentials(monkeypat
     assert await hub_partner_pages.main() == 2
 
 
-async def test_a_dead_source_stops_the_sweep_instead_of_retrying_it() -> None:
+async def test_a_dead_source_stops_the_sweep_after_a_run_of_failures(monkeypatch) -> None:
     """2026-10-02: the source stopped answering and the run spent 49 minutes
-    retrying 57 pages. A 422 saying the SOURCE is unreachable cannot be fixed
-    by asking again, so it aborts the sweep with one clear message."""
+    retrying 57 pages across every shard. A run of "source unreachable" now
+    ends the sweep with one message — but only a RUN of them: that same day
+    the source dropped about half its connections and the other half returned
+    703 records, and abandoning the night over one blip loses those."""
+    import asyncio
+
     import httpx
 
-    from scripts.hub_daily import SourceDown, _ingest_region
+    from scripts.hub_daily import _UNREACHABLE_STREAK, SourceDown, _ingest_region
 
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(asyncio, "sleep", lambda _s: real_sleep(0))
     calls = 0
 
     def handler(_request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
         return httpx.Response(
-            422, json={"detail": "ingest precondition failed: source unreachable: ConnectTimeout"}
+            422, json={"detail": "ingest precondition failed: HTTP None — source unreachable: ConnectTimeout"}
         )
 
+    # The streak spans shards, as the sweep does: a page gives up after its
+    # own attempts and the next shard starts, still against a dead source.
+    shared = {"streak": 0}
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(handler), base_url="https://example.test"
     ) as client:
-        with pytest.raises(SourceDown):
+        with pytest.raises(httpx.HTTPStatusError):  # first shard just fails
             await _ingest_region(
-                client, region="Bayern", radius_km=0, since_days=1, max_pages=100
+                client, region="Bayern", radius_km=0, since_days=1, max_pages=100,
+                unreachable=shared,
             )
+        with pytest.raises(SourceDown):  # the second gives up on the night
+            await _ingest_region(
+                client, region="Berlin", radius_km=0, since_days=1, max_pages=100,
+                unreachable=shared,
+            )
+    assert calls == _UNREACHABLE_STREAK, "stops at the threshold, not after it"
 
-    assert calls == 1, "a dead source must not be retried"
+
+async def test_one_unreachable_page_does_not_end_the_night(monkeypatch) -> None:
+    """A single dropped connection is a blip. The page is retried and the
+    streak resets on the next success, so the rest of the sweep still runs."""
+    import asyncio
+
+    import httpx
+
+    from scripts.hub_daily import _ingest_region
+
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(asyncio, "sleep", lambda _s: real_sleep(0))
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                422, json={"detail": "HTTP None — source unreachable: RemoteProtocolError"}
+            )
+        return httpx.Response(
+            201,
+            json={
+                "source": "bundesagentur", "observation_id": str(uuid.uuid4()),
+                "fetched": 0, "total_available": 0, "companies_created": 0,
+                "postings_created": 0, "postings_updated": 0, "rejected": [],
+                "posting_external_ids_created": [],
+            },
+        )
+
+    shared = {"streak": 0}
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://example.test"
+    ) as client:
+        totals = await _ingest_region(
+            client, region="Bayern", radius_km=0, since_days=1, max_pages=1,
+            unreachable=shared,
+        )
+    assert calls == 2 and shared["streak"] == 0
+    assert totals["pages"] == 1
 
 
 async def test_an_ordinary_5xx_is_still_retried(monkeypatch) -> None:

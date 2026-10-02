@@ -108,13 +108,21 @@ _DESCRIPTION_BATCH_ATTEMPTS = 4
 _PARTNER_BATCH_SIZE = 20
 
 
-class SourceDown(Exception):
-    """The source is not answering at all — every remaining shard would fail.
+#: Consecutive pages that must come back "source unreachable" before the sweep
+#: gives up. One is a blip — on 2026-10-02 the source dropped roughly half its
+#: connections while the other half returned 703 records — and abandoning the
+#: night over a blip loses the shards that would have worked. A run of five
+#: says the source is down, not flaky.
+_UNREACHABLE_STREAK = 5
 
-    2026-10-02: `rest.arbeitsagentur.de` stopped accepting connections and the
-    run spent 49 minutes retrying 57 pages before reporting failure. One clear
-    message beats a wall of identical ones, and the shards it skips have
-    nothing to fetch anyway.
+
+class SourceDown(Exception):
+    """The source stopped answering for a run of pages, not just one.
+
+    2026-10-02: `rest.arbeitsagentur.de` dropped connections and the run spent
+    49 minutes retrying 57 pages before reporting failure. One clear message
+    beats a wall of identical ones, and the shards it skips have nothing to
+    fetch anyway.
     """
 #: Attempts per crawl page. A page cut off by the hosting proxy is transient and
 #: a slice is idempotent, so re-sending it is cheaper than losing the shard.
@@ -142,12 +150,16 @@ async def _ingest_region(
     berufsfeld: str | None = None,
     primary: bool = False,
     created_external_ids: set[str] | None = None,
+    unreachable: dict[str, int] | None = None,
 ) -> dict[str, int]:
     totals = {
         "pages": 0, "fetched": 0, "companies": 0, "postings": 0, "updated": 0,
         # What the SOURCE says exists for this shard — the coverage numerator.
         "available": 0,
     }
+    # Shared across shards by the caller, so "five in a row" means five pages,
+    # not five per shard.
+    unreachable = {"streak": 0} if unreachable is None else unreachable
 
     for page in range(1, min(max_pages, _PAGE_CEILING) + 1):
         summary = None
@@ -170,10 +182,31 @@ async def _ingest_region(
                     # retries.
                 },
             )
-            # 422 + "unreachable" is the API saying the SOURCE is down, not
-            # that this request was wrong. Retrying cannot help.
+            # 422 + "unreachable" is the API saying the SOURCE did not answer,
+            # not that this request was wrong. Worth one more try — transport
+            # failures are often transient — but counted, so a source that is
+            # genuinely down ends the sweep instead of being retried per shard.
             if response.status_code == 422 and "unreachable" in response.text:
-                raise SourceDown(response.json().get("detail", response.text)[:200])
+                unreachable["streak"] += 1
+                if unreachable["streak"] >= _UNREACHABLE_STREAK:
+                    raise SourceDown(
+                        f"{unreachable['streak']} pages in a row: "
+                        f"{response.json().get('detail', response.text)[:120]}"
+                    )
+                if attempt < _PAGE_ATTEMPTS - 1:
+                    wait = min(2**attempt * 5, 60)
+                    print(
+                        f"    page {page}: source unreachable — retrying in {wait}s",
+                        file=sys.stderr,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                # Out of attempts on this page: fail the shard the ordinary
+                # way. Breaking out here left `summary` unset and the loop
+                # below walked into an AttributeError.
+                response.raise_for_status()
+            if response.status_code == 200 or response.status_code == 201:
+                unreachable["streak"] = 0
             try:
                 response.raise_for_status()
                 summary = response.json()
@@ -466,6 +499,9 @@ async def main() -> int:
             shard_plan = []
 
         source_down: str | None = None
+        # One counter for the whole night: the source is either answering or
+        # it is not, and a per-shard count would never reach the threshold.
+        unreachable = {"streak": 0}
 
         # --- primary sweep -------------------------------------------------
         if not args.by_region and shard_plan:
@@ -499,6 +535,7 @@ async def main() -> int:
                             berufsfeld=field,
                             primary=True,
                             created_external_ids=created_external_ids,
+                            unreachable=unreachable,
                         )
                     except SourceDown as exc:
                         print(f"  SOURCE DOWN: {exc} — skipping the rest of the sweep",
@@ -528,6 +565,7 @@ async def main() -> int:
                     delay=args.delay,
                     primary=True,
                     created_external_ids=created_external_ids,
+                    unreachable=unreachable,
                 )
             except SourceDown as exc:
                 print(f"  SOURCE DOWN: {exc} — skipping the rest of the sweep",
@@ -573,6 +611,7 @@ async def main() -> int:
                         delay=args.delay,
                         what=directive["q"],
                         created_external_ids=created_external_ids,
+                        unreachable=unreachable,
                     )
                 except Exception as exc:
                     print(f"      FAILED: {exc}", file=sys.stderr)
