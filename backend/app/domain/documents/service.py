@@ -28,10 +28,16 @@ from sqlalchemy import desc, select
 
 from app.domain.candidates import service as candidates_service
 from app.domain.candidates.schemas import CandidateCreate
+from app.domain.common.enums import DocumentKind
 from app.domain.documents import gate, parser
 from app.domain.documents.models import CandidateDocument
 from app.domain.documents.extraction import get_cv_extractor
-from app.domain.documents.extraction.base import CVSections, FIELD_LABELS, FIELD_ORDER
+from app.domain.documents.extraction.base import (
+    CVSections,
+    FIELD_LABELS,
+    FIELD_ORDER,
+    TRANSCRIPT_FIELD_ORDER,
+)
 from app.domain.documents.gate import GateOutcome, PreconditionFailed
 from app.domain.documents.schemas import CVExtractionResult, CVField
 
@@ -295,6 +301,122 @@ async def extract_cv(
     )
 
 
+async def extract_transcript(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    filename: str,
+    content: bytes,
+    content_type: str,
+) -> CVExtractionResult:
+    """Read a Gesprächstranskript for the qualification fields — and PROPOSE.
+
+    The same seam as the CV pass (precondition → extract → confidence gate),
+    with one deliberate difference at the end: **nothing is written.**
+
+    A CV creates a candidate that did not exist, so there is nothing to
+    overwrite. A transcript lands on a record a recruiter has already worked
+    on, and "Mindestgehalt 92.000" read out of a conversation is a model's
+    reading of hedged speech. Writing it through `update_candidate` would
+    stamp it `HUMAN_VERIFIED`, confidence 1.0 — the receipt would then claim a
+    human asserted a number nobody checked. So the extraction comes back as
+    proposals with their confidence, the recruiter confirms what is right, and
+    the ordinary PATCH records it as the human edit it then is.
+
+    The file itself is stored either way: keeping evidence asserts nothing.
+    """
+    candidate = await candidates_service.get_candidate(
+        session, tenant_id=tenant_id, candidate_id=candidate_id
+    )
+    if candidate is None:
+        raise PreconditionFailed("candidate not found")
+
+    text = _document_text(content, content_type)
+    notes: list[str] = []
+    review_items: list[str] = []
+
+    pre = gate.evaluate(gate.PRECONDITIONS, {"document": {"text_chars": len(text)}})
+    notes += [o.as_note() for o in pre]
+    if any(not o.ok for o in pre):
+        reason = next((o.reason for o in pre if not o.ok), "precondition failed")
+        raise PreconditionFailed(reason or "precondition failed")
+
+    extracted, extractor_name = _run_qualification_extractor(text)
+    notes.append(f"gelesen via {extractor_name}")
+    if not extracted:
+        review_items.append(
+            "keine Felder aus dem Transkript gelesen — bitte manuell erfassen"
+        )
+
+    for f in extracted:
+        if f.confidence < HUMAN_REVIEW_THRESHOLD:
+            label = FIELD_LABELS.get(f.field, f.field)
+            review_items.append(f"{label}: unsicher gelesen ({f.confidence:.0%})")
+
+    notes.append("Vorschläge — nichts wurde in den Datensatz geschrieben")
+
+    await store_document(
+        session,
+        tenant_id=tenant_id,
+        candidate_id=candidate_id,
+        filename=filename,
+        content=content,
+        content_type=content_type,
+        kind=DocumentKind.TRANSKRIPT.value,
+    )
+
+    order = {name: i for i, name in enumerate(TRANSCRIPT_FIELD_ORDER)}
+    fields = [
+        CVField(
+            field=f.field,
+            label=FIELD_LABELS.get(f.field, f.field),
+            value=f.value,
+            confidence=round(f.confidence, 2),
+            needs_review=f.confidence < HUMAN_REVIEW_THRESHOLD,
+        )
+        for f in sorted(extracted, key=lambda f: order.get(f.field, len(order)))
+    ]
+    return CVExtractionResult(
+        document_name=filename,
+        fields=fields,
+        review_items=list(dict.fromkeys(review_items)),
+        notes=notes,
+        candidate_id=candidate_id,
+        text_chars=len(text),
+    )
+
+
+def _document_text(content: bytes, content_type: str) -> str:
+    """A transcript arrives as a PDF export or as plain text — both are read.
+
+    Anything else is refused at the router, so a silently empty parse of a
+    .docx cannot look like "the conversation said nothing".
+    """
+    if content_type == "text/plain":
+        return content.decode("utf-8", errors="replace")
+    return parser.pdf_to_text(content)
+
+
+def _run_qualification_extractor(text: str) -> tuple[list[ExtractedField], str]:
+    """Ask the configured provider to read the transcript.
+
+    A provider that cannot (the heuristic fallback) yields NOTHING rather than
+    guessing: the CV regexes look for a salary figure and would happily read
+    the client's budget, a year, or a phone number as a candidate's floor. An
+    empty form the recruiter fills in is honest; a wrong number is not.
+    """
+    extractor = get_cv_extractor()
+    read = getattr(extractor, "extract_qualification", None)
+    if read is None:
+        return [], f"{extractor.name} (kann keine Transkripte lesen)"
+    try:
+        return read(text), extractor.name
+    except Exception as exc:
+        logger.warning("transcript extractor %s failed (%s)", extractor.name, exc)
+        return [], f"{extractor.name} (Fehler: {type(exc).__name__})"
+
+
 async def store_document(
     session: AsyncSession,
     *,
@@ -303,11 +425,13 @@ async def store_document(
     filename: str,
     content: bytes,
     content_type: str = "application/pdf",
+    kind: str = DocumentKind.CV.value,
 ) -> CandidateDocument:
-    """Persist the raw uploaded CV so it can be shown next to the parsed record."""
+    """Persist an uploaded file so it can be shown next to the parsed record."""
     doc = CandidateDocument(
         tenant_id=tenant_id,
         candidate_id=candidate_id,
+        kind=kind,
         filename=filename,
         content_type=content_type,
         byte_size=len(content),
@@ -319,9 +443,35 @@ async def store_document(
 
 
 async def get_latest_document(
-    session: AsyncSession, *, tenant_id: uuid.UUID, candidate_id: uuid.UUID
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    kind: str | None = DocumentKind.CV.value,
 ) -> CandidateDocument | None:
-    """The most recent original CV stored for a candidate (None if none)."""
+    """The most recent document of one kind for a candidate (None if none).
+
+    Defaults to the CV. It used to mean "the newest file", which was the same
+    thing while CVs were all there was — the first Zeugnis uploaded would have
+    started being served as the candidate's CV.
+    """
+    query = select(CandidateDocument).where(
+        CandidateDocument.tenant_id == tenant_id,
+        CandidateDocument.candidate_id == candidate_id,
+    )
+    if kind is not None:
+        query = query.where(CandidateDocument.kind == kind)
+    result = await session.execute(
+        query.order_by(desc(CandidateDocument.created_at)).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_documents(
+    session: AsyncSession, *, tenant_id: uuid.UUID, candidate_id: uuid.UUID
+) -> list[CandidateDocument]:
+    """Every file on a candidate, newest first. Metadata only is the caller's
+    job — the rows carry their bytes and must not be serialized wholesale."""
     result = await session.execute(
         select(CandidateDocument)
         .where(
@@ -329,9 +479,19 @@ async def get_latest_document(
             CandidateDocument.candidate_id == candidate_id,
         )
         .order_by(desc(CandidateDocument.created_at))
-        .limit(1)
     )
-    return result.scalar_one_or_none()
+    return list(result.scalars())
+
+
+async def get_document(
+    session: AsyncSession, *, tenant_id: uuid.UUID, document_id: uuid.UUID
+) -> CandidateDocument | None:
+    return await session.scalar(
+        select(CandidateDocument).where(
+            CandidateDocument.tenant_id == tenant_id,
+            CandidateDocument.id == document_id,
+        )
+    )
 
 
 async def _verify_persisted(

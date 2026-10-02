@@ -41,7 +41,11 @@ interface Draft {
   total_years_experience: string
   current_salary: string
   salary_expectation: string
+  salary_minimum: string
   salary_currency: string
+  profile_summary: string
+  interview_availability: string
+  other_processes: string
   work_permit: string
   source: string
   motivation: string
@@ -102,7 +106,11 @@ function seed(dto: CandidateDTO): Draft {
     total_years_experience: s(dto.total_years_experience),
     current_salary: numStr(dto.current_salary),
     salary_expectation: numStr(dto.salary_expectation),
+    salary_minimum: numStr(dto.salary_minimum),
     salary_currency: dto.salary_currency || 'EUR',
+    profile_summary: s(dto.profile_summary),
+    interview_availability: s(dto.interview_availability),
+    other_processes: s(dto.other_processes),
     work_permit: dto.work_permit || 'unknown',
     source: s(dto.source),
     motivation: s(dto.motivation),
@@ -128,11 +136,19 @@ function validate(d: Draft): string | null {
   for (const [label, v] of [
     ['Aktuelles Gehalt', d.current_salary],
     ['Wunschgehalt', d.salary_expectation],
+    ['Mindestgehalt', d.salary_minimum],
   ] as const) {
     const t = v.trim()
     if (t !== '' && (!Number.isFinite(Number(t)) || Number(t) < 0)) {
       return `${label} muss eine positive Zahl sein.`
     }
+  }
+  // A floor above the wish is a typo every time, and it would silently break
+  // the comparison against a mandate's band.
+  const min = toNum(d.salary_minimum)
+  const wish = toNum(d.salary_expectation)
+  if (min !== null && wish !== null && min > wish) {
+    return 'Mindestgehalt liegt über dem Wunschgehalt.'
   }
   return null
 }
@@ -199,6 +215,9 @@ function buildPatch(dto: CandidateDTO, d: Draft): CandidateUpdatePayload {
   str('total_years_experience', d.total_years_experience, dto.total_years_experience)
   str('source', d.source, dto.source)
   str('motivation', d.motivation, dto.motivation)
+  str('profile_summary', d.profile_summary, dto.profile_summary)
+  str('interview_availability', d.interview_availability, dto.interview_availability)
+  str('other_processes', d.other_processes, dto.other_processes)
 
   // Currency is never null (defaults to EUR on the backend).
   const cur = d.salary_currency.trim().toUpperCase()
@@ -209,6 +228,8 @@ function buildPatch(dto: CandidateDTO, d: Draft): CandidateUpdatePayload {
   if (curSal !== (dto.current_salary ?? null)) patch.current_salary = curSal
   const expSal = toNum(d.salary_expectation)
   if (expSal !== (dto.salary_expectation ?? null)) patch.salary_expectation = expSal
+  const minSal = toNum(d.salary_minimum)
+  if (minSal !== (dto.salary_minimum ?? null)) patch.salary_minimum = minSal
 
   // Enum.
   if (d.work_permit && d.work_permit !== dto.work_permit) patch.work_permit = d.work_permit
@@ -324,6 +345,12 @@ export function DossierEditor({
           type="number"
         />
         <TextInput
+          label="Mindestgehalt"
+          value={d.salary_minimum}
+          onChange={(v) => set('salary_minimum', v)}
+          type="number"
+        />
+        <TextInput
           label="Wunschgehalt"
           value={d.salary_expectation}
           onChange={(v) => set('salary_expectation', v)}
@@ -338,6 +365,26 @@ export function DossierEditor({
         />
         <TextInput label="Quelle" value={d.source} onChange={(v) => set('source', v)} />
       </Group>
+
+      {/* What only the Qualifikationsgespräch yields — no CV states these.
+          See data/examples/metadata_quailfication.txt. */}
+      <Group title="Nach dem Qualifikationsgespräch">
+        <TextInput
+          label="Verfügbarkeit für Interviews"
+          value={d.interview_availability}
+          onChange={(v) => set('interview_availability', v)}
+          placeholder="z. B. Mi/Do ab 11 Uhr"
+        />
+      </Group>
+
+      <section className="mt-7">
+        <GroupLabel>Andere aktive Prozesse</GroupLabel>
+        <TextArea
+          value={d.other_processes}
+          onChange={(v) => set('other_processes', v)}
+          placeholder="Wo ist der Kandidat sonst im Prozess? Firmen nennen — wer ähnliche Profile sucht, ist ein möglicher Neukunde."
+        />
+      </section>
 
       <section className="mt-7">
         <GroupLabel>Sprachen</GroupLabel>
@@ -383,11 +430,20 @@ export function DossierEditor({
       </section>
 
       <section className="mt-7">
-        <GroupLabel>Profil</GroupLabel>
+        <GroupLabel>Profil-Zusammenfassung</GroupLabel>
+        <TextArea
+          value={d.profile_summary}
+          onChange={(v) => set('profile_summary', v)}
+          placeholder="Zusammenfassung des Profils aus dem Gespräch…"
+        />
+      </section>
+
+      <section className="mt-7">
+        <GroupLabel>Wechselmotivation</GroupLabel>
         <TextArea
           value={d.motivation}
           onChange={(v) => set('motivation', v)}
-          placeholder="Kurzprofil / Motivation…"
+          placeholder="Warum will der Kandidat wechseln?"
         />
       </section>
 

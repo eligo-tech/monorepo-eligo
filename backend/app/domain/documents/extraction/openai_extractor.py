@@ -21,6 +21,7 @@ from app.domain.documents.extraction.base import (
     EducationEntry,
     ExtractionResult,
     FIELD_ORDER,
+    TRANSCRIPT_FIELD_ORDER,
     WorkRole,
 )
 
@@ -114,6 +115,65 @@ _SCHEMA = {
 }
 
 
+# ── Gesprächstranskript ────────────────────────────────────────────────────
+#
+# A second, much smaller schema. The transcript is read for what the
+# conversation establishes and the CV cannot: the salary floor as well as the
+# wish, the notice period as stated out loud, why they are leaving, which other
+# processes are running, and when they can take an interview.
+#
+# The grounding rule is stricter here than for a CV, because an interview is
+# full of hedging. "Ich könnte mir vorstellen, so um die 100" is a wish stated
+# loosely; "mindestens 92" is a floor. Anything softer than a statement is
+# either left out or returned with a low confidence, which routes it to review
+# instead of into the record.
+_TRANSCRIPT_SYSTEM = (
+    "You extract data from a transcript or notes of a recruiting qualification "
+    "interview (Qualifikationsgespräch), usually in German. Rules:\n"
+    "1. GROUNDING: only what the candidate or recruiter actually SAYS. Never "
+    "infer, average, or complete a number. If the candidate did not state it, "
+    "omit the field.\n"
+    "2. SALARY: `current_salary` is what they earn now, `salary_minimum` the "
+    "floor they would accept, `expected_salary` the figure they want. Return "
+    "digits only in euro (e.g. '95000'). If a range is named for the floor, "
+    "take the LOWER number. Never copy one of the three into another.\n"
+    "3. VERBATIM-ISH: `notice_period`, `availability` and "
+    "`interview_availability` keep the candidate's own phrasing "
+    "('3 Monate zum Monatsende', 'Mi/Do ab 11 Uhr').\n"
+    "4. `motivation` is why they are leaving, in one or two sentences. "
+    "`other_processes` names the other companies or processes they are in, "
+    "with the company names if given. `profile_summary` is two or three "
+    "sentences describing the professional profile the conversation revealed.\n"
+    "5. `skills` are technologies the candidate states they have worked with; "
+    "join with '; '. Do not include technologies merely mentioned by the "
+    "recruiter or named as something the candidate does NOT know.\n"
+    "6. CONFIDENCE in [0,1]: how plainly the transcript states it. Hedged, "
+    "approximate or implied values get a LOW confidence. No commentary."
+)
+
+_TRANSCRIPT_FIELD_ITEM = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "name": {"type": "string", "enum": TRANSCRIPT_FIELD_ORDER},
+        "value": {"type": "string"},
+        "confidence": {"type": "number"},
+    },
+    "required": ["name", "value", "confidence"],
+}
+
+_TRANSCRIPT_SCHEMA = {
+    "name": "qualification_extraction",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"fields": {"type": "array", "items": _TRANSCRIPT_FIELD_ITEM}},
+        "required": ["fields"],
+    },
+}
+
+
 class OpenAIExtractor:
     name = "openai"
 
@@ -142,13 +202,16 @@ class OpenAIExtractor:
         )
         return json.loads(response.choices[0].message.content or "{}")
 
-    def _parse_fields(self, raw: list[dict]) -> list[ExtractedField]:
+    def _parse_fields(
+        self, raw: list[dict], allowed: list[str] | None = None
+    ) -> list[ExtractedField]:
+        allowed = allowed if allowed is not None else _FLAT_FIELDS
         seen: set[str] = set()
         fields: list[ExtractedField] = []
         for entry in raw:
             name = entry.get("name")
             value = (entry.get("value") or "").strip()
-            if name in _FLAT_FIELDS and value and name not in seen:
+            if name in allowed and value and name not in seen:
                 seen.add(name)
                 fields.append(
                     ExtractedField(
@@ -197,3 +260,19 @@ class OpenAIExtractor:
     def extract(self, text: str) -> list[ExtractedField]:
         """Flat fields only (Protocol conformance; the app uses `extract_all`)."""
         return self.extract_all(text).fields
+
+    def extract_qualification(self, text: str) -> list[ExtractedField]:
+        """Read a Gesprächstranskript for the post-interview fields."""
+        response = self._client.chat.completions.create(
+            model=self._model,
+            messages=[
+                {"role": "system", "content": _TRANSCRIPT_SYSTEM},
+                {"role": "user", "content": text[:_MAX_CHARS]},
+            ],
+            response_format=cast(
+                Any, {"type": "json_schema", "json_schema": _TRANSCRIPT_SCHEMA}
+            ),
+            temperature=0,
+        )
+        data = json.loads(response.choices[0].message.content or "{}")
+        return self._parse_fields(data.get("fields", []), TRANSCRIPT_FIELD_ORDER)

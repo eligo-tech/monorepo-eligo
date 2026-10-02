@@ -1,10 +1,11 @@
-"""Pydantic v2 contracts for the documents domain (CV extraction)."""
+"""Pydantic v2 contracts for the documents domain (uploads & extraction)."""
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CVField(BaseModel):
@@ -30,3 +31,22 @@ class CVExtractionResult(BaseModel):
     candidate_id: uuid.UUID | None = None
     # Length of extracted text — 0 usually means an image-only/scanned PDF.
     text_chars: int
+
+
+class DocumentRead(BaseModel):
+    """One file on a candidate — metadata only.
+
+    The bytes stay out of the list on purpose: a dossier with four Zeugnisse
+    would otherwise ship several megabytes of base64 to render four rows.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    candidate_id: uuid.UUID
+    #: "cv" | "transkript" | "zeugnis" | "zertifikat" | "sonstiges"
+    kind: str
+    filename: str
+    content_type: str
+    byte_size: int
+    created_at: dt.datetime

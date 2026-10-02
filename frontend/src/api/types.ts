@@ -60,6 +60,15 @@ export interface CandidateDTO {
   availability?: string | null
   total_years_experience?: string | null
   current_salary?: number | null
+  /** The floor the candidate named in the Qualifikationsgespräch;
+   *  `salary_expectation` is the wish. Only the pair says whether a band works. */
+  salary_minimum?: number | null
+  /** The recruiter's summary of the conversation — holds across mandates. */
+  profile_summary?: string | null
+  /** "Mi/Do ab 11 Uhr" — needed when booking a round. */
+  interview_availability?: string | null
+  /** Where else they are in process: a timing risk, and a sales signal. */
+  other_processes?: string | null
   languages?: string[] | null
   education?: EducationDTO[] | string[] | null
   working_experience?: string[] | null
@@ -95,6 +104,10 @@ export interface CandidateUpdatePayload {
   total_years_experience?: string | null
   current_salary?: number | null
   salary_expectation?: number | null
+  salary_minimum?: number | null
+  profile_summary?: string | null
+  interview_availability?: string | null
+  other_processes?: string | null
   salary_currency?: string
   work_permit?: string
   source?: string | null
@@ -635,4 +648,18 @@ export interface ProcessJobDTO {
   salary_currency: string | null
   status: string | null
   candidates: ProcessCandidateDTO[]
+}
+
+/** What an uploaded file IS. Mirrors the backend's `DocumentKind`. */
+export type DocumentKind = 'cv' | 'transkript' | 'zeugnis' | 'zertifikat' | 'sonstiges'
+
+/** One file on a candidate — metadata only; the bytes come from its own URL. */
+export interface CandidateDocumentDTO {
+  id: string
+  candidate_id: string
+  kind: DocumentKind
+  filename: string
+  content_type: string
+  byte_size: number
+  created_at: string
 }
