@@ -113,7 +113,40 @@ CV_FIELDS: dict[str, str] = {
 }
 
 FIELD_ORDER: list[str] = list(CV_FIELDS.keys())
-FIELD_LABELS: dict[str, str] = CV_FIELDS
+
+# ── The Qualifikationsgespräch ──────────────────────────────────────────────
+#
+# `data/examples/metadata_quailfication.txt` splits the core data in two: what
+# a CV can tell you, and what only the conversation can. These four are the
+# second half — no CV states a minimum salary, the other processes someone is
+# running, or when they can take an interview.
+QUALIFICATION_ONLY_FIELDS: dict[str, str] = {
+    "salary_minimum": "Mindestgehalt",
+    "other_processes": "Andere aktive Prozesse",
+    "interview_availability": "Verfügbarkeit für Interviews",
+    "profile_summary": "Profil-Zusammenfassung",
+}
+
+#: What a transcript is read for: the post-Gespräch set. The overlap with
+#: `CV_FIELDS` is deliberate — a candidate states their notice period in the
+#: conversation whether or not the CV mentioned it, and the later source wins
+#: by being more recent, not by being different.
+_FROM_CV = (
+    "notice_period",
+    "availability",
+    "current_salary",
+    "expected_salary",
+    "motivation",
+    "skills",
+)
+TRANSCRIPT_FIELDS: dict[str, str] = {
+    **{k: CV_FIELDS[k] for k in _FROM_CV},
+    **QUALIFICATION_ONLY_FIELDS,
+}
+TRANSCRIPT_FIELD_ORDER: list[str] = list(TRANSCRIPT_FIELDS.keys())
+
+#: Every field either source can yield — the one place labels come from.
+FIELD_LABELS: dict[str, str] = {**CV_FIELDS, **QUALIFICATION_ONLY_FIELDS}
 
 # The subset the canonical Candidate row can store today; the rest are extracted
 # and shown for review (persisting them is a schema follow-up).
@@ -137,3 +170,9 @@ class CVExtractor(Protocol):
     # those that don't (the heuristic fallback) use `extract` and yield no
     # structured sections.
     def extract_all(self, text: str) -> ExtractionResult: ...
+
+    # Optional: read a Gesprächstranskript for the qualification fields
+    # (`TRANSCRIPT_FIELDS`). A provider that cannot do it yields nothing and
+    # the caller says so — guessing a salary floor out of a regex would be
+    # worse than an empty form.
+    def extract_qualification(self, text: str) -> list[ExtractedField]: ...

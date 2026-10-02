@@ -53,6 +53,9 @@ export interface CandidateProfile {
   totalYearsExperience?: string
   currentSalary?: number | null
   salaryExpectation?: number | null
+  /** The floor named in the Qualifikationsgespräch — the wish alone cannot
+   *  say whether a mandate's band works. */
+  salaryMinimum?: number | null
   salaryCurrency?: string
   availabilityWeeks?: number | null
   workPermit?: string
@@ -61,6 +64,12 @@ export interface CandidateProfile {
   roles: RoleEntry[]
   education: EducationEntry[]
   motivation?: string
+  /** The recruiter's own summary of the conversation. */
+  profileSummary?: string
+  /** "Mi/Do ab 11 Uhr" — what a round gets booked against. */
+  interviewAvailability?: string
+  /** Where else they are in process: timing risk and sales signal. */
+  otherProcesses?: string
   source?: string
   /** all skills (the table only shows the first two) */
   allSkills: string[]

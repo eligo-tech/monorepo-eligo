@@ -189,6 +189,7 @@ function toProfile(dto: CandidateDTO): CandidateProfile {
     totalYearsExperience: dto.total_years_experience ?? undefined,
     currentSalary: dto.current_salary ?? undefined,
     salaryExpectation: dto.salary_expectation ?? undefined,
+    salaryMinimum: dto.salary_minimum ?? undefined,
     salaryCurrency: dto.salary_currency,
     availabilityWeeks: dto.availability_weeks ?? undefined,
     workPermit: dto.work_permit,
@@ -196,6 +197,9 @@ function toProfile(dto: CandidateDTO): CandidateProfile {
     roles: toRoles(dto.work_history),
     education: toEducation(dto.education),
     motivation: dto.motivation ?? undefined,
+    profileSummary: dto.profile_summary ?? undefined,
+    interviewAvailability: dto.interview_availability ?? undefined,
+    otherProcesses: dto.other_processes ?? undefined,
     source: dto.source ?? undefined,
     allSkills: dto.skills,
   }

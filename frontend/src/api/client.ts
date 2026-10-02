@@ -23,6 +23,8 @@ import type {
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
+  CandidateDocumentDTO,
+  DocumentKind,
   ProcessJobDTO,
   ProcessStepDTO,
   ReportingOverviewDTO,
@@ -359,6 +361,61 @@ export const api = {
     const res = await fetch(`${BASE}/documents/extract-cv?persist=${persist}`, {
       method: 'POST',
       body, // let the browser set the multipart boundary
+      headers: await authHeaders(),
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new ApiError(res.status, detail || res.statusText)
+    }
+    return res.json() as Promise<CVExtractionResultDTO>
+  },
+
+  /** Every file on a candidate (metadata only). */
+  candidateDocuments: (candidateId: string) =>
+    request<CandidateDocumentDTO[]>(`/documents/candidate/${candidateId}`),
+
+  /** Where a stored file is served from — used as an <a href>. */
+  documentUrl: (documentId: string) => `${BASE}/documents/${documentId}/content`,
+
+  /** Attach a Zeugnis, Zertifikat or any other file to a candidate. */
+  async uploadDocument(
+    candidateId: string,
+    file: File,
+    kind: DocumentKind,
+  ): Promise<CandidateDocumentDTO> {
+    const body = new FormData()
+    body.append('file', file)
+    body.append('candidate_id', candidateId)
+    body.append('kind', kind)
+    const res = await fetch(`${BASE}/documents/upload`, {
+      method: 'POST',
+      body,
+      headers: await authHeaders(),
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new ApiError(res.status, detail || res.statusText)
+    }
+    return res.json() as Promise<CandidateDocumentDTO>
+  },
+
+  /**
+   * Read a Gesprächstranskript for the qualification fields.
+   *
+   * Returns PROPOSALS and stores the transcript as evidence — nothing is
+   * written to the candidate. Confirming a value is an ordinary PATCH, which
+   * is what makes the receipt say a human asserted it.
+   */
+  async extractTranscript(
+    candidateId: string,
+    file: File,
+  ): Promise<CVExtractionResultDTO> {
+    const body = new FormData()
+    body.append('file', file)
+    body.append('candidate_id', candidateId)
+    const res = await fetch(`${BASE}/documents/extract-transcript`, {
+      method: 'POST',
+      body,
       headers: await authHeaders(),
     })
     if (!res.ok) {

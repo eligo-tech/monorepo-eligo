@@ -125,3 +125,22 @@ def owes_art14_notice(source: ConfidenceSource | str | None) -> bool:
         except ValueError:
             return False
     return source in ART14_SOURCES
+
+
+class DocumentKind(str, enum.Enum):
+    """What an uploaded file IS.
+
+    `candidate_documents` held only CVs, so "the newest file" and "the CV"
+    were the same row. The moment a Zeugnis or a Zertifikat is attached that
+    stops being true, and a reader asking for the CV would get back whatever
+    was uploaded last. The kind is what keeps that question answerable.
+
+    `TRANSKRIPT` is the Gesprächsnotiz from the Qualifikationsgespräch — the
+    second source the qualification data is read from, next to the CV.
+    """
+
+    CV = "cv"
+    TRANSKRIPT = "transkript"
+    ZEUGNIS = "zeugnis"
+    ZERTIFIKAT = "zertifikat"
+    SONSTIGES = "sonstiges"

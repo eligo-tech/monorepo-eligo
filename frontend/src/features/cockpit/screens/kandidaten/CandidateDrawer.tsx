@@ -19,6 +19,7 @@ import {
   Languages,
   Mail,
   MapPin,
+  Paperclip,
   Pencil,
   Phone,
   ShieldCheck,
@@ -34,6 +35,7 @@ import { LinkedInMark } from '@/components/ui/LinkedInMark'
 import { cn } from '@/lib/cn'
 import { Chip } from '../../ui/primitives'
 import { Button, CloseButton, Drawer } from '../../ui/forms'
+import { AttachmentsPanel } from './AttachmentsPanel'
 import { DossierEditor } from './DossierEditor'
 
 export function CandidateDrawer({
@@ -296,11 +298,23 @@ export function CandidateDrawer({
 
                 <hr className="my-7 border-cockpit-line" />
 
+                {/* The recruiter's summary of the conversation outranks the
+                    synthesised one — a person wrote it, having spoken to them. */}
                 <CvSection icon={Sparkles} title="Profil">
                   <p className="text-[14px] leading-relaxed text-cockpit-dim">
-                    {p?.motivation?.trim() || candidate.aiSummary}
+                    {p?.profileSummary?.trim() ||
+                      p?.motivation?.trim() ||
+                      candidate.aiSummary}
                   </p>
                 </CvSection>
+
+                {p?.profileSummary?.trim() && p?.motivation?.trim() && (
+                  <CvSection icon={Sparkles} title="Wechselmotivation">
+                    <p className="text-[14px] leading-relaxed text-cockpit-dim">
+                      {p.motivation}
+                    </p>
+                  </CvSection>
+                )}
 
                 <CvSection icon={Briefcase} title="Berufserfahrung">
                   {roles ? (
@@ -370,6 +384,13 @@ export function CandidateDrawer({
                   ) : (
                     <Empty>Keine Ausbildung erfasst</Empty>
                   )}
+                </CvSection>
+
+                <CvSection icon={Paperclip} title="Dateien">
+                  <AttachmentsPanel
+                    candidateId={candidate.id}
+                    onCandidateChanged={handleSaved}
+                  />
                 </CvSection>
               </>
             )}
@@ -546,6 +567,7 @@ function Profile360({ candidate, p }: { candidate: Candidate; p?: CandidateProfi
         ['Verfügbarkeit', p?.availability],
         ['Berufserfahrung', yearsLabel(candidate, p?.totalYearsExperience)],
         ['Aktuelles Gehalt', money(p?.currentSalary)],
+        ['Mindestgehalt', money(p?.salaryMinimum)],
         ['Wunschgehalt', money(p?.salaryExpectation)],
         ['Währung', p?.salaryCurrency],
         ['Arbeitserlaubnis', permitLabel(p?.workPermit)],
@@ -553,6 +575,20 @@ function Profile360({ candidate, p }: { candidate: Candidate; p?: CandidateProfi
       ],
     },
   ]
+
+  // Only after the Qualifikationsgespräch is there anything here; an empty
+  // block of "—" would suggest the conversation happened and yielded nothing.
+  const qualification: FieldT[] = [
+    ['Verfügbarkeit für Interviews', p?.interviewAvailability],
+    ['Andere aktive Prozesse', p?.otherProcesses],
+  ]
+  if (qualification.some(([, value]) => value)) {
+    sections.push({
+      title: 'Nach dem Qualifikationsgespräch',
+      icon: CalendarClock,
+      fields: qualification,
+    })
+  }
 
   return (
     <div className="space-y-6">
