@@ -227,6 +227,13 @@ export function processCardsFromSteps(
         steps,
         editable: true,
         assessment: toAssessment(person.assessment),
+        salaryFit:
+          person.salary_fit && person.salary_fit.status !== 'unknown'
+            ? {
+                status: person.salary_fit.status,
+                detail: person.salary_fit.detail ?? undefined,
+              }
+            : undefined,
       })
     }
   }

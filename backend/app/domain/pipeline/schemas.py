@@ -134,6 +134,21 @@ class AssessmentWrite(BaseModel):
     assessed_at: dt.datetime | None = None
 
 
+class SalaryFitRead(BaseModel):
+    """What the candidate needs, measured against what the mandate pays.
+
+    Deterministic arithmetic, not a model's opinion — and `negotiable` is a
+    first-class answer: a wish above the band with a floor inside it is a
+    conversation, not an exclusion.
+    """
+
+    #: "unknown" | "fits" | "negotiable" | "above_band"
+    status: str
+    detail: str | None = None
+    minimum: int | None = None
+    wish: int | None = None
+
+
 class ProcessCandidateRead(BaseModel):
     """One candidate's run at one job."""
 
@@ -148,6 +163,7 @@ class ProcessCandidateRead(BaseModel):
     steps: list[ProcessStepRead]
     #: Null until someone has assessed this candidate FOR THIS mandate.
     assessment: AssessmentRead | None = None
+    salary_fit: SalaryFitRead | None = None
 
 
 class ProcessJobRead(BaseModel):

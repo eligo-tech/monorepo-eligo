@@ -317,6 +317,27 @@ def _assessment_dict(row: ApplicationAssessment | None) -> dict | None:
     }
 
 
+def _salary_fit_dict(candidate, job) -> dict | None:
+    """The money question, answered the same way the matcher answers it."""
+    from app.domain.matching.salary import salary_fit
+
+    fit = salary_fit(
+        minimum=candidate.salary_minimum,
+        wish=candidate.salary_expectation,
+        job_min=job.salary_min,
+        job_max=job.salary_max,
+        currency=job.salary_currency,
+    )
+    if fit.status == "unknown":
+        return None
+    return {
+        "status": fit.status,
+        "detail": fit.detail,
+        "minimum": candidate.salary_minimum,
+        "wish": candidate.salary_expectation,
+    }
+
+
 async def get_assessment(
     session: AsyncSession, *, tenant_id: uuid.UUID, application_id: uuid.UUID
 ) -> ApplicationAssessment | None:
@@ -499,6 +520,7 @@ async def processes(
                     for s in steps
                 ],
                 "assessment": _assessment_dict(assessments.get(app.id)),
+                "salary_fit": _salary_fit_dict(candidate, job),
             }
         )
 

@@ -51,6 +51,38 @@ function Fact({ label, value }: { label: string; value: string | null }) {
   )
 }
 
+/** The money, measured against the band — arithmetic, not an opinion.
+ *
+ *  "Verhandelbar" is its own state and is deliberately not red: a wish above
+ *  the band with a floor inside it is the conversation the recruiter is paid
+ *  to have, and colouring it like a rejection would lose the candidate the
+ *  example document scores 8/10. */
+function SalaryVerdict({ fit }: { fit: NonNullable<ProcessCard['salaryFit']> }) {
+  const TONE = {
+    fits: 'border-mint-600 bg-mint-800/30 text-mint-300',
+    negotiable: 'border-gold-600 bg-gold-800/30 text-gold-300',
+    above_band: 'border-coral-600 bg-coral-800/30 text-coral-300',
+  } as const
+  const LABEL = {
+    fits: 'Gehalt im Band',
+    negotiable: 'Gehalt verhandelbar',
+    above_band: 'Gehalt über Band',
+  } as const
+
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-2.5">
+      <span
+        className={`rounded-md border px-2 py-0.5 font-mono text-[12px] leading-5 ${TONE[fit.status]}`}
+      >
+        {LABEL[fit.status]}
+      </span>
+      {fit.detail && (
+        <span className="font-mono text-[12px] text-cockpit-faint">{fit.detail}</span>
+      )}
+    </div>
+  )
+}
+
 export function MandateView({
   mandate,
   onBack,
@@ -138,6 +170,7 @@ export function MandateView({
                 card.editable ? (step) => setEditing({ card, step }) : undefined
               }
             >
+              {card.salaryFit && <SalaryVerdict fit={card.salaryFit} />}
               {card.assessment ? (
                 <AssessmentPanel assessment={card.assessment} />
               ) : (
