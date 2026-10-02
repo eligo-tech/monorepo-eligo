@@ -38,3 +38,33 @@ async def _fresh_db():
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_outbound_network(monkeypatch):
+    """No test may touch the internet.
+
+    `POST /hub/ingest` with an empty body is a valid request, so an operator
+    test that only meant to check authorization ran a real crawl against the
+    Bundesagentur API from CI — minutes when it worked, a read timeout when it
+    did not (run 36868354414). A suite whose colour depends on a third party's
+    uptime teaches people to re-run red builds, which is how a real failure
+    gets waved through.
+
+    Loopback stays open: ASGI transports do not use sockets, but a local
+    database or a debugger might.
+    """
+    import socket
+
+    real_connect = socket.socket.connect
+
+    def guard(self, address, *args, **kwargs):
+        host = address[0] if isinstance(address, tuple) else address
+        if isinstance(host, str) and host not in ("127.0.0.1", "::1", "localhost"):
+            raise AssertionError(
+                f"a test tried to reach {host} — stub the adapter instead "
+                "(see _StubAdapter in test_operator_endpoints.py)"
+            )
+        return real_connect(self, address, *args, **kwargs)
+
+    monkeypatch.setattr(socket.socket, "connect", guard)

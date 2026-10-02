@@ -21,7 +21,10 @@ import pytest
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 
+import datetime as dt
+
 from app.core.config import settings
+from app.domain.hub.adapters.base import FetchResult
 
 # Every endpoint that only a scheduled job may call. Keep in step with the
 # routers; the first test fails loudly if they drift apart.
@@ -106,11 +109,41 @@ async def test_a_valid_user_session_is_refused(method, path, monkeypatch) -> Non
     assert "machine credential" in resp.json()["detail"]
 
 
+class _StubAdapter:
+    """A source that answers from memory.
+
+    `POST /hub/ingest` with an empty body is a VALID request, so this test used
+    to run a real crawl against the Bundesagentur API — on every CI run, from
+    GitHub's network. It failed intermittently with a read timeout (2026-10-01,
+    run 36868354414) and spent minutes when it passed. The guard under test is
+    authorization; the network was never part of it.
+    """
+
+    name = "bundesagentur"
+
+    async def fetch(self, query):  # noqa: ANN001 — mirrors SourceAdapter
+        return FetchResult(
+            source=self.name,
+            request_url="stub://ingest",
+            fetched_at=dt.datetime.now(dt.UTC),
+            http_status=200,
+            robots_allowed=True,
+            postings=[],
+            total_available=0,
+        )
+
+
 @pytest.mark.parametrize(("method", "path"), sorted(DECLARED_OPERATOR_ROUTES))
 async def test_the_machine_credential_is_accepted(method, path, monkeypatch) -> None:
     """The other half: the guard must not lock out the scheduler itself."""
     from app.core import auth as auth_module
+    from app.domain.hub import router as hub_router
     from app.main import app
+
+    # No test in this suite may touch the internet: the routes are exercised
+    # for their guard, and a third party's uptime must not decide whether CI
+    # is green.
+    monkeypatch.setattr(hub_router, "get_source_adapter", lambda _source: _StubAdapter())
 
     monkeypatch.setattr(settings, "ingest_token", _TOKEN)
     monkeypatch.setattr(settings, "auth_enabled", True)
