@@ -27,6 +27,7 @@ from app.core.logging import get_logger
 from sqlalchemy import desc, select
 
 from app.domain.candidates import service as candidates_service
+from app.domain.candidates.employment import normalize_employment_form
 from app.domain.candidates.schemas import CandidateCreate
 from app.domain.common.enums import DocumentKind
 from app.domain.documents import gate, parser
@@ -119,7 +120,11 @@ def _build_candidate(
         linkedin_url=g("linkedin_url"),
         xing_url=g("xing_url"),
         industry=g("industry"),
+        # One label from a CV is one industry — splitting on the comma would
+        # cut "Pharma, MedTech und Gesundheitsbranche" in half.
+        industries=[g("industry")] if g("industry") else [],
         employment_type=g("employment_type"),
+        employment_form=normalize_employment_form(g("employment_type")),
         willing_to_relocate=g("willing_to_relocate"),
         notice_period=g("notice_period"),
         availability=g("availability"),

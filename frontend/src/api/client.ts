@@ -24,6 +24,7 @@ import type {
   MatchResultDTO,
   PipelineBoardDTO,
   CandidateDocumentDTO,
+  CompetingEmployerDTO,
   DocumentKind,
   ProcessJobDTO,
   ProcessStepDTO,
@@ -369,6 +370,10 @@ export const api = {
     }
     return res.json() as Promise<CVExtractionResultDTO>
   },
+
+  /** Companies this tenant's candidates named as other active processes. */
+  competingEmployers: () =>
+    request<CompetingEmployerDTO[]>('/candidates/competing-employers'),
 
   /** Every file on a candidate (metadata only). */
   candidateDocuments: (candidateId: string) =>

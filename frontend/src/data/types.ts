@@ -45,8 +45,13 @@ export interface CandidateProfile {
   country?: string
   linkedinUrl?: string
   xingUrl?: string
+  /** @deprecated single imported label — read `industries`. */
   industry?: string
+  industries: string[]
+  /** What the source called it. */
   employmentType?: string
+  /** festanstellung | freelance | beides — the decidable form. */
+  employmentForm?: string
   willingToRelocate?: string
   noticePeriod?: string
   availability?: string
@@ -70,6 +75,8 @@ export interface CandidateProfile {
   interviewAvailability?: string
   /** Where else they are in process: timing risk and sales signal. */
   otherProcesses?: string
+  /** The companies behind that. */
+  otherProcessCompanies: string[]
   source?: string
   /** all skills (the table only shows the first two) */
   allSkills: string[]

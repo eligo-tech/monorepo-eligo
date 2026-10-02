@@ -12,7 +12,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.common.enums import WorkPermitStatus
+from app.domain.common.enums import EmploymentForm, WorkPermitStatus
 
 # Pragmatic e-mail shape check — mirrors the extraction gate's validator. Not a
 # full RFC 5322 parser; rejects the obvious garbage (missing @, no domain dot).
@@ -46,7 +46,12 @@ class CandidateBase(BaseModel):
     linkedin_url: str | None = None
     xing_url: str | None = None
     industry: str | None = None
+    #: Every industry worked in. `industry` is the single imported label and
+    #: is on its way out — read this.
+    industries: list[str] | None = None
     employment_type: str | None = None
+    #: "festanstellung" | "freelance" | "beides" — see EmploymentForm.
+    employment_form: EmploymentForm | None = None
     willing_to_relocate: str | None = None
     notice_period: str | None = None
     availability: str | None = None
@@ -56,6 +61,7 @@ class CandidateBase(BaseModel):
     profile_summary: str | None = None
     interview_availability: str | None = None
     other_processes: str | None = None
+    other_process_companies: list[str] | None = None
     languages: list[str] | None = None
     # Structured entries ({degree, institution, dates}) or legacy strings.
     education: list[dict] | list[str] | None = None
@@ -97,7 +103,9 @@ class CandidateUpdate(BaseModel):
     linkedin_url: str | None = None
     xing_url: str | None = None
     industry: str | None = None
+    industries: list[str] | None = None
     employment_type: str | None = None
+    employment_form: EmploymentForm | None = None
     willing_to_relocate: str | None = None
     notice_period: str | None = None
     availability: str | None = None
@@ -108,6 +116,7 @@ class CandidateUpdate(BaseModel):
     profile_summary: str | None = None
     interview_availability: str | None = None
     other_processes: str | None = None
+    other_process_companies: list[str] | None = None
     salary_currency: str | None = None
     availability_weeks: int | None = Field(default=None, ge=0)
     work_permit: WorkPermitStatus | None = None
@@ -144,3 +153,16 @@ class CandidateRead(CandidateBase):
     verification_score: float
     created_at: dt.datetime
     updated_at: dt.datetime
+
+
+class CompetingEmployerRead(BaseModel):
+    """One company that is interviewing this tenant's candidates.
+
+    A business-development signal, not a record of fact: the names come from
+    what candidates said in their Qualifikationsgespräch.
+    """
+
+    company: str
+    candidate_count: int
+    #: Who named it — the recruiter needs to know whom to ask for detail.
+    candidates: list[str]

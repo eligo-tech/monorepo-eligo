@@ -252,8 +252,16 @@ export function CandidateDrawer({
                     </InfoRow>
                     <InfoRow icon={Phone} label="Telefon" value={candidate.phone} mono />
                     <InfoRow icon={MapPin} label="Standort" value={address || candidate.location} />
-                    <InfoRow icon={Building2} label="Branche" value={p?.industry} />
-                    <InfoRow icon={Briefcase} label="Anstellungsart" value={p?.employmentType} />
+                    <InfoRow
+                      icon={Building2}
+                      label="Branchen"
+                      value={p?.industries.join(' · ')}
+                    />
+                    <InfoRow
+                      icon={Briefcase}
+                      label="Anstellungsform"
+                      value={employmentFormLabel(p?.employmentForm)}
+                    />
                     <InfoRow icon={CalendarClock} label="Verfügbarkeit" value={p?.availability} />
                     <InfoRow icon={CalendarClock} label="Kündigungsfrist" value={p?.noticePeriod} />
                     <InfoRow icon={Wallet} label="Gehalt" value={salary} mono />
@@ -560,8 +568,10 @@ function Profile360({ candidate, p }: { candidate: Candidate; p?: CandidateProfi
       fields: [
         ['Job-Titel', val(candidate.currentTitle)],
         ['Aktuelles Unternehmen', val(candidate.currentCompany)],
-        ['Branche', p?.industry],
-        ['Anstellungsart', p?.employmentType],
+        ['Branchen', p?.industries.join(' · ') || undefined],
+        ['Anstellungsform', employmentFormLabel(p?.employmentForm)],
+        // What the source called it, kept visible as provenance for the form.
+        ['Anstellungsart (Quelle)', p?.employmentType],
         ['Umzugsbereit', relocate(p?.willingToRelocate)],
         ['Kündigungsfrist', p?.noticePeriod],
         ['Verfügbarkeit', p?.availability],
@@ -580,7 +590,8 @@ function Profile360({ candidate, p }: { candidate: Candidate; p?: CandidateProfi
   // block of "—" would suggest the conversation happened and yielded nothing.
   const qualification: FieldT[] = [
     ['Verfügbarkeit für Interviews', p?.interviewAvailability],
-    ['Andere aktive Prozesse', p?.otherProcesses],
+    ['Andere Prozesse bei', p?.otherProcessCompanies.join(' · ') || undefined],
+    ['Notiz zu anderen Prozessen', p?.otherProcesses],
   ]
   if (qualification.some(([, value]) => value)) {
     sections.push({
@@ -604,6 +615,17 @@ function Profile360({ candidate, p }: { candidate: Candidate; p?: CandidateProfi
       ))}
     </div>
   )
+}
+
+const EMPLOYMENT_FORM_LABELS: Record<string, string> = {
+  festanstellung: 'Festanstellung',
+  freelance: 'Freelance',
+  beides: 'Beides',
+}
+
+/** Unset means nobody established it — shown as a gap, not as a guess. */
+function employmentFormLabel(form?: string): string | undefined {
+  return form ? (EMPLOYMENT_FORM_LABELS[form] ?? form) : undefined
 }
 
 function Field({ label, value, href }: { label: string; value?: string; href?: string }) {
