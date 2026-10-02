@@ -380,6 +380,49 @@ async def _fetch_partner_pages(client: httpx.AsyncClient, *, budget: int) -> dic
     return {**latest, **totals}
 
 
+def run_verdict(
+    *,
+    source_down: str | None,
+    failures: list[str],
+    reached: int,
+    national_total: int,
+    min_coverage: float,
+) -> tuple[int, str]:
+    """Did this night succeed? Exit code plus the line that explains it.
+
+    It used to be "any shard failed → red", which with a source dropping ~30%
+    of connections (measured 2026-10-02: 7 of 10 answered) meant a red mail
+    most mornings for a run that had done nearly all its work. A daily red
+    mail is a mail nobody reads, and that is how a real failure gets missed.
+
+    So the run is judged by what reached the corpus:
+
+      * the source being DOWN is always red — nothing was collected;
+      * otherwise coverage decides, because that is the thing we actually
+        care about;
+      * with no coverage figure (the probe itself failed) fall back to the old
+        rule: an unmeasured run cannot be called good.
+    """
+    if source_down:
+        return 1, f"FAILED: source unreachable — {source_down}"
+    if not national_total:
+        if failures:
+            return 1, "FAILED: no coverage figure and shards failed"
+        return 0, "ok (no coverage figure available)"
+    pct = reached / national_total * 100
+    if pct < min_coverage:
+        return 1, (
+            f"FAILED: coverage {pct:.1f}% is below the {min_coverage:.0f}% this "
+            f"run must reach ({len(failures)} shard(s) failed)"
+        )
+    if failures:
+        return 0, (
+            f"ok: {pct:.1f}% coverage despite {len(failures)} failed shard(s) — "
+            "the source dropped connections, the corpus did not lose ground"
+        )
+    return 0, f"ok: {pct:.1f}% coverage"
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -424,6 +467,14 @@ async def main() -> int:
         dest="descriptions",
         action="store_false",
         help="skip ad-text fetches for postings newly inserted by this run",
+    )
+    parser.add_argument(
+        "--min-coverage",
+        type=float,
+        default=90.0,
+        help="percent of the window's postings this run must reach before it "
+        "counts as successful. Below it the night lost ground and the workflow "
+        "goes red; above it, a few shards the source dropped are not news.",
     )
     parser.add_argument(
         "--partner-pages",
@@ -502,6 +553,11 @@ async def main() -> int:
         # One counter for the whole night: the source is either answering or
         # it is not, and a per-shard count would never reach the threshold.
         unreachable = {"streak": 0}
+        # Shards that failed once. With a source dropping ~30% of connections
+        # (measured 2026-10-02: 7 of 10 requests answered), most succeed on a
+        # second ask — and a shard abandoned after one try is a hole in the
+        # corpus nobody notices.
+        retryable: list[dict] = []
 
         # --- primary sweep -------------------------------------------------
         if not args.by_region and shard_plan:
@@ -546,6 +602,10 @@ async def main() -> int:
                     except Exception as exc:
                         print(f"    FAILED: {exc}", file=sys.stderr)
                         failures.append(field)
+                        retryable.append(
+                            {"region": sub, "berufsfeld": field, "radius_km": 0,
+                             "primary": True, "label": field}
+                        )
                         continue
                     for key in grand:
                         grand[key] += totals[key]
@@ -577,6 +637,10 @@ async def main() -> int:
                 # One bad region must not silently shrink the corpus refresh.
                 print(f"    FAILED: {exc}", file=sys.stderr)
                 failures.append(region)
+                retryable.append(
+                    {"region": region, "radius_km": args.radius, "primary": True,
+                     "label": region}
+                )
                 continue
             for key in grand:
                 grand[key] += totals[key]
@@ -616,6 +680,11 @@ async def main() -> int:
                 except Exception as exc:
                     print(f"      FAILED: {exc}", file=sys.stderr)
                     failures.append(label)
+                    retryable.append(
+                        {"region": directive.get("city"),
+                         "radius_km": directive.get("radius_km") or 0,
+                         "what": directive["q"], "label": label}
+                    )
                     continue
                 for key in grand:
                     grand[key] += totals[key]
@@ -674,6 +743,39 @@ async def main() -> int:
                 print(f"  stale sweep FAILED: {exc}", file=sys.stderr)
                 failures.append("expire-stale")
 
+        # --- second pass: ask the shards that failed once more -------------
+        if retryable and not source_down:
+            print(f"  zweiter Versuch ({len(retryable)} Shards)")
+            recovered: list[str] = []
+            for shard in retryable:
+                try:
+                    totals = await _ingest_region(
+                        client,
+                        region=shard.get("region"),
+                        radius_km=shard.get("radius_km", 0),
+                        since_days=args.since,
+                        max_pages=args.max_pages,
+                        delay=args.delay,
+                        what=shard.get("what"),
+                        berufsfeld=shard.get("berufsfeld"),
+                        primary=shard.get("primary", False),
+                        created_external_ids=created_external_ids,
+                        unreachable=unreachable,
+                    )
+                except SourceDown as exc:
+                    print(f"  SOURCE DOWN: {exc}", file=sys.stderr)
+                    source_down = str(exc)
+                    break
+                except Exception as exc:
+                    print(f"    {shard['label']} erneut FAILED: {exc}", file=sys.stderr)
+                    continue
+                recovered.append(shard["label"])
+                for key in grand:
+                    grand[key] += totals[key]
+            if recovered:
+                print(f"    erholt: {', '.join(recovered)}")
+                failures = [f for f in failures if f not in recovered]
+
     print(
         f"pages {grand['pages']} · geprüft {grand['fetched']} · "
         f"+{grand['companies']} Unternehmen · +{grand['postings']} Rollen · "
@@ -698,9 +800,15 @@ async def main() -> int:
             f"Bundesland, whose `wo=` lookup loses some states",
             file=sys.stdout if pct >= 95 else sys.stderr,
         )
-    if failures:
-        print(f"FAILED: {', '.join(failures)}", file=sys.stderr)
-        return 1
+    verdict, message = run_verdict(
+        source_down=source_down,
+        failures=failures,
+        reached=grand["available"],
+        national_total=national_total,
+        min_coverage=args.min_coverage,
+    )
+    print(message, file=sys.stderr if verdict else sys.stdout)
+    return verdict
     return 0
 
 

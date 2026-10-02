@@ -315,3 +315,54 @@ async def test_an_ordinary_5xx_is_still_retried(monkeypatch) -> None:
             pass
 
     assert calls == _PAGE_ATTEMPTS
+
+
+def test_a_flaky_source_does_not_make_the_night_red() -> None:
+    """The judgement that stops the daily red mail.
+
+    2026-10-02: the source answered 7 of 10 requests. Runs that collected
+    nearly everything still exited 1 because some shard failed, so the alert
+    stopped meaning anything.
+    """
+    from scripts.hub_daily import run_verdict
+
+    code, message = run_verdict(
+        source_down=None, failures=["Bayern", "Berlin"],
+        reached=11_800, national_total=12_000, min_coverage=90.0,
+    )
+    assert code == 0 and "98.3% coverage despite 2 failed" in message
+
+
+def test_losing_real_ground_is_still_red() -> None:
+    from scripts.hub_daily import run_verdict
+
+    code, message = run_verdict(
+        source_down=None, failures=["Bayern"],
+        reached=6_000, national_total=12_000, min_coverage=90.0,
+    )
+    assert code == 1 and "50.0% is below the 90%" in message
+
+
+def test_a_dead_source_is_always_red() -> None:
+    """Even if nothing else failed: nothing was collected."""
+    from scripts.hub_daily import run_verdict
+
+    code, message = run_verdict(
+        source_down="5 pages in a row: source unreachable", failures=[],
+        reached=0, national_total=12_000, min_coverage=90.0,
+    )
+    assert code == 1 and "source unreachable" in message
+
+
+def test_an_unmeasured_run_with_failures_is_red() -> None:
+    """The probe itself failed, so coverage is unknown — do not call it good."""
+    from scripts.hub_daily import run_verdict
+
+    assert run_verdict(
+        source_down=None, failures=["Bayern"], reached=0, national_total=0,
+        min_coverage=90.0,
+    )[0] == 1
+    assert run_verdict(
+        source_down=None, failures=[], reached=0, national_total=0,
+        min_coverage=90.0,
+    )[0] == 0
