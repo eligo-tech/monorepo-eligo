@@ -12,6 +12,7 @@ import type {
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
+  ProcessCandidateDTO,
   ProcessJobDTO,
   ProcessStepDTO,
 } from '@/api/types'
@@ -19,8 +20,10 @@ import { buildSteps, PROCESS_STEPS } from './mock'
 import {
   demo,
   live,
+  type CandidateAssessment,
   type Figure,
   type JobScore,
+  type Mandate,
   type ProcessCard,
   type ProcessStep,
 } from './types'
@@ -120,6 +123,7 @@ export function toProcessCards(
 
       return {
         id: app.id,
+        jobId: job?.id,
         candidateRef: candidateRef(app.candidate_id),
         candidateName: candidate?.full_name ?? 'Unbekannt',
         role: job?.title ?? candidate?.current_title ?? '—',
@@ -202,6 +206,7 @@ export function processCardsFromSteps(
 
       cards.push({
         id: person.application_id,
+        jobId: job.job_id,
         candidateRef: candidateRef(person.candidate_id),
         candidateName: person.candidate_name,
         role: job.job_title,
@@ -221,6 +226,7 @@ export function processCardsFromSteps(
             : undefined,
         steps,
         editable: true,
+        assessment: toAssessment(person.assessment),
       })
     }
   }
@@ -229,6 +235,64 @@ export function processCardsFromSteps(
   return cards.sort(
     (a, b) =>
       a.mandateRef.localeCompare(b.mandateRef) || b.progress.value - a.progress.value,
+  )
+}
+
+function toAssessment(
+  dto: ProcessCandidateDTO['assessment'],
+): CandidateAssessment | undefined {
+  if (!dto) return undefined
+  return {
+    fitScore: dto.fit_score,
+    verdict: dto.verdict,
+    strengths: dto.strengths ?? [],
+    risks: dto.risks ?? [],
+    clientSummary: dto.client_summary,
+    technologies: dto.technologies ?? [],
+    basis: dto.basis,
+    assessedAt: dto.assessed_at,
+  }
+}
+
+/**
+ * The cards, grouped into mandates — the cockpit's per-job view.
+ *
+ * Grouping runs off the cards rather than the DTOs so the demo baseline gets
+ * the view too: a card with no `jobId` is grouped by its mandate ref and the
+ * Suchprofil simply stays empty. The alternative — a per-job view that exists
+ * only when the backend answers — would make the switch appear and disappear.
+ */
+export function mandatesFromCards(
+  cards: ProcessCard[],
+  jobs: ProcessJobDTO[] = [],
+): Mandate[] {
+  const profile = new Map(jobs.map((j) => [j.job_id, j]))
+  const out = new Map<string, Mandate>()
+
+  for (const card of cards) {
+    const id = card.jobId ?? card.mandateRef
+    const dto = card.jobId ? profile.get(card.jobId) : undefined
+    const mandate = out.get(id) ?? {
+      id,
+      ref: card.mandateRef,
+      title: card.role,
+      client: card.client,
+      location: dto?.location ?? null,
+      mustHave: dto?.must_have_skills ?? [],
+      salaryMin: dto?.salary_min ?? null,
+      salaryMax: dto?.salary_max ?? null,
+      salaryCurrency: dto?.salary_currency ?? null,
+      status: dto?.status ?? null,
+      cards: [],
+    }
+    mandate.cards.push(card)
+    out.set(id, mandate)
+  }
+
+  // Busiest mandate first — where the work is. Ties keep the card order,
+  // which is already furthest-along-first.
+  return [...out.values()].sort(
+    (a, b) => b.cards.length - a.cards.length || a.title.localeCompare(b.title),
   )
 }
 

@@ -149,8 +149,29 @@ export interface ProcessStep {
   note?: string | null
 }
 
+/** The Kandidatenauswertung, as the cockpit shows it: this candidate measured
+ *  against THIS mandate. Absent while nobody has written one — "not assessed"
+ *  and "assessed, no score" are different statements. */
+export interface CandidateAssessment {
+  /** Gesamtbewertung on the recruiter's own scale, 0–10. */
+  fitScore: number | null
+  /** Kurzfazit, followed by the paragraph that argues it. */
+  verdict: string | null
+  strengths: string[]
+  risks: string[]
+  /** Written for the client's eyes — never mixed with internal notes. */
+  clientSummary: string | null
+  technologies: string[]
+  /** Provenance: what the assessment was read from, and when. */
+  basis: string | null
+  assessedAt: string | null
+}
+
 export interface ProcessCard {
   id: string
+  /** The mandate this run belongs to, when the card comes from the record.
+   *  Demo cards have none — there is no job row behind them. */
+  jobId?: string
   candidateRef: string
   candidateName: string
   role: string
@@ -169,6 +190,30 @@ export interface ProcessCard {
    *  edited. Demo cards and the coarse board join are read-only: there is no
    *  row to write to. */
   editable?: boolean
+  assessment?: CandidateAssessment
+}
+
+/** One mandate: what is being searched for, and who is running on it.
+ *
+ *  The cockpit's second view. The overall view answers "where does the book of
+ *  business stand"; this one answers "where does THIS search stand" — the
+ *  question a client asks on the phone, and the one the flat list of cards
+ *  could only be read sideways to answer. */
+export interface Mandate {
+  /** The job id when the mandate comes from the record, else its display ref. */
+  id: string
+  ref: string
+  title: string
+  client: string
+  /** The Suchprofil. Null/empty where the mandate carries none yet — shown as
+   *  a gap to fill, never invented. */
+  location: string | null
+  mustHave: string[]
+  salaryMin: number | null
+  salaryMax: number | null
+  salaryCurrency: string | null
+  status: string | null
+  cards: ProcessCard[]
 }
 
 // ── Nächste beste Aktionen ──────────────────────────────────────────────────
@@ -201,5 +246,7 @@ export interface CockpitData {
   slides: KpiSlide[]
   jobScores: JobScore[]
   processes: ProcessCard[]
+  /** The same processes, grouped the way the tracker groups them. */
+  mandates: Mandate[]
   actions: NextAction[]
 }
