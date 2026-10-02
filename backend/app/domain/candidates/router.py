@@ -14,6 +14,7 @@ from app.domain.candidates.schemas import (
     CandidateCreate,
     CandidateRead,
     CandidateUpdate,
+    CompetingEmployerRead,
 )
 from app.domain.documents import service as documents_service
 
@@ -28,6 +29,22 @@ async def list_candidates(
 ) -> list[CandidateRead]:
     rows = await service.list_candidates(db, tenant_id=tenant_id, limit=limit)
     return [CandidateRead.model_validate(r) for r in rows]
+
+
+@router.get("/competing-employers", response_model=list[CompetingEmployerRead])
+async def competing_employers(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[CompetingEmployerRead]:
+    """Companies this tenant's candidates named as other active processes.
+
+    Declared BEFORE `/{candidate_id}`: FastAPI matches in order, and a later
+    literal path would be swallowed by the uuid route.
+    """
+    return [
+        CompetingEmployerRead.model_validate(row)
+        for row in await service.competing_employers(db, tenant_id=tenant_id)
+    ]
 
 
 @router.get("/{candidate_id}", response_model=CandidateRead)

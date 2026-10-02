@@ -182,7 +182,14 @@ function toProfile(dto: CandidateDTO): CandidateProfile {
     linkedinUrl: normalizeUrl(dto.linkedin_url),
     xingUrl: normalizeUrl(dto.xing_url),
     industry: dto.industry ?? undefined,
+    // A record imported before `industries` existed still has its one label.
+    industries: dto.industries?.length
+      ? dto.industries
+      : dto.industry
+        ? [dto.industry]
+        : [],
     employmentType: dto.employment_type ?? undefined,
+    employmentForm: dto.employment_form ?? undefined,
     willingToRelocate: dto.willing_to_relocate ?? undefined,
     noticePeriod: dto.notice_period ?? undefined,
     availability: dto.availability ?? undefined,
@@ -200,6 +207,7 @@ function toProfile(dto: CandidateDTO): CandidateProfile {
     profileSummary: dto.profile_summary ?? undefined,
     interviewAvailability: dto.interview_availability ?? undefined,
     otherProcesses: dto.other_processes ?? undefined,
+    otherProcessCompanies: dto.other_process_companies ?? [],
     source: dto.source ?? undefined,
     allSkills: dto.skills,
   }

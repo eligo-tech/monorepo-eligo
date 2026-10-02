@@ -25,6 +25,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.candidates.employment import normalize_employment_form
 from app.domain.candidates.models import Candidate
 from app.domain.common.enums import ConfidenceSource
 from app.domain.companies.models import Company
@@ -308,6 +309,9 @@ async def import_aifind(
             "full_name": record.full_name,
             "current_title": record.job_title,
             "employment_type": record.employment,
+            # The source says "Permanent" / "Contract, Permanent"; the
+            # filterable form is derived, and stays NULL when it is unclear.
+            "employment_form": normalize_employment_form(record.employment),
             "first_name": record.first_name,
             "last_name": record.last_name,
             "sex": record.sex,
@@ -317,6 +321,7 @@ async def import_aifind(
             "xing_url": record.xing_url,
             "current_company": record.current_company,
             "industry": record.industry,
+            "industries": [record.industry] if record.industry else [],
             "street": record.street,
             "postal_code": record.postal_code,
             "city": record.city,

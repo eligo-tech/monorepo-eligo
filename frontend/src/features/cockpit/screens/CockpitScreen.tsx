@@ -6,6 +6,7 @@
 // URL hash — `#cockpit/<jobId>` — so a per-job view can be sent to a
 // colleague instead of described to them.
 
+import { CompetitionSection } from '../sections/CompetitionSection'
 import { JobScoringSection } from '../sections/JobScoringSection'
 import { NextActionsSection } from '../sections/NextActionsSection'
 import { ProcessSection } from '../sections/ProcessSection'
@@ -92,6 +93,7 @@ export function CockpitScreen({
           onChanged={reload}
           onOpenMandate={onSelectMandate}
         />
+        <CompetitionSection />
         <NextActionsSection actions={data.actions} />
       </div>
     </>

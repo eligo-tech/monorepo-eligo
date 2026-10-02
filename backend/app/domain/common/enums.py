@@ -144,3 +144,18 @@ class DocumentKind(str, enum.Enum):
     ZEUGNIS = "zeugnis"
     ZERTIFIKAT = "zertifikat"
     SONSTIGES = "sonstiges"
+
+
+class EmploymentForm(str, enum.Enum):
+    """Festanstellung, Freelance, or both — the Anstellungsform a candidate
+    will actually consider.
+
+    Three values because the business has three answers. The imported source
+    string ("Permanent", "Contract, Permanent", "Founder") stays where it was;
+    this is the normalized form a filter can use. See
+    `candidates/employment.py` for the mapping and why it refuses to guess.
+    """
+
+    FESTANSTELLUNG = "festanstellung"
+    FREELANCE = "freelance"
+    BEIDES = "beides"

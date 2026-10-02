@@ -22,6 +22,7 @@ from app.domain.candidates.models import Candidate
 from app.domain.common.enums import MatchStrength, ReceiptAction, WorkPermitStatus
 from app.domain.jobs.models import Job
 from app.domain.matching.models import MatchReceipt
+from app.domain.matching.salary import salary_fit
 from app.domain.matching.schemas import MatchReason, MatchResult
 from app.domain.verification import service as verification_service
 
@@ -67,13 +68,23 @@ def apply_hard_filters(candidate: Candidate, job: Job) -> list[str]:
                 f"{job.location_radius_km}km of '{job.location}'"
             )
 
-    # 3. Salary cap — candidate expectation must fit the band ceiling.
-    if job.salary_max is not None and candidate.salary_expectation is not None:
-        if candidate.salary_expectation > job.salary_max:
-            failures.append(
-                f"salary expectation {candidate.salary_expectation} "
-                f"exceeds cap {job.salary_max}"
-            )
+    # 3. Salary — only the FLOOR excludes.
+    #    A wish above the ceiling used to drop the candidate. Now that a
+    #    minimum is recorded, that would discard exactly the person the
+    #    recruiter's own evaluation calls a rare full match: wish above the
+    #    orientation, floor inside it, explicitly open to negotiating. The
+    #    shared rule decides, so the cockpit and the matcher cannot disagree.
+    fit = salary_fit(
+        minimum=candidate.salary_minimum,
+        wish=candidate.salary_expectation,
+        job_min=job.salary_min,
+        job_max=job.salary_max,
+        currency=job.salary_currency,
+    )
+    if fit.excludes:
+        failures.append(
+            f"salary minimum {candidate.salary_minimum} exceeds cap {job.salary_max}"
+        )
 
     # 4. Required certifications — every one must be present.
     candidate_skills = {_norm(s) for s in candidate.skills}

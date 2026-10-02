@@ -33,8 +33,9 @@ interface Draft {
   country: string
   linkedin_url: string
   xing_url: string
-  industry: string
+  industries: string[]
   employment_type: string
+  employment_form: string
   willing_to_relocate: string
   notice_period: string
   availability: string
@@ -46,6 +47,7 @@ interface Draft {
   profile_summary: string
   interview_availability: string
   other_processes: string
+  other_process_companies: string[]
   work_permit: string
   source: string
   motivation: string
@@ -62,6 +64,13 @@ const WORK_PERMITS: { value: string; label: string }[] = [
   { value: 'work_visa', label: 'Arbeitsvisum' },
   { value: 'requires_sponsorship', label: 'Sponsoring nötig' },
   { value: 'none', label: 'Keine' },
+]
+
+const EMPLOYMENT_FORMS = [
+  { value: '', label: '—' },
+  { value: 'festanstellung', label: 'Festanstellung' },
+  { value: 'freelance', label: 'Freelance' },
+  { value: 'beides', label: 'Beides' },
 ]
 
 const RELOCATE = [
@@ -98,8 +107,15 @@ function seed(dto: CandidateDTO): Draft {
     country: s(dto.country),
     linkedin_url: s(dto.linkedin_url),
     xing_url: s(dto.xing_url),
-    industry: s(dto.industry),
+    // The legacy single label is folded in, so a record imported before
+    // `industries` existed still shows its industry in the list.
+    industries: dto.industries?.length
+      ? [...dto.industries]
+      : dto.industry
+        ? [dto.industry]
+        : [],
     employment_type: s(dto.employment_type),
+    employment_form: s(dto.employment_form),
     willing_to_relocate: s(dto.willing_to_relocate),
     notice_period: s(dto.notice_period),
     availability: s(dto.availability),
@@ -111,6 +127,7 @@ function seed(dto: CandidateDTO): Draft {
     profile_summary: s(dto.profile_summary),
     interview_availability: s(dto.interview_availability),
     other_processes: s(dto.other_processes),
+    other_process_companies: [...(dto.other_process_companies ?? [])],
     work_permit: dto.work_permit || 'unknown',
     source: s(dto.source),
     motivation: s(dto.motivation),
@@ -207,7 +224,6 @@ function buildPatch(dto: CandidateDTO, d: Draft): CandidateUpdatePayload {
   str('country', d.country, dto.country)
   str('linkedin_url', d.linkedin_url, dto.linkedin_url)
   str('xing_url', d.xing_url, dto.xing_url)
-  str('industry', d.industry, dto.industry)
   str('employment_type', d.employment_type, dto.employment_type)
   str('willing_to_relocate', d.willing_to_relocate, dto.willing_to_relocate)
   str('notice_period', d.notice_period, dto.notice_period)
@@ -231,12 +247,32 @@ function buildPatch(dto: CandidateDTO, d: Draft): CandidateUpdatePayload {
   const minSal = toNum(d.salary_minimum)
   if (minSal !== (dto.salary_minimum ?? null)) patch.salary_minimum = minSal
 
-  // Enum.
+  // Enums. An empty Anstellungsform is a real value — "nobody has
+  // established it" — so it is sent as null rather than left unchanged.
   if (d.work_permit && d.work_permit !== dto.work_permit) patch.work_permit = d.work_permit
+  if (d.employment_form !== (dto.employment_form ?? '')) {
+    patch.employment_form = (d.employment_form || null) as typeof patch.employment_form
+  }
 
   // Lists — compare JSON; backend re-diffs and skips no-ops anyway.
   const skills = cleanList(d.skills)
   if (JSON.stringify(skills) !== JSON.stringify(dto.skills ?? [])) patch.skills = skills
+  const industries = cleanList(d.industries)
+  const seededIndustries = dto.industries?.length
+    ? dto.industries
+    : dto.industry
+      ? [dto.industry]
+      : []
+  if (JSON.stringify(industries) !== JSON.stringify(seededIndustries)) {
+    patch.industries = industries
+  }
+  const otherCompanies = cleanList(d.other_process_companies)
+  if (
+    JSON.stringify(otherCompanies) !==
+    JSON.stringify(dto.other_process_companies ?? [])
+  ) {
+    patch.other_process_companies = otherCompanies
+  }
   const languages = cleanList(d.languages)
   if (JSON.stringify(languages) !== JSON.stringify(dto.languages ?? [])) patch.languages = languages
 
@@ -319,11 +355,11 @@ export function DossierEditor({
           value={d.current_company}
           onChange={(v) => set('current_company', v)}
         />
-        <TextInput label="Branche" value={d.industry} onChange={(v) => set('industry', v)} />
-        <TextInput
-          label="Anstellungsart"
-          value={d.employment_type}
-          onChange={(v) => set('employment_type', v)}
+        <SelectInput
+          label="Anstellungsform"
+          value={d.employment_form}
+          onChange={(v) => set('employment_form', v)}
+          options={EMPLOYMENT_FORMS}
         />
         <SelectInput
           label="Umzugsbereit"
@@ -378,11 +414,29 @@ export function DossierEditor({
       </Group>
 
       <section className="mt-7">
-        <GroupLabel>Andere aktive Prozesse</GroupLabel>
-        <TextArea
-          value={d.other_processes}
-          onChange={(v) => set('other_processes', v)}
-          placeholder="Wo ist der Kandidat sonst im Prozess? Firmen nennen — wer ähnliche Profile sucht, ist ein möglicher Neukunde."
+        <GroupLabel>Andere aktive Prozesse — bei wem</GroupLabel>
+        {/* Names, not prose: the same company named by three candidates is a
+            hiring need in this niche, and prose cannot be counted. */}
+        <TagInput
+          tags={d.other_process_companies}
+          onChange={(v) => set('other_process_companies', v)}
+          placeholder="Firma hinzufügen…"
+        />
+        <div className="mt-3">
+          <TextArea
+            value={d.other_processes}
+            onChange={(v) => set('other_processes', v)}
+            placeholder="Notiz zum Stand der anderen Prozesse…"
+          />
+        </div>
+      </section>
+
+      <section className="mt-7">
+        <GroupLabel>Branchen</GroupLabel>
+        <TagInput
+          tags={d.industries}
+          onChange={(v) => set('industries', v)}
+          placeholder="Branche hinzufügen…"
         />
       </section>
 

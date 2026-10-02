@@ -53,8 +53,14 @@ export interface CandidateDTO {
   country?: string | null
   linkedin_url?: string | null
   xing_url?: string | null
+  /** @deprecated One imported label; read `industries`. */
   industry?: string | null
+  /** Every industry worked in — the document asks for "Branchen", plural. */
+  industries?: string[] | null
+  /** What the source called it ("Permanent", "Contract, Permanent"). */
   employment_type?: string | null
+  /** The decidable form a filter can read. Null when nobody established it. */
+  employment_form?: EmploymentForm | null
   willing_to_relocate?: string | null
   notice_period?: string | null
   availability?: string | null
@@ -67,8 +73,10 @@ export interface CandidateDTO {
   profile_summary?: string | null
   /** "Mi/Do ab 11 Uhr" — needed when booking a round. */
   interview_availability?: string | null
-  /** Where else they are in process: a timing risk, and a sales signal. */
+  /** Where else they are in process, in the candidate's own words. */
   other_processes?: string | null
+  /** The companies behind that — countable across the pool, unlike prose. */
+  other_process_companies?: string[] | null
   languages?: string[] | null
   education?: EducationDTO[] | string[] | null
   working_experience?: string[] | null
@@ -97,7 +105,9 @@ export interface CandidateUpdatePayload {
   linkedin_url?: string | null
   xing_url?: string | null
   industry?: string | null
+  industries?: string[]
   employment_type?: string | null
+  employment_form?: EmploymentForm | null
   willing_to_relocate?: string | null
   notice_period?: string | null
   availability?: string | null
@@ -108,6 +118,7 @@ export interface CandidateUpdatePayload {
   profile_summary?: string | null
   interview_availability?: string | null
   other_processes?: string | null
+  other_process_companies?: string[]
   salary_currency?: string
   work_permit?: string
   source?: string | null
@@ -632,6 +643,8 @@ export interface ProcessCandidateDTO {
   steps: ProcessStepDTO[]
   /** Null while nobody has assessed this candidate FOR THIS mandate. */
   assessment: AssessmentDTO | null
+  /** Null when the figures to compare are not all there. */
+  salary_fit: SalaryFitDTO | null
 }
 
 /** One mandate with every candidate running on it ("Laufende Prozesse"). */
@@ -662,4 +675,25 @@ export interface CandidateDocumentDTO {
   content_type: string
   byte_size: number
   created_at: string
+}
+
+/** Festanstellung, Freelance, or both — mirrors the backend's EmploymentForm. */
+export type EmploymentForm = 'festanstellung' | 'freelance' | 'beides'
+
+/** One company this tenant's candidates named as another active process.
+ *  A business-development signal: whoever interviews the same profiles is a
+ *  possible client. Sourced from what candidates said, not from a register. */
+export interface CompetingEmployerDTO {
+  company: string
+  candidate_count: number
+  candidates: string[]
+}
+
+/** Deterministic comparison of what a candidate needs with what a mandate
+ *  pays. `negotiable` is a first-class answer, not a soft failure. */
+export interface SalaryFitDTO {
+  status: 'unknown' | 'fits' | 'negotiable' | 'above_band'
+  detail: string | null
+  minimum: number | null
+  wish: number | null
 }

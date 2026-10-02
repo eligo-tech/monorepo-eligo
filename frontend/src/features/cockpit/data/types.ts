@@ -191,6 +191,15 @@ export interface ProcessCard {
    *  row to write to. */
   editable?: boolean
   assessment?: CandidateAssessment
+  /** Deterministic: what the candidate needs vs. what the mandate pays.
+   *  Absent when the figures to compare are not all on the record. */
+  salaryFit?: SalaryFit
+}
+
+/** The money question, decided in code rather than by a model. */
+export interface SalaryFit {
+  status: 'fits' | 'negotiable' | 'above_band'
+  detail?: string
 }
 
 /** One mandate: what is being searched for, and who is running on it.

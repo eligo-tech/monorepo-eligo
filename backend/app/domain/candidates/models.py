@@ -50,8 +50,21 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
     linkedin_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     xing_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
+    #: What the source called the candidate's industry — ONE label, often a
+    #: compound one ("Pharma, MedTech und Gesundheitsbranche"). Kept as the
+    #: imported value; `industries` is the field of record. Dropped once
+    #: nothing reads it (expand/contract, see migration 0030).
     industry: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: Every industry the candidate has worked in. The document asks for
+    #: "Branchen", plural — a career in Luftfahrt AND Behörden AND Bundeswehr
+    #: cannot be said in one slot, and that breadth is exactly what makes
+    #: someone placeable in a second market.
+    industries: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    #: The source's own words ("Permanent", "Contract, Permanent", "Founder").
     employment_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    #: The decidable form: festanstellung | freelance | beides, or NULL when
+    #: nobody has established it. This is what a filter reads.
+    employment_form: Mapped[str | None] = mapped_column(String(20), nullable=True)
     willing_to_relocate: Mapped[str | None] = mapped_column(String(10), nullable=True)
     notice_period: Mapped[str | None] = mapped_column(String(80), nullable=True)
     availability: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -88,9 +101,18 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
     #: "Mittwoch/Donnerstag ab 11–12 Uhr" — scheduling needs the window, and a
     #: window buried in a note cannot be read when booking a round.
     interview_availability: Mapped[str | None] = mapped_column(Text, nullable=True)
-    #: Other processes the candidate is running, and where. Timing pressure —
-    #: and a business-development signal, since those companies are hiring.
+    #: Other processes the candidate is running, in their own words. Timing
+    #: pressure, and the note behind the names below.
     other_processes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: WHERE those processes are running, as company names.
+    #:
+    #: The document is explicit about why: "im Idealfall sagt er uns wo -> so
+    #: wissen wir wer ähnliche Profile sucht und ist für uns ein potentieller
+    #: Neukunde". A sentence cannot be counted across a pool; names can, and
+    #: three candidates naming the same company is a sales lead.
+    other_process_companies: Mapped[list] = mapped_column(
+        JSONList, default=list, nullable=False
+    )
     availability_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     work_permit: Mapped[WorkPermitStatus] = mapped_column(

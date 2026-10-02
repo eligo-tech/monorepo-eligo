@@ -44,52 +44,41 @@ async def get_candidate(
 async def create_candidate(
     session: AsyncSession, *, data: CandidateCreate
 ) -> Candidate:
+    """Write a new candidate from the whole payload.
+
+    Built from `model_dump` rather than a hand-written field list. The list
+    version had to be extended for every new column and silently dropped the
+    ones nobody remembered — `salary_minimum`, `profile_summary`,
+    `interview_availability` and `other_processes` all arrived on the schema
+    and were discarded here on the way to the row.
+    """
     tenant_id = data.tenant_id or settings.default_tenant_id
-    candidate = Candidate(
-        tenant_id=tenant_id,
-        full_name=data.full_name,
-        email=data.email,
-        phone=data.phone,
-        current_title=data.current_title,
-        current_company=data.current_company,
-        location=data.location,
-        merged_identities=data.merged_identities,
-        skills=data.skills,
-        work_history=data.work_history,
-        salary_expectation=data.salary_expectation,
-        salary_currency=data.salary_currency,
-        availability_weeks=data.availability_weeks,
-        work_permit=data.work_permit,
-        # Extended profile (aiFind field set) — persisted so the dossier fills in.
-        first_name=data.first_name,
-        last_name=data.last_name,
-        sex=data.sex,
-        name_prefix=data.name_prefix,
-        date_of_birth=data.date_of_birth,
-        street=data.street,
-        postal_code=data.postal_code,
-        city=data.city,
-        country=data.country,
-        linkedin_url=data.linkedin_url,
-        xing_url=data.xing_url,
-        industry=data.industry,
-        employment_type=data.employment_type,
-        willing_to_relocate=data.willing_to_relocate,
-        notice_period=data.notice_period,
-        availability=data.availability,
-        total_years_experience=data.total_years_experience,
-        current_salary=data.current_salary,
-        languages=data.languages,
-        education=data.education,
-        working_experience=data.working_experience,
-        motivation=data.motivation,
-        source=data.source,
-    )
+    values = data.model_dump(exclude_none=True)
+    values.pop("tenant_id", None)
+    # The schema carries a few fields the row does not; dropping them here
+    # beats an unexpected-keyword TypeError at runtime.
+    values = {k: v for k, v in values.items() if hasattr(Candidate, k)}
+    candidate = Candidate(tenant_id=tenant_id, **values)
+    _sync_industry(candidate)
     session.add(candidate)
     await session.flush()
     await session.commit()
     await session.refresh(candidate)
     return candidate
+
+
+def _sync_industry(candidate: Candidate) -> None:
+    """Keep the legacy single `industry` in step with `industries`.
+
+    The expand half of expand/contract (migration 0030): `industries` is the
+    field of record, `industry` still exists so a deploy does not break the
+    running container mid-rollout, and it is dropped in a follow-up. Without
+    this the legacy column would quietly drift away from the truth.
+    """
+    if candidate.industries:
+        candidate.industry = candidate.industries[0]
+    elif candidate.industry and not candidate.industries:
+        candidate.industries = [candidate.industry]
 
 
 # Columns declared NOT NULL — a manual edit must not blank these out.
@@ -216,8 +205,68 @@ async def update_candidate(
         candidate.verification_score = max(
             candidate.verification_score, _verification_score(candidate)
         )
+        if "industries" in applied or "industry" in applied:
+            _sync_industry(candidate)
         await session.flush()
 
     await session.commit()
     await session.refresh(candidate)
     return candidate
+
+
+def _norm_company(name: str) -> str:
+    """Fold the spellings a recruiter types into one key.
+
+    "Trade Republic", "trade republic" and "Trade Republic GmbH" are one
+    company for the purpose of counting who is hiring. Legal suffixes are
+    dropped and case is ignored; anything subtler (abbreviations, umlaut
+    spellings) belongs in the hub's `resolution.py`, not in a count.
+    """
+    cleaned = name.strip().lower()
+    for suffix in (" gmbh & co. kg", " gmbh", " ag", " se", " kg", " ug", " e.k."):
+        if cleaned.endswith(suffix):
+            cleaned = cleaned[: -len(suffix)]
+            break
+    return " ".join(cleaned.split())
+
+
+async def competing_employers(
+    session: AsyncSession, *, tenant_id: uuid.UUID
+) -> list[dict]:
+    """Who else is interviewing this tenant's candidates — a sales signal.
+
+    `data/examples/metadata_quailfication.txt` asks where a candidate's other
+    processes are running, and says why: whoever is looking at the same
+    profiles is a potential client. One name is an anecdote; the same name
+    across three candidates is a company with a hiring need in this niche.
+
+    Returns the companies with the candidates who named them, busiest first.
+    Names come from recruiters, so the display name is the most recent
+    spelling and the grouping key is the normalized one.
+    """
+    rows = (
+        await session.execute(
+            select(Candidate)
+            .where(Candidate.tenant_id == tenant_id)
+            .order_by(Candidate.updated_at.desc())
+        )
+    ).scalars()
+
+    grouped: dict[str, dict] = {}
+    for candidate in rows:
+        for raw in candidate.other_process_companies or []:
+            name = (raw or "").strip()
+            if not name:
+                continue
+            key = _norm_company(name)
+            entry = grouped.setdefault(
+                key, {"company": name, "candidate_count": 0, "candidates": []}
+            )
+            if candidate.full_name not in entry["candidates"]:
+                entry["candidates"].append(candidate.full_name)
+                entry["candidate_count"] += 1
+
+    return sorted(
+        grouped.values(),
+        key=lambda e: (-e["candidate_count"], e["company"].lower()),
+    )
