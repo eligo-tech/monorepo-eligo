@@ -16,7 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.domain.common.enums import ApplicationStatus, PipelineStage
 from app.domain.pipeline import steps as steps_mod
-from app.domain.pipeline.models import Application, ProcessStep
+from app.domain.pipeline.models import (
+    Application,
+    ApplicationAssessment,
+    ProcessStep,
+)
 from app.domain.pipeline.schemas import ApplicationCreate
 
 # Display labels for the board columns (German labels are product-facing).
@@ -292,6 +296,89 @@ async def set_step(
     return row
 
 
+def _assessment_dict(row: ApplicationAssessment | None) -> dict | None:
+    """The stored assessment as the wire contract wants it, or nothing.
+
+    `None` means "nobody has assessed this candidate for this mandate yet" and
+    the cockpit says so. An empty object would read as "assessed, score
+    unknown", which is a different and wrong statement.
+    """
+    if row is None:
+        return None
+    return {
+        "fit_score": row.fit_score,
+        "verdict": row.verdict,
+        "strengths": list(row.strengths or []),
+        "risks": list(row.risks or []),
+        "client_summary": row.client_summary,
+        "technologies": list(row.technologies or []),
+        "basis": row.basis,
+        "assessed_at": as_utc(row.assessed_at),
+    }
+
+
+async def get_assessment(
+    session: AsyncSession, *, tenant_id: uuid.UUID, application_id: uuid.UUID
+) -> ApplicationAssessment | None:
+    return await session.scalar(
+        select(ApplicationAssessment).where(
+            ApplicationAssessment.tenant_id == tenant_id,
+            ApplicationAssessment.application_id == application_id,
+        )
+    )
+
+
+async def set_assessment(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    application_id: uuid.UUID,
+    fit_score: int | None = None,
+    verdict: str | None = None,
+    strengths: list[str] | None = None,
+    risks: list[str] | None = None,
+    client_summary: str | None = None,
+    technologies: list[str] | None = None,
+    basis: str | None = None,
+    assessed_at: dt.datetime | None = None,
+) -> ApplicationAssessment:
+    """Replace the assessment of one candidate on one mandate.
+
+    One row per application (the unique constraint says so), so re-assessing
+    after the second round overwrites rather than accumulating versions the
+    cockpit would then have to choose between. The receipt trail for who
+    changed what lives in the verification ledger, not in duplicate rows.
+    """
+    if fit_score is not None and not 0 <= fit_score <= 10:
+        raise ValueError("fit_score must be between 0 and 10")
+
+    app = await get_application(
+        session, tenant_id=tenant_id, application_id=application_id
+    )
+    if app is None:
+        raise ValueError("application not found")
+
+    row = await get_assessment(
+        session, tenant_id=tenant_id, application_id=application_id
+    )
+    if row is None:
+        row = ApplicationAssessment(
+            tenant_id=tenant_id, application_id=application_id
+        )
+        session.add(row)
+    row.fit_score = fit_score
+    row.verdict = verdict
+    row.strengths = list(strengths or [])
+    row.risks = list(risks or [])
+    row.client_summary = client_summary
+    row.technologies = list(technologies or [])
+    row.basis = basis
+    row.assessed_at = assessed_at or dt.datetime.now(dt.UTC)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
 async def processes(
     session: AsyncSession, *, tenant_id: uuid.UUID
 ) -> list[dict]:
@@ -319,6 +406,18 @@ async def processes(
     by_app: dict[uuid.UUID, list[ProcessStep]] = {}
     for step in all_steps:
         by_app.setdefault(step.application_id, []).append(step)
+
+    assessments = {
+        a.application_id: a
+        for a in (
+            await session.execute(
+                select(ApplicationAssessment).where(
+                    ApplicationAssessment.tenant_id == tenant_id,
+                    ApplicationAssessment.application_id.in_([a.id for a in apps]),
+                )
+            )
+        ).scalars()
+    }
 
     candidates = {
         c.id: c
@@ -360,6 +459,12 @@ async def processes(
                 "job_title": job.title,
                 "company_id": company.id if company else None,
                 "company_name": company.name if company else None,
+                "location": job.location,
+                "must_have_skills": list(job.must_have_skills or []),
+                "salary_min": job.salary_min,
+                "salary_max": job.salary_max,
+                "salary_currency": job.salary_currency,
+                "status": job.status,
                 "candidates": [],
             },
         )
@@ -393,6 +498,7 @@ async def processes(
                     }
                     for s in steps
                 ],
+                "assessment": _assessment_dict(assessments.get(app.id)),
             }
         )
 

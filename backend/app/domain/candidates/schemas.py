@@ -52,6 +52,10 @@ class CandidateBase(BaseModel):
     availability: str | None = None
     total_years_experience: str | None = None
     current_salary: int | None = None
+    salary_minimum: int | None = None
+    profile_summary: str | None = None
+    interview_availability: str | None = None
+    other_processes: str | None = None
     languages: list[str] | None = None
     # Structured entries ({degree, institution, dates}) or legacy strings.
     education: list[dict] | list[str] | None = None
@@ -100,6 +104,10 @@ class CandidateUpdate(BaseModel):
     total_years_experience: str | None = None
     current_salary: int | None = Field(default=None, ge=0)
     salary_expectation: int | None = Field(default=None, ge=0)
+    salary_minimum: int | None = Field(default=None, ge=0)
+    profile_summary: str | None = None
+    interview_availability: str | None = None
+    other_processes: str | None = None
     salary_currency: str | None = None
     availability_weeks: int | None = Field(default=None, ge=0)
     work_permit: WorkPermitStatus | None = None

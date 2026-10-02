@@ -12,6 +12,8 @@ from app.core.database import get_db
 from app.domain.pipeline import service
 from app.domain.pipeline import steps as steps_mod
 from app.domain.pipeline.schemas import (
+    AssessmentRead,
+    AssessmentWrite,
     ProcessJobRead,
     ProcessStepRead,
     ProcessStepUpdate,
@@ -156,3 +158,49 @@ async def set_step(
             "note": row.note,
         }
     )
+
+
+@router.get(
+    "/applications/{application_id}/assessment", response_model=AssessmentRead
+)
+async def read_assessment(
+    application_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> AssessmentRead:
+    """The Kandidatenauswertung for this candidate on this mandate."""
+    row = await service.get_assessment(
+        db, tenant_id=tenant_id, application_id=application_id
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no assessment yet")
+    return AssessmentRead.model_validate(row)
+
+
+@router.put(
+    "/applications/{application_id}/assessment", response_model=AssessmentRead
+)
+async def write_assessment(
+    application_id: uuid.UUID,
+    payload: AssessmentWrite,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> AssessmentRead:
+    """Write (or rewrite) the assessment. A full replacement, by design."""
+    try:
+        row = await service.set_assessment(
+            db,
+            tenant_id=tenant_id,
+            application_id=application_id,
+            fit_score=payload.fit_score,
+            verdict=payload.verdict,
+            strengths=payload.strengths,
+            risks=payload.risks,
+            client_summary=payload.client_summary,
+            technologies=payload.technologies,
+            basis=payload.basis,
+            assessed_at=payload.assessed_at,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return AssessmentRead.model_validate(row)

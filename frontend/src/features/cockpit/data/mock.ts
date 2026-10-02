@@ -242,6 +242,10 @@ export const MOCK_COCKPIT: CockpitData = {
     },
   ],
 
+  // Grouped on load by `mandatesFromCards` — computing it here would make the
+  // mock import the adapters that import the mock.
+  mandates: [],
+
   processes: [
     {
       id: 'pc-1',

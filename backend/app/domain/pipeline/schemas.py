@@ -101,6 +101,39 @@ class ProcessStepUpdate(BaseModel):
     actor: str = "recruiter"
 
 
+class AssessmentRead(BaseModel):
+    """The Kandidatenauswertung as the cockpit shows it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    fit_score: int | None
+    verdict: str | None
+    strengths: list[str]
+    risks: list[str]
+    client_summary: str | None
+    technologies: list[str]
+    basis: str | None
+    assessed_at: dt.datetime | None
+
+
+class AssessmentWrite(BaseModel):
+    """Write the assessment of one candidate on one mandate.
+
+    A full replacement, not a patch: the recruiter re-reads the whole
+    evaluation after a round and a half-updated verdict — new risks, old
+    Kurzfazit — is worse than no verdict at all.
+    """
+
+    fit_score: int | None = Field(default=None, ge=0, le=10)
+    verdict: str | None = None
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    client_summary: str | None = None
+    technologies: list[str] = Field(default_factory=list)
+    basis: str | None = None
+    assessed_at: dt.datetime | None = None
+
+
 class ProcessCandidateRead(BaseModel):
     """One candidate's run at one job."""
 
@@ -113,6 +146,8 @@ class ProcessCandidateRead(BaseModel):
     next_appointment: dt.datetime | None
     note: str | None
     steps: list[ProcessStepRead]
+    #: Null until someone has assessed this candidate FOR THIS mandate.
+    assessment: AssessmentRead | None = None
 
 
 class ProcessJobRead(BaseModel):
@@ -122,4 +157,12 @@ class ProcessJobRead(BaseModel):
     job_title: str
     company_id: uuid.UUID | None
     company_name: str | None
+    #: The Suchprofil, so the per-job view can say what is being searched for
+    #: next to who is running — the two halves of one mandate.
+    location: str | None = None
+    must_have_skills: list[str] = Field(default_factory=list)
+    salary_min: int | None = None
+    salary_max: int | None = None
+    salary_currency: str | None = None
+    status: str | None = None
     candidates: list[ProcessCandidateRead]

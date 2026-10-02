@@ -592,6 +592,22 @@ export interface ProcessStepDTO {
   note: string | null
 }
 
+/** The Kandidatenauswertung — one candidate measured against ONE mandate. */
+export interface AssessmentDTO {
+  /** Gesamtbewertung on the document's own scale, 0–10. */
+  fit_score: number | null
+  /** Kurzfazit, plus the paragraph that argues it. */
+  verdict: string | null
+  strengths: string[]
+  risks: string[]
+  /** Section C — written for the client's eyes, not internal notes. */
+  client_summary: string | null
+  technologies: string[]
+  /** Provenance: "CV (Kurzversion) + Gesprächstranskript (18.09.2026)". */
+  basis: string | null
+  assessed_at: string | null
+}
+
 export interface ProcessCandidateDTO {
   application_id: string
   candidate_id: string
@@ -601,6 +617,8 @@ export interface ProcessCandidateDTO {
   next_appointment: string | null
   note: string | null
   steps: ProcessStepDTO[]
+  /** Null while nobody has assessed this candidate FOR THIS mandate. */
+  assessment: AssessmentDTO | null
 }
 
 /** One mandate with every candidate running on it ("Laufende Prozesse"). */
@@ -609,5 +627,12 @@ export interface ProcessJobDTO {
   job_title: string
   company_id: string | null
   company_name: string | null
+  /** The Suchprofil — the other half of a mandate. */
+  location: string | null
+  must_have_skills: string[]
+  salary_min: number | null
+  salary_max: number | null
+  salary_currency: string | null
+  status: string | null
   candidates: ProcessCandidateDTO[]
 }

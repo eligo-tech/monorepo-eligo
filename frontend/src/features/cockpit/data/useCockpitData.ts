@@ -11,7 +11,12 @@ import { useAsync } from '@/hooks/useAsync'
 import { api } from '@/api/client'
 import type { JobDTO, MatchResultDTO } from '@/api/types'
 import { MOCK_COCKPIT } from './mock'
-import { processCardsFromSteps, toJobScores, toProcessCards } from './adapters'
+import {
+  mandatesFromCards,
+  processCardsFromSteps,
+  toJobScores,
+  toProcessCards,
+} from './adapters'
 import type { CockpitData } from './types'
 
 /** Which sections are showing live data — drives the section-header hints. */
@@ -69,6 +74,10 @@ async function loadCockpit(): Promise<Omit<CockpitState, 'reload'>> {
       live.processes = true
     }
   }
+
+  // The per-job view groups whatever cards we ended up with — live ones carry
+  // their mandate's Suchprofil, demo ones group by their ref alone.
+  data.mandates = mandatesFromCards(data.processes, processes ?? [])
 
   // ── 02 Jobscoring ──
   if (jobs) {

@@ -112,7 +112,15 @@ export function JobsScreen() {
                   GRID,
                 )}
               >
-                <span className="truncate text-[15px] text-cockpit-text">{job.title}</span>
+                {/* The mandate opens in the cockpit's per-job view — the
+                    list says a role exists, the cockpit says where it stands. */}
+                <a
+                  href={`#cockpit/${job.id}`}
+                  title="Im Cockpit öffnen"
+                  className="truncate text-[15px] text-cockpit-text underline-offset-2 transition-colors hover:text-mint-300 hover:underline"
+                >
+                  {job.title}
+                </a>
                 <span className="truncate text-[14px] text-cockpit-dim">
                   {companyName(job.client_company_id)}
                 </span>

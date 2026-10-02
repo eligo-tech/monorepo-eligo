@@ -46,18 +46,40 @@ export const isScreenKey = (v: string): v is ScreenKey =>
  *  One line is cheaper than a dead hash that silently lands on the cockpit. */
 const RETIRED: Record<string, ScreenKey> = { workspace: 'projekte' }
 
-export const resolveScreen = (hash: string): ScreenKey | null =>
-  isScreenKey(hash) ? hash : (RETIRED[hash] ?? null)
+/** `#cockpit/<jobId>`: the screen, then what it is focused on.
+ *
+ *  The per-job view belongs in the URL. A recruiter sends a colleague "look at
+ *  the EM-Software search", and a view that exists only in component state can
+ *  only be described, never linked. */
+export const resolveScreen = (hash: string): ScreenKey | null => {
+  const base = hash.split('/')[0]
+  return isScreenKey(base) ? base : (RETIRED[base] ?? null)
+}
+
+/** The part after the screen, if any — today a mandate id on `#cockpit`. */
+export const resolveDetail = (hash: string): string | null =>
+  hash.split('/').slice(1).join('/') || null
 
 export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: ScreenKey }) {
   const state = useCockpitData()
   const [typeface, setTypeface] = useTypeface()
   const [screen, setScreen] = useState<ScreenKey>(initialScreen)
+  const [detail, setDetail] = useState<string | null>(() =>
+    resolveDetail(window.location.hash.replace('#', '')),
+  )
   const [query, setQuery] = useState('')
 
   const goToScreen = useCallback((next: ScreenKey) => {
     setScreen(next)
+    setDetail(null)
     window.location.hash = next
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  /** Focus one mandate inside the cockpit, or go back to the overall view. */
+  const goToMandate = useCallback((id: string | null) => {
+    setDetail(id)
+    window.location.hash = id ? `cockpit/${id}` : 'cockpit'
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
@@ -66,7 +88,10 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
     const onHash = () => {
       const h = window.location.hash.replace('#', '')
       const next = resolveScreen(h)
-      if (next) setScreen(next)
+      if (next) {
+        setScreen(next)
+        setDetail(resolveDetail(h))
+      }
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -86,7 +111,13 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
       />
 
       <main className="mx-auto max-w-[1560px] px-6 pb-24 pt-8">
-        {screen === 'cockpit' && <CockpitScreen state={state} />}
+        {screen === 'cockpit' && (
+          <CockpitScreen
+            state={state}
+            mandateId={detail}
+            onSelectMandate={goToMandate}
+          />
+        )}
         {screen === 'markt' && <MarktScreen />}
         {screen === 'projekte' && <ProjekteScreen />}
         {screen === 'managers' && <ManagerScreen />}
