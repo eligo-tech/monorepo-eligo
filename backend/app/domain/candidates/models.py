@@ -75,7 +75,22 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
     )
 
     salary_expectation: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: The floor, as asked in the Qualifikationsgespräch. A candidate names
+    #: two numbers ("Minimum 92–95k, Wunsch ~100k") and only the pair says
+    #: whether a mandate's band can work — `salary_expectation` is the Wunsch.
+    salary_minimum: Mapped[int | None] = mapped_column(Integer, nullable=True)
     salary_currency: Mapped[str] = mapped_column(String(3), default="EUR")
+
+    #: The recruiter's own summary of the Gesprächszusammenfassung (section B
+    #: of the Kandidatenauswertung) — holds across mandates, so it lives here
+    #: and not on the application.
+    profile_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: "Mittwoch/Donnerstag ab 11–12 Uhr" — scheduling needs the window, and a
+    #: window buried in a note cannot be read when booking a round.
+    interview_availability: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Other processes the candidate is running, and where. Timing pressure —
+    #: and a business-development signal, since those companies are hiring.
+    other_processes: Mapped[str | None] = mapped_column(Text, nullable=True)
     availability_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     work_permit: Mapped[WorkPermitStatus] = mapped_column(
