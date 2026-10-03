@@ -45,9 +45,7 @@ class CandidateBase(BaseModel):
     country: str | None = None
     linkedin_url: str | None = None
     xing_url: str | None = None
-    industry: str | None = None
-    #: Every industry worked in. `industry` is the single imported label and
-    #: is on its way out — read this.
+    #: Every industry worked in, in the candidate's own career order.
     industries: list[str] | None = None
     employment_type: str | None = None
     #: "festanstellung" | "freelance" | "beides" — see EmploymentForm.
@@ -102,7 +100,6 @@ class CandidateUpdate(BaseModel):
     country: str | None = None
     linkedin_url: str | None = None
     xing_url: str | None = None
-    industry: str | None = None
     industries: list[str] | None = None
     employment_type: str | None = None
     employment_form: EmploymentForm | None = None

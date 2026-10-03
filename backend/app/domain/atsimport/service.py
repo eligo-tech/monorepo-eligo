@@ -320,7 +320,6 @@ async def import_aifind(
             "email": record.email,
             "xing_url": record.xing_url,
             "current_company": record.current_company,
-            "industry": record.industry,
             "industries": [record.industry] if record.industry else [],
             "street": record.street,
             "postal_code": record.postal_code,

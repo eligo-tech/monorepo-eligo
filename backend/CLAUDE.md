@@ -228,7 +228,25 @@ Every domain package under `app/domain/<name>/` has exactly:
 
 Shared primitives live in `app/domain/common/` (`mixins`, `enums`, `types`).
 Cross-domain enums (`PipelineStage`, `ApplicationStatus`, `MatchStrength`,
-`ConfidenceSource`, `ReceiptAction`, `WorkPermitStatus`) belong there.
+`ConfidenceSource`, `ReceiptAction`, `WorkPermitStatus`, `DocumentKind`,
+`EmploymentForm`) belong there.
+
+Three domain facts worth knowing before you add a field:
+
+- **`pipeline`** holds both resolutions of a process: `applications.stage` is
+  the coarse Kanban position, `process_steps` the tracker's nine steps with
+  their dates and verdicts, and the stage is DERIVED from the steps.
+  `application_assessments` is the Kandidatenauswertung — keyed on the
+  application, because the same person against another Muss-Profil is a
+  different fit.
+- **`documents`** stores every file a candidate has with a `kind`
+  (cv · transkript · zeugnis · zertifikat · sonstiges). "The CV" is the newest
+  file *of that kind*; before the column it was simply the newest file.
+- **`candidates`** carries the Qualifikationsgespräch set:
+  `industries` (plural — the single `industry` column is gone from the code),
+  `employment_form`, `salary_minimum` next to `salary_expectation`,
+  `profile_summary`, `interview_availability`, `other_processes` and
+  `other_process_companies`.
 
 Portable column types are in `common/types.py`: `JSONDict`/`JSONList` map to
 `JSONB` on Postgres and TEXT on SQLite. Embeddings are JSON lists in the

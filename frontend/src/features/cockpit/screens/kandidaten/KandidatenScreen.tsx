@@ -9,13 +9,12 @@ import { useMemo, useState } from 'react'
 import { ArrowDownUp, Check, Download, Search, SlidersHorizontal, Upload, X } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { LinkedInMark } from '@/components/ui/LinkedInMark'
-import { candidates as mockCandidates } from '@/data/candidates'
 import type { Candidate } from '@/data/types'
 import { api } from '@/api/client'
 import { toCandidate } from '@/api/adapters'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
-import { Chip, SectionHeader } from '../../ui/primitives'
+import { Chip, Panel, SectionHeader } from '../../ui/primitives'
 import { Button, FIELD } from '../../ui/forms'
 import { CandidateDrawer } from './CandidateDrawer'
 import { CvUploadModal } from './CvUploadModal'
@@ -187,12 +186,12 @@ export function KandidatenScreen() {
   const [selected, setSelected] = useState<Candidate | null>(null)
   const { data, loading, error } = useAsync(() => api.candidates(), [refreshKey])
 
-  // Live data when reachable; mock only as an OFFLINE fallback (never flash mock
-  // over a real, possibly-empty, tenant). While loading we show nothing.
-  const all = useMemo(
-    () => (data ? data.map(toCandidate) : error ? mockCandidates : []),
-    [data, error],
-  )
+  // Live data or nothing. There used to be a mock fallback here — five
+  // invented people rendered whenever the call failed, which in a product
+  // where the common failure is an expired session meant a recruiter saw
+  // strangers in their own pool, indistinguishable from their candidates
+  // except for a hint in the section header. An error says it is an error.
+  const all = useMemo(() => (data ? data.map(toCandidate) : []), [data])
 
   // Distinct technologies across the pool, most common first (for the filter).
   const skillOptions = useMemo(() => {
@@ -256,8 +255,17 @@ export function KandidatenScreen() {
           id="section-liste"
           index="01"
           title="Bestand"
-          hint={error ? 'offline · Demo-Daten' : 'live aus dem Datensatz'}
+          hint={error ? 'nicht erreichbar' : 'live aus dem Datensatz'}
         />
+
+        {error && (
+          <Panel className="p-5">
+            <p className="text-[14px] text-coral-400">
+              Kandidaten konnten nicht geladen werden — ist die Sitzung noch
+              gültig? (Die Liste bleibt leer, statt Beispieldaten zu zeigen.)
+            </p>
+          </Panel>
+        )}
 
         {/* Stats strip */}
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
@@ -342,7 +350,7 @@ export function KandidatenScreen() {
             <p className="py-16 text-center font-mono text-[13px] text-cockpit-faint">Lädt…</p>
           )}
 
-          {!loading && rows.length === 0 && (
+          {!loading && !error && rows.length === 0 && (
             <p className="py-16 text-center text-[14px] text-cockpit-dim">
               Keine Kandidaten gefunden
               {query ? ` für „${query}"` : ''}

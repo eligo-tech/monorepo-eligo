@@ -31,10 +31,13 @@ src/
 │   ├── CommandBar.tsx          # wordmark, search, status chips, typeface switch, Clerk controls
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
 │   ├── useTypeface.ts          # the Jet · Mono · Heli switch
-│   ├── screens/                # CockpitScreen · MarktScreen · ProjekteScreen
+│   ├── screens/                # CockpitScreen · MarktScreen · ProjekteScreen · JobsScreen
 │   │   ├── ContactsPanel.tsx   # "Anreichern": contacts read out of a company's public ads
-│   │   └── kandidaten/         # KandidatenScreen · CandidateDrawer · DossierEditor · CvUploadModal
-│   ├── sections/               # SignalsPanel · Revenue (01) · JobScoring (02) · Process (03) · NextActions
+│   │   ├── MandateEditor.tsx   # "Mandat bearbeiten" — the Suchprofil, from the Jobs list
+│   │   ├── MandateView.tsx     # the per-job workspace ("Mandat & Kandidatensuche")
+│   │   ├── mandate/            # its nine panels (Stammdaten · Feedback · Aktivität · …)
+│   │   └── kandidaten/         # KandidatenScreen · CandidateDrawer · DossierEditor · CvUploadModal · AttachmentsPanel
+│   ├── sections/               # SignalsPanel · Revenue (01) · Process (02) · NextActions · JobScoring (03) · Competition (04)
 │   ├── ui/                     # primitives.tsx · forms.tsx · Gauge · ProcessStepper · ScoreBar · Carousel
 │   └── data/                   # types · mock (demo baseline) · adapters (DTO joins) · useCockpitData
 ├── components/                 # cross-feature UI (ui/Avatar, ui/LinkedInMark, …)
@@ -46,6 +49,14 @@ src/
 **Adding a screen** is one entry in `SCREENS` (`CockpitShell.tsx`) plus a component
 exporting its section anchor ids. Hash routing, the navigator and keyboard paging
 follow automatically.
+
+**The cockpit has two views**, and both live on the same screen. `#cockpit` is
+the whole book of business; `#cockpit/<jobId>` is one mandate — its Suchprofil,
+its candidates, their assessments. The hash carries the choice so a per-job view
+can be sent to a colleague (`resolveScreen` takes the part before the slash,
+`resolveDetail` the part after). The section order follows
+`data/design/cockpit_update.html`: 01 Umsatz → 02 Laufende Prozesse (grouped by
+mandate) → Nächste beste Aktionen → 03 Jobscoring → 04 Wettbewerb.
 
 **Screens are ordered as a drill-down** — `cockpit` → `kandidaten` →
 `kandidatenwelt`: the whole book of business, the pool it draws on, then one
@@ -137,11 +148,21 @@ the screen. `state.live` says which sections are live and drives their header hi
 
 | Section | Source |
 |---|---|
-| 03 Laufende Prozesse | live: `/pipeline/board` joined to `/candidates`, `/jobs`, `/companies` |
+| 02 Laufende Prozesse | live: `/pipeline/processes` (per-step rows), else `/pipeline/board` joined to `/candidates`, `/jobs`, `/companies` |
+| Kandidatenauswertung, Gehalts-Verdikt (per job) | live: `/pipeline/processes` carries both |
+| 04 Wer sucht dieselben Profile | live: `/candidates/competing-employers` |
 | `Ø N T bis Offer` | live: `reportingOverview().dwell` |
-| 02 Jobscoring score | live: `matchJob(id)` per open mandate → mean of the top 3 that cleared hard filters |
+| 03 Jobscoring score | live: `matchJob(id)` per open mandate → mean of the top 3 that cleared hard filters |
 | Jobscoring delta, `M %` | none — rendered as `—`, not invented |
 | 01 Umsatz, Signale, Aktionen, market roles | demo — no revenue/signal/market model in the backend yet |
+
+**Never fall back to invented rows.** The mock FLOOR above is the demo baseline
+for sections the backend cannot serve, and every figure in it carries
+`provenance: 'demo'`. That is not a licence to substitute fake *records* for
+real ones: the Kandidaten screen used to render five hardcoded people on ANY
+API error, which — in a product whose commonest failure is an expired session —
+showed a recruiter strangers in their own pool, flagged only by a hint in the
+section header. A failed call says so and shows nothing.
 
 The backend's `PipelineStage` enum has 7 stages; the cockpit's process has 9 steps.
 `STAGE_TO_STEP` maps `presented → 1`, `interview → 4`, `placed → 9`; pre-presentation

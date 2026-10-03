@@ -59,26 +59,11 @@ async def create_candidate(
     # beats an unexpected-keyword TypeError at runtime.
     values = {k: v for k, v in values.items() if hasattr(Candidate, k)}
     candidate = Candidate(tenant_id=tenant_id, **values)
-    _sync_industry(candidate)
     session.add(candidate)
     await session.flush()
     await session.commit()
     await session.refresh(candidate)
     return candidate
-
-
-def _sync_industry(candidate: Candidate) -> None:
-    """Keep the legacy single `industry` in step with `industries`.
-
-    The expand half of expand/contract (migration 0030): `industries` is the
-    field of record, `industry` still exists so a deploy does not break the
-    running container mid-rollout, and it is dropped in a follow-up. Without
-    this the legacy column would quietly drift away from the truth.
-    """
-    if candidate.industries:
-        candidate.industry = candidate.industries[0]
-    elif candidate.industry and not candidate.industries:
-        candidate.industries = [candidate.industry]
 
 
 # Columns declared NOT NULL — a manual edit must not blank these out.
@@ -205,8 +190,6 @@ async def update_candidate(
         candidate.verification_score = max(
             candidate.verification_score, _verification_score(candidate)
         )
-        if "industries" in applied or "industry" in applied:
-            _sync_industry(candidate)
         await session.flush()
 
     await session.commit()
