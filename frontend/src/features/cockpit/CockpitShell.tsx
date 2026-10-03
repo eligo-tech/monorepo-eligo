@@ -116,6 +116,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
             state={state}
             mandateId={detail}
             onSelectMandate={goToMandate}
+            onGoToScreen={goToScreen}
           />
         )}
         {screen === 'markt' && <MarktScreen />}

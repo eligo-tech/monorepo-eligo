@@ -7,7 +7,7 @@
 import { Search } from 'lucide-react'
 import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react'
 import { authEnabled } from '@/auth/config'
-import { SegmentedControl } from './ui/primitives'
+import { Figure, SegmentedControl } from './ui/primitives'
 import { SectionPicker, type SectionOption } from './SectionPicker'
 import type { ScreenKey } from './CockpitShell'
 import type { CockpitStatus } from './data/types'
@@ -73,6 +73,23 @@ export function CommandBar({
             className="w-full rounded-xl border border-cockpit-line bg-cockpit-inset py-2.5 pl-11 pr-4 text-[15px] text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
           />
         </label>
+
+        {/* System state, as the design puts it: what the machine owes you and
+            whether a human is still in the loop. Both are demo values — there
+            is no datalauf queue in the backend yet — so the count carries its
+            provenance marker rather than passing as measured. */}
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="flex items-center gap-2 rounded-xl border border-gold-600/45 bg-gold-800/25 px-3 py-1.5 text-[13px] text-gold-300">
+            <span className="h-[7px] w-[7px] rounded-full bg-gold-400" />
+            Datenlauf fällig · <Figure figure={status.pendingChanges} /> Änderungen
+          </span>
+          {status.humanInTheLoop && (
+            <span className="flex items-center gap-2 rounded-xl border border-mint-600/45 bg-mint-800/25 px-3 py-1.5 text-[13px] text-mint-300">
+              <span className="h-[7px] w-[7px] rounded-full bg-mint-400" />
+              Human-in-the-Loop aktiv
+            </span>
+          )}
+        </div>
 
         {/* Tenant + account, or the mockup's static initials chip in demo mode */}
         <div className="flex shrink-0 items-center gap-2.5 rounded-xl border border-cockpit-line bg-cockpit-inset px-3 py-1.5">

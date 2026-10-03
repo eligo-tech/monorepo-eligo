@@ -42,7 +42,7 @@ export function NextActionsSection({ actions }: { actions: NextAction[] }) {
   return (
     <section className="space-y-5">
       <SectionHeader
-        id="section-04"
+        id="section-aktionen"
         title="Nächste beste Aktionen"
         tone="gold"
         icon={<Zap className="h-[15px] w-[15px]" />}

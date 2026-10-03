@@ -214,6 +214,9 @@ export interface Mandate {
   ref: string
   title: string
   client: string
+  /** The client company's id, when the mandate comes from the record — the
+   *  workspace loads its Stammdaten and manager from it. */
+  companyId?: string
   /** The Suchprofil. Null/empty where the mandate carries none yet — shown as
    *  a gap to fill, never invented. */
   location: string | null
