@@ -12,10 +12,14 @@ import { NextActionsSection } from '../sections/NextActionsSection'
 import { ProcessSection } from '../sections/ProcessSection'
 import { RevenueSection } from '../sections/RevenueSection'
 import { SignalsPanel } from '../sections/SignalsPanel'
+import { MandateDrawer } from './MandateDrawer'
 import { MandateView } from './MandateView'
 import { cn } from '@/lib/cn'
+import { useMemo } from 'react'
+
 import { api } from '@/api/client'
 import { useAsync } from '@/hooks/useAsync'
+import { mandateFromJob } from '../data/adapters'
 import type { CockpitState } from '../data/useCockpitData'
 import type { ScreenKey } from '../CockpitShell'
 
@@ -33,21 +37,31 @@ export function CockpitScreen({
   onGoToScreen?: (screen: ScreenKey) => void
 }) {
   const { data, live, reload } = state
-  const mandate = mandateId
-    ? data.mandates.find((m) => m.id === mandateId)
-    : undefined
+
+  // Every mandate the workspace has, not only the nine someone is running
+  // on: choosing a mandate to work ON is exactly the case where the process
+  // list is empty. `/jobs` is the full set; the process-derived ones carry
+  // the candidate counts, so they win on merge.
+  const { data: allJobs } = useAsync(() => api.jobs().catch(() => []), [])
+  const { data: allCompanies } = useAsync(() => api.companies().catch(() => []), [])
+
+  const mandates = useMemo(() => {
+    const byId = new Map(data.mandates.map((m) => [m.id, m]))
+    const companyName = new Map((allCompanies ?? []).map((c) => [c.id, c.name]))
+    for (const job of allJobs ?? []) {
+      if (byId.has(job.id)) continue
+      byId.set(job.id, mandateFromJob(job, companyName.get(job.client_company_id) ?? null))
+    }
+    return [...byId.values()]
+  }, [data.mandates, allJobs, allCompanies])
+
+  const mandate = mandateId ? mandates.find((m) => m.id === mandateId) : undefined
 
   // The workspace's Stammdaten need the client record and its manager. Both
   // are fetched only while a mandate is in focus — the overall view has no
   // use for them, and the cockpit's rule is one failing call degrades one
   // panel, so each is settled to undefined rather than thrown.
-  const { data: company } = useAsync(
-    () =>
-      mandate?.companyId
-        ? api.companies().then((rows) => rows.find((c) => c.id === mandate.companyId))
-        : Promise.resolve(undefined),
-    [mandate?.companyId],
-  )
+  const company = (allCompanies ?? []).find((c) => c.id === mandate?.companyId)
   const { data: manager } = useAsync(
     () =>
       mandate?.companyId
@@ -58,34 +72,33 @@ export function CockpitScreen({
     [mandate?.companyId],
   )
 
-  // A hash can name a mandate with nobody in play — a job opened from the
-  // Jobs list before its first candidate is presented — or one that has
-  // finished. Both get a sentence, not an empty screen.
+  const drawer = onSelectMandate ? (
+    <MandateDrawer
+      mandates={mandates}
+      activeId={mandate ? mandate.id : null}
+      onSelect={onSelectMandate}
+    />
+  ) : null
+
+  // A hash can name a mandate that no longer exists — a deleted job, or a
+  // link from another workspace. That gets a sentence, not an empty screen.
   if (mandateId && !mandate) {
     return (
-      <>
-        <MandateSwitch
-          state={state}
-          mandateId={null}
-          onSelectMandate={onSelectMandate}
-        />
-        <p className="mt-6 text-[15px] text-cockpit-dim">
-          Für dieses Mandat läuft noch kein Prozess — sobald ein Kandidat
-          vorgestellt ist, erscheint er hier.
+      <div className="flex gap-6">
+        {drawer}
+        <p className="min-w-0 flex-1 text-[15px] text-cockpit-dim">
+          Dieses Mandat gibt es in diesem Workspace nicht (mehr) — links eines
+          auswählen.
         </p>
-      </>
+      </div>
     )
   }
 
   if (mandate) {
     return (
-      <>
-        <MandateSwitch
-          state={state}
-          mandateId={mandateId ?? null}
-          onSelectMandate={onSelectMandate}
-        />
-        <div className="mt-8">
+      <div className="flex gap-6">
+        {drawer}
+        <div className="min-w-0 flex-1">
           <MandateView
             mandate={mandate}
             company={company ?? undefined}
@@ -94,15 +107,15 @@ export function CockpitScreen({
             onChanged={reload}
           />
         </div>
-      </>
+      </div>
     )
   }
 
   return (
-    <>
-      <MandateSwitch state={state} mandateId={null} onSelectMandate={onSelectMandate} />
+    <div className="flex gap-6">
+      {drawer}
 
-      <div className="mt-8 space-y-10">
+      <div className="min-w-0 flex-1 space-y-10">
         <header id="section-signals" className="scroll-mt-24">
           <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-mint-400">
             Kommandozentrale
@@ -132,7 +145,7 @@ export function CockpitScreen({
         <CompetitionSection />
         <WorldStrip onGo={onGoToScreen} />
       </div>
-    </>
+    </div>
   )
 }
 
@@ -167,74 +180,3 @@ function WorldStrip({ onGo }: { onGo?: (screen: ScreenKey) => void }) {
   )
 }
 
-/**
- * Gesamt ⇄ one mandate.
- *
- * A row of chips rather than a dropdown: the mandates ARE the book of
- * business, and a recruiter should see how many searches are running without
- * opening anything. It scrolls horizontally once there are more than a screen
- * holds, which is the same thing the tracker does on paper.
- */
-function MandateSwitch({
-  state,
-  mandateId,
-  onSelectMandate,
-}: {
-  state: CockpitState
-  mandateId: string | null
-  onSelectMandate?: (id: string | null) => void
-}) {
-  const { mandates } = state.data
-  if (!onSelectMandate || mandates.length === 0) return null
-
-  return (
-    <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1">
-      <ViewChip
-        active={mandateId === null}
-        onClick={() => onSelectMandate(null)}
-        label="Gesamt"
-      />
-      <span className="mx-1 h-4 w-px shrink-0 bg-cockpit-line" />
-      {mandates.map((m) => (
-        <ViewChip
-          key={m.id}
-          active={m.id === mandateId}
-          onClick={() => onSelectMandate(m.id)}
-          label={`${m.client} · ${m.title}`}
-          count={m.cards.length}
-        />
-      ))}
-    </div>
-  )
-}
-
-function ViewChip({
-  active,
-  onClick,
-  label,
-  count,
-}: {
-  active: boolean
-  onClick: () => void
-  label: string
-  count?: number
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        'shrink-0 whitespace-nowrap rounded-lg border px-3 py-1.5 font-mono text-[12px] transition-colors',
-        active
-          ? 'border-cockpit-edge bg-white/[0.07] text-cockpit-text'
-          : 'border-cockpit-line text-cockpit-dim hover:text-cockpit-text',
-      )}
-    >
-      {label}
-      {count !== undefined && (
-        <span className="ml-1.5 text-cockpit-faint">{count}</span>
-      )}
-    </button>
-  )
-}
