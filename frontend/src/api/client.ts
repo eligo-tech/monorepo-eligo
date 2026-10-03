@@ -26,6 +26,9 @@ import type {
   CandidateDocumentDTO,
   CompetingEmployerDTO,
   DocumentKind,
+  ImportEntityDTO,
+  ImportPreviewDTO,
+  ImportResultDTO,
   SourceCapabilitiesDTO,
   TenantSourceDTO,
   JobUpdatePayload,
@@ -70,6 +73,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new ApiError(res.status, body || res.statusText)
+  }
+  return res.json() as Promise<T>
+}
+
+/** POST a file plus form fields. Shared by every upload: the browser must
+ *  set the multipart boundary itself, so no content-type header here. */
+async function upload<T>(
+  path: string,
+  file: File,
+  fields: Record<string, string>,
+): Promise<T> {
+  const body = new FormData()
+  body.append('file', file)
+  for (const [key, value] of Object.entries(fields)) body.append(key, value)
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    body,
+    headers: await authHeaders(),
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new ApiError(res.status, detail || res.statusText)
   }
   return res.json() as Promise<T>
 }
@@ -380,6 +405,23 @@ export const api = {
       `/jobs/${jobId}${editor ? `?editor=${encodeURIComponent(editor)}` : ''}`,
       { method: 'PATCH', body: JSON.stringify(patch) },
     ),
+
+  // ── Importing a file ──
+  importEntities: () => request<ImportEntityDTO[]>('/imports/entities'),
+
+  /** Read the file and report what importing it WOULD do. Writes nothing. */
+  importPreview: (file: File, entity: string, mapping?: Record<string, string>) =>
+    upload<ImportPreviewDTO>('/imports/preview', file, {
+      entity,
+      ...(mapping ? { mapping: JSON.stringify(mapping) } : {}),
+    }),
+
+  /** Import the file with the mapping the recruiter confirmed. */
+  importCommit: (file: File, entity: string, mapping: Record<string, string>) =>
+    upload<ImportResultDTO>('/imports/commit', file, {
+      entity,
+      mapping: JSON.stringify(mapping),
+    }),
 
   // ── This workspace's own data sources ──
   tenantSources: () => request<TenantSourceDTO[]>('/tenant-sources'),

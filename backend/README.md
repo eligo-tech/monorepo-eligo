@@ -37,7 +37,21 @@ Copy `.env.example` → `.env`. Everything is prefixed `ELIGO_`. The default
 
 ## Onboarding a workspace's own data
 
-A customer connects their ATS themselves under **Einstellungen · Datenquellen**:
+Two doors, and the first needs no configuration at all.
+
+**A file** (`Einstellungen · Daten übernehmen`) — CSV or .xlsx exported from
+whatever the customer used before. The server reads the file (semicolons,
+cp1252, a title row above the table and duplicate headers are all handled),
+guesses what each column means from its header, and shows **what importing
+would do** — created, updated, skipped and why — before anything is written.
+The recruiter corrects the mapping if a guess is wrong, then imports.
+Candidates, companies, contacts and mandates; re-running the same file
+updates rather than duplicates, which is what makes a messy first import
+survivable. `POST /imports/preview` and `/imports/commit`, both tenant-scoped
+and both in-request — there is no outbound call and no credential involved.
+
+**An ATS account**, for a system that stays in use. A customer connects it
+themselves under **Einstellungen · Verbundene Systeme**:
 username and password, encrypted on arrival and never returned by the API.
 Pressing *Import anfordern* writes a request; it does not import.
 

@@ -734,3 +734,40 @@ export interface SourceCapabilitiesDTO {
    *  stored at all, and the form says so instead of failing on submit. */
   secrets_configured: boolean
 }
+
+// ── Importing a file a customer exported from their old system ──
+
+export interface ImportEntityDTO {
+  key: string
+  label: string
+  hint: string
+  fields: { name: string; label: string; required: boolean }[]
+}
+
+export interface ImportRowPlanDTO {
+  line: number
+  /** "create" | "update" | "skip" */
+  action: string
+  reason: string | null
+  values: Record<string, unknown>
+}
+
+export interface ImportPreviewDTO {
+  entity: string
+  /** How the file was read — "CSV · Trennzeichen „;" · cp1252". */
+  note: string
+  columns: string[]
+  /** Column → canonical field. A suggestion the recruiter can correct. */
+  mapping: Record<string, string>
+  row_count: number
+  counts: Record<string, number>
+  sample: ImportRowPlanDTO[]
+  problems: string[]
+}
+
+export interface ImportResultDTO {
+  created: number
+  updated: number
+  skipped: number
+  problems: string[]
+}
