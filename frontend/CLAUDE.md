@@ -56,7 +56,13 @@ its candidates, their assessments. The **MandateDrawer** on the left switches
 between them: every mandate the workspace has, searchable, the ones with a
 running process first. It lists `/jobs` merged with the process-derived
 mandates, because a search with nobody in it yet is exactly the one you open;
-it collapses to a rail and remembers that in `localStorage`. The hash carries the choice so a per-job view
+it collapses to a rail and remembers that in `localStorage`.
+
+The hash carries one id or several: `#cockpit/<id>` is one mandate's
+workspace, `#cockpit/<id>,<id>` the overall view narrowed to a shortlist
+ticked on the Jobs screen. The narrowed view renders the SAME sections with a
+filtered `mandates` list rather than a second "filtered cockpit" to keep in
+step. The hash carries the choice so a per-job view
 can be sent to a colleague (`resolveScreen` takes the part before the slash,
 `resolveDetail` the part after). The section order follows
 `data/design/cockpit_update.html`: 01 Umsatz → 02 Laufende Prozesse (grouped by

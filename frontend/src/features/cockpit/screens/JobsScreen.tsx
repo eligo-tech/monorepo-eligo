@@ -11,14 +11,15 @@ import { api } from '@/api/client'
 import type { CompanyDTO, JobDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
+import { Button } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { MandateEditor } from './MandateEditor'
 
 
 
 const GRID =
-  'grid-cols-[minmax(0,2.4fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.25fr)_7rem_auto]'
-const COLUMNS = ['Titel', 'Firma', 'Ort', 'Gehaltsband', 'Status', '']
+  'grid-cols-[1.5rem_minmax(0,2.5fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_7rem_2rem]'
+const COLUMNS = ['', 'Titel', 'Firma', 'Ort', 'Gehaltsband', 'Status', '']
 
 /** "85.000–95.000 €", or the honest gap. A mandate without a ceiling applies
  *  no salary filter at all, which is worth seeing at a glance. */
@@ -48,6 +49,10 @@ export function JobsScreen() {
   }, [companies.data])
 
   const [editing, setEditing] = useState<JobDTO | null>(null)
+  // Which mandates to take to the cockpit. One opens its workspace, several
+  // open the overall view narrowed to them — a shortlist of searches to work
+  // through, which is what "select several jobs" is for.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   // Saved mandates are overlaid locally: `useAsync` has no refetch, and
   // re-mounting the screen to see your own edit reads as a bug.
   const [saved, setSaved] = useState<Record<string, JobDTO>>({})
@@ -112,6 +117,58 @@ export function JobsScreen() {
 
         {rows.length > 0 && (
           <div>
+            {/* The cockpit link used to sit in every row, which made 76 rows
+                shout the same word. It belongs here: tick what you want to
+                look at, then go once. */}
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-[13px] text-cockpit-dim">
+                <input
+                  type="checkbox"
+                  className="h-[15px] w-[15px] accent-[#a9d6b4]"
+                  checked={selected.size > 0 && selected.size === rows.length}
+                  ref={(el) => {
+                    if (el) {
+                      el.indeterminate =
+                        selected.size > 0 && selected.size < rows.length
+                    }
+                  }}
+                  onChange={(e) =>
+                    setSelected(
+                      e.target.checked ? new Set(rows.map((j) => j.id)) : new Set(),
+                    )
+                  }
+                />
+                {selected.size > 0 ? `${selected.size} ausgewählt` : 'Alle wählen'}
+              </label>
+
+              <Button
+                tone="primary"
+                disabled={selected.size === 0}
+                onClick={() => {
+                  window.location.hash = `cockpit/${[...selected].join(',')}`
+                }}
+                title={
+                  selected.size === 0
+                    ? 'Erst ein Mandat auswählen'
+                    : selected.size === 1
+                      ? 'Dieses Mandat im Cockpit öffnen'
+                      : `${selected.size} Mandate im Cockpit öffnen`
+                }
+              >
+                Im Cockpit öffnen <ArrowUpRight className="h-4 w-4" />
+              </Button>
+
+              {selected.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set())}
+                  className="font-mono text-[12px] text-cockpit-faint transition-colors hover:text-cockpit-text"
+                >
+                  Auswahl aufheben
+                </button>
+              )}
+            </div>
+
             <div
               className={cn(
                 'grid gap-4 border-b border-cockpit-line px-3 pb-2.5',
@@ -132,8 +189,22 @@ export function JobsScreen() {
                   GRID,
                 )}
               >
-                {/* The mandate opens in the cockpit's per-job view — the
-                    list says a role exists, the cockpit says where it stands. */}
+                <input
+                  type="checkbox"
+                  aria-label={`${job.title} auswählen`}
+                  className="h-[15px] w-[15px] accent-[#a9d6b4]"
+                  checked={selected.has(job.id)}
+                  onChange={(e) =>
+                    setSelected((prev) => {
+                      const next = new Set(prev)
+                      if (e.target.checked) next.add(job.id)
+                      else next.delete(job.id)
+                      return next
+                    })
+                  }
+                />
+                {/* Still a link: a title that opens the thing is invisible
+                    chrome, unlike a button repeated seventy-six times. */}
                 <a
                   href={`#cockpit/${job.id}`}
                   title="Im Cockpit öffnen"
@@ -163,28 +234,15 @@ export function JobsScreen() {
                 <span>
                   <Chip tone={STATUS_TONE[job.status]}>{job.status}</Chip>
                 </span>
-                <span className="flex items-center justify-end gap-1.5">
-                  {/* The mandate's two doors: edit what is being searched
-                      for, or open where the search stands. The title links
-                      to the cockpit too, but a link in a table reads as
-                      "detail page" — this says which cockpit view it is. */}
-                  <a
-                    href={`#cockpit/${job.id}`}
-                    title="Dieses Mandat im Cockpit öffnen"
-                    className="flex items-center gap-1.5 rounded-lg border border-cockpit-line px-2.5 py-1 font-mono text-[11.5px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
-                  >
-                    Cockpit <ArrowUpRight className="h-3.5 w-3.5" />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(job)}
-                    title="Mandat bearbeiten"
-                    aria-label={`${job.title} bearbeiten`}
-                    className="p-1 text-cockpit-faint transition-colors hover:text-mint-300"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setEditing(job)}
+                  title="Mandat bearbeiten"
+                  aria-label={`${job.title} bearbeiten`}
+                  className="justify-self-end p-1 text-cockpit-faint transition-colors hover:text-mint-300"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
               </div>
             ))}
           </div>
