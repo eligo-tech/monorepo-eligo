@@ -87,12 +87,13 @@ function Row({
 
 export function MandateDrawer({
   mandates,
-  activeId,
+  activeIds,
   onSelect,
 }: {
   /** Every mandate in the workspace, in process or not. */
   mandates: Mandate[]
-  activeId: string | null
+  /** What the cockpit is currently showing — one, several, or none. */
+  activeIds: string[]
   onSelect: (id: string | null) => void
 }) {
   const [open, setOpen] = useRemembered(STORAGE_KEY, true)
@@ -153,10 +154,10 @@ export function MandateDrawer({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          aria-current={activeId === null ? 'true' : undefined}
+          aria-current={activeIds.length === 0 ? 'true' : undefined}
           className={cn(
             'mb-1 w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors',
-            activeId === null
+            activeIds.length === 0
               ? 'bg-white/[0.07] text-cockpit-text'
               : 'text-cockpit-dim hover:bg-white/[0.03] hover:text-cockpit-text',
           )}
@@ -176,7 +177,7 @@ export function MandateDrawer({
               <Row
                 key={mandate.id}
                 mandate={mandate}
-                active={mandate.id === activeId}
+                active={activeIds.includes(mandate.id)}
                 onSelect={() => onSelect(mandate.id)}
               />
             ))}
@@ -192,7 +193,7 @@ export function MandateDrawer({
               <Row
                 key={mandate.id}
                 mandate={mandate}
-                active={mandate.id === activeId}
+                active={activeIds.includes(mandate.id)}
                 onSelect={() => onSelect(mandate.id)}
               />
             ))}

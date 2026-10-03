@@ -55,7 +55,18 @@ export function CockpitScreen({
     return [...byId.values()]
   }, [data.mandates, allJobs, allCompanies])
 
-  const mandate = mandateId ? mandates.find((m) => m.id === mandateId) : undefined
+  // The hash carries one id or several, comma-separated: `#cockpit/<id>` is
+  // one mandate's workspace, `#cockpit/<id>,<id>` the overall view narrowed
+  // to a shortlist picked on the Jobs screen.
+  const selectedIds = useMemo(
+    () => (mandateId ? mandateId.split(',').filter(Boolean) : []),
+    [mandateId],
+  )
+  const selection = useMemo(
+    () => mandates.filter((m) => selectedIds.includes(m.id)),
+    [mandates, selectedIds],
+  )
+  const mandate = selectedIds.length === 1 ? selection[0] : undefined
 
   // The workspace's Stammdaten need the client record and its manager. Both
   // are fetched only while a mandate is in focus — the overall view has no
@@ -75,10 +86,51 @@ export function CockpitScreen({
   const drawer = onSelectMandate ? (
     <MandateDrawer
       mandates={mandates}
-      activeId={mandate ? mandate.id : null}
+      activeIds={selectedIds}
       onSelect={onSelectMandate}
     />
   ) : null
+
+  // Several mandates: the book of business, narrowed to the shortlist. The
+  // sections below read the same data, so only `mandates` changes — there is
+  // no second "filtered cockpit" to keep in step with this one.
+  if (selection.length > 1) {
+    const shortlist = {
+      ...data,
+      mandates: selection,
+      processes: selection.flatMap((m) => m.cards),
+    }
+    return (
+      <div className="flex gap-6">
+        {drawer}
+        <div className="min-w-0 flex-1 space-y-10">
+          <header className="flex flex-wrap items-center gap-3">
+            <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-cockpit-text">
+              {selection.length} Mandate
+            </h1>
+            <span className="font-mono text-[12px] text-cockpit-faint">
+              {selection.map((m) => m.title).join(' · ')}
+            </span>
+            <button
+              type="button"
+              onClick={() => onSelectMandate?.(null)}
+              className="ml-auto font-mono text-[12px] text-cockpit-faint transition-colors hover:text-cockpit-text"
+            >
+              Auswahl aufheben
+            </button>
+          </header>
+
+          <ProcessSection
+            mandates={selection}
+            isLive={live.processes}
+            onChanged={reload}
+            onOpenMandate={onSelectMandate}
+          />
+          <NextActionsSection actions={shortlist.actions} />
+        </div>
+      </div>
+    )
+  }
 
   // A hash can name a mandate that no longer exists — a deleted job, or a
   // link from another workspace. That gets a sentence, not an empty screen.
