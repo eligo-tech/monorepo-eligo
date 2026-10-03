@@ -692,6 +692,8 @@ export function MarktScreen() {
     city: string
     regions: string[]
     berufsfelder: string[]
+    /** Set by "trotzdem nach … suchen": take the words exactly as typed. */
+    exact?: boolean
   } | null>(null)
   const [regions, setRegions] = useState<string[]>([])
   const [berufsfelder, setBerufsfelder] = useState<string[]>([])
@@ -714,16 +716,33 @@ export function MarktScreen() {
             berufsfelder: query.berufsfelder,
             limit: PAGE_SIZE,
             minRelevance: titlesOnly ? 3 : 1,
+            correct: !query.exact,
           })
-        : Promise.resolve({ items: [], total: 0, next_cursor: null }),
+        : Promise.resolve({ items: [], total: 0, next_cursor: null, corrections: [] }),
     [
       query?.q,
       query?.city,
       query?.regions.join('|'),
       query?.berufsfelder.join('|'),
+      query?.exact,
       titlesOnly,
     ],
   )
+  // What the corpus was actually asked, once a thin answer was retried with
+  // its own spelling. Paging has to use THIS: the server corrects only the
+  // first page, so sending the typed word again would make page two a
+  // different search from page one.
+  const corrections = results.data?.corrections ?? []
+  const searchedQ = useMemo(() => {
+    if (!query) return ''
+    if (corrections.length === 0) return query.q
+    const fix = new Map(corrections.map((c) => [c.from, c.to]))
+    return query.q
+      .split(/\s+/)
+      .map((word) => fix.get(word.toLowerCase()) ?? word)
+      .join(' ')
+  }, [query, corrections])
+
   // Pages 2..n, appended. Kept apart from `results` so a new search resets them
   // by construction rather than by remembering to clear them.
   const [more, setMore] = useState<HubEmployerHitDTO[]>([])
@@ -740,7 +759,7 @@ export function MarktScreen() {
     setLoadingMore(true)
     try {
       const page = await api.hubSearch({
-        q: query.q,
+        q: searchedQ,
         city: query.city,
         regions: query.regions,
         berufsfelder: query.berufsfelder,
@@ -753,7 +772,7 @@ export function MarktScreen() {
     } finally {
       setLoadingMore(false)
     }
-  }, [query, cursor, titlesOnly])
+  }, [query, searchedQ, cursor, titlesOnly])
 
   const run = useCallback(() => {
     setActiveSaved(null)
@@ -894,7 +913,7 @@ export function MarktScreen() {
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Rolle, Firma oder Stichwort — z. B. Embedded, SAP, Pflegefachkraft"
+              placeholder="Rolle, Firma oder Stichwort — Tippfehler und „ue“ statt „ü“ egal"
               className={cn(FIELD, 'py-2.5 pl-11 pr-9 text-[15px]')}
             />
             {draft && (
@@ -1041,10 +1060,35 @@ export function MarktScreen() {
               )}
             </p>
 
+            {corrections.length > 0 && (
+              <Panel className="border-gold-600/40 px-4 py-3">
+                <p className="text-[13.5px] leading-relaxed text-cockpit-dim">
+                  Ergebnisse für{' '}
+                  <span className="font-medium text-cockpit-text">„{searchedQ}“</span> —{' '}
+                  {corrections.map((c) => `„${c.from}“`).join(', ')}{' '}
+                  {corrections.length > 1 ? 'fanden' : 'fand'} im Korpus fast nichts.{' '}
+                  <button
+                    type="button"
+                    onClick={() => setQuery({ ...query, exact: true })}
+                    className="text-gold-300 underline-offset-2 hover:underline"
+                  >
+                    Trotzdem nach „{query.q}“ suchen
+                  </button>
+                </p>
+              </Panel>
+            )}
+
+            {query.exact && hits.length > 0 && (
+              <p className="font-mono text-[12px] text-cockpit-faint">
+                wörtlich gesucht — Schreibweise nicht korrigiert
+              </p>
+            )}
+
             {hits.length === 0 ? (
               <Panel className="p-6">
                 <p className="text-[14px] text-cockpit-dim">
-                  Nichts gefunden für „{query.q || query.city}“. Der Korpus enthält heute nur
+                  Nichts gefunden für „{query.q || query.city}“
+                  {query.exact && ' (wörtlich gesucht)'}. Der Korpus enthält heute nur
                   Titel und Berufsbezeichnungen — keine Anzeigentexte —, deshalb trifft eine
                   Suche nach Anforderungen noch nicht.
                 </p>

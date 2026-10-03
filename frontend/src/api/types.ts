@@ -285,6 +285,14 @@ export interface HubSearchPageDTO {
   total: number
   /** Pass back as `cursor` for the next page; null means this was the last. */
   next_cursor: string | null
+  /** Words the server re-spelled because the typed ones reached almost
+   *  nothing. Shown, never applied silently. */
+  corrections: QueryCorrectionDTO[]
+}
+
+export interface QueryCorrectionDTO {
+  from: string
+  to: string
 }
 
 /** What the corpus→CRM crossing produced. */

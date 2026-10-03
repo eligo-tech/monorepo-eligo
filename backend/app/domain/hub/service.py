@@ -34,6 +34,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.domain.hub import gate
+from app.domain.hub.spelling import (
+    closest_word,
+    has_other_spelling,
+    umlaut_variants,
+)
 from app.domain.hub.adapters.base import SourceAdapter, SourcedPosting, SourceQuery
 from app.domain.hub.models import (
     HubCompany,
@@ -1200,6 +1205,164 @@ def _role_relevance(terms: list[str]):
     )
 
 
+
+
+#: Above this many hits a term is doing its job and is never second-guessed.
+#: Measured on the live corpus: "strasse" has 204 hits of its own and "neue"
+#: 950, so both stay as typed, while "muenchen" has 2 and "koeln" 2.
+_WEAK_TERM_HITS = 25
+#: And the other spelling has to be properly better, not merely bigger. When
+#: the typed term reaches nothing at all, any spelling that reaches something
+#: is already an improvement, which `max(1, …)` expresses.
+_STRONG_FACTOR = 10
+#: Counting stops here. The question is "a handful or plenty", and counting
+#: 3,122 Münchner rows to learn "plenty" costs more than the answer is worth.
+_HIT_CAP = 200
+
+
+async def _term_hits(session: AsyncSession, term: str) -> int:
+    """Roughly how much of the corpus a word reaches. Capped, indexed, cheap.
+
+    Both arms are `lower(col) LIKE` on the expressions migration 0016 indexed
+    with pg_trgm, and both stop at `_HIT_CAP`, so this is a bounded bitmap
+    probe — affordable for every term of every search, which is what lets the
+    rewrite below stay evidence rather than a guess.
+    """
+    needle = f"%{term}%"
+    titles = (
+        select(literal(1))
+        .where(
+            HubJobPosting.is_active.is_(True),
+            func.lower(HubJobPosting.title).like(needle),
+        )
+        .limit(_HIT_CAP)
+        .subquery()
+    )
+    names = (
+        select(literal(1))
+        .where(
+            or_(
+                func.lower(HubCompany.name).like(needle),
+                func.lower(HubCompany.city).like(needle),
+            )
+        )
+        .limit(_HIT_CAP)
+        .subquery()
+    )
+    return int(
+        (await session.scalar(select(func.count()).select_from(titles))) or 0
+    ) + int((await session.scalar(select(func.count()).select_from(names))) or 0)
+
+
+async def _nearest_known_word(session: AsyncSession, term: str) -> str | None:
+    """The corpus's own spelling of a term that matched nothing at all.
+
+    Postgres only: `word_similarity` and its `<<%` operator come from pg_trgm,
+    and the GIN indexes from migration 0016 serve the operator, so this is a
+    bounded index lookup rather than a scan of 360,126 titles. On SQLite — what
+    CI runs — there is no such operator and no suggestion; the umlaut half of
+    the rewrite is dialect-independent and is what the regression test pins.
+
+    Titles first, company names second: a misspelt role is the common case,
+    and the role word is the one that changes an answer.
+    """
+    if session.bind is None or session.bind.dialect.name != "postgresql":
+        return None
+    for column in (HubJobPosting.title, HubCompany.name):
+        folded = func.lower(column)
+        rows = await session.execute(
+            # `term <<% text` is pg_trgm's "is this word a close match for some
+            # word inside that text", and the GIN indexes from migration 0016
+            # serve it with the column on the right — which is why the term is
+            # a literal on the left rather than the other way round.
+            select(column)
+            .where(literal(term).op("<<%")(folded))
+            .order_by(func.word_similarity(literal(term), folded).desc())
+            .limit(20)
+        )
+        hit = closest_word(term, [r for (r,) in rows if r])
+        if hit:
+            return hit
+    return None
+
+
+async def _better_spelling(session: AsyncSession, term: str) -> str | None:
+    """The word the corpus knows, when the typed one reaches almost nothing.
+
+    Two different failures, two different remedies:
+
+    * **The other umlaut convention.** "muenchen" is not a typo, it is how a
+      German writes München when the keyboard fights back — and it reaches 2
+      rows against 3,122. Taken only when the typed term is weak AND the other
+      spelling is an order of magnitude stronger, which is what keeps
+      "strasse" (204 hits of its own) and "neue" (950, whose variant "nü" would
+      drag in every Nürnberg employer) as typed.
+    * **A genuine typo.** "pflegefachkaft" is not quite nothing — two of the
+      360,126 ads carry the same slip — so "reaches nothing" was the wrong
+      test for it. Weak is the test, and the neighbour has to clear the same
+      order-of-magnitude bar the umlaut variants do.
+    """
+    hits = await _term_hits(session, term)
+    if hits > _WEAK_TERM_HITS:
+        return None
+    best: tuple[int, str] | None = None
+    for variant in umlaut_variants(term):
+        if len(variant) < 4:
+            continue  # "neue" → "nü": two characters cannot be a word
+        count = await _term_hits(session, variant)
+        if count >= max(1, hits * _STRONG_FACTOR) and (
+            best is None or count > best[0]
+        ):
+            best = (count, variant)
+    if best:
+        return best[1]
+    near = await _nearest_known_word(session, term)
+    if near and await _term_hits(session, near) >= max(1, hits * _STRONG_FACTOR):
+        return near
+    return None
+
+
+async def _resolve_terms(
+    session: AsyncSession, terms: list[str]
+) -> tuple[list[str], list[dict]]:
+    """Replace terms the corpus cannot answer with the ones it can.
+
+    Returns the terms to search with and what was changed, so the caller can
+    say so. A term that is working is never touched — guessing at a word that
+    already answers is how a search starts answering a question nobody asked.
+    """
+    resolved: list[str] = []
+    corrections: list[dict] = []
+    for term in terms:
+        alternative = None if len(term) < 4 else await _better_spelling(session, term)
+        if alternative:
+            corrections.append({"from": term, "to": alternative})
+            resolved.append(alternative)
+        else:
+            resolved.append(term)
+    return resolved, corrections
+
+
+#: Re-exported so the router depends on the domain, not on a helper module.
+query_may_be_misspelt = has_other_spelling
+
+
+async def resolve_query(
+    session: AsyncSession, q: str | None
+) -> tuple[str | None, list[dict]]:
+    """The query the corpus can answer, plus what had to change to get there.
+
+    Deliberately NOT called from inside `search_employers`. A search that
+    quietly rewrites its own input cannot be asked for the literal one, and the
+    reader is never told why their word came back different. The router calls
+    this only after a thin answer, declares the substitution, and offers the
+    verbatim search — see `_THIN_RESULT`.
+    """
+    terms = [t for t in (q or "").lower().split() if t]
+    if not terms:
+        return q, []
+    resolved, corrections = await _resolve_terms(session, terms)
+    return (" ".join(resolved) if corrections else q), corrections
 
 
 async def _search_candidates(
