@@ -33,7 +33,9 @@ async def list_sources(
 
 
 @router.get("/capabilities")
-async def capabilities() -> dict:
+async def capabilities(
+    _tenant_id: uuid.UUID = Depends(get_current_tenant),
+) -> dict:
     """What the server can offer — so the UI can say WHY a form is closed.
 
     Without `ELIGO_SECRET_KEY` no credential can be stored, and a form that

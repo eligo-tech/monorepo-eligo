@@ -44,8 +44,15 @@ router = APIRouter(prefix="/hub", tags=["hub"])
 
 
 @router.get("/sources")
-async def list_sources() -> dict[str, list[str]]:
-    """Which public sources this build can ingest from."""
+async def list_sources(
+    _tenant_id: uuid.UUID = Depends(get_current_tenant),
+) -> dict[str, list[str]]:
+    """Which public sources this build can ingest from.
+
+    Authenticated, like everything else. The answer is build metadata rather
+    than anybody's data, but "harmless to leak" is a judgement that ages
+    badly — the next field added to a public endpoint is the one that is not.
+    """
     return {"sources": available_sources()}
 
 
