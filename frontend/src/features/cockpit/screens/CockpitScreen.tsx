@@ -14,6 +14,8 @@ import { RevenueSection } from '../sections/RevenueSection'
 import { SignalsPanel } from '../sections/SignalsPanel'
 import { MandateView } from './MandateView'
 import { cn } from '@/lib/cn'
+import { api } from '@/api/client'
+import { useAsync } from '@/hooks/useAsync'
 import type { CockpitState } from '../data/useCockpitData'
 import type { ScreenKey } from '../CockpitShell'
 
@@ -34,6 +36,27 @@ export function CockpitScreen({
   const mandate = mandateId
     ? data.mandates.find((m) => m.id === mandateId)
     : undefined
+
+  // The workspace's Stammdaten need the client record and its manager. Both
+  // are fetched only while a mandate is in focus — the overall view has no
+  // use for them, and the cockpit's rule is one failing call degrades one
+  // panel, so each is settled to undefined rather than thrown.
+  const { data: company } = useAsync(
+    () =>
+      mandate?.companyId
+        ? api.companies().then((rows) => rows.find((c) => c.id === mandate.companyId))
+        : Promise.resolve(undefined),
+    [mandate?.companyId],
+  )
+  const { data: manager } = useAsync(
+    () =>
+      mandate?.companyId
+        ? api
+            .managers({ companyId: mandate.companyId, limit: 1 })
+            .then((rows) => rows[0])
+        : Promise.resolve(undefined),
+    [mandate?.companyId],
+  )
 
   // A hash can name a mandate with nobody in play — a job opened from the
   // Jobs list before its first candidate is presented — or one that has
@@ -65,6 +88,8 @@ export function CockpitScreen({
         <div className="mt-8">
           <MandateView
             mandate={mandate}
+            company={company ?? undefined}
+            manager={manager ?? undefined}
             onBack={() => onSelectMandate?.(null)}
             onChanged={reload}
           />

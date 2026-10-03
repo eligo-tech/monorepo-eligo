@@ -316,6 +316,7 @@ export function mandatesFromCards(
       ref: card.mandateRef,
       title: card.role,
       client: card.client,
+      companyId: dto?.company_id ?? undefined,
       location: dto?.location ?? null,
       mustHave: dto?.must_have_skills ?? [],
       salaryMin: dto?.salary_min ?? null,
