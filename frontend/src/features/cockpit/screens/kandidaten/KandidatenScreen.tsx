@@ -14,6 +14,7 @@ import { api } from '@/api/client'
 import { toCandidate } from '@/api/adapters'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
+import { searchScore, type SearchField } from '@/lib/search'
 import { Chip, Panel, SectionHeader } from '../../ui/primitives'
 import { Button, FIELD } from '../../ui/forms'
 import { CandidateDrawer } from './CandidateDrawer'
@@ -68,19 +69,22 @@ function exportCsv(rows: Candidate[]): void {
 }
 
 /** Free-text haystack for one candidate row. */
-function matches(c: Candidate, q: string): boolean {
+/** What a candidate can be found by, and how much each field is worth.
+ *
+ *  Skills are one field rather than one per skill: a profile listing thirty
+ *  technologies would otherwise outscore the person whose TITLE is the role,
+ *  which is backwards — "Java" in a job title says more than "Java" among
+ *  twenty-nine other words. */
+function searchable(c: Candidate): SearchField[] {
+  const skills = c.profile?.allSkills ?? c.skills.map((s) => s.label)
   return [
-    c.name,
-    c.email,
-    c.phone,
-    c.currentTitle,
-    c.currentCompany,
-    c.location,
-    ...(c.profile?.allSkills ?? c.skills.map((s) => s.label)),
+    { text: c.name, weight: 3 },
+    { text: c.currentTitle, weight: 3 },
+    { text: skills.join(' '), weight: 2.5 },
+    { text: c.currentCompany, weight: 2 },
+    { text: c.location, weight: 2 },
+    { text: `${c.email} ${c.phone}`, weight: 1 },
   ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q)
 }
 
 /** Filter by technology. AND semantics — each added skill narrows the list. */
@@ -97,7 +101,17 @@ function SkillFilter({
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const shown = skills.filter((s) => s.label.toLowerCase().includes(q.trim().toLowerCase()))
+  // Same scorer as the list: a technology list is exactly where a typo is
+  // likely ("kubernets", "postgre") and where an empty result is baffling.
+  const shown = useMemo(() => {
+    const term = q.trim()
+    if (!term) return skills
+    return skills
+      .map((s) => ({ s, score: searchScore([{ text: s.label, weight: 1 }], term) }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score || b.s.count - a.s.count)
+      .map((r) => r.s)
+  }, [skills, q])
 
   return (
     <div className="relative">
@@ -239,9 +253,22 @@ export function KandidatenScreen({
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
   }, [all])
 
+  const term = query.trim()
+  // Relevance is the default ONLY while something is being searched for, and
+  // only until the reader picks an order themselves. "Neueste zuerst" over a
+  // search for "wildfly" answers a question nobody asked.
+  const byRelevance = term !== '' && sort === 'created'
+
   const rows = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    let out = q ? all.filter((c) => matches(c, q)) : all
+    // Scored, not merely matched: "Softwre Entwikler" still finds the person,
+    // and "java münchen" works although no single field holds both words.
+    let out = term
+      ? all
+          .map((c) => ({ c, score: searchScore(searchable(c), term) }))
+          .filter((r) => r.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .map((r) => r.c)
+      : all
     if (skillFilter.size > 0) {
       out = out.filter((c) => {
         const have = new Set(
@@ -253,9 +280,10 @@ export function KandidatenScreen({
     const sorted = [...out]
     if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'de'))
     else if (sort === 'verification') sorted.sort((a, b) => b.verification - a.verification)
-    else sorted.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+    else if (!byRelevance)
+      sorted.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
     return sorted
-  }, [all, query, sort, skillFilter])
+  }, [all, term, byRelevance, sort, skillFilter])
 
   const avgVerification = all.length
     ? Math.round(all.reduce((s, c) => s + c.verification, 0) / all.length)
@@ -307,6 +335,7 @@ export function KandidatenScreen({
           </span>
           <span>
             <span className="text-cockpit-text">{rows.length}</span> angezeigt
+            {byRelevance && rows.length > 1 && ' · nach Relevanz'}
           </span>
           <span>
             <span className="text-cockpit-text">{skillOptions.length}</span> Technologien
@@ -326,7 +355,7 @@ export function KandidatenScreen({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Kandidaten, Stichworte, Notizen…"
+              placeholder="Name, Titel, Skill oder Ort — Tippfehler erlaubt"
               className={cn(FIELD, 'py-2.5 pl-11 pr-9 text-[15px]')}
             />
             {query && (
@@ -388,6 +417,18 @@ export function KandidatenScreen({
               Keine Kandidaten gefunden
               {query ? ` für „${query}"` : ''}
               {skillFilter.size > 0 ? ` mit ${[...skillFilter].join(', ')}` : ''}.
+              {(query || skillFilter.size > 0) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery('')
+                    setSkillFilter(new Set())
+                  }}
+                  className="ml-2 font-mono text-[12px] text-mint-300 transition-colors hover:text-cockpit-text"
+                >
+                  Filter zurücksetzen
+                </button>
+              )}
             </p>
           )}
 
