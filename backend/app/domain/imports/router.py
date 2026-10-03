@@ -40,7 +40,9 @@ _SAMPLE = 25
 
 
 @router.get("/entities", response_model=list[EntityRead])
-async def entities() -> list[EntityRead]:
+async def entities(
+    _tenant_id: uuid.UUID = Depends(get_current_tenant),
+) -> list[EntityRead]:
     """What can be imported, and which fields each kind understands."""
     return [
         EntityRead(
