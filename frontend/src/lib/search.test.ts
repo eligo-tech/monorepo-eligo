@@ -99,3 +99,59 @@ describe('searchScore', () => {
     expect(searchScore(GE, 'Vertrieb')).toBe(0)
   })
 })
+
+describe('candidate rows', () => {
+  // The shape KandidatenScreen builds: name · title · skills · company ·
+  // location · contact.
+  const person = (
+    name: string,
+    title: string,
+    skills: string[],
+    location = 'München',
+  ) => [
+    { text: name, weight: 3 },
+    { text: title, weight: 3 },
+    { text: skills.join(' '), weight: 2.5 },
+    { text: 'Beispiel GmbH', weight: 2 },
+    { text: location, weight: 2 },
+    { text: 'kontakt@beispiel.invalid', weight: 1 },
+  ]
+
+  const architect = person('AnonymGE', 'Senior Software Architekt', [
+    'Java',
+    'Jakarta EE',
+    'WildFly',
+    'JPA',
+  ])
+  const generalist = person('Jana Beck', 'Projektleiterin', [
+    'Java',
+    'Scrum',
+    'Jira',
+    'Confluence',
+    'SAP',
+    'Excel',
+  ])
+
+  it('finds a skill that no title mentions', () => {
+    expect(searchScore(architect, 'wildfly')).toBeGreaterThan(0)
+    expect(searchScore(generalist, 'wildfly')).toBe(0)
+  })
+
+  it('ranks the role above a long skill list holding the same word', () => {
+    // A profile listing thirty technologies must not outrank the person whose
+    // JOB is the thing being searched for.
+    expect(searchScore(person('A', 'Java Entwickler', ['Git']), 'java')).toBeGreaterThan(
+      searchScore(generalist, 'java'),
+    )
+  })
+
+  it('survives the typo a recruiter actually makes', () => {
+    expect(searchScore(architect, 'architeckt')).toBeGreaterThan(0)
+    expect(searchScore(architect, 'anonymge muenchen')).toBeGreaterThan(0)
+  })
+
+  it('still refuses a word the record does not carry', () => {
+    expect(searchScore(architect, 'wildfly vertrieb')).toBe(0)
+    expect(searchScore(architect, 'hamburg')).toBe(0)
+  })
+})
