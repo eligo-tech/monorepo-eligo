@@ -219,6 +219,22 @@ export const api = {
     }),
 
   /** Contacts in this workspace. `q` matches name, role or company. */
+  /** The contact pool plus its true size — same contract as `candidatesPage`,
+   *  and for the same reason: the screen ranks these rows in the browser. */
+  managersPage: async (
+    limit = 1000,
+  ): Promise<{ items: ManagerDTO[]; total: number }> => {
+    const res = await fetch(`${BASE}/managers?limit=${limit}`, {
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    })
+    if (!res.ok) {
+      throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+    }
+    const items = (await res.json()) as ManagerDTO[]
+    const header = Number(res.headers.get('X-Total-Count'))
+    return { items, total: Number.isFinite(header) && header > 0 ? header : items.length }
+  },
+
   managers: (params?: { q?: string; companyId?: string; limit?: number }) => {
     const qs = new URLSearchParams()
     if (params?.q) qs.set('q', params.q)

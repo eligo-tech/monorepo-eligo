@@ -41,6 +41,19 @@ async def _own_company(
     return company
 
 
+async def count_managers(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+) -> int:
+    """How many contacts exist, independent of any page or search term."""
+    stmt = select(func.count()).select_from(Manager).where(Manager.tenant_id == tenant_id)
+    if company_id is not None:
+        stmt = stmt.where(Manager.company_id == company_id)
+    return int(await session.scalar(stmt) or 0)
+
+
 async def list_managers(
     session: AsyncSession,
     *,

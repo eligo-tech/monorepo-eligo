@@ -12,6 +12,7 @@ import datetime as dt
 import uuid
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
 from app.core.database import SessionLocal
 from app.domain.common.enums import ConfidenceSource, InteractionType
@@ -394,3 +395,40 @@ async def test_a_shared_company_mailbox_is_not_a_duplicate(company) -> None:
     assert by_name["Fabian Huber"].duplicate_count == 1
     assert by_name["Burkhardt Gumpricht"].duplicate_count == 1
     assert by_name["Mick Drahtschmid"].duplicate_count == 2
+
+
+def _api() -> AsyncClient:
+    from app.main import app
+
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+async def test_list_reports_the_whole_contact_pool() -> None:
+    """Same contract as /candidates — the screen ranks these rows in the browser.
+
+    The cap was 500 while the live workspace already held 647 contacts, and
+    the screen asked for 200 of them. A term matching 300 people showed 200
+    with nothing saying so.
+    """
+    async with _api() as c:
+        company = await c.post("/api/v1/companies", json={"name": "Zählfirma GmbH"})
+        assert company.status_code == 201, company.text
+        cid = company.json()["id"]
+        for i in range(4):
+            r = await c.post(
+                "/api/v1/managers",
+                json={"company_id": cid, "full_name": f"Zählperson {i}"},
+            )
+            assert r.status_code == 201, r.text
+
+        page = await c.get("/api/v1/managers", params={"limit": 2})
+        assert len(page.json()) == 2
+        assert page.headers["x-total-count"] == "4"
+
+        # The count is of the POOL, not of the query: "2 von 4 geladen" is a
+        # statement about the page, and a search term must not change it.
+        filtered = await c.get("/api/v1/managers", params={"q": "Zählperson 1"})
+        assert len(filtered.json()) == 1
+        assert filtered.headers["x-total-count"] == "4"
+
+        assert (await c.get("/api/v1/managers", params={"limit": 1000})).status_code == 200
