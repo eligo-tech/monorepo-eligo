@@ -64,6 +64,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Unit tests
+        # The search scorer decides what a recruiter sees when they type;
+        # a silent regression there looks like missing data.
+        run: npm test
+
       - name: Type-check & build
         run: npm run build
 
