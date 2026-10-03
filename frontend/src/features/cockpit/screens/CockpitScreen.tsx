@@ -15,16 +15,20 @@ import { SignalsPanel } from '../sections/SignalsPanel'
 import { MandateView } from './MandateView'
 import { cn } from '@/lib/cn'
 import type { CockpitState } from '../data/useCockpitData'
+import type { ScreenKey } from '../CockpitShell'
 
 export function CockpitScreen({
   state,
   mandateId,
   onSelectMandate,
+  onGoToScreen,
 }: {
   state: CockpitState
   /** The mandate in focus, from the hash. Null is the overall view. */
   mandateId?: string | null
   onSelectMandate?: (id: string | null) => void
+  /** Jump to a neighbouring work surface (the design's compass). */
+  onGoToScreen?: (screen: ScreenKey) => void
 }) {
   const { data, live, reload } = state
   const mandate = mandateId
@@ -75,7 +79,10 @@ export function CockpitScreen({
 
       <div className="mt-8 space-y-10">
         <header id="section-signals" className="scroll-mt-24">
-          <h1 className="text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
+          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-mint-400">
+            Kommandozentrale
+          </span>
+          <h1 className="mt-1.5 text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
             Cockpit
           </h1>
           <p className="mt-2 max-w-xl text-[16px] leading-relaxed text-cockpit-dim">
@@ -84,19 +91,54 @@ export function CockpitScreen({
           </p>
         </header>
 
+        {/* The design's order, and it is an argument: what came in, what it is
+            worth, where the work stands, what to do next — and only then the
+            scoring, which is a view ON that work rather than part of it. */}
         <SignalsPanel signals={data.signals} />
         <RevenueSection slides={data.slides} />
-        <JobScoringSection rows={data.jobScores} isLive={live.jobScores} />
         <ProcessSection
-          cards={data.processes}
+          mandates={data.mandates}
           isLive={live.processes}
           onChanged={reload}
           onOpenMandate={onSelectMandate}
         />
-        <CompetitionSection />
         <NextActionsSection actions={data.actions} />
+        <JobScoringSection rows={data.jobScores} isLive={live.jobScores} />
+        <CompetitionSection />
+        <WorldStrip onGo={onGoToScreen} />
       </div>
     </>
+  )
+}
+
+/**
+ * The design's compass, flattened into a strip: the work surfaces that sit
+ * around the cockpit. The directions are the mock's own (→ Kandidatenwelt,
+ * ← Business Development, ↑ Mandat & Kandidatensuche), kept so the two read
+ * as one product even though this app routes by hash rather than by grid.
+ */
+function WorldStrip({ onGo }: { onGo?: (screen: ScreenKey) => void }) {
+  if (!onGo) return null
+  const WORLDS: { screen: ScreenKey; dir: string; label: string; dot: string }[] = [
+    { screen: 'kandidaten', dir: '→', label: 'Kandidatenwelt', dot: 'bg-coral-400' },
+    { screen: 'markt', dir: '←', label: 'Business Development', dot: 'bg-gold-400' },
+    { screen: 'jobs', dir: '↑', label: 'Mandat & Kandidatensuche', dot: 'bg-lav-400' },
+  ]
+  return (
+    <div className="flex flex-wrap gap-2.5 border-t border-cockpit-line pt-5">
+      {WORLDS.map((world) => (
+        <button
+          key={world.screen}
+          type="button"
+          onClick={() => onGo(world.screen)}
+          className="flex items-center gap-2 rounded-lg border border-cockpit-line bg-cockpit-surface px-3.5 py-2.5 text-[12.5px] text-cockpit-text transition-all hover:-translate-y-0.5 hover:border-cockpit-edge"
+        >
+          <span className={cn('h-2.5 w-2.5 rounded-[3px]', world.dot)} />
+          <span className="font-mono text-[12px] text-cockpit-faint">{world.dir}</span>
+          {world.label}
+        </button>
+      ))}
+    </div>
   )
 }
 

@@ -18,8 +18,8 @@ export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: 
   return (
     <section className="space-y-5">
       <SectionHeader
-        id="section-02"
-        index="02"
+        id="section-03"
+        index="03"
         title="Jobscoring"
         hint={
           isLive

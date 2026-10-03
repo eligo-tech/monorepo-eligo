@@ -70,7 +70,19 @@ export function ProcessCardPanel({
         </div>
 
         <div className="shrink-0 text-right">
-          <Money figure={card.fee} className="block text-[22px] text-mint-400" />
+          {/* No Honorarmodell yet, so the fee is a demo zero. The design shows
+              a real figure here; "€ 0" would read as a fee of nothing, which
+              is a claim. An em dash says "not known" instead. */}
+          {card.fee.value > 0 ? (
+            <Money figure={card.fee} className="block text-[22px] text-mint-400" />
+          ) : (
+            <span
+              className="block text-[22px] text-cockpit-faint"
+              title="Kein Honorarmodell hinterlegt"
+            >
+              —
+            </span>
+          )}
           <span className="font-mono text-[12px] text-cockpit-faint">Fee-Potenzial</span>
         </div>
       </div>

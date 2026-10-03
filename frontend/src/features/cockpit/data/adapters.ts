@@ -187,6 +187,7 @@ export function processCardsFromSteps(
           key: key as ProcessStep['key'],
           label,
           state,
+          chips: stepChips(key, row),
           meta: stepMeta(row),
           scheduledAt: row?.scheduled_at ?? null,
           doneAt: row?.done_at ?? null,
@@ -245,6 +246,37 @@ export function processCardsFromSteps(
   )
 }
 
+/** The design's sub-chips under a step: who has delivered.
+ *
+ *  The record holds ONE verdict per step, and the tracker's green/red cell is
+ *  the CLIENT's (see backend `pipeline/steps.py`). So the Kunde chip lights
+ *  from that verdict and the Kandidat chip stays unlit until there is a field
+ *  that actually records what the candidate said — lighting both would claim
+ *  feedback nobody collected. "Offer & Zusage" is a single milestone in this
+ *  model, so both of its chips follow it.
+ */
+function stepChips(
+  key: string,
+  row: ProcessStepDTO | undefined,
+): ProcessStep['chips'] {
+  const passed = row?.outcome === 'pass'
+  if (key === 'feedback-1') return [{ label: 'Kunde', done: passed }]
+  if (key === 'feedback-2') {
+    return [
+      { label: 'Kand.', done: false },
+      { label: 'Kunde', done: passed },
+    ]
+  }
+  if (key === 'offer') {
+    const done = passed || !!row?.done_at
+    return [
+      { label: 'Offer', done },
+      { label: 'Zusage', done },
+    ]
+  }
+  return undefined
+}
+
 function toAssessment(
   dto: ProcessCandidateDTO['assessment'],
 ): CandidateAssessment | undefined {
@@ -296,10 +328,15 @@ export function mandatesFromCards(
     out.set(id, mandate)
   }
 
-  // Busiest mandate first — where the work is. Ties keep the card order,
-  // which is already furthest-along-first.
+  // Furthest-along mandate first, the way the design orders the cockpit list:
+  // the search closest to a placement is the one worth looking at. Ties go to
+  // the busier mandate, then alphabetically so the order is stable.
+  const best = (m: Mandate) => Math.max(...m.cards.map((c) => c.progress.value))
   return [...out.values()].sort(
-    (a, b) => b.cards.length - a.cards.length || a.title.localeCompare(b.title),
+    (a, b) =>
+      best(b) - best(a) ||
+      b.cards.length - a.cards.length ||
+      a.title.localeCompare(b.title),
   )
 }
 
