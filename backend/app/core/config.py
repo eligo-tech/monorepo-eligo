@@ -107,6 +107,14 @@ class Settings(BaseSettings):
     # When false, requests run as the default tenant (no login) — the scaffold
     # default so tests/demo work with no auth provider. Set true in production.
     auth_enabled: bool = False
+    #: Escape hatch for the startup guard below: a real database served with
+    #: authentication off. Only ever right for a local Postgres you own.
+    allow_insecure_no_auth: bool = False
+
+    #: Fernet key for secrets the record must be able to replay — today only a
+    #: tenant's ATS password. Unset means credentials cannot be stored at all,
+    #: which is the safe default (see `app/core/secrets.py`).
+    secret_key: str | None = None
     clerk_secret_key: str | None = Field(
         default=None, validation_alias="CLERK_SECRET_KEY"
     )

@@ -1,0 +1,57 @@
+# Per-workspace imports — the scheduled half of onboarding.
+#
+# A workspace connects its own ATS under Einstellungen and asks for an import.
+# Nothing happens in that click by design: the request is a timestamp on the
+# workspace's row, and this job performs it. Hundreds of outbound calls do not
+# belong inside a browser request, and collection stays a scheduled, logged
+# activity with an answer to "when was this taken, and on whose instruction".
+#
+# Machine credential only (the endpoint decrypts a tenant's password), same
+# authorization as the hub jobs.
+name: Workspace · imports
+
+on:
+  schedule:
+    # Shortly after the hub nightly, so a busy night does not overlap them.
+    - cron: "40 5 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "How many queued sources to run"
+        required: false
+        default: "3"
+      no_details:
+        description: "Skip the slow detail passes (true/false)"
+        required: false
+        default: "false"
+
+concurrency:
+  # Two runs would fight over the same queued requests.
+  group: tenant-imports
+  cancel-in-progress: false
+
+jobs:
+  imports:
+    runs-on: ubuntu-latest
+    # One source is a login plus a detail call per candidate; three of those
+    # is the shape this is budgeted for.
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Run queued imports
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+        run: |
+          python -m scripts.tenant_imports \
+            --limit "${{ github.event.inputs.limit || '3' }}" \
+            ${{ github.event.inputs.no_details == 'true' && '--no-details' || '' }}

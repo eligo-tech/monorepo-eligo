@@ -93,6 +93,49 @@ async def _set_tenant_guc(db: AsyncSession, tenant_id: uuid.UUID) -> None:
     )
 
 
+class InsecureConfiguration(RuntimeError):
+    """The process is configured to serve real data with no authentication."""
+
+
+def assert_auth_configured() -> None:
+    """Refuse to start a Postgres deployment with authentication switched off.
+
+    `auth_enabled` defaults to False so that tests and the local SQLite demo
+    need no setup — and that default is the one fail-open left in the stack.
+    With auth off, `get_current_tenant` hands every anonymous caller the
+    DEFAULT tenant: no token, no organisation, full read and write. Against the
+    scaffold's SQLite file that is a convenience; against the production
+    database it would publish one workspace to the internet and mix every
+    write into it.
+
+    The failure mode is quiet, which is what makes it dangerous: nothing errors,
+    the app simply serves the wrong tenant to whoever asks. A deployment that
+    forgets `ELIGO_AUTH_ENABLED` must therefore not come up at all — the same
+    stance `get_ingest_tenant` already takes when no machine credential is
+    configured (503 rather than "accept whoever asks").
+
+    `ELIGO_ALLOW_INSECURE_NO_AUTH=true` overrides it for a local Postgres, and
+    says so in the log every boot.
+    """
+    if settings.auth_enabled or not settings.is_postgres:
+        return
+    if settings.allow_insecure_no_auth:
+        get_logger(__name__).error(
+            "SECURITY: serving %s with authentication DISABLED — every request "
+            "is the default tenant. Allowed only by ELIGO_ALLOW_INSECURE_NO_AUTH.",
+            settings.safe_database_url,
+        )
+        return
+    raise InsecureConfiguration(
+        "refusing to start: ELIGO_AUTH_ENABLED is false and the database is "
+        f"Postgres ({settings.safe_database_url}). With auth off every request "
+        "is served as the default tenant, so this would expose and corrupt real "
+        "workspace data. Set ELIGO_AUTH_ENABLED=true, or "
+        "ELIGO_ALLOW_INSECURE_NO_AUTH=true if this database is genuinely a "
+        "local one you own."
+    )
+
+
 async def get_current_tenant(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: AsyncSession = Depends(get_db),

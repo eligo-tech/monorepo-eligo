@@ -11,6 +11,11 @@ Credentials come from AI_FIND_EMAIL / AI_FIND_PWD. They are a password rather
 than an API key because the source's SPA client has direct access grants
 disabled, so the only way in is the browser's own flow — see
 `app.integrations.aifind`.
+
+For a workspace that onboards itself, prefer the product path: it stores its
+own credential under Einstellungen and the scheduled runner imports it
+(`scripts/tenant_imports`). This stays for a one-off against a tenant that
+has not connected a source yet.
 """
 
 from __future__ import annotations
@@ -21,11 +26,9 @@ import os
 import sys
 import uuid
 
-import httpx
-
 from app.core.database import AdminSessionLocal
 from app.domain.atsimport import service as importer
-from app.integrations import aifind
+from app.domain.tenantsources import runner
 
 
 async def main() -> int:
@@ -49,54 +52,14 @@ async def main() -> int:
         print("AI_FIND_EMAIL / AI_FIND_PWD are not set", file=sys.stderr)
         return 1
 
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-        token = await aifind.fetch_access_token(
-            client, username=username, password=password
-        )
-        fetched = {}
-        for entity in ("companies", "managers", "jobs", "candidates"):
-            fetched[entity] = await aifind.fetch_all(
-                client, token=token, operation=entity
-            )
-            print(f"  {entity}: {len(fetched[entity])}")
-
-        if not args.no_details:
-            # Managers: the list gives a name and a role. The phone number, what
-            # they are open to, and the conversation history — the part that
-            # cannot be re-derived — all need the detail call.
-            mgr_ids = [m.external_id for m in fetched["managers"]]
-            print(f"  manager details: fetching {len(mgr_ids)} (with notes) …")
-            detailed_mgrs = await aifind.fetch_manager_details(
-                client, token=token, external_ids=mgr_ids
-            )
-            notes_total = sum(len(m.notes) for m in detailed_mgrs)
-            with_phone = sum(1 for m in detailed_mgrs if m.phone)
-            print(
-                f"  manager details: {len(detailed_mgrs)} of {len(mgr_ids)} retrieved, "
-                f"{with_phone} with a phone number, {notes_total} notes"
-            )
-            by_mgr = {m.external_id: m for m in fetched["managers"]}
-            by_mgr.update({m.external_id: m for m in detailed_mgrs})
-            fetched["managers"] = list(by_mgr.values())
-
-            # The list query returns no skills, and a hard filter cannot filter
-            # on a job title. One detail call per candidate is the only way the
-            # source offers, so it is paced rather than parallel.
-            ids = [c.external_id for c in fetched["candidates"]]
-            print(f"  candidate details: fetching {len(ids)} …")
-            detailed = await aifind.fetch_candidate_details(
-                client, token=token, external_ids=ids
-            )
-            with_skills = sum(1 for c in detailed if c.skills)
-            print(
-                f"  candidate details: {len(detailed)} of {len(ids)} retrieved, "
-                f"{with_skills} carry skills"
-            )
-            # Keep the list record for anyone the detail call lost, so a partial
-            # detail pass never shrinks the import.
-            by_id = {c.external_id: c for c in fetched["candidates"]}
-            by_id.update({c.external_id: c for c in detailed})
-            fetched["candidates"] = list(by_id.values())
+    # One fetch implementation, shared with the scheduled per-workspace
+    # runner (`domain/tenantsources/runner.py`). Two copies of a login flow
+    # and two detail passes would drift the first time the source changed.
+    fetched = await runner.fetch_aifind(
+        username=username, password=password, with_details=not args.no_details
+    )
+    for entity, rows in fetched.items():
+        print(f"  {entity}: {len(rows)}")
 
     if args.dry_run:
         print("dry run — nothing written")

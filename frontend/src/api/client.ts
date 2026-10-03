@@ -26,6 +26,8 @@ import type {
   CandidateDocumentDTO,
   CompetingEmployerDTO,
   DocumentKind,
+  SourceCapabilitiesDTO,
+  TenantSourceDTO,
   JobUpdatePayload,
   ProcessJobDTO,
   ProcessStepDTO,
@@ -378,6 +380,28 @@ export const api = {
       `/jobs/${jobId}${editor ? `?editor=${encodeURIComponent(editor)}` : ''}`,
       { method: 'PATCH', body: JSON.stringify(patch) },
     ),
+
+  // ── This workspace's own data sources ──
+  tenantSources: () => request<TenantSourceDTO[]>('/tenant-sources'),
+  sourceCapabilities: () =>
+    request<SourceCapabilitiesDTO>('/tenant-sources/capabilities'),
+  /** Connect or re-configure a source. `secret` is write-only and optional on
+   *  an update, so a username can be fixed without re-typing the password. */
+  saveTenantSource: (
+    kind: string,
+    body: { username: string; secret?: string; label?: string; status?: string },
+  ) =>
+    request<TenantSourceDTO>(`/tenant-sources/${kind}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteTenantSource: (kind: string) =>
+    request<void>(`/tenant-sources/${kind}`, { method: 'DELETE' }),
+  /** Ask for an import. Queues it — the scheduled runner performs it. */
+  requestImport: (kind: string) =>
+    request<{ queued: boolean; detail: string }>(`/tenant-sources/${kind}/import`, {
+      method: 'POST',
+    }),
 
   /** Companies this tenant's candidates named as other active processes. */
   competingEmployers: () =>
