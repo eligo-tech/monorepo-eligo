@@ -103,7 +103,28 @@ async function upload<T>(
 
 export const api = {
   health: () => request<{ status: string }>('/health'),
-  candidates: () => request<CandidateDTO[]>('/candidates'),
+  /** The pool, with the size of the WHOLE pool alongside it.
+   *
+   *  The cockpit searches and filters these rows in the browser, so a page
+   *  that is smaller than the pool makes every search a search of the first
+   *  N names — a failure that looks exactly like an empty result. The count
+   *  comes from `X-Total-Count`, and the screen compares the two. */
+  candidatesPage: async (
+    limit = 1000,
+  ): Promise<{ items: CandidateDTO[]; total: number }> => {
+    const res = await fetch(`${BASE}/candidates?limit=${limit}`, {
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    })
+    if (!res.ok) {
+      throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+    }
+    const items = (await res.json()) as CandidateDTO[]
+    // A proxy that strips the header must not be read as "the pool is empty".
+    const header = Number(res.headers.get('X-Total-Count'))
+    return { items, total: Number.isFinite(header) && header > 0 ? header : items.length }
+  },
+
+  candidates: () => request<CandidateDTO[]>('/candidates?limit=1000'),
 
   /** Fetch a single candidate's full record (used to seed the edit form). */
   candidate: (id: string) => request<CandidateDTO>(`/candidates/${id}`),

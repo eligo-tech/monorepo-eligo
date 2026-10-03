@@ -54,6 +54,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # A browser cannot read a response header unless it is named here, and a
+    # list that does not say how much of the set it is showing is a list that
+    # silently lies — see `X-Total-Count` on /candidates.
+    expose_headers=["X-Total-Count"],
 )
 
 app.include_router(api_router, prefix=settings.api_v1_prefix)

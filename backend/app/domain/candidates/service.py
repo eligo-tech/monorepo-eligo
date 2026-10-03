@@ -6,7 +6,7 @@ import enum
 import json
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -27,6 +27,18 @@ async def list_candidates(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+async def count_candidates(session: AsyncSession, *, tenant_id: uuid.UUID) -> int:
+    """How many the tenant has, independent of any page."""
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(Candidate)
+            .where(Candidate.tenant_id == tenant_id)
+        )
+        or 0
+    )
 
 
 async def get_candidate(
