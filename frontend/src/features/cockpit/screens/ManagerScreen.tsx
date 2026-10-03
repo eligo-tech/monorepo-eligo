@@ -15,7 +15,16 @@
 // told" is the question with a deadline attached.
 
 import { useMemo, useState } from 'react'
-import { Building2, Check, Mail, Phone, Search, ShieldAlert, UserRound } from 'lucide-react'
+import {
+  Building2,
+  Check,
+  Mail,
+  MapPin,
+  Phone,
+  Search,
+  ShieldAlert,
+  UserRound,
+} from 'lucide-react'
 import { api } from '@/api/client'
 import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
@@ -82,6 +91,14 @@ function ManagerRow({
           <Building2 className="h-3.5 w-3.5 shrink-0" />
           {companyName}
         </span>
+        {/* 642 of 647 contacts carry a city, and none of them showed it. A
+            field you can search but not see reads as a search that guesses. */}
+        {manager.city && (
+          <span className="flex items-center gap-1.5 font-mono text-[12px] text-cockpit-faint">
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            {manager.city}
+          </span>
+        )}
 
         <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
           {manager.email && (
@@ -179,6 +196,10 @@ export function ManagerScreen() {
             { text: m.full_name, weight: 3 },
             { text: m.role_title ?? '', weight: 3 },
             { text: companyName(m.company_id), weight: 2.5 },
+            // Where the person sits. The contact's OWN address, which the
+            // import carried all along — not the client company's
+            // `location`, which is filled for 13 of 341 companies.
+            { text: `${m.city ?? ''} ${m.postal_code ?? ''}`, weight: 2 },
             { text: `${m.email ?? ''} ${m.phone ?? ''}`, weight: 1 },
           ],
           term,
@@ -228,7 +249,7 @@ export function ManagerScreen() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cockpit-faint" />
               <input
                 className={cn(FIELD, 'pl-9')}
-                placeholder="Name, Rolle oder Firma — Tippfehler erlaubt"
+                placeholder="Name, Rolle, Firma, Ort oder PLZ — Tippfehler erlaubt"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
