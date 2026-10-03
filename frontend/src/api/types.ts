@@ -714,3 +714,26 @@ export interface JobUpdatePayload {
   salary_currency?: string
   status?: string
 }
+
+/** One data source a workspace has connected — its own ATS, today aiFind.
+ *  The stored password is never part of this: `has_secret` is all the UI
+ *  gets, because a value the API does not emit cannot leak. */
+export interface TenantSourceDTO {
+  id: string
+  kind: string
+  label: string | null
+  username: string
+  status: string
+  has_secret: boolean
+  import_requested_at: string | null
+  last_run_at: string | null
+  last_result: Record<string, number | string>
+  last_error: string | null
+}
+
+export interface SourceCapabilitiesDTO {
+  kinds: string[]
+  /** False when the server has no ELIGO_SECRET_KEY — no credential can be
+   *  stored at all, and the form says so instead of failing on submit. */
+  secrets_configured: boolean
+}

@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
 from app.core.config import settings
+from app.core.auth import assert_auth_configured
 from app.core.database import assert_runtime_rls_enforced, create_all
 from app.core.logging import configure_logging, get_logger
 
@@ -24,6 +25,9 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Create tables on startup (scaffold convenience; use Alembic in prod)."""
     configure_logging()
+    # Before anything is served: a Postgres database with auth off would hand
+    # every anonymous caller the default tenant (see `assert_auth_configured`).
+    assert_auth_configured()
     if settings.auto_create_tables:
         await create_all()
         logger.info("tables ensured (%s)", settings.safe_database_url)

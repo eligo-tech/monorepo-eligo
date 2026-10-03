@@ -28,6 +28,38 @@ Copy `.env.example` → `.env`. Everything is prefixed `ELIGO_`. The default
 `ELIGO_DATABASE_URL` is async SQLite; point it at
 `postgresql+asyncpg://…` to use Postgres.
 
+### Two settings a production deployment must get right
+
+| variable | why it matters |
+|---|---|
+| `ELIGO_AUTH_ENABLED=true` | With auth off, every anonymous request is served as the **default tenant** — real data, read and write, to whoever asks. The app now **refuses to start** in that configuration against Postgres (`ELIGO_ALLOW_INSECURE_NO_AUTH=true` overrides it for a local database you own). |
+| `ELIGO_SECRET_KEY` | Fernet key encrypting the credentials workspaces store for their own sources. Unset means no workspace can connect its ATS at all — storing a password in the clear is not the fallback. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Rotating it invalidates every stored credential, and each workspace is told so in plain words. |
+
+## Onboarding a workspace's own data
+
+A customer connects their ATS themselves under **Einstellungen · Datenquellen**:
+username and password, encrypted on arrival and never returned by the API.
+Pressing *Import anfordern* writes a request; it does not import.
+
+The import is performed by the scheduled job — `Workspace · imports`
+(`.github/workflows/tenant-imports.yml`, nightly at 05:40, or by hand), which
+calls the machine-only endpoint:
+
+```bash
+ELIGO_API_BASE=https://…/api/v1 ELIGO_INGEST_TOKEN=… \
+  python -m scripts.tenant_imports --limit 3 [--no-details]
+```
+
+Why the split: an aiFind import is hundreds of outbound calls, which gives a
+request no retry and no backpressure and makes a timeout indistinguishable
+from a failure; collection stays a scheduled, logged activity (GDPR Art. 30);
+and a password is decrypted only in the job process, never in a request a
+recruiter can reach. The endpoint takes the machine token only — a valid Clerk
+session gets 401, and `tests/test_operator_endpoints.py` attacks it to prove it.
+
+The old path still works for a one-off, with the credential in the operator's
+environment: `python -m scripts.aifind_import --tenant <uuid>`.
+
 ## Tenant isolation — fail-closed RLS
 
 Tenant isolation is enforced at the **database**, not just in app code. Every

@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { CommandBar } from './CommandBar'
 import { CockpitScreen } from './screens/CockpitScreen'
 import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
+import { EinstellungenScreen } from './screens/EinstellungenScreen'
 import { JobsScreen } from './screens/JobsScreen'
 import { ManagerScreen } from './screens/ManagerScreen'
 import { MarktScreen } from './screens/MarktScreen'
@@ -26,6 +27,7 @@ export type ScreenKey =
   | 'managers'
   | 'jobs'
   | 'kandidaten'
+  | 'einstellungen'
 
 // The order the product reads in: the book of business, then the market it
 // draws on, then the part of it this workspace watches — the funnel from
@@ -37,6 +39,7 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'managers', label: 'Manager', placeholder: true },
   { key: 'jobs', label: 'Jobs' },
   { key: 'kandidaten', label: 'Kandidaten' },
+  { key: 'einstellungen', label: 'Einstellungen' },
 ]
 
 export const isScreenKey = (v: string): v is ScreenKey =>
@@ -124,6 +127,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         {screen === 'managers' && <ManagerScreen />}
         {screen === 'jobs' && <JobsScreen />}
         {screen === 'kandidaten' && <KandidatenScreen />}
+        {screen === 'einstellungen' && <EinstellungenScreen />}
       </main>
     </div>
   )

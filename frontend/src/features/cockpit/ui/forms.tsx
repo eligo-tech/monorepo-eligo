@@ -40,7 +40,7 @@ export function TextInput({
   value: string
   onChange: (v: string) => void
   placeholder?: string
-  type?: 'text' | 'email' | 'number'
+  type?: 'text' | 'email' | 'number' | 'password'
 }) {
   return (
     <label className="block min-w-0">
