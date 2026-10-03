@@ -30,6 +30,7 @@ import {
 import type { Candidate, CandidateProfile } from '@/data/types'
 import type { CandidateDTO } from '@/api/types'
 import { api } from '@/api/client'
+import { useAsync } from '@/hooks/useAsync'
 import { Avatar } from '@/components/ui/Avatar'
 import { LinkedInMark } from '@/components/ui/LinkedInMark'
 import { cn } from '@/lib/cn'
@@ -55,6 +56,22 @@ export function CandidateDrawer({
   const [editing, setEditing] = useState(false)
   const [dto, setDto] = useState<CandidateDTO | null>(null)
   const [dtoError, setDtoError] = useState(false)
+
+  // Which mandates this person is running on. The cockpit links here; without
+  // the way back, the record is a dead end — you read the CV and then have to
+  // find the search again by name.
+  const { data: runs } = useAsync(
+    () =>
+      api
+        .processes()
+        .then((jobs) =>
+          jobs
+            .filter((j) => j.candidates.some((c) => c.candidate_id === candidate.id))
+            .map((j) => ({ id: j.job_id, title: j.job_title, client: j.company_name })),
+        )
+        .catch(() => []),
+    [candidate.id],
+  )
 
   async function startEdit() {
     setExpanded(true)
@@ -131,6 +148,17 @@ export function CandidateDrawer({
         </div>
 
         <div className="flex items-center gap-2">
+          {(runs ?? []).map((run) => (
+            <a
+              key={run.id}
+              href={`#cockpit/${run.id}`}
+              title={`${run.title} im Cockpit öffnen`}
+              className="flex max-w-[15rem] items-center gap-1.5 rounded-xl border border-cockpit-line px-3.5 py-2 text-[13px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
+            >
+              <Briefcase className="h-4 w-4 shrink-0" />
+              <span className="truncate">Im Prozess: {run.client ?? run.title}</span>
+            </a>
+          ))}
           <a
             href={`mailto:${candidate.email}`}
             className="flex items-center gap-1.5 rounded-xl border border-mint-600 bg-mint-800/40 px-3.5 py-2 text-[13px] font-medium text-mint-300 transition-colors hover:bg-mint-800/70"

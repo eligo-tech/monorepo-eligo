@@ -8,6 +8,8 @@
 
 import type { ReactNode } from 'react'
 
+import { ExternalLink } from 'lucide-react'
+
 import { ProgressRing } from './Gauge'
 import { ProcessStepper } from './ProcessStepper'
 import { Chip, Money, Panel } from './primitives'
@@ -40,6 +42,18 @@ export function ProcessCardPanel({
               <span className="text-cockpit-faint"> · </span>
               {card.role}
             </h3>
+            {/* The process says where the person stands; their record says who
+                they are. Reading one while hunting the other in a second list
+                is the step this link removes. */}
+            {card.candidateId && (
+              <a
+                href={`#kandidaten/${card.candidateId}`}
+                title={`${card.candidateName} — Kandidatenakte öffnen`}
+                className="flex items-center gap-1 rounded-md border border-cockpit-line px-2 py-0.5 font-mono text-[11.5px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
+              >
+                Kandidatenakte <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
             {card.statusNote && <Chip tone="mint">{card.statusNote}</Chip>}
           </div>
           <p className="mt-1 font-mono text-[13px] text-cockpit-faint">

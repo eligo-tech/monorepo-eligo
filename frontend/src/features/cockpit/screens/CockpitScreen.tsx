@@ -101,9 +101,9 @@ export function CockpitScreen({
       processes: selection.flatMap((m) => m.cards),
     }
     return (
-      <div className="flex gap-6">
+      <div className="flex gap-5 xl:gap-7">
         {drawer}
-        <div className="min-w-0 flex-1 space-y-10">
+        <div className="mx-auto min-w-0 max-w-[1560px] flex-1 space-y-10 px-6">
           <header className="flex flex-wrap items-center gap-3">
             <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-cockpit-text">
               {selection.length} Mandate
@@ -136,9 +136,9 @@ export function CockpitScreen({
   // link from another workspace. That gets a sentence, not an empty screen.
   if (mandateId && !mandate) {
     return (
-      <div className="flex gap-6">
+      <div className="flex gap-5 xl:gap-7">
         {drawer}
-        <p className="min-w-0 flex-1 text-[15px] text-cockpit-dim">
+        <p className="mx-auto min-w-0 max-w-[1560px] flex-1 px-6 text-[15px] text-cockpit-dim">
           Dieses Mandat gibt es in diesem Workspace nicht (mehr) — links eines
           auswählen.
         </p>
@@ -148,9 +148,9 @@ export function CockpitScreen({
 
   if (mandate) {
     return (
-      <div className="flex gap-6">
+      <div className="flex gap-5 xl:gap-7">
         {drawer}
-        <div className="min-w-0 flex-1">
+        <div className="mx-auto min-w-0 max-w-[1560px] flex-1 px-6">
           <MandateView
             mandate={mandate}
             company={company ?? undefined}
@@ -164,10 +164,10 @@ export function CockpitScreen({
   }
 
   return (
-    <div className="flex gap-6">
+    <div className="flex gap-5 xl:gap-7">
       {drawer}
 
-      <div className="min-w-0 flex-1 space-y-10">
+      <div className="mx-auto min-w-0 max-w-[1560px] flex-1 space-y-10 px-6">
         <header id="section-signals" className="scroll-mt-24">
           <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-mint-400">
             Kommandozentrale
