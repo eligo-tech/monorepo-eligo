@@ -207,14 +207,19 @@ export function KandidatenScreen({
   const [sort, setSort] = useState<SortKey>('created')
   const [skillFilter, setSkillFilter] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Candidate | null>(null)
-  const { data, loading, error } = useAsync(() => api.candidates(), [refreshKey])
+  const { data, loading, error } = useAsync(() => api.candidatesPage(), [refreshKey])
 
   // Live data or nothing. There used to be a mock fallback here — five
   // invented people rendered whenever the call failed, which in a product
   // where the common failure is an expired session meant a recruiter saw
   // strangers in their own pool, indistinguishable from their candidates
   // except for a hint in the section header. An error says it is an error.
-  const all = useMemo(() => (data ? data.map(toCandidate) : []), [data])
+  const all = useMemo(() => (data ? data.items.map(toCandidate) : []), [data])
+  // What the server says exists, against what this page holds. Searching and
+  // filtering happen here, so the gap is the part of the pool no search on
+  // this screen can reach.
+  const poolTotal = data?.total ?? all.length
+  const truncated = poolTotal > all.length
 
   // The hash drives the open record. Waiting for the list keeps one source of
   // truth for what a Candidate is — the drawer wants the adapted shape, not
@@ -332,6 +337,15 @@ export function KandidatenScreen({
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
           <span>
             <span className="text-cockpit-text">{all.length}</span> Kandidaten
+            {truncated && (
+              <span
+                className="text-gold-300"
+                title="Suche und Filter laufen im Browser über die geladenen Zeilen — der Rest ist hier nicht auffindbar."
+              >
+                {' '}
+                von {poolTotal} geladen
+              </span>
+            )}
           </span>
           <span>
             <span className="text-cockpit-text">{rows.length}</span> angezeigt

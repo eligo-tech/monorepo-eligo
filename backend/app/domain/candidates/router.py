@@ -23,11 +23,23 @@ router = APIRouter(prefix="/candidates", tags=["candidates"])
 
 @router.get("", response_model=list[CandidateRead])
 async def list_candidates(
+    response: Response,
     tenant_id: uuid.UUID = Depends(get_current_tenant),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
 ) -> list[CandidateRead]:
+    """The pool, alphabetically, with `X-Total-Count` saying how big it is.
+
+    The count is not decoration. This list is searched and filtered in the
+    BROWSER, so a page of 100 out of 447 makes every search a search of the
+    first hundred names and says nothing about the other 347 — the failure
+    looks exactly like "we have nobody for that". The caller asks for what it
+    can hold and compares the two numbers.
+    """
     rows = await service.list_candidates(db, tenant_id=tenant_id, limit=limit)
+    response.headers["X-Total-Count"] = str(
+        await service.count_candidates(db, tenant_id=tenant_id)
+    )
     return [CandidateRead.model_validate(r) for r in rows]
 
 
