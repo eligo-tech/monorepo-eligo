@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_tenant
@@ -23,14 +23,26 @@ router = APIRouter(prefix="/managers", tags=["managers"])
 
 @router.get("", response_model=list[ManagerRead])
 async def list_managers(
+    response: Response,
     company_id: uuid.UUID | None = Query(default=None),
     q: str | None = Query(default=None, description="name, role or company"),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=1000),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> list[ManagerRead]:
+    """This workspace's contacts, with `X-Total-Count` for the whole set.
+
+    Same contract as `/candidates`, for the same reason: the cockpit filters
+    and ranks these rows in the browser, so a page smaller than the set turns
+    every search into a search of the first N names. The count is of the
+    tenant's contacts, unfiltered by `q` — "447 of 647 shown" is about the
+    page, not about the query.
+    """
     rows = await service.list_managers(
         db, tenant_id=tenant_id, company_id=company_id, q=q, limit=limit
+    )
+    response.headers["X-Total-Count"] = str(
+        await service.count_managers(db, tenant_id=tenant_id, company_id=company_id)
     )
     return [ManagerRead.model_validate(r) for r in rows]
 

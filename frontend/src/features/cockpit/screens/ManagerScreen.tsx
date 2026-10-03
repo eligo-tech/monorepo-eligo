@@ -14,12 +14,13 @@
 // rather than a headcount: "how many people do I hold data on who have not been
 // told" is the question with a deadline attached.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Building2, Check, Mail, Phone, Search, ShieldAlert, UserRound } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
+import { searchScore } from '@/lib/search'
 import { Panel, SectionHeader } from '../ui/primitives'
 import { ManagerProfile } from './ManagerProfile'
 import { FIELD } from '../ui/forms'
@@ -140,22 +141,15 @@ function ManagerRow({
 }
 
 export function ManagerScreen() {
-  const [draft, setDraft] = useState('')
   const [query, setQuery] = useState('')
   const [overrides, setOverrides] = useState<Record<string, ManagerDTO>>({})
   const [selected, setSelected] = useState<ManagerDTO | null>(null)
 
-  // Debounced: the search hits the database, and 650 rows is enough that a
-  // request per keystroke is felt.
-  useEffect(() => {
-    const id = setTimeout(() => setQuery(draft.trim()), 250)
-    return () => clearTimeout(id)
-  }, [draft])
-
-  const managers = useAsync<ManagerDTO[]>(
-    () => api.managers({ q: query || undefined, limit: 200 }),
-    [query],
-  )
+  // The whole pool, once. It used to be a debounced database query per
+  // keystroke, capped at 200 of 647 — so a term matching 300 people showed
+  // 200 of them with nothing saying so, and a typo showed none. 647 contacts
+  // fit comfortably in the browser, where the scorer can also rank them.
+  const managers = useAsync(() => api.managersPage(), [])
   const companies = useAsync<CompanyDTO[]>(() => api.companies(), [])
   const art14 = useAsync<ManagerDTO[]>(() => api.managersOwingArt14(), [])
 
@@ -164,7 +158,36 @@ export function ManagerScreen() {
     return (id: string) => byId.get(id) ?? '—'
   }, [companies.data])
 
-  const rows = (managers.data ?? []).map((m) => overrides[m.id] ?? m)
+  const all = useMemo(
+    () => (managers.data?.items ?? []).map((m) => overrides[m.id] ?? m),
+    [managers.data, overrides],
+  )
+  const poolTotal = managers.data?.total ?? all.length
+  const truncated = poolTotal > all.length
+
+  const term = query.trim()
+  // Scored and ranked, like Jobs and Kandidaten: "CTO Bergfreunde" finds the
+  // person although no single field holds both words, and "Bergfruende"
+  // still finds them.
+  const rows = useMemo(() => {
+    if (!term) return all
+    return all
+      .map((m) => ({
+        m,
+        score: searchScore(
+          [
+            { text: m.full_name, weight: 3 },
+            { text: m.role_title ?? '', weight: 3 },
+            { text: companyName(m.company_id), weight: 2.5 },
+            { text: `${m.email ?? ''} ${m.phone ?? ''}`, weight: 1 },
+          ],
+          term,
+        ),
+      }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((r) => r.m)
+  }, [all, companyName, term])
   // Counted from the live queue, then adjusted by anything discharged in this
   // session — so the number moves when the button is pressed rather than on a
   // reload.
@@ -191,7 +214,11 @@ export function ManagerScreen() {
           hint={
             managers.loading
               ? 'lädt…'
-              : `${de(rows.length)}${rows.length === 200 ? '+' : ''} angezeigt`
+              : term
+                ? `${de(rows.length)} von ${de(all.length)} · nach Relevanz`
+                : `${de(all.length)} Kontakte${
+                    truncated ? ` von ${de(poolTotal)} geladen` : ''
+                  }`
           }
         />
 
@@ -201,9 +228,9 @@ export function ManagerScreen() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cockpit-faint" />
               <input
                 className={cn(FIELD, 'pl-9')}
-                placeholder="Name, Rolle oder Firma…"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Name, Rolle oder Firma — Tippfehler erlaubt"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
               />
             </div>
             {/* An obligation with a deadline belongs next to the work, not in a
@@ -234,9 +261,20 @@ export function ManagerScreen() {
         {!managers.error && !managers.loading && rows.length === 0 && (
           <Panel className="p-5">
             <p className="text-[14px] text-cockpit-dim">
-              {query
-                ? `Kein Kontakt passt zu „${query}“.`
-                : 'Noch keine Ansprechpartner. Übernehmen Sie ein Unternehmen aus dem Markt oder importieren Sie Ihr bestehendes System.'}
+              {term ? (
+                <>
+                  Kein Kontakt passt zu „{term}“.
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="ml-2 font-mono text-[12px] text-mint-300 transition-colors hover:text-cockpit-text"
+                  >
+                    Suche zurücksetzen
+                  </button>
+                </>
+              ) : (
+                'Noch keine Ansprechpartner. Übernehmen Sie ein Unternehmen aus dem Markt oder importieren Sie Ihr bestehendes System.'
+              )}
             </p>
           </Panel>
         )}

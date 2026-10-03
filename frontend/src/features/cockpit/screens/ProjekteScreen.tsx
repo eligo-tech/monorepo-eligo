@@ -17,7 +17,7 @@
 // companies (they are the shared corpus's) nor the contacts (they are this
 // workspace's own).
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   Building2,
@@ -31,6 +31,7 @@ import {
   Sparkles,
   Trash2,
   UserPlus,
+  X,
 } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type {
@@ -41,6 +42,7 @@ import type {
   ProjectDetailDTO,
 } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
+import { searchScore, type SearchField } from '@/lib/search'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { Button, FIELD } from '../ui/forms'
@@ -178,6 +180,7 @@ function AddCompanies({
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
   const candidates = useAsync<ProjectCandidateDTO[]>(
     () => (open ? api.projectCandidates(projectId) : Promise.resolve([])),
     [projectId, open],
@@ -204,13 +207,30 @@ function AddCompanies({
     )
   }
 
-  const list = candidates.data ?? []
+  const watched = candidates.data ?? []
+  // A picker over everything watched in a 161,955-company corpus is exactly
+  // where scrolling stops working.
+  const list = ranked(watched, query, (c) => [
+    { text: c.name, weight: 3 },
+    { text: c.cities.join(' '), weight: 2 },
+  ])
   return (
     <Panel tone="inset" className="w-full space-y-2 p-3">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <span className="font-mono text-[12px] uppercase tracking-[0.12em] text-cockpit-faint">
           Beobachtete Firmen
+          {query && (
+            <span className="ml-2 normal-case tracking-normal">
+              {de(list.length)} von {de(watched.length)}
+            </span>
+          )}
         </span>
+        <ListSearch
+          value={query}
+          onChange={setQuery}
+          placeholder="Firma oder Ort…"
+          count={watched.length}
+        />
         <Button className="ml-auto" onClick={() => setOpen(false)}>
           Abbrechen
         </Button>
@@ -222,10 +242,15 @@ function AddCompanies({
       {candidates.loading && (
         <p className="font-mono text-[12px] text-cockpit-faint">lädt…</p>
       )}
-      {!candidates.loading && list.length === 0 && (
+      {!candidates.loading && watched.length === 0 && (
         <p className="max-w-2xl text-[13px] leading-relaxed text-cockpit-dim">
           Keine weiteren beobachteten Firmen. Im Markt suchen und dort
           „Beobachten“ klicken — die Firmen erscheinen dann hier.
+        </p>
+      )}
+      {!candidates.loading && watched.length > 0 && list.length === 0 && (
+        <p className="text-[13px] text-cockpit-dim">
+          Keine beobachtete Firma passt zu „{query}“.
         </p>
       )}
 
@@ -506,6 +531,7 @@ function CompanyRow({
 
 function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () => void }) {
   const [reloadKey, setReloadKey] = useState(0)
+  const [query, setQuery] = useState('')
   const [override, setOverride] = useState<ProjectDetailDTO | null>(null)
   const loaded = useAsync<ProjectDetailDTO>(() => api.project(projectId), [projectId, reloadKey])
   const detail = override ?? loaded.data
@@ -513,6 +539,14 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
     setOverride(null)
     setReloadKey((k) => k + 1)
   }, [])
+
+  // Searchable by what the reader remembers: the firm, where it is, or the
+  // person they spoke to there.
+  const companies = ranked(detail?.companies ?? [], query, (c) => [
+    { text: c.name, weight: 3 },
+    { text: c.cities.join(' '), weight: 2 },
+    { text: c.contacts.map((p) => `${p.full_name} ${p.role_title ?? ''}`).join(' '), weight: 2 },
+  ])
 
   if (loaded.loading && !detail) {
     return <p className="font-mono text-[13px] text-cockpit-faint">lädt Projekt…</p>
@@ -546,12 +580,24 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
           )}{' '}
           · {de(detail.open_roles)} offene Rollen
         </span>
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-3">
+          <ListSearch
+            value={query}
+            onChange={setQuery}
+            placeholder="Firma, Ort oder Ansprechpartner…"
+            count={detail.companies.length}
+          />
           <AddCompanies projectId={projectId} onAdded={setOverride} />
         </span>
       </div>
 
-      {detail.companies.length === 0 ? (
+      {companies.length === 0 && detail.companies.length > 0 ? (
+        <Panel className="p-5">
+          <p className="text-[14px] text-cockpit-dim">
+            Keine Firma in diesem Projekt passt zu „{query}“.
+          </p>
+        </Panel>
+      ) : detail.companies.length === 0 ? (
         <Panel className="p-6">
           <div className="flex items-start gap-3">
             <span className="rounded-md border border-cockpit-line p-2 text-cockpit-faint">
@@ -565,7 +611,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
         </Panel>
       ) : (
         <div className="space-y-3">
-          {detail.companies.map((company) => (
+          {companies.map((company) => (
             <CompanyRow
               key={company.hub_company_id}
               projectId={projectId}
@@ -622,11 +668,67 @@ function UnassignedWatched({ reloadKey }: { reloadKey: number }) {
   )
 }
 
+/** One search box, used by the three lists on this screen that can grow.
+ *
+ *  Rendered only past `from` rows: a search field above four cards is
+ *  furniture, and the screen already has enough controls. */
+function ListSearch({
+  value,
+  onChange,
+  placeholder,
+  count,
+  from = 6,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  count: number
+  from?: number
+}) {
+  if (count < from && !value) return null
+  return (
+    <label className="flex min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-cockpit-line bg-cockpit-inset px-3 focus-within:border-cockpit-edge">
+      <Search className="h-4 w-4 shrink-0 text-cockpit-faint" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full bg-transparent py-1.5 text-[13.5px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Suche leeren"
+          className="text-cockpit-faint transition-colors hover:text-cockpit-text"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </label>
+  )
+}
+
+/** Rank a list with the shared scorer, or hand it back untouched. */
+function ranked<T>(items: T[], term: string, fields: (item: T) => SearchField[]): T[] {
+  if (!term.trim()) return items
+  return items
+    .map((item) => ({ item, score: searchScore(fields(item), term) }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((r) => r.item)
+}
+
 export function ProjekteScreen() {
   const [reloadKey, setReloadKey] = useState(0)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const projects = useAsync<ProjectDTO[]>(() => api.projects(), [reloadKey])
-  const list = projects.data ?? []
+  const all = projects.data ?? []
+  const list = useMemo(
+    () => ranked(all, query, (p) => [{ text: p.name, weight: 3 }, { text: p.note ?? '', weight: 1 }]),
+    [all, query],
+  )
 
   return (
     <div className="space-y-8">
@@ -657,14 +759,24 @@ export function ProjekteScreen() {
               title="Projekte"
               hint={
                 projects.data
-                  ? `${de(list.length)} ${list.length === 1 ? 'Projekt' : 'Projekte'}`
+                  ? query
+                    ? `${de(list.length)} von ${de(all.length)}`
+                    : `${de(all.length)} ${all.length === 1 ? 'Projekt' : 'Projekte'}`
                   : projects.error
                     ? 'offline'
                     : 'lädt…'
               }
             />
 
-            <NewProject onCreated={() => setReloadKey((k) => k + 1)} />
+            <div className="flex flex-wrap items-center gap-3">
+              <NewProject onCreated={() => setReloadKey((k) => k + 1)} />
+              <ListSearch
+                value={query}
+                onChange={setQuery}
+                placeholder="Projekt suchen…"
+                count={all.length}
+              />
+            </div>
 
             {projects.error && (
               <Panel className="p-5">
@@ -674,7 +786,15 @@ export function ProjekteScreen() {
               </Panel>
             )}
 
-            {projects.data && list.length === 0 && (
+            {projects.data && all.length > 0 && list.length === 0 && (
+              <Panel className="p-5">
+                <p className="text-[14px] text-cockpit-dim">
+                  Kein Projekt passt zu „{query}“.
+                </p>
+              </Panel>
+            )}
+
+            {projects.data && all.length === 0 && (
               <Panel className="p-6">
                 <div className="flex items-start gap-3">
                   <span className="rounded-md border border-cockpit-line p-2 text-cockpit-faint">
