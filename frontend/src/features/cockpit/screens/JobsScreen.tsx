@@ -19,6 +19,7 @@ import { api } from '@/api/client'
 import type { CompanyDTO, JobDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
+import { searchScore } from '@/lib/search'
 import { Button } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { MandateEditor } from './MandateEditor'
@@ -57,15 +58,6 @@ const STATUS_FILTERS = [
 
 const mandateRef = (id: string) => `#A-${id.slice(0, 4)}`
 
-/** Word-wise, so "ge münchen" finds the Münchner GE-Mandat even though no
- *  single field contains that string. Every word must hit somewhere. */
-function matches(haystack: string, needle: string): boolean {
-  const words = needle.toLowerCase().split(/\s+/).filter(Boolean)
-  if (words.length === 0) return true
-  const hay = haystack.toLowerCase()
-  return words.every((w) => hay.includes(w))
-}
-
 export function JobsScreen({
   query = '',
   onClearQuery,
@@ -99,24 +91,31 @@ export function JobsScreen({
 
   // Both boxes apply. The command bar's query is shown as a removable chip
   // so a term typed on another screen cannot silently empty this list.
-  const rows = useMemo(
-    () =>
-      all.filter((job) => {
-        const haystack = [
-          job.title,
-          companyName(job.client_company_id),
-          job.location ?? '',
-          mandateRef(job.id),
-          job.status,
-        ].join(' ')
-        return (
-          matches(haystack, filter) &&
-          matches(haystack, query) &&
-          (!status || job.status === status)
-        )
-      }),
-    [all, companyName, filter, query, status],
-  )
+  //
+  // Scored, not merely matched: "Softwre" still finds GE Software, and the
+  // closest mandate comes first instead of whatever the alphabet decided.
+  const term = [filter, query].filter(Boolean).join(' ')
+
+  const rows = useMemo(() => {
+    const scored = all
+      .filter((job) => !status || job.status === status)
+      .map((job) => ({
+        job,
+        score: searchScore(
+          [
+            { text: job.title, weight: 3 },
+            { text: companyName(job.client_company_id), weight: 3 },
+            { text: job.location ?? '', weight: 2 },
+            { text: mandateRef(job.id), weight: 2 },
+            { text: job.status, weight: 1 },
+          ],
+          term,
+        ),
+      }))
+      .filter((r) => r.score > 0)
+    if (term) scored.sort((a, b) => b.score - a.score)
+    return scored.map((r) => r.job)
+  }, [all, companyName, status, term])
 
   // Counted over the filtered list: "2 von 10 Mandaten · 6 offen" would read
   // as if the filter had kept six of them.
@@ -155,7 +154,7 @@ export function JobsScreen({
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Mandat, Firma, Ort oder #A-Nummer …"
+              placeholder="Mandat, Firma, Ort oder #A-Nummer — Tippfehler erlaubt"
               className="w-full bg-transparent py-2 text-[14px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
             />
             {filter && (
@@ -198,6 +197,7 @@ export function JobsScreen({
           <span>
             <span className="text-cockpit-text">{open}</span> offen
           </span>
+          {term && rows.length > 1 && <span>nach Relevanz sortiert</span>}
           {query && (
             <span className="flex items-center gap-1.5 rounded-md border border-gold-600/45 px-2 py-0.5 text-gold-300">
               Suche oben: „{query}“
