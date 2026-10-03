@@ -45,8 +45,6 @@ export interface CandidateProfile {
   country?: string
   linkedinUrl?: string
   xingUrl?: string
-  /** @deprecated single imported label — read `industries`. */
-  industry?: string
   industries: string[]
   /** What the source called it. */
   employmentType?: string

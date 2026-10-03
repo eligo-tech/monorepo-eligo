@@ -33,7 +33,7 @@ CV_DIR = Path(__file__).resolve().parents[2] / "data" / "sample_cv"
 
 # Non-empty extended fields we report coverage on.
 EXT_FIELDS = (
-    "linkedin_url", "city", "country", "industry", "date_of_birth",
+    "linkedin_url", "city", "country", "date_of_birth",
     "languages", "education", "working_experience", "motivation",
     "notice_period", "availability", "current_salary",
 )

@@ -53,8 +53,6 @@ export interface CandidateDTO {
   country?: string | null
   linkedin_url?: string | null
   xing_url?: string | null
-  /** @deprecated One imported label; read `industries`. */
-  industry?: string | null
   /** Every industry worked in — the document asks for "Branchen", plural. */
   industries?: string[] | null
   /** What the source called it ("Permanent", "Contract, Permanent"). */
@@ -104,7 +102,6 @@ export interface CandidateUpdatePayload {
   country?: string | null
   linkedin_url?: string | null
   xing_url?: string | null
-  industry?: string | null
   industries?: string[]
   employment_type?: string | null
   employment_form?: EmploymentForm | null

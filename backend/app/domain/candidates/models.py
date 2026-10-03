@@ -50,15 +50,15 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
     linkedin_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     xing_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
-    #: What the source called the candidate's industry — ONE label, often a
-    #: compound one ("Pharma, MedTech und Gesundheitsbranche"). Kept as the
-    #: imported value; `industries` is the field of record. Dropped once
-    #: nothing reads it (expand/contract, see migration 0030).
-    industry: Mapped[str | None] = mapped_column(String(120), nullable=True)
     #: Every industry the candidate has worked in. The document asks for
     #: "Branchen", plural — a career in Luftfahrt AND Behörden AND Bundeswehr
     #: cannot be said in one slot, and that breadth is exactly what makes
     #: someone placeable in a second market.
+    #:
+    #: There was a single `industry` column until migration 0030 backfilled
+    #: this one from it. Nothing reads it any more; the column itself is
+    #: dropped in a follow-up migration, because the container still serving
+    #: during a deploy would select it (expand/contract — ARCHITECTURE.md §5).
     industries: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
     #: The source's own words ("Permanent", "Contract, Permanent", "Founder").
     employment_type: Mapped[str | None] = mapped_column(String(60), nullable=True)

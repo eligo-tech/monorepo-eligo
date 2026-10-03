@@ -81,27 +81,29 @@ async def test_a_career_can_span_several_industries() -> None:
         )
     )
     assert created.industries == ["Luft- und Raumfahrt", "Behörden", "Automotive"]
-    # The legacy single column follows along until it is dropped, so a reader
-    # of either sees the same first industry rather than two truths.
-    assert created.industry == "Luft- und Raumfahrt"
 
 
-async def test_one_imported_label_becomes_a_one_item_list() -> None:
+async def test_one_imported_label_stays_one_label() -> None:
     """NOT split on the comma: "Pharma, MedTech und Gesundheitsbranche" is a
-    single taxonomy label, and splitting it invents an industry."""
+    single taxonomy label, and splitting it invents an industry that nobody
+    recorded. This is the shape every import path writes."""
     created = await _create(
         CandidateCreate(
             tenant_id=TENANT,
             full_name="Aus dem Import",
-            industry="Pharma, MedTech und Gesundheitsbranche",
+            industries=["Pharma, MedTech und Gesundheitsbranche"],
         )
     )
     assert created.industries == ["Pharma, MedTech und Gesundheitsbranche"]
 
 
-async def test_editing_the_list_keeps_the_legacy_column_in_step() -> None:
+async def test_the_list_is_the_only_field_of_record() -> None:
+    """The single `industry` column is gone from the code (its DROP waits for
+    the next deploy). A patch that sets the list is the whole story."""
     created = await _create(
-        CandidateCreate(tenant_id=TENANT, full_name="Wechselt", industry="Automotive")
+        CandidateCreate(
+            tenant_id=TENANT, full_name="Wechselt", industries=["Automotive"]
+        )
     )
     async with SessionLocal() as s:
         updated = await service.update_candidate(
@@ -112,7 +114,7 @@ async def test_editing_the_list_keeps_the_legacy_column_in_step() -> None:
             editor="test",
         )
     assert updated.industries == ["Maschinenbau", "Intralogistik"]
-    assert updated.industry == "Maschinenbau"
+    assert not hasattr(updated, "industry")
 
 
 async def _create(data: CandidateCreate):

@@ -107,13 +107,7 @@ function seed(dto: CandidateDTO): Draft {
     country: s(dto.country),
     linkedin_url: s(dto.linkedin_url),
     xing_url: s(dto.xing_url),
-    // The legacy single label is folded in, so a record imported before
-    // `industries` existed still shows its industry in the list.
-    industries: dto.industries?.length
-      ? [...dto.industries]
-      : dto.industry
-        ? [dto.industry]
-        : [],
+    industries: [...(dto.industries ?? [])],
     employment_type: s(dto.employment_type),
     employment_form: s(dto.employment_form),
     willing_to_relocate: s(dto.willing_to_relocate),
@@ -258,12 +252,7 @@ function buildPatch(dto: CandidateDTO, d: Draft): CandidateUpdatePayload {
   const skills = cleanList(d.skills)
   if (JSON.stringify(skills) !== JSON.stringify(dto.skills ?? [])) patch.skills = skills
   const industries = cleanList(d.industries)
-  const seededIndustries = dto.industries?.length
-    ? dto.industries
-    : dto.industry
-      ? [dto.industry]
-      : []
-  if (JSON.stringify(industries) !== JSON.stringify(seededIndustries)) {
+  if (JSON.stringify(industries) !== JSON.stringify(dto.industries ?? [])) {
     patch.industries = industries
   }
   const otherCompanies = cleanList(d.other_process_companies)

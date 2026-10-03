@@ -119,7 +119,6 @@ def _build_candidate(
         country=g("country"),
         linkedin_url=g("linkedin_url"),
         xing_url=g("xing_url"),
-        industry=g("industry"),
         # One label from a CV is one industry — splitting on the comma would
         # cut "Pharma, MedTech und Gesundheitsbranche" in half.
         industries=[g("industry")] if g("industry") else [],

@@ -216,10 +216,25 @@ job measures and prints its own coverage every run rather than assuming it.
 
 1. `hub_suppressions` + a precondition in the ingest gate (Art. 17/21)
 2. Retention/pruning of `raw` payloads and stale postings (Art. 5(1)(e))
-3. The scheduled ingestion job itself, with failure alerting (RULE 1, CC7.2)
-4. A written LIA + RoPA + sub-processor list (Art. 6/28/30)
-5. Art. 14 wiring for `managers` (incl. persons adopted from the corpus)
+3. A written LIA + RoPA + sub-processor list (Art. 6/28/30)
+4. **Sending** the Art. 14 notice. The tracking exists — `managers` carries
+   `art14_notified_at`, `art14_outstanding` derives from the source, and
+   `GET /managers/art14-outstanding` is the queue — but nothing delivers a
+   notice; today that is a human with an e-mail client.
+5. Roles inside a workspace. Every member of a Clerk org has full access, and
+   the UI does not send `editor`, so a receipt cannot say WHO made a change.
+
+**Done since this list was written:** the scheduled ingestion job exists
+(`.github/workflows/hub-ingest.yml`, nightly, machine credential only) and
+judges itself by measured coverage, failing the run — and mailing — below the
+threshold.
+
+**Schema debt:** `candidates.industry` is no longer read or written by any
+code (migration 0030 moved the truth to `candidates.industries`). The column
+itself still exists and must be dropped in a migration *after* the deploy that
+removed the code — the container still serving during a rollout would select
+it. One `op.drop_column`, nothing else.
 
 Nothing here should be described to a customer as "GDPR compliant" or "SOC 2
-compliant" until 1–4 exist. The architecture is *shaped* to make them
+compliant" until 1–3 exist. The architecture is *shaped* to make them
 straightforward; that is not the same as having them.
