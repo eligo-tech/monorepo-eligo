@@ -8,6 +8,7 @@
 // screens to reach one you wanted is worse than choosing it from a list.
 
 import { useCallback, useEffect, useState } from 'react'
+import { cn } from '@/lib/cn'
 import { CommandBar } from './CommandBar'
 import { CockpitScreen } from './screens/CockpitScreen'
 import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
@@ -88,6 +89,12 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
+  /** Open or close a candidate record without leaving the screen. */
+  const goToCandidate = useCallback((id: string | null) => {
+    setDetail(id)
+    window.location.hash = id ? `kandidaten/${id}` : 'kandidaten'
+  }, [])
+
   // Keep in step with back/forward and hash edits.
   useEffect(() => {
     const onHash = () => {
@@ -119,7 +126,16 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         onScreenChange={goToScreen}
       />
 
-      <main className="mx-auto max-w-[1560px] px-6 pb-24 pt-8">
+      {/* The cockpit carries a left rail, which has to reach the window edge
+          — a sidebar that starts where a centred container starts is a column
+          floating in the page. So that screen gets the full width and places
+          its own gutters; every other screen stays centred. */}
+      <main
+        className={cn(
+          'pb-24 pt-8',
+          screen === 'cockpit' ? 'px-0' : 'mx-auto max-w-[1560px] px-6',
+        )}
+      >
         {screen === 'cockpit' && (
           <CockpitScreen
             state={state}
@@ -134,7 +150,12 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         {screen === 'jobs' && (
           <JobsScreen query={query} onClearQuery={() => setQuery('')} />
         )}
-        {screen === 'kandidaten' && <KandidatenScreen />}
+        {screen === 'kandidaten' && (
+          <KandidatenScreen
+            candidateId={detail}
+            onCandidateChange={goToCandidate}
+          />
+        )}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
       </main>
     </div>
