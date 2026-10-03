@@ -6,7 +6,7 @@
 // keeps scraped market noise out of the matcher (ARCHITECTURE.md, §1).
 
 import { useMemo, useState } from 'react'
-import { Briefcase, MapPin, Pencil, Wallet } from 'lucide-react'
+import { ArrowUpRight, Briefcase, MapPin, Pencil, Wallet } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CompanyDTO, JobDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
@@ -17,7 +17,7 @@ import { MandateEditor } from './MandateEditor'
 
 
 const GRID =
-  'grid-cols-[minmax(0,2.6fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_7rem_2rem]'
+  'grid-cols-[minmax(0,2.4fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.25fr)_7rem_auto]'
 const COLUMNS = ['Titel', 'Firma', 'Ort', 'Gehaltsband', 'Status', '']
 
 /** "85.000–95.000 €", or the honest gap. A mandate without a ceiling applies
@@ -163,15 +163,28 @@ export function JobsScreen() {
                 <span>
                   <Chip tone={STATUS_TONE[job.status]}>{job.status}</Chip>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setEditing(job)}
-                  title="Mandat bearbeiten"
-                  aria-label={`${job.title} bearbeiten`}
-                  className="justify-self-end text-cockpit-faint transition-colors hover:text-mint-300"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
+                <span className="flex items-center justify-end gap-1.5">
+                  {/* The mandate's two doors: edit what is being searched
+                      for, or open where the search stands. The title links
+                      to the cockpit too, but a link in a table reads as
+                      "detail page" — this says which cockpit view it is. */}
+                  <a
+                    href={`#cockpit/${job.id}`}
+                    title="Dieses Mandat im Cockpit öffnen"
+                    className="flex items-center gap-1.5 rounded-lg border border-cockpit-line px-2.5 py-1 font-mono text-[11.5px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
+                  >
+                    Cockpit <ArrowUpRight className="h-3.5 w-3.5" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(job)}
+                    title="Mandat bearbeiten"
+                    aria-label={`${job.title} bearbeiten`}
+                    className="p-1 text-cockpit-faint transition-colors hover:text-mint-300"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </span>
               </div>
             ))}
           </div>
