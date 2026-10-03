@@ -35,25 +35,29 @@ export function ProcessCardPanel({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
+            {/* The process says where the person stands; their record says
+                who they are. The NAME is the way across — a bordered
+                "Kandidatenakte" chip sat at the end of a long title and read
+                as a tag, so the obvious thing to click was the only thing
+                that did nothing. */}
             <h3 className="text-[19px] font-semibold text-cockpit-text">
               <span className="font-mono font-medium">{card.candidateRef}</span>
               <span className="text-cockpit-faint"> · </span>
-              {card.candidateName}
+              {card.candidateId ? (
+                <a
+                  href={`#kandidaten/${card.candidateId}`}
+                  title={`${card.candidateName} — Kandidatenakte öffnen`}
+                  className="underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
+                >
+                  {card.candidateName}
+                  <ExternalLink className="ml-1 inline h-3.5 w-3.5 align-[-1px] text-cockpit-faint" />
+                </a>
+              ) : (
+                card.candidateName
+              )}
               <span className="text-cockpit-faint"> · </span>
               {card.role}
             </h3>
-            {/* The process says where the person stands; their record says who
-                they are. Reading one while hunting the other in a second list
-                is the step this link removes. */}
-            {card.candidateId && (
-              <a
-                href={`#kandidaten/${card.candidateId}`}
-                title={`${card.candidateName} — Kandidatenakte öffnen`}
-                className="flex items-center gap-1 rounded-md border border-cockpit-line px-2 py-0.5 font-mono text-[11.5px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
-              >
-                Kandidatenakte <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
             {card.statusNote && <Chip tone="mint">{card.statusNote}</Chip>}
           </div>
           <p className="mt-1 font-mono text-[13px] text-cockpit-faint">
