@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import secrets
-from app.core.auth import get_current_tenant, get_ingest_tenant
+from app.core.auth import Actor, get_current_tenant, get_ingest_tenant, require_admin
 from app.core.database import get_db
 from app.domain.tenantsources import runner, service
 from app.domain.tenantsources.schemas import (
@@ -49,13 +49,13 @@ async def capabilities(
 async def upsert_source(
     kind: str,
     payload: TenantSourceWrite,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> TenantSourceRead:
     """Connect a source, or change its login. The password is write-only."""
     try:
         row = await service.upsert_source(
-            db, tenant_id=tenant_id, kind=kind, data=payload
+            db, tenant_id=actor.tenant_id, kind=kind, data=payload
         )
     except service.UnknownSource as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
@@ -67,17 +67,17 @@ async def upsert_source(
 @router.delete("/{kind}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_source(
     kind: str,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    if not await service.delete_source(db, tenant_id=tenant_id, kind=kind):
+    if not await service.delete_source(db, tenant_id=actor.tenant_id, kind=kind):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "source not configured")
 
 
 @router.post("/{kind}/import", response_model=ImportRequestRead)
 async def request_import(
     kind: str,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ImportRequestRead:
     """Ask for an import.
@@ -87,7 +87,7 @@ async def request_import(
     collection stays a logged, scheduled activity (see `service.py`).
     """
     try:
-        await service.request_import(db, tenant_id=tenant_id, kind=kind)
+        await service.request_import(db, tenant_id=actor.tenant_id, kind=kind)
     except service.UnknownSource as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except service.NotConfigured as exc:

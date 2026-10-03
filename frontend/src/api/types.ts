@@ -771,3 +771,25 @@ export interface ImportResultDTO {
   skipped: number
   problems: string[]
 }
+
+/** Who the server thinks you are. Courtesy for the UI — never the control:
+ *  every admin-only endpoint checks the same token itself. */
+export interface MeDTO {
+  tenant_id: string
+  user_id: string | null
+  name: string
+  /** "admin" | "recruiter" */
+  role: string
+  /** False when the Clerk token carried no role claim at all. */
+  role_known: boolean
+}
+
+/** One line of a record's change history, from the receipt ledger. */
+export interface HistoryEntryDTO {
+  at: string
+  actor: string
+  agent: string
+  field: string | null
+  summary: string
+  source: string | null
+}

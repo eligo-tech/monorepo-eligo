@@ -18,6 +18,7 @@ import { MarktScreen } from './screens/MarktScreen'
 import { ProjekteScreen } from './screens/ProjekteScreen'
 import type { SectionOption } from './SectionPicker'
 import { useCockpitData } from './data/useCockpitData'
+import { useMe } from './useMe'
 import { useTypeface } from './useTypeface'
 
 export type ScreenKey =
@@ -66,6 +67,7 @@ export const resolveDetail = (hash: string): string | null =>
 export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: ScreenKey }) {
   const state = useCockpitData()
   const [typeface, setTypeface] = useTypeface()
+  const me = useMe()
   const [screen, setScreen] = useState<ScreenKey>(initialScreen)
   const [detail, setDetail] = useState<string | null>(() =>
     resolveDetail(window.location.hash.replace('#', '')),
@@ -104,6 +106,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
     <div className="cockpit-root min-h-screen bg-cockpit-bg bg-grid bg-grid-cell font-sans text-cockpit-text">
       <CommandBar
         status={state.data.status}
+        me={me}
         query={query}
         onQueryChange={setQuery}
         typeface={typeface}
@@ -127,7 +130,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         {screen === 'managers' && <ManagerScreen />}
         {screen === 'jobs' && <JobsScreen />}
         {screen === 'kandidaten' && <KandidatenScreen />}
-        {screen === 'einstellungen' && <EinstellungenScreen />}
+        {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
       </main>
     </div>
   )

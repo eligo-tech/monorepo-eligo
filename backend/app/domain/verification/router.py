@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_tenant
 from app.core.database import get_db
 from app.domain.verification import service
-from app.domain.verification.schemas import ReceiptRead
+from app.domain.verification.schemas import HistoryEntryRead, ReceiptRead
 
 router = APIRouter(prefix="/verification", tags=["verification"])
 
@@ -38,3 +38,30 @@ async def verify_chain(
     """Recompute the hash chain and report whether it is intact."""
     ok, reason = await service.verify_chain(db, tenant_id=tenant_id)
     return {"intact": ok, "detail": reason}
+
+
+@router.get(
+    "/history/{entity_type}/{entity_id}", response_model=list[HistoryEntryRead]
+)
+async def history(
+    entity_type: str,
+    entity_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+) -> list[HistoryEntryRead]:
+    """What has changed on this record, newest first, and who changed it.
+
+    Reads the append-only ledger rather than a separate audit table — there
+    is only one history, and it is the one the receipts already guarantee.
+    """
+    return [
+        HistoryEntryRead.model_validate(entry)
+        for entry in await service.history_for(
+            db,
+            tenant_id=tenant_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            limit=limit,
+        )
+    ]

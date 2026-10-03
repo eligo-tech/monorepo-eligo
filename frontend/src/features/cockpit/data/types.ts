@@ -211,6 +211,9 @@ export interface SalaryFit {
 export interface Mandate {
   /** The job id when the mandate comes from the record, else its display ref. */
   id: string
+  /** Set ONLY when this mandate is a real job row — demo cards have none, and
+   *  anything that queries the record by id must not be handed a "#A-1f24". */
+  jobId?: string
   ref: string
   title: string
   client: string

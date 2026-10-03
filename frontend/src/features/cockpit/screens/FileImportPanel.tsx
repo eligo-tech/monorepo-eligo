@@ -30,7 +30,15 @@ const ACTION_LABEL: Record<string, string> = {
   skip: 'übersprungen',
 }
 
-export function FileImportPanel({ onImported }: { onImported?: () => void }) {
+export function FileImportPanel({
+  canCommit = true,
+  onImported,
+}: {
+  /** Previewing is for everyone; writing hundreds of rows over the record
+   *  is an admin act. The server enforces it either way. */
+  canCommit?: boolean
+  onImported?: () => void
+}) {
   const [entities, setEntities] = useState<ImportEntityDTO[]>([])
   const [entity, setEntity] = useState('candidates')
   const [file, setFile] = useState<File | null>(null)
@@ -265,12 +273,18 @@ export function FileImportPanel({ onImported }: { onImported?: () => void }) {
             <Button
               tone="primary"
               onClick={commit}
-              disabled={busy || preview.counts.create + preview.counts.update === 0}
+              disabled={
+                busy ||
+                !canCommit ||
+                preview.counts.create + preview.counts.update === 0
+              }
+              title={canCommit ? undefined : 'Nur Administratoren können importieren'}
             >
               {preview.counts.create + preview.counts.update} Zeilen importieren
               <ArrowRight className="h-4 w-4" />
             </Button>
             <span className="font-mono text-[11.5px] text-cockpit-faint">
+              {!canCommit && 'Nur Administratoren können importieren. '}
               Noch wurde nichts geschrieben. Dieselbe Datei erneut zu importieren
               aktualisiert die Datensätze, statt sie zu verdoppeln.
             </span>

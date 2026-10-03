@@ -16,7 +16,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Database, Loader2, Trash2 } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
-import type { SourceCapabilitiesDTO, TenantSourceDTO } from '@/api/types'
+import type { MeDTO, SourceCapabilitiesDTO, TenantSourceDTO } from '@/api/types'
+import { isAdmin } from '../useMe'
 import { FileImportPanel } from './FileImportPanel'
 import { Button, TextInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
@@ -44,7 +45,8 @@ function summaryLine(result: Record<string, number | string>): string | null {
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
-export function EinstellungenScreen() {
+export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
+  const admin = isAdmin(me)
   const [caps, setCaps] = useState<SourceCapabilitiesDTO | null>(null)
   const [sources, setSources] = useState<TenantSourceDTO[] | null>(null)
   const [username, setUsername] = useState('')
@@ -155,7 +157,7 @@ export function EinstellungenScreen() {
           title="Daten übernehmen"
           hint="CSV oder Excel aus dem bisherigen System"
         />
-        <FileImportPanel />
+        <FileImportPanel canCommit={admin} />
       </section>
 
       <section className="space-y-5">
@@ -187,7 +189,13 @@ export function EinstellungenScreen() {
             )}
           </div>
 
-          {blocked ? (
+          {!admin ? (
+            <p className="mt-4 rounded-xl border border-cockpit-line bg-cockpit-inset px-4 py-3 text-[13px] text-cockpit-dim">
+              Nur Administratoren können Datenquellen ändern. Sie sehen den
+              Stand dieses Workspace, aber nicht die Zugangsdaten — und der
+              Server weist eine Änderung ohnehin ab, nicht nur dieses Formular.
+            </p>
+          ) : blocked ? (
             <p className="mt-4 rounded-xl border border-coral-600/50 bg-coral-800/20 px-4 py-3 text-[13px] text-coral-300">
               Der Server hat keinen Schlüssel für Zugangsdaten hinterlegt
               (ELIGO_SECRET_KEY). Bis dahin lassen sich keine Quellen verbinden —

@@ -73,3 +73,16 @@ class CommitResult(BaseModel):
     reason: str
     receipt: ReceiptRead
     record: EnrichmentRecordRead
+
+
+class HistoryEntryRead(BaseModel):
+    """One line of a record's change history, from the ledger."""
+
+    at: dt.datetime
+    #: The person the token named, or the agent that proposed it.
+    actor: str
+    agent: str
+    field: str | None = None
+    summary: str
+    #: "human_verified", "llm_extraction", … — how the value was established.
+    source: str | None = None

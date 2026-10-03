@@ -26,9 +26,11 @@ import type {
   CandidateDocumentDTO,
   CompetingEmployerDTO,
   DocumentKind,
+  HistoryEntryDTO,
   ImportEntityDTO,
   ImportPreviewDTO,
   ImportResultDTO,
+  MeDTO,
   SourceCapabilitiesDTO,
   TenantSourceDTO,
   JobUpdatePayload,
@@ -400,11 +402,18 @@ export const api = {
   },
 
   /** Edit a mandate's Suchprofil. Each changed field leaves a receipt. */
-  updateJob: (jobId: string, patch: JobUpdatePayload, editor?: string) =>
-    request<JobDTO>(
-      `/jobs/${jobId}${editor ? `?editor=${encodeURIComponent(editor)}` : ''}`,
-      { method: 'PATCH', body: JSON.stringify(patch) },
-    ),
+  updateJob: (jobId: string, patch: JobUpdatePayload) =>
+    request<JobDTO>(`/jobs/${jobId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  /** Who the server thinks you are, and what you may do. */
+  me: () => request<MeDTO>('/me'),
+
+  /** What has changed on one record, newest first, from the ledger. */
+  history: (entityType: string, entityId: string) =>
+    request<HistoryEntryDTO[]>(`/verification/history/${entityType}/${entityId}`),
 
   // ── Importing a file ──
   importEntities: () => request<ImportEntityDTO[]>('/imports/entities'),

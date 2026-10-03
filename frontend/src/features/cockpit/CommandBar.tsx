@@ -10,6 +10,8 @@ import { authEnabled } from '@/auth/config'
 import { Figure, SegmentedControl } from './ui/primitives'
 import { SectionPicker, type SectionOption } from './SectionPicker'
 import type { ScreenKey } from './CockpitShell'
+import { cn } from '@/lib/cn'
+import type { MeDTO } from '@/api/types'
 import type { CockpitStatus } from './data/types'
 import type { Typeface } from './useTypeface'
 
@@ -34,6 +36,7 @@ function CockpitMark() {
 
 export function CommandBar({
   status,
+  me,
   query,
   onQueryChange,
   typeface,
@@ -43,6 +46,8 @@ export function CommandBar({
   onScreenChange,
 }: {
   status: CockpitStatus
+  /** Who the server says you are; null while it is being asked. */
+  me: MeDTO | null
   query: string
   onQueryChange: (q: string) => void
   typeface: Typeface
@@ -109,6 +114,28 @@ export function CommandBar({
           <span className="font-mono text-[13px] text-cockpit-dim">
             · Ansprache: <span className="text-cockpit-text">{status.address}</span>
           </span>
+          {/* What the server thinks you are. Shown rather than assumed: if a
+              Clerk token arrives without a role claim everyone is treated as
+              a recruiter, and this is where that becomes visible instead of
+              turning into "why is Einstellungen locked?". */}
+          {me && (
+            <span
+              title={
+                me.role_known
+                  ? `Angemeldet als ${me.name}`
+                  : 'Das Token enthält keine Rolle — als Recruiter behandelt.'
+              }
+              className={cn(
+                'rounded-md border px-2 py-0.5 font-mono text-[11.5px]',
+                me.role === 'admin'
+                  ? 'border-mint-600/50 bg-mint-800/30 text-mint-300'
+                  : 'border-cockpit-line text-cockpit-dim',
+              )}
+            >
+              {me.role === 'admin' ? 'Admin' : 'Recruiter'}
+              {!me.role_known && ' ?'}
+            </span>
+          )}
         </div>
 
         <SegmentedControl

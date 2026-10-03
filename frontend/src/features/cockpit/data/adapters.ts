@@ -313,6 +313,7 @@ export function mandatesFromCards(
     const dto = card.jobId ? profile.get(card.jobId) : undefined
     const mandate = out.get(id) ?? {
       id,
+      jobId: card.jobId,
       ref: card.mandateRef,
       title: card.role,
       client: card.client,

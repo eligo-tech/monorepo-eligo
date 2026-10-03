@@ -279,6 +279,10 @@ async def verify_and_commit(
         write_payload: dict[str, Any] = {
             "field": change.field,
             "value": change.proposed_value,
+            # The provenance travels with the WRITE, not only the VERIFY:
+            # the history a recruiter reads lists what was written, and
+            # "who said so" is half of what makes a line worth reading.
+            "source": change.source.value,
         }
         if actor:
             write_payload["actor"] = actor
@@ -358,3 +362,54 @@ async def verify_chain(
             return False, f"chain broken at receipt {receipt.id}"
         prev = receipt.receipt_hash
     return True, "chain intact"
+
+
+async def history_for(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    limit: int = 50,
+) -> list[dict]:
+    """The change history of one record, from the receipt ledger.
+
+    The ledger has recorded every verified change since the beginning and
+    nothing in the product ever showed it. This is that, per record: who,
+    what, when — the "evidence-backed" claim made visible rather than only
+    auditable with a SQL client.
+
+    WRITE receipts only. Each change produces a VERIFY and a WRITE, and
+    listing both would double every line; the verify is the decision, the
+    write is the fact, and the fact is what a recruiter is looking for.
+    """
+    rows = (
+        await session.execute(
+            select(Receipt)
+            .where(
+                Receipt.tenant_id == tenant_id,
+                Receipt.subject_type == entity_type,
+                Receipt.subject_id == str(entity_id),
+                Receipt.action == ReceiptAction.WRITE,
+            )
+            .order_by(Receipt.chain_index.desc())
+            .limit(limit)
+        )
+    ).scalars()
+
+    history: list[dict] = []
+    for row in rows:
+        payload = row.payload or {}
+        history.append(
+            {
+                "at": row.created_at,
+                # An agent's work is attributed to the agent; a human's to the
+                # person the token named. Neither is ever "unknown" silently.
+                "actor": payload.get("actor") or row.agent,
+                "agent": row.agent,
+                "field": payload.get("field"),
+                "summary": row.summary,
+                "source": payload.get("source"),
+            }
+        )
+    return history
