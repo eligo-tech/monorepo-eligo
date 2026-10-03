@@ -157,6 +157,8 @@ export const api = {
     limit?: number
     cursor?: string | null
     minRelevance?: number
+    /** false asks for the literal query — "trotzdem nach „muenchen" suchen". */
+    correct?: boolean
   }) => {
     const qs = new URLSearchParams()
     if (params.q) qs.set('q', params.q)
@@ -170,6 +172,7 @@ export const api = {
     if (params.cursor) qs.set('cursor', params.cursor)
     if (params.minRelevance && params.minRelevance > 1)
       qs.set('min_relevance', String(params.minRelevance))
+    if (params.correct === false) qs.set('correct', 'false')
     return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
 

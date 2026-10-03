@@ -196,6 +196,19 @@ class HubEmployerHit(BaseModel):
     tracked: bool = False
 
 
+class QueryCorrection(BaseModel):
+    """One search word the corpus does not know, and the one it does.
+
+    Shown, never hidden: a search that quietly rewrites your words teaches you
+    to distrust the zero results it does report.
+    """
+
+    from_: str = Field(alias="from")
+    to: str
+
+    model_config = {"populate_by_name": True}
+
+
 class HubSearchPage(BaseModel):
     """One page of employer results.
 
@@ -210,6 +223,8 @@ class HubSearchPage(BaseModel):
     total: int = 0
     #: Pass back as `cursor` for the next page. None means this was the last.
     next_cursor: str | None = None
+    #: Terms that were rewritten before searching, so the UI can say so.
+    corrections: list[QueryCorrection] = Field(default_factory=list)
 
 
 RELATIONSHIPS = ("watching", "prospect", "client", "ignored")

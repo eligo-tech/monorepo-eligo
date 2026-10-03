@@ -27,6 +27,7 @@ from app.domain.hub.schemas import (
     CompanyContacts,
     HubJobPostingHit,
     HubSearchPage,
+    QueryCorrection,
     DescriptionFetchRequest,
     HubCompanyLinkRead,
     HubCorpusStats,
@@ -79,6 +80,13 @@ async def hub_facets(
     return HubFacets.model_validate(await service.corpus_facets(db))
 
 
+#: A result this thin is indistinguishable from a failed search, so it earns a
+#: second attempt with a corrected query. Four employers, not zero: a typo can
+#: still collide with a handful of rows — two of 360,126 ads spell it
+#: "Pflegefachkaft" — and those two would otherwise suppress the rescue.
+_THIN_RESULT = 4
+
+
 @router.get("/search", response_model=HubSearchPage)
 async def search_hub_employers(
     q: str | None = Query(default=None, description="name, city, role or occupation"),
@@ -96,6 +104,10 @@ async def search_hub_employers(
     cursor: str | None = Query(
         default=None, description="opaque; from a previous page's next_cursor"
     ),
+    correct: bool = Query(
+        default=True,
+        description="retry a near-empty search with the corpus's own spelling",
+    ),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> HubSearchPage:
@@ -106,17 +118,59 @@ async def search_hub_employers(
     hundreds of which are the same discounter once per branch — is not a surface
     anyone can work with.
     """
-    hits = await service.search_employers(
-        db,
-        q=q,
-        city=city,
-        regions=region,
-        berufsfelder=berufsfeld,
-        min_roles=min_roles,
-        limit=limit,
-        cursor=cursor,
-        min_relevance=min_relevance,
-    )
+    async def page(query: str | None) -> tuple[list[dict], int]:
+        found = await service.search_employers(
+            db,
+            q=query,
+            city=city,
+            regions=region,
+            berufsfelder=berufsfeld,
+            min_roles=min_roles,
+            limit=limit,
+            cursor=cursor,
+            min_relevance=min_relevance,
+        )
+        # Counted once, on the first page only: it does not change as the
+        # reader pages, and it is a second aggregate over the same set.
+        counted = (
+            await service.count_employers(
+                db,
+                q=query,
+                city=city,
+                regions=region,
+                berufsfelder=berufsfeld,
+                min_relevance=min_relevance,
+            )
+            if cursor is None
+            else 0
+        )
+        return found, counted
+
+    hits, total = await page(q)
+
+    # Spelling is checked AFTER the search, never before: resolving every term
+    # up front cost 76–300 ms on searches that were already working, and this
+    # screen's failure mode is a timeout.
+    #
+    # Two triggers, because a thin answer alone is not enough. "muenchen"
+    # returns 298 employers with München in their NAME and misses the 2,973 in
+    # the city — a confident-looking answer to the wrong question. So any word
+    # that has another umlaut spelling is re-checked whatever the count, and
+    # everything else only when the answer was thin enough to be a failure.
+    corrections: list[dict] = []
+    if (
+        correct
+        and cursor is None
+        and (total <= _THIN_RESULT or service.query_may_be_misspelt(q))
+    ):
+        corrected, corrections = await service.resolve_query(db, q)
+        if corrections:
+            retried, retried_total = await page(corrected)
+            if retried_total > total:
+                hits, total = retried, retried_total
+            else:
+                corrections = []  # the other spelling was no better; say nothing
+
     tracked = await service.tracked_company_ids(db, tenant_id=tenant_id)
     out: list[HubEmployerHit] = []
     for hit in hits:
@@ -131,26 +185,13 @@ async def search_hub_employers(
         # An employer counts as tracked when ANY of its sites is.
         item.tracked = any(cid in tracked for cid in hit["hub_company_ids"])
         out.append(item)
-    # Counted once, on the first page only: it does not change as the reader
-    # pages, and it is a second aggregate over the same candidate set.
-    total = (
-        await service.count_employers(
-            db,
-            q=q,
-            city=city,
-            regions=region,
-            berufsfelder=berufsfeld,
-            min_relevance=min_relevance,
-        )
-        if cursor is None
-        else 0
-    )
     return HubSearchPage(
         items=out,
         total=total,
         # A short page is the last page; a full one may or may not be, and
         # offering a cursor that returns nothing is cheaper than a count per page.
         next_cursor=service.encode_cursor(hits[-1]) if len(hits) == limit else None,
+        corrections=[QueryCorrection(**c) for c in corrections],
     )
 
 
