@@ -59,6 +59,12 @@ export type PeriodKey = 'jahr' | 'quartal' | 'monat' | 'tag'
 export interface ClosingDeal {
   id: string
   candidateRef: string
+  /** Set when the deal came from a real process: the record to open. Demo
+   *  rows have no person behind the ref. */
+  candidateId?: string
+  candidateName?: string
+  /** The mandate this run belongs to, for the cockpit link. */
+  jobId?: string
   mandateRef: string
   client: string
   fee: Figure

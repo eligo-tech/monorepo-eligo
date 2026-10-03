@@ -21,6 +21,7 @@ import {
   demo,
   live,
   type CandidateAssessment,
+  type ClosingDeal,
   type Figure,
   type JobScore,
   type Mandate,
@@ -303,6 +304,60 @@ function toAssessment(
  * Suchprofil simply stays empty. The alternative — a per-job view that exists
  * only when the backend answers — would make the switch appear and disappear.
  */
+/** The step from which a process counts as "kurz vor Abschluss". */
+const CLOSING_FROM = PROCESS_STEPS.findIndex((s) => s.key === 'finaltermin')
+const SIGNED = PROCESS_STEPS.findIndex((s) => s.key === 'vertrag')
+/** Enough to see where the money is; more would be a pipeline list. */
+const CLOSING_LIMIT = 4
+
+/**
+ * "Kurz vor Abschluss" from the real board.
+ *
+ * It was two invented rows with invented fees, so the one number a recruiter
+ * would act on — who is about to sign — came from `mock.ts`. The processes
+ * are in the record, and the step a process has reached is a fact: a run that
+ * has had its final appointment and not yet a contract is what the panel
+ * claims to show.
+ *
+ * What stays `demo` is what the backend genuinely cannot say: there is no
+ * Honorarmodell, so the fee is unknown, and no signal store, so the chance is
+ * DERIVED from the steps rather than learned. Both carry their marker; the
+ * people and the stage do not, because those are real.
+ */
+export function closingDealsFromCards(cards: ProcessCard[]): ClosingDeal[] {
+  return cards
+    .filter((card) => {
+      if (!card.candidateId) return false
+      if (card.steps.some((s) => s.state === 'out')) return false
+      const done = card.steps.map((s, i) => (s.state === 'done' ? i : -1))
+      const reached = Math.max(-1, ...done)
+      return reached >= CLOSING_FROM && reached < SIGNED
+    })
+    .sort((a, b) => b.progress.value - a.progress.value)
+    .slice(0, CLOSING_LIMIT)
+    .map((card) => ({
+      id: card.id,
+      candidateRef: card.candidateRef,
+      candidateId: card.candidateId,
+      candidateName: card.candidateName,
+      jobId: card.jobId,
+      mandateRef: card.mandateRef,
+      client: card.client,
+      fee: card.fee,
+      timing: card.statusNote ?? nextStepLabel(card),
+      chance: demo(
+        card.progress.value,
+        'Aus den abgehakten Schritten abgeleitet — keine gelernte Abschlusschance',
+      ),
+    }))
+}
+
+/** "Wartet auf Offer & Zusage" — the step actually in play. */
+function nextStepLabel(card: ProcessCard): string {
+  const next = card.steps.find((s) => s.state === 'current' || s.state === 'pending')
+  return next ? `wartet auf ${next.label}` : 'offen'
+}
+
 export function mandatesFromCards(
   cards: ProcessCard[],
   jobs: ProcessJobDTO[] = [],
