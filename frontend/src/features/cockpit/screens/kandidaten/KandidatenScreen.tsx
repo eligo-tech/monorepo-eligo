@@ -5,7 +5,7 @@
 // is cockpit now. Verification is surfaced as a column because it is the one number
 // on a candidate the record can actually vouch for.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowDownUp, Check, Download, Search, SlidersHorizontal, Upload, X } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { LinkedInMark } from '@/components/ui/LinkedInMark'
@@ -174,7 +174,16 @@ function SkillFilter({
 const GRID = 'grid-cols-[1.7fr_0.5fr_1.5fr_1fr_1.4fr_1.1fr_0.7fr]'
 const COLUMNS = ['Name', 'LI', 'E-Mail', 'Telefon', 'Erfahrung', 'Skills', 'Verif.']
 
-export function KandidatenScreen() {
+export function KandidatenScreen({
+  candidateId,
+  onCandidateChange,
+}: {
+  /** From the hash — `#kandidaten/<id>` opens that person's record straight
+   *  away. The cockpit's process cards link here, and a colleague can be
+   *  sent the link instead of "search for the anonymised senior". */
+  candidateId?: string | null
+  onCandidateChange?: (id: string | null) => void
+} = {}) {
   // Deep-link: ?upload=1 opens the CV import dialog straight away.
   const [uploadOpen, setUploadOpen] = useState(
     () => new URLSearchParams(window.location.search).get('upload') === '1',
@@ -192,6 +201,30 @@ export function KandidatenScreen() {
   // strangers in their own pool, indistinguishable from their candidates
   // except for a hint in the section header. An error says it is an error.
   const all = useMemo(() => (data ? data.map(toCandidate) : []), [data])
+
+  // The hash drives the open record. Waiting for the list keeps one source of
+  // truth for what a Candidate is — the drawer wants the adapted shape, not
+  // a second fetch that could disagree with the row behind it.
+  useEffect(() => {
+    if (!candidateId) {
+      setSelected(null)
+      return
+    }
+    const match = all.find((c) => c.id === candidateId)
+    if (match) setSelected(match)
+  }, [candidateId, all])
+
+  /** Opening writes the hash as well, so the address bar always names the
+   *  record on screen — and the back button closes it. */
+  function openCandidate(candidate: Candidate) {
+    setSelected(candidate)
+    onCandidateChange?.(candidate.id)
+  }
+
+  function closeDrawer() {
+    setSelected(null)
+    onCandidateChange?.(null)
+  }
 
   // Distinct technologies across the pool, most common first (for the filter).
   const skillOptions = useMemo(() => {
@@ -363,10 +396,12 @@ export function KandidatenScreen() {
             return (
               <div
                 key={c.id}
-                onClick={() => setSelected(c)}
+                onClick={() => openCandidate(c)}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelected(c)}
+                onKeyDown={(e) =>
+                  (e.key === 'Enter' || e.key === ' ') && openCandidate(c)
+                }
                 className={cn(
                   'grid cursor-pointer items-center gap-4 border-b border-cockpit-line px-3 py-3.5',
                   'transition-colors hover:bg-white/[0.03]',
@@ -439,7 +474,7 @@ export function KandidatenScreen() {
       {selected && (
         <CandidateDrawer
           candidate={selected}
-          onClose={() => setSelected(null)}
+          onClose={closeDrawer}
           onSaved={(updated) => {
             setSelected(toCandidate(updated)) // reflect the edit in the open drawer
             setRefreshKey((k) => k + 1) // and refresh the underlying list

@@ -174,6 +174,9 @@ export interface ProcessCard {
   jobId?: string
   candidateRef: string
   candidateName: string
+  /** The person behind the process, so the card can open their record.
+   *  Absent on demo cards: there is nobody to open. */
+  candidateId?: string
   role: string
   mandateRef: string
   client: string

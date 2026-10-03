@@ -9,6 +9,12 @@
 // So: every mandate, searchable, the ones in process first because that is
 // where today's work is. Collapsible, and it remembers — a panel that
 // reopens itself on every page load is a panel you close twice.
+//
+// It is a RAIL, not a column: flush against the window's left edge, starting
+// under the command bar, running to the bottom. It used to sit inside the
+// centred 1560px container, which left a stripe of empty page to its left
+// while 76 mandate titles were truncated inside 248 pixels — the width was
+// being spent on the margin instead of on the names.
 
 import { useEffect, useMemo, useState } from 'react'
 import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
@@ -113,7 +119,7 @@ export function MandateDrawer({
         type="button"
         onClick={() => setOpen(true)}
         title="Mandate einblenden"
-        className="sticky top-24 flex h-fit shrink-0 items-center gap-2 rounded-lg border border-cockpit-line px-2 py-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
+        className="sticky top-20 ml-0 flex h-fit shrink-0 items-center gap-2 rounded-r-lg border-y border-r border-cockpit-line py-3 pl-1.5 pr-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
       >
         <PanelLeftOpen className="h-4 w-4" />
         <span className="[writing-mode:vertical-rl]">Mandate</span>
@@ -122,8 +128,8 @@ export function MandateDrawer({
   }
 
   return (
-    <aside className="sticky top-24 flex h-fit max-h-[calc(100vh-8rem)] w-[248px] shrink-0 flex-col rounded-xl border border-cockpit-line bg-cockpit-inset">
-      <div className="flex items-center gap-2 border-b border-cockpit-line px-3 py-2">
+    <aside className="sticky top-20 flex h-[calc(100vh-6rem)] w-[270px] shrink-0 flex-col rounded-r-xl border-y border-r border-cockpit-line bg-cockpit-inset lg:w-[300px] xl:w-[340px]">
+      <div className="flex items-center gap-2 border-b border-cockpit-line pl-4 pr-3 py-2">
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
           Mandate
         </span>
@@ -140,7 +146,7 @@ export function MandateDrawer({
         </button>
       </div>
 
-      <label className="flex items-center gap-2 border-b border-cockpit-line px-3 py-2">
+      <label className="flex items-center gap-2 border-b border-cockpit-line pl-4 pr-3 py-2">
         <Search className="h-3.5 w-3.5 shrink-0 text-cockpit-faint" />
         <input
           value={query}
@@ -150,7 +156,7 @@ export function MandateDrawer({
         />
       </label>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto py-2 pl-2.5 pr-2">
         <button
           type="button"
           onClick={() => onSelect(null)}
