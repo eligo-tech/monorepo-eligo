@@ -109,6 +109,9 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         me={me}
         query={query}
         onQueryChange={setQuery}
+        searchHint={
+          screen === 'jobs' ? 'Mandate filtern: Firma, Titel, Ort …' : undefined
+        }
         typeface={typeface}
         onTypefaceChange={setTypeface}
         screens={SCREENS}
@@ -128,7 +131,9 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         {screen === 'markt' && <MarktScreen />}
         {screen === 'projekte' && <ProjekteScreen />}
         {screen === 'managers' && <ManagerScreen />}
-        {screen === 'jobs' && <JobsScreen />}
+        {screen === 'jobs' && (
+          <JobsScreen query={query} onClearQuery={() => setQuery('')} />
+        )}
         {screen === 'kandidaten' && <KandidatenScreen />}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
       </main>
