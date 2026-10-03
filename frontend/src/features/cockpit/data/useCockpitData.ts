@@ -12,6 +12,7 @@ import { api } from '@/api/client'
 import type { JobDTO, MatchResultDTO } from '@/api/types'
 import { MOCK_COCKPIT } from './mock'
 import {
+  closingDealsFromCards,
   mandatesFromCards,
   processCardsFromSteps,
   toJobScores,
@@ -23,6 +24,8 @@ import type { CockpitData } from './types'
 export interface LiveSections {
   processes: boolean
   jobScores: boolean
+  /** "Kurz vor Abschluss" — real runs past their final appointment. */
+  closing: boolean
 }
 
 export interface CockpitState {
@@ -54,7 +57,7 @@ async function loadCockpit(): Promise<Omit<CockpitState, 'reload'>> {
   ])
 
   const data: CockpitData = { ...MOCK_COCKPIT }
-  const live: LiveSections = { processes: false, jobScores: false }
+  const live: LiveSections = { processes: false, jobScores: false, closing: false }
 
   // ── 03 Laufende Prozesse ──
   // Two sources, in order of fidelity. The recruiter's tracker
@@ -79,6 +82,32 @@ async function loadCockpit(): Promise<Omit<CockpitState, 'reload'>> {
   // their mandate's Suchprofil, demo ones group by their ref alone.
   data.mandates = mandatesFromCards(data.processes, processes ?? [])
 
+  // ── 01 Kurz vor Abschluss ──
+  // Derived from the same cards: a process past its final appointment and
+  // short of a contract. Same rule as everywhere in this file — live if there
+  // is anything to show, otherwise the demo rows stay rather than leaving a
+  // hole. The fee and the chance remain `demo` either way: no Honorarmodell,
+  // no signal store.
+  const closing = closingDealsFromCards(data.processes)
+  if (closing.length > 0) {
+    // The same list on every period: "kurz vor Abschluss" is a state of the
+    // process, not of the month being looked at.
+    data.slides = data.slides.map((slide) =>
+      slide.panels
+        ? {
+            ...slide,
+            panels: Object.fromEntries(
+              Object.entries(slide.panels).map(([key, panel]) => [
+                key,
+                { ...panel, closing },
+              ]),
+            ) as typeof slide.panels,
+          }
+        : slide,
+    )
+    live.closing = true
+  }
+
   // ── 02 Jobscoring ──
   if (jobs) {
     const open: JobDTO[] = jobs
@@ -101,7 +130,7 @@ async function loadCockpit(): Promise<Omit<CockpitState, 'reload'>> {
 const FALLBACK: Omit<CockpitState, 'reload'> = {
   data: MOCK_COCKPIT,
   loading: true,
-  live: { processes: false, jobScores: false },
+  live: { processes: false, jobScores: false, closing: false },
 }
 
 /** Cockpit data, mock-backed and progressively overlaid with live values. */

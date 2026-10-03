@@ -6,6 +6,7 @@
 // is a data edit rather than a layout change.
 
 import { useState } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { Carousel, Slide } from '../ui/Carousel'
 import { Gauge } from '../ui/Gauge'
 import { Chip, Figure, Label, Money, Panel, SectionHeader, SegmentedControl } from '../ui/primitives'
@@ -18,7 +19,15 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: 'tag', label: 'Tag' },
 ]
 
-export function RevenueSection({ slides }: { slides: KpiSlide[] }) {
+export function RevenueSection({
+  slides,
+  closingIsLive = false,
+}: {
+  slides: KpiSlide[]
+  /** True when "Kurz vor Abschluss" came from real processes rather than
+   *  from the demo pair. Said in the header, like every other section. */
+  closingIsLive?: boolean
+}) {
   const [period, setPeriod] = useState<PeriodKey>('monat')
 
   return (
@@ -27,7 +36,11 @@ export function RevenueSection({ slides }: { slides: KpiSlide[] }) {
         id="section-01"
         index="01"
         title="Umsatz & Potenzial"
-        hint="‹ wischen · tippen ›"
+        hint={
+          closingIsLive
+            ? 'Abschlüsse live · ‹ wischen · tippen ›'
+            : '‹ wischen · tippen ›'
+        }
       />
 
       <Carousel count={slides.length} ariaLabel="Kennzahlen-Panels">
@@ -44,6 +57,7 @@ export function RevenueSection({ slides }: { slides: KpiSlide[] }) {
                   panel={slide.panels[period]}
                   period={period}
                   onPeriodChange={setPeriod}
+                  closingIsLive={closingIsLive}
                 />
               ) : (
                 <PlaceholderBody title={slide.title} hint={slide.hint} />
@@ -60,10 +74,12 @@ function RevenueBody({
   panel,
   period,
   onPeriodChange,
+  closingIsLive,
 }: {
   panel: RevenuePanel
   period: PeriodKey
   onPeriodChange: (p: PeriodKey) => void
+  closingIsLive: boolean
 }) {
   const forecast = {
     value: panel.actual.value + panel.potential.value,
@@ -137,17 +153,46 @@ function RevenueBody({
         <div>
           <div className="flex items-baseline gap-3">
             <Label>Kurz vor Abschluss</Label>
-            <span className="text-[13px] text-cockpit-faint">fließt in den Umsatz</span>
+            <span className="text-[13px] text-cockpit-faint">
+              {closingIsLive
+                ? 'Prozesse nach dem Finaltermin, ohne Vertrag'
+                : 'fließt in den Umsatz'}
+            </span>
           </div>
 
           <div className="mt-3 divide-y divide-cockpit-line">
             {panel.closing.map((deal) => (
               <div key={deal.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 py-3">
                 <div className="min-w-0 flex-1">
+                  {/* A deal is a PERSON about to sign. The ref alone made
+                      the one row a recruiter acts on the only one they could
+                      not open. */}
                   <div className="text-[15px] text-cockpit-text">
-                    <span className="font-mono">{deal.candidateRef}</span>
+                    {deal.candidateId ? (
+                      <a
+                        href={`#kandidaten/${deal.candidateId}`}
+                        title={`${deal.candidateName ?? deal.candidateRef} — Kandidatenakte öffnen`}
+                        className="underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
+                      >
+                        <span className="font-mono">{deal.candidateRef}</span>
+                        {deal.candidateName && ` · ${deal.candidateName}`}
+                        <ExternalLink className="ml-1 inline h-3.5 w-3.5 align-[-1px] text-cockpit-faint" />
+                      </a>
+                    ) : (
+                      <span className="font-mono">{deal.candidateRef}</span>
+                    )}
                     <span className="text-cockpit-faint"> · </span>
-                    <span className="font-mono">{deal.mandateRef}</span>
+                    {deal.jobId ? (
+                      <a
+                        href={`#cockpit/${deal.jobId}`}
+                        title="Mandat im Cockpit öffnen"
+                        className="font-mono underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
+                      >
+                        {deal.mandateRef}
+                      </a>
+                    ) : (
+                      <span className="font-mono">{deal.mandateRef}</span>
+                    )}
                     <span className="text-cockpit-faint"> · </span>
                     {deal.client}
                   </div>
@@ -159,7 +204,19 @@ function RevenueBody({
                     {deal.note && <Chip tone="mint">{deal.note}</Chip>}
                   </div>
                 </div>
-                <Money figure={deal.fee} className="shrink-0 text-[17px] text-cockpit-text" />
+                {/* Same rule as the process card: "€ 0" reads as a fee of
+                    nothing, which is a claim. Without a Honorarmodell the
+                    honest mark is a dash. */}
+                {deal.fee.value > 0 ? (
+                  <Money figure={deal.fee} className="shrink-0 text-[17px] text-cockpit-text" />
+                ) : (
+                  <span
+                    title="Kein Honorarmodell hinterlegt"
+                    className="shrink-0 text-[17px] text-cockpit-faint"
+                  >
+                    —
+                  </span>
+                )}
               </div>
             ))}
           </div>

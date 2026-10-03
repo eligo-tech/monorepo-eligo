@@ -185,7 +185,7 @@ export function CockpitScreen({
             worth, where the work stands, what to do next — and only then the
             scoring, which is a view ON that work rather than part of it. */}
         <SignalsPanel signals={data.signals} />
-        <RevenueSection slides={data.slides} />
+        <RevenueSection slides={data.slides} closingIsLive={live.closing} />
         <ProcessSection
           mandates={data.mandates}
           isLive={live.processes}
