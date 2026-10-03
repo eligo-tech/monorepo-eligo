@@ -6,7 +6,15 @@
 // keeps scraped market noise out of the matcher (ARCHITECTURE.md, §1).
 
 import { useMemo, useState } from 'react'
-import { ArrowUpRight, Briefcase, MapPin, Pencil, Wallet } from 'lucide-react'
+import {
+  ArrowUpRight,
+  Briefcase,
+  MapPin,
+  Pencil,
+  Search,
+  Wallet,
+  X,
+} from 'lucide-react'
 import { api } from '@/api/client'
 import type { CompanyDTO, JobDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
@@ -39,7 +47,34 @@ const STATUS_TONE: Record<string, 'mint' | 'gold' | undefined> = {
   on_hold: 'gold',
 }
 
-export function JobsScreen() {
+const STATUS_FILTERS = [
+  { value: '', label: 'Alle' },
+  { value: 'open', label: 'Offen' },
+  { value: 'on_hold', label: 'Pausiert' },
+  { value: 'filled', label: 'Besetzt' },
+  { value: 'cancelled', label: 'Abgesagt' },
+]
+
+const mandateRef = (id: string) => `#A-${id.slice(0, 4)}`
+
+/** Word-wise, so "ge münchen" finds the Münchner GE-Mandat even though no
+ *  single field contains that string. Every word must hit somewhere. */
+function matches(haystack: string, needle: string): boolean {
+  const words = needle.toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return true
+  const hay = haystack.toLowerCase()
+  return words.every((w) => hay.includes(w))
+}
+
+export function JobsScreen({
+  query = '',
+  onClearQuery,
+}: {
+  /** The command bar's term. It used to go nowhere — the box looked like a
+   *  search and filtered nothing. */
+  query?: string
+  onClearQuery?: () => void
+}) {
   const jobs = useAsync<JobDTO[]>(() => api.jobs(), [])
   const companies = useAsync<CompanyDTO[]>(() => api.companies(), [])
 
@@ -57,8 +92,41 @@ export function JobsScreen() {
   // re-mounting the screen to see your own edit reads as a bug.
   const [saved, setSaved] = useState<Record<string, JobDTO>>({})
 
-  const rows = (jobs.data ?? []).map((j) => saved[j.id] ?? j)
+  const [filter, setFilter] = useState('')
+  const [status, setStatus] = useState('')
+
+  const all = (jobs.data ?? []).map((j) => saved[j.id] ?? j)
+
+  // Both boxes apply. The command bar's query is shown as a removable chip
+  // so a term typed on another screen cannot silently empty this list.
+  const rows = useMemo(
+    () =>
+      all.filter((job) => {
+        const haystack = [
+          job.title,
+          companyName(job.client_company_id),
+          job.location ?? '',
+          mandateRef(job.id),
+          job.status,
+        ].join(' ')
+        return (
+          matches(haystack, filter) &&
+          matches(haystack, query) &&
+          (!status || job.status === status)
+        )
+      }),
+    [all, companyName, filter, query, status],
+  )
+
+  // Counted over the filtered list: "2 von 10 Mandaten · 6 offen" would read
+  // as if the filter had kept six of them.
   const open = rows.filter((j) => j.status === 'open').length
+
+  const reset = () => {
+    setFilter('')
+    setStatus('')
+    onClearQuery?.()
+  }
 
   return (
     <div className="space-y-8">
@@ -81,13 +149,70 @@ export function JobsScreen() {
           hint={jobs.error ? 'offline' : 'live aus dem Datensatz'}
         />
 
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex min-w-[16rem] flex-1 items-center gap-2.5 rounded-lg border border-cockpit-line bg-cockpit-inset px-3 focus-within:border-cockpit-edge">
+            <Search className="h-4 w-4 shrink-0 text-cockpit-faint" />
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Mandat, Firma, Ort oder #A-Nummer …"
+              className="w-full bg-transparent py-2 text-[14px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
+            />
+            {filter && (
+              <button
+                type="button"
+                onClick={() => setFilter('')}
+                aria-label="Suche leeren"
+                className="text-cockpit-faint transition-colors hover:text-cockpit-text"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </label>
+
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_FILTERS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setStatus(option.value)}
+                aria-pressed={status === option.value}
+                className={cn(
+                  'rounded-lg border px-2.5 py-1.5 font-mono text-[12px] transition-colors',
+                  status === option.value
+                    ? 'border-cockpit-edge bg-white/[0.06] text-cockpit-text'
+                    : 'border-cockpit-line text-cockpit-faint hover:text-cockpit-dim',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
           <span>
-            <span className="text-cockpit-text">{rows.length}</span> Mandate
+            <span className="text-cockpit-text">{rows.length}</span>
+            {rows.length === all.length ? ' Mandate' : ` von ${all.length} Mandaten`}
           </span>
           <span>
             <span className="text-cockpit-text">{open}</span> offen
           </span>
+          {query && (
+            <span className="flex items-center gap-1.5 rounded-md border border-gold-600/45 px-2 py-0.5 text-gold-300">
+              Suche oben: „{query}“
+              {onClearQuery && (
+                <button
+                  type="button"
+                  onClick={onClearQuery}
+                  aria-label="Suche oben leeren"
+                  className="transition-colors hover:text-cockpit-text"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </span>
+          )}
         </div>
 
         {jobs.loading && (
@@ -102,7 +227,24 @@ export function JobsScreen() {
           </Panel>
         )}
 
-        {!jobs.loading && !jobs.error && rows.length === 0 && (
+        {!jobs.loading && !jobs.error && rows.length === 0 && all.length > 0 && (
+          <Panel className="p-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-[14px] text-cockpit-dim">
+                Kein Mandat passt zu dieser Suche.
+              </p>
+              <button
+                type="button"
+                onClick={reset}
+                className="font-mono text-[12px] text-mint-300 transition-colors hover:text-cockpit-text"
+              >
+                Filter zurücksetzen
+              </button>
+            </div>
+          </Panel>
+        )}
+
+        {!jobs.loading && !jobs.error && all.length === 0 && (
           <Panel className="p-6">
             <div className="flex items-start gap-3">
               <span className="rounded-md border border-cockpit-line p-2 text-cockpit-faint">

@@ -39,6 +39,7 @@ export function CommandBar({
   me,
   query,
   onQueryChange,
+  searchHint,
   typeface,
   onTypefaceChange,
   screens,
@@ -50,6 +51,9 @@ export function CommandBar({
   me: MeDTO | null
   query: string
   onQueryChange: (q: string) => void
+  /** What this box does on the current screen. The term reaches the Jobs
+   *  list, so the placeholder says so instead of promising a global search. */
+  searchHint?: string
   typeface: Typeface
   onTypefaceChange: (t: Typeface) => void
   screens: SectionOption<ScreenKey>[]
@@ -74,7 +78,7 @@ export function CommandBar({
           <input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Kandidat, Mandat oder Firma suchen …"
+            placeholder={searchHint ?? 'Kandidat, Mandat oder Firma suchen …'}
             className="w-full rounded-xl border border-cockpit-line bg-cockpit-inset py-2.5 pl-11 pr-4 text-[15px] text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
           />
         </label>
