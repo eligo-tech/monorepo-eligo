@@ -6,7 +6,9 @@ here (see backend/CLAUDE.md, "adding a new domain").
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.core.auth import Actor, get_current_actor
 
 from app.domain.candidates.router import router as candidates_router
 from app.domain.companies.router import router as companies_router
@@ -30,6 +32,24 @@ api_router = APIRouter()
 async def health() -> dict[str, str]:
     """Liveness probe. Runs with SQLite and no external services."""
     return {"status": "ok"}
+
+
+@api_router.get("/me", tags=["system"])
+async def me(actor: Actor = Depends(get_current_actor)) -> dict:
+    """Who the server thinks you are, and what you may do.
+
+    The UI needs this to show the role and to explain a closed panel instead
+    of rendering a form that will be refused. It is NOT the authorization —
+    every admin-only endpoint checks the same token itself, so hiding a
+    button is a courtesy, never the control.
+    """
+    return {
+        "tenant_id": str(actor.tenant_id),
+        "user_id": actor.user_id,
+        "name": actor.name,
+        "role": actor.role,
+        "role_known": actor.role_known,
+    }
 
 
 api_router.include_router(candidates_router)

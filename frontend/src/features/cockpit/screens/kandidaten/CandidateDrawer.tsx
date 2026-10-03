@@ -35,6 +35,7 @@ import { LinkedInMark } from '@/components/ui/LinkedInMark'
 import { cn } from '@/lib/cn'
 import { Chip } from '../../ui/primitives'
 import { Button, CloseButton, Drawer } from '../../ui/forms'
+import { HistoryTrail } from '../../ui/HistoryTrail'
 import { AttachmentsPanel } from './AttachmentsPanel'
 import { DossierEditor } from './DossierEditor'
 
@@ -400,6 +401,10 @@ export function CandidateDrawer({
                     onCandidateChanged={handleSaved}
                   />
                 </CvSection>
+
+                <div className="mt-7">
+                  <HistoryTrail entityType="candidate" entityId={candidate.id} />
+                </div>
               </>
             )}
           </div>

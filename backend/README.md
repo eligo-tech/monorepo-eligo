@@ -74,6 +74,33 @@ session gets 401, and `tests/test_operator_endpoints.py` attacks it to prove it.
 The old path still works for a one-off, with the credential in the operator's
 environment: `python -m scripts.aifind_import --tenant <uuid>`.
 
+## Who is acting, and what they may do
+
+Identity comes from the Clerk token, never from the client. `get_current_actor`
+returns the workspace, the user, the name a receipt should show and the role;
+`get_current_tenant` is now a thin read of the same thing, so every existing
+caller is unchanged.
+
+| role | mapped from | may |
+|---|---|---|
+| `admin` | Clerk `org:admin` / `org:owner` | everything, plus the Einstellungen: connect or disconnect a data source, request an ATS import, commit a file import |
+| `recruiter` | everything else, **and a token with no role claim** | the whole day job — candidates, mandates, processes, assessments, Markt, documents, import *preview* |
+
+Least privilege when the role is unknown, and the UI says so: the command bar
+shows `Admin ?` / `Recruiter ?` when the token carried no role, so a locked
+panel is explicable rather than mysterious. With `ELIGO_AUTH_ENABLED=false`
+the demo actor is an admin, so a local stack is never locked out of itself.
+
+**Names in receipts need one Clerk setting.** A default session token carries
+`sub` and little else, so a receipt may read `user_3Gj…`. Add `name` (or
+`email`) to the session-token template in the Clerk dashboard and the ledger
+starts showing people.
+
+Every verified change is readable per record:
+`GET /verification/history/{entity_type}/{entity_id}` — the same ledger the
+receipts guarantee, surfaced in the candidate drawer and the mandate
+workspace as **Änderungsverlauf**.
+
 ## Tenant isolation — fail-closed RLS
 
 Tenant isolation is enforced at the **database**, not just in app code. Every

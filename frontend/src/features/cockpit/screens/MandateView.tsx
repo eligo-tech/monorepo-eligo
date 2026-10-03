@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 
 import { AssessmentPanel } from '../ui/AssessmentPanel'
+import { HistoryTrail } from '../ui/HistoryTrail'
 import { ProcessCardPanel } from '../ui/ProcessCardPanel'
 import { StepEditor } from '../ui/StepEditor'
 import { Panel, SectionHeader } from '../ui/primitives'
@@ -150,6 +151,14 @@ export function MandateView({
       <SuchprofilPanel mandate={mandate} />
       <SourcingPanel mandate={mandate} />
       <QualificationPanel mandate={mandate} />
+
+      {/* The mandate's own ledger. Its band and radius are hard filters, so
+          "who widened the cap, and when" is the question this answers. */}
+      {mandate.jobId && (
+        <Panel className="px-6 py-5">
+          <HistoryTrail entityType="job" entityId={mandate.jobId} />
+        </Panel>
+      )}
 
       {editing && (
         <StepEditor

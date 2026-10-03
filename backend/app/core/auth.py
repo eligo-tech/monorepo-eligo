@@ -15,6 +15,7 @@ import base64
 import functools
 import secrets
 import uuid
+from dataclasses import dataclass
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -136,19 +137,93 @@ def assert_auth_configured() -> None:
     )
 
 
-async def get_current_tenant(
+#: The two things a member of a workspace can be.
+#:
+#: Deliberately two. Every role scheme grows, and the ones that start with
+#: five are guesses about a workload nobody has run yet. These two answer the
+#: question that exists today: may this person change how data enters the
+#: workspace, or only work the book inside it.
+ADMIN = "admin"
+RECRUITER = "recruiter"
+
+#: Clerk's own role names that mean "admin here". Clerk writes `org:admin` in
+#: v1 tokens and `admin` in v2; custom roles come through as themselves.
+_ADMIN_ROLES = {"admin", "owner"}
+
+
+@dataclass(frozen=True)
+class Actor:
+    """Who is making this request, as the TOKEN says — never the client.
+
+    The browser used to be asked who it was (`?editor=`), which is not a
+    question with a trustworthy answer. Everything attributable now comes
+    from the verified JWT.
+    """
+
+    tenant_id: uuid.UUID
+    #: Clerk user id (`sub`). None in the auth-disabled demo.
+    user_id: str | None
+    #: What a receipt should call this person.
+    name: str
+    role: str
+    #: False when the token carried no role claim at all. The actor is then
+    #: treated as a recruiter — least privilege — and the UI says why, rather
+    #: than leaving somebody to wonder which button disappeared.
+    role_known: bool
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == ADMIN
+
+
+def _role(claims: dict) -> tuple[str, bool]:
+    """Clerk's role for the active org → ours. Unknown means recruiter."""
+    raw = claims.get("org_role") or (claims.get("o") or {}).get("rol")
+    if not raw:
+        return RECRUITER, False
+    normalized = str(raw).rsplit(":", 1)[-1].strip().lower()
+    return (ADMIN if normalized in _ADMIN_ROLES else RECRUITER), True
+
+
+def _actor_name(claims: dict) -> str:
+    """The most human thing the token offers.
+
+    A default Clerk session token carries `sub` and little else; `name` and
+    `email` appear only when the session-token template includes them. So a
+    receipt may read "user_3Gj…" until that is configured — attributable
+    either way, which is the part that matters.
+    """
+    for key in ("name", "full_name"):
+        value = claims.get(key)
+        if value:
+            return str(value)
+    given, family = claims.get("given_name"), claims.get("family_name")
+    if given or family:
+        return " ".join(part for part in (given, family) if part)
+    return str(claims.get("email") or claims.get("sub") or "unbekannt")
+
+
+async def get_current_actor(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
-) -> uuid.UUID:
-    """Resolve the tenant for this request and pin it for RLS.
+) -> Actor:
+    """Resolve WHO and WHICH WORKSPACE, and pin the tenant for RLS.
 
-    auth disabled → default tenant. auth enabled → verify the Clerk JWT, require
-    an active organization, and map org → tenant (created on first sight).
+    auth disabled → the default tenant as an admin, so the local demo and the
+    tests are not locked out of their own settings. auth enabled → verify the
+    Clerk JWT, require an active organization, map org → tenant (created on
+    first sight), and read the role from the same token.
     """
     if not settings.auth_enabled:
         current_tenant_var.set(str(settings.default_tenant_id))
         await _set_tenant_guc(db, settings.default_tenant_id)
-        return settings.default_tenant_id
+        return Actor(
+            tenant_id=settings.default_tenant_id,
+            user_id=None,
+            name="Demo",
+            role=ADMIN,
+            role_known=False,
+        )
 
     if creds is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
@@ -169,7 +244,37 @@ async def get_current_tenant(
     )
     current_tenant_var.set(str(tenant.id))
     await _set_tenant_guc(db, tenant.id)  # pin the in-flight transaction too
-    return tenant.id
+
+    role, known = _role(claims)
+    return Actor(
+        tenant_id=tenant.id,
+        user_id=claims.get("sub"),
+        name=_actor_name(claims),
+        role=role,
+        role_known=known,
+    )
+
+
+async def get_current_tenant(actor: Actor = Depends(get_current_actor)) -> uuid.UUID:
+    """The workspace for this request. Unchanged for every existing caller."""
+    return actor.tenant_id
+
+
+async def require_admin(actor: Actor = Depends(get_current_actor)) -> Actor:
+    """Guard the few endpoints that change HOW data enters the workspace.
+
+    Working the book — candidates, mandates, processes, assessments — is
+    everybody's job. Connecting a data source, importing a file over the
+    record and disconnecting an ATS are not: they rewrite what everyone else
+    then works on.
+    """
+    if not actor.is_admin:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Nur Administratoren dürfen die Datenquellen dieses Workspace ändern."
+            + ("" if actor.role_known else " (Das Token enthält keine Rolle.)"),
+        )
+    return actor
 
 
 async def get_ingest_tenant(
@@ -230,23 +335,9 @@ async def get_ingest_tenant(
     return tenant_id
 
 
-async def get_current_user(
-    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> str | None:
-    """Best-effort identity of the acting user (Clerk ``sub`` claim).
-
-    Used to attribute human actions (e.g. a manual candidate edit) in the
-    append-only receipt ledger. Returns ``None`` in demo/auth-disabled mode.
-    Never raises: authentication is already enforced by ``get_current_tenant``
-    on the same request, so this only needs to *read* the identity.
-    """
-    if not settings.auth_enabled or creds is None:
-        return None
-    try:
-        return verify_token(creds.credentials).get("sub")
-    except Exception:
-        return None
-
-
+# `get_current_user` lived here: a second, weaker read of the same token that
+# returned the Clerk `sub` and nothing else. `get_current_actor` replaces it —
+# one identity per request, carrying the name a receipt should show and the
+# role the guard needs.
 # Annotated dependency used across routers in place of the default-tenant query param.
 CurrentTenant = Depends(get_current_tenant)

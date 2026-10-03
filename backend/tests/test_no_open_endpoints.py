@@ -29,7 +29,15 @@ DECLARED_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("GET", "/"),
 }
 
-_AUTH_DEPENDENCIES = {"get_current_tenant", "get_ingest_tenant"}
+#: Dependencies that authenticate a request. `get_current_tenant` resolves
+#: the workspace, `get_current_actor` the person as well, `require_admin` the
+#: person plus a role check, and `get_ingest_tenant` a machine credential.
+_AUTH_DEPENDENCIES = {
+    "get_current_tenant",
+    "get_current_actor",
+    "require_admin",
+    "get_ingest_tenant",
+}
 
 
 def _api_routes(router):

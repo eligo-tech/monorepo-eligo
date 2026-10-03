@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_tenant
+from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.pipeline import service
 from app.domain.pipeline import steps as steps_mod
@@ -128,14 +128,14 @@ async def set_step(
     application_id: uuid.UUID,
     step_key: str,
     payload: ProcessStepUpdate,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> ProcessStepRead:
     """Set a date, a verdict or a note on one step. Idempotent per step."""
     try:
         row = await service.set_step(
             db,
-            tenant_id=tenant_id,
+            tenant_id=actor.tenant_id,
             application_id=application_id,
             step_key=step_key,
             scheduled_at=payload.scheduled_at,
@@ -143,7 +143,7 @@ async def set_step(
             outcome=payload.outcome,
             note=payload.note,
             clear=payload.clear,
-            actor=payload.actor,
+            actor=actor.name,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc

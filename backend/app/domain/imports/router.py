@@ -18,7 +18,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_tenant
+from app.core.auth import Actor, get_current_tenant, require_admin
 from app.core.database import get_db
 from app.domain.imports import parser, service
 from app.domain.imports.schemas import (
@@ -118,15 +118,20 @@ async def commit(
     file: UploadFile = File(...),
     entity: str = Form(...),
     mapping: str = Form(...),
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ImportResultRead:
-    """Import the file with the mapping the recruiter confirmed."""
+    """Import the file with the mapping the recruiter confirmed.
+
+    Admin only, unlike the preview above: this writes hundreds of rows over
+    the workspace's own record, which is a change to what every colleague
+    then works on.
+    """
     sheet = await _read_file(file)
     try:
         result = await service.commit(
             db,
-            tenant_id=tenant_id,
+            tenant_id=actor.tenant_id,
             entity=entity,
             rows=sheet.rows,
             mapping=json.loads(mapping),
