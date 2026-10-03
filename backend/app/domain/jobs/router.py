@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_current_tenant
 from app.core.database import get_db
 from app.domain.jobs import service
-from app.domain.jobs.schemas import JobCreate, JobRead
+from app.domain.jobs.schemas import JobCreate, JobRead, JobUpdate
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -45,4 +45,24 @@ async def create_job(
 ) -> JobRead:
     payload.tenant_id = tenant_id  # force the authenticated tenant
     row = await service.create_job(db, data=payload)
+    return JobRead.model_validate(row)
+
+
+@router.patch("/{job_id}", response_model=JobRead)
+async def update_job(
+    job_id: uuid.UUID,
+    payload: JobUpdate,
+    editor: str | None = Query(default=None, description="Who made the edit."),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> JobRead:
+    """Edit the Suchprofil. Each changed field leaves a receipt."""
+    try:
+        row = await service.update_job(
+            db, tenant_id=tenant_id, job_id=job_id, patch=payload, editor=editor
+        )
+    except service.InvalidBand as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     return JobRead.model_validate(row)
