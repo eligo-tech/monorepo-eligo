@@ -26,6 +26,7 @@ import type {
   CandidateDocumentDTO,
   CompetingEmployerDTO,
   DocumentKind,
+  JobUpdatePayload,
   ProcessJobDTO,
   ProcessStepDTO,
   ReportingOverviewDTO,
@@ -370,6 +371,13 @@ export const api = {
     }
     return res.json() as Promise<CVExtractionResultDTO>
   },
+
+  /** Edit a mandate's Suchprofil. Each changed field leaves a receipt. */
+  updateJob: (jobId: string, patch: JobUpdatePayload, editor?: string) =>
+    request<JobDTO>(
+      `/jobs/${jobId}${editor ? `?editor=${encodeURIComponent(editor)}` : ''}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
 
   /** Companies this tenant's candidates named as other active processes. */
   competingEmployers: () =>

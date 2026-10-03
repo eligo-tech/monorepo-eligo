@@ -697,3 +697,20 @@ export interface SalaryFitDTO {
   minimum: number | null
   wish: number | null
 }
+
+/** PATCH body for a mandate's Suchprofil. Only what is sent is applied.
+ *  `salary_max`, `location_radius_km` and `required_certifications` are hard
+ *  filter inputs — editing them changes who the matcher excludes. */
+export interface JobUpdatePayload {
+  title?: string
+  client_company_id?: string | null
+  location?: string | null
+  location_radius_km?: number | null
+  must_have_skills?: string[]
+  required_certifications?: string[]
+  requires_work_permit?: boolean
+  salary_min?: number | null
+  salary_max?: number | null
+  salary_currency?: string
+  status?: string
+}

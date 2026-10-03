@@ -5,18 +5,33 @@
 // thing as a market posting in the Markt corpus — that distinction is what
 // keeps scraped market noise out of the matcher (ARCHITECTURE.md, §1).
 
-import { useMemo } from 'react'
-import { Briefcase, MapPin } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Briefcase, MapPin, Pencil, Wallet } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CompanyDTO, JobDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
+import { MandateEditor } from './MandateEditor'
 
 
 
-const GRID = 'grid-cols-[minmax(0,3fr)_minmax(0,1.8fr)_minmax(0,1.4fr)_7rem]'
-const COLUMNS = ['Titel', 'Firma', 'Ort', 'Status']
+const GRID =
+  'grid-cols-[minmax(0,2.6fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_7rem_2rem]'
+const COLUMNS = ['Titel', 'Firma', 'Ort', 'Gehaltsband', 'Status', '']
+
+/** "85.000–95.000 €", or the honest gap. A mandate without a ceiling applies
+ *  no salary filter at all, which is worth seeing at a glance. */
+function band(job: JobDTO): string | null {
+  const money = (v: number) => v.toLocaleString('de-DE')
+  const symbol = (job.salary_currency || 'EUR') === 'EUR' ? '€' : job.salary_currency
+  if (job.salary_min != null && job.salary_max != null) {
+    return `${money(job.salary_min)}–${money(job.salary_max)} ${symbol}`
+  }
+  if (job.salary_max != null) return `bis ${money(job.salary_max)} ${symbol}`
+  if (job.salary_min != null) return `ab ${money(job.salary_min)} ${symbol}`
+  return null
+}
 
 const STATUS_TONE: Record<string, 'mint' | 'gold' | undefined> = {
   open: 'mint',
@@ -32,7 +47,12 @@ export function JobsScreen() {
     return (id: string | null) => (id ? (byId.get(id) ?? '—') : '—')
   }, [companies.data])
 
-  const rows = jobs.data ?? []
+  const [editing, setEditing] = useState<JobDTO | null>(null)
+  // Saved mandates are overlaid locally: `useAsync` has no refetch, and
+  // re-mounting the screen to see your own edit reads as a bug.
+  const [saved, setSaved] = useState<Record<string, JobDTO>>({})
+
+  const rows = (jobs.data ?? []).map((j) => saved[j.id] ?? j)
   const open = rows.filter((j) => j.status === 'open').length
 
   return (
@@ -130,14 +150,44 @@ export function JobsScreen() {
                   )}
                   <span className="truncate">{job.location ?? '—'}</span>
                 </span>
+                <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px] text-cockpit-dim">
+                  {band(job) ? (
+                    <>
+                      <Wallet className="h-3.5 w-3.5 shrink-0 text-cockpit-faint" />
+                      <span className="truncate">{band(job)}</span>
+                    </>
+                  ) : (
+                    <span className="truncate text-cockpit-faint">kein Band</span>
+                  )}
+                </span>
                 <span>
                   <Chip tone={STATUS_TONE[job.status]}>{job.status}</Chip>
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setEditing(job)}
+                  title="Mandat bearbeiten"
+                  aria-label={`${job.title} bearbeiten`}
+                  className="justify-self-end text-cockpit-faint transition-colors hover:text-mint-300"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      {editing && (
+        <MandateEditor
+          job={editing}
+          companies={companies.data ?? []}
+          onClose={() => setEditing(null)}
+          onSaved={(updated) =>
+            setSaved((prev) => ({ ...prev, [updated.id]: updated }))
+          }
+        />
+      )}
     </div>
   )
 }
