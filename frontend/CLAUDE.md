@@ -52,7 +52,11 @@ follow automatically.
 
 **The cockpit has two views**, and both live on the same screen. `#cockpit` is
 the whole book of business; `#cockpit/<jobId>` is one mandate — its Suchprofil,
-its candidates, their assessments. The hash carries the choice so a per-job view
+its candidates, their assessments. The **MandateDrawer** on the left switches
+between them: every mandate the workspace has, searchable, the ones with a
+running process first. It lists `/jobs` merged with the process-derived
+mandates, because a search with nobody in it yet is exactly the one you open;
+it collapses to a rail and remembers that in `localStorage`. The hash carries the choice so a per-job view
 can be sent to a colleague (`resolveScreen` takes the part before the slash,
 `resolveDetail` the part after). The section order follows
 `data/design/cockpit_update.html`: 01 Umsatz → 02 Laufende Prozesse (grouped by

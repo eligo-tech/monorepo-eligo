@@ -342,6 +342,33 @@ export function mandatesFromCards(
   )
 }
 
+/**
+ * A mandate from a JOB row, for the 67 that have nobody in process yet.
+ *
+ * `mandatesFromCards` can only see mandates someone is running on, which is
+ * the right basis for "Laufende Prozesse" and the wrong one for choosing a
+ * mandate to work on: a search with no candidates yet is exactly the one
+ * that needs opening. The workspace then shows its Stammdaten and Suchprofil
+ * with an empty process list, which is the truth about it.
+ */
+export function mandateFromJob(job: JobDTO, companyName: string | null): Mandate {
+  return {
+    id: job.id,
+    jobId: job.id,
+    ref: mandateRef(job.id),
+    title: job.title,
+    client: companyName ?? '—',
+    companyId: job.client_company_id ?? undefined,
+    location: job.location ?? null,
+    mustHave: job.must_have_skills ?? [],
+    salaryMin: job.salary_min ?? null,
+    salaryMax: job.salary_max ?? null,
+    salaryCurrency: job.salary_currency ?? null,
+    status: job.status ?? null,
+    cards: [],
+  }
+}
+
 /** The recruiter's clock. Appointments are agreed in German local time, and a
  *  cockpit that renders them in the viewer's zone would show a Munich
  *  interview at the wrong hour to anyone travelling. */
