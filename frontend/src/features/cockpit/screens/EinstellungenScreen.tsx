@@ -17,6 +17,7 @@ import { CheckCircle2, Database, Loader2, Trash2 } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
 import type { SourceCapabilitiesDTO, TenantSourceDTO } from '@/api/types'
+import { FileImportPanel } from './FileImportPanel'
 import { Button, TextInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 
@@ -138,16 +139,31 @@ export function EinstellungenScreen() {
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
           Dieser Workspace und seine Daten gehören nur Ihnen — den Markt teilen
-          sich alle, Kandidaten, Mandate und Ansprechpartner nicht.
+          sich alle, Kandidaten, Mandate und Ansprechpartner nicht. Hier kommen
+          Ihre Daten herein: als Datei aus dem alten System, oder laufend aus
+          einem angebundenen ATS.
         </p>
       </header>
+
+      {/* The file path comes FIRST: it works for every customer, needs no
+          credential and no vendor, and is how most onboardings will actually
+          happen. Connecting an ATS account is the special case. */}
+      <section className="space-y-5">
+        <SectionHeader
+          id="section-import"
+          index="01"
+          title="Daten übernehmen"
+          hint="CSV oder Excel aus dem bisherigen System"
+        />
+        <FileImportPanel />
+      </section>
 
       <section className="space-y-5">
         <SectionHeader
           id="section-quellen"
-          index="01"
-          title="Datenquellen"
-          hint="Eigene Datenbank anbinden"
+          index="02"
+          title="Verbundene Systeme"
+          hint="Laufender Abgleich mit einem ATS"
         />
 
         <Panel className="px-6 py-5">

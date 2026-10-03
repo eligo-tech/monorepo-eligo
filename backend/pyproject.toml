@@ -14,6 +14,8 @@ authors = [{ name = "eligo-tech" }]
 dependencies = [
     # Fernet, for the credentials a workspace stores for its own sources.
     "cryptography>=42",
+    # Reading an .xlsx a customer exported from their old system.
+    "openpyxl>=3.1",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
