@@ -232,3 +232,31 @@ async def test_the_order_survives_a_removal_in_the_middle() -> None:
         order = (await _steps(c, job_id))["step_order"]
         assert "vorbereitung" not in order
         assert order.index("custom_probetag") == order.index("interview") + 1
+
+
+async def test_assigning_the_same_candidate_twice_is_one_process() -> None:
+    """A double click is not a second process.
+
+    Two rows would put the same person under the mandate twice, each with
+    its own step list, and the first one ticked would look like the other
+    had not happened.
+    """
+    async with _api() as c:
+        company = (await c.post("/api/v1/companies", json={"name": "Doppel GmbH"})).json()
+        job = (
+            await c.post(
+                "/api/v1/jobs",
+                json={"title": "Backend", "client_company_id": company["id"]},
+            )
+        ).json()
+        cand = (
+            await c.post("/api/v1/candidates", json={"full_name": "Dana Doppel"})
+        ).json()
+        body = {"candidate_id": cand["id"], "job_id": job["id"]}
+        first = (await c.post("/api/v1/pipeline/applications", json=body)).json()
+        second = (await c.post("/api/v1/pipeline/applications", json=body)).json()
+        assert first["id"] == second["id"]
+
+        rows = (await c.get("/api/v1/pipeline/processes")).json()
+        [entry] = [j for j in rows if j["job_id"] == job["id"]]
+        assert len(entry["candidates"]) == 1

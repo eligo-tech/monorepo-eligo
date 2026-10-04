@@ -154,6 +154,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
           <KandidatenScreen
             candidateId={detail}
             onCandidateChange={goToCandidate}
+            onPipelineChanged={state.reload}
           />
         )}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}

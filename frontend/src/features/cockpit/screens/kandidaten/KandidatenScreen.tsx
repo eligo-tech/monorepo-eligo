@@ -206,12 +206,16 @@ const COLUMNS = [
 export function KandidatenScreen({
   candidateId,
   onCandidateChange,
+  onPipelineChanged,
 }: {
   /** From the hash — `#kandidaten/<id>` opens that person's record straight
    *  away. The cockpit's process cards link here, and a colleague can be
    *  sent the link instead of "search for the anonymised senior". */
   candidateId?: string | null
   onCandidateChange?: (id: string | null) => void
+  /** Assigning a candidate to a mandate changes the cockpit's board, and the
+   *  next thing the recruiter does is open it. */
+  onPipelineChanged?: () => void
 } = {}) {
   // Deep-link: ?upload=1 opens the CV import dialog straight away.
   const [uploadOpen, setUploadOpen] = useState(
@@ -582,6 +586,7 @@ export function KandidatenScreen({
         <CandidateDrawer
           candidate={selected}
           onClose={closeDrawer}
+          onPipelineChanged={onPipelineChanged}
           onSaved={(updated) => {
             setSelected(toCandidate(updated)) // reflect the edit in the open drawer
             setRefreshKey((k) => k + 1) // and refresh the underlying list

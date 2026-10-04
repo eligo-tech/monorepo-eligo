@@ -65,8 +65,26 @@ async def get_application(
 async def create_application(
     session: AsyncSession, *, data: ApplicationCreate
 ) -> Application:
+    """Put one candidate on one job. Idempotent per pair.
+
+    Assigning the same person to the same mandate twice is a double click,
+    not a second process — and two rows would show the same candidate twice
+    under one mandate with two separate step lists. The existing row comes
+    back instead.
+    """
+    tenant_id = data.tenant_id or settings.default_tenant_id
+    existing = await session.scalar(
+        select(Application).where(
+            Application.tenant_id == tenant_id,
+            Application.candidate_id == data.candidate_id,
+            Application.job_id == data.job_id,
+        )
+    )
+    if existing is not None:
+        return existing
+
     app = Application(
-        tenant_id=data.tenant_id or settings.default_tenant_id,
+        tenant_id=tenant_id,
         candidate_id=data.candidate_id,
         job_id=data.job_id,
         status=data.status,
@@ -606,9 +624,12 @@ async def processes(
 ) -> list[dict]:
     """"Laufende Prozesse", grouped by job — the tracker's own shape.
 
-    A job appears once its first candidate has been presented, which is what
-    the process doc says and what the sheet does: rows exist under a mandate
-    only from the presentation onwards.
+    A candidate appears here as soon as they are ASSIGNED to the mandate, not
+    only once presented. The sheet starts at the presentation because a sheet
+    has nowhere to put someone before that; the cockpit does, and the work
+    between assignment and presentation — the Qualifikationsgespräch, the
+    Unterlagen, the client text — is exactly what it is for. `presented_at`
+    stays null until the step is ticked, so the two states remain distinct.
     """
     from app.domain.candidates.models import Candidate
     from app.domain.companies.models import Company
@@ -672,8 +693,6 @@ async def processes(
         steps = sorted(
             by_app.get(app.id, []), key=lambda s: (s.position, s.step_key)
         )
-        if not steps:
-            continue  # not presented yet — the sheet has no row for it either
         job = jobs.get(app.job_id)
         candidate = candidates.get(app.candidate_id)
         if job is None or candidate is None:
