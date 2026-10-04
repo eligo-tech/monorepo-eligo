@@ -614,6 +614,10 @@ export interface ProcessStepDTO {
   label: string
   /** "appointment" (has a date/time) | "feedback" (pass/out) | "milestone". */
   kind: string
+  /** Sort position within this process; the nine are spaced by ten. */
+  position?: number
+  /** True for a step this process added for itself. */
+  custom?: boolean
   scheduled_at: string | null
   done_at: string | null
   /** "open" | "pass" | "out" — the tracker's uncoloured / green / red cell. */
@@ -646,6 +650,10 @@ export interface ProcessCandidateDTO {
   next_appointment: string | null
   note: string | null
   steps: ProcessStepDTO[]
+  /** Every step this process shows, in order: the nine-step template merged
+   *  with what this process added, minus what it removed. Authoritative —
+   *  the rows in `steps` exist only for steps someone has touched. */
+  step_order?: string[]
   /** Null while nobody has assessed this candidate FOR THIS mandate. */
   assessment: AssessmentDTO | null
   /** Null when the figures to compare are not all there. */

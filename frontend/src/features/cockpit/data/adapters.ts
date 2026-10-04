@@ -167,14 +167,15 @@ export function processCardsFromSteps(
       const byKey = new Map(person.steps.map((s) => [s.step_key, s]))
       const out = person.steps.find((s) => s.outcome === 'out')
 
-      // Walk the canonical nine, then append any extra interview round the
-      // tracker recorded (a third appointment) right after the final one.
-      const keys: string[] = PROCESS_STEPS.map((s) => s.key)
-      const extra = person.steps
-        .map((s) => s.step_key)
-        .filter((k) => k.startsWith('interviewtermin_'))
-        .sort()
-      keys.splice(keys.indexOf('finaltermin') + 1, 0, ...extra)
+      // The nine are a TEMPLATE, not the process: this run may have taken a
+      // step out and added one of its own. The SERVER says what the order is
+      // — deriving it here as well is how the two drift, and a step rendered
+      // one slot off is worse than one not rendered at all. The template is
+      // the fallback for a backend that does not send it yet.
+      const keys: string[] =
+        person.step_order && person.step_order.length > 0
+          ? person.step_order
+          : PROCESS_STEPS.map((s) => s.key)
 
       let reached = -1
       const steps: ProcessStep[] = keys.map((key, i) => {

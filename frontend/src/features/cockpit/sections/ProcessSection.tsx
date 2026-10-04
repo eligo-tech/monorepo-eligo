@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 
+import { api } from '@/api/client'
 import { StepEditor } from '../ui/StepEditor'
 import { ProcessCardPanel } from '../ui/ProcessCardPanel'
 import { Money, Panel, SectionHeader } from '../ui/primitives'
@@ -119,6 +120,22 @@ export function ProcessSection({
                   <ProcessCardPanel
                     key={card.id}
                     card={card}
+                    onAddStep={
+                      card.editable
+                        ? async (label, after) => {
+                            await api.addProcessStep(card.id, { label, after })
+                            onChanged?.()
+                          }
+                        : undefined
+                    }
+                    onRemoveStep={
+                      card.editable
+                        ? async (step) => {
+                            await api.removeProcessStep(card.id, step.key)
+                            onChanged?.()
+                          }
+                        : undefined
+                    }
                     onStepClick={
                       card.editable
                         ? (step) => {

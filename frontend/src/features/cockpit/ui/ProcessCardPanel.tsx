@@ -18,11 +18,16 @@ import type { ProcessCard, ProcessStep } from '../data/types'
 export function ProcessCardPanel({
   card,
   onStepClick,
+  onAddStep,
+  onRemoveStep,
   onMandateClick,
   children,
 }: {
   card: ProcessCard
   onStepClick?: (step: ProcessStep) => void
+  /** Only live cards can be edited: a demo card has no row to write to. */
+  onAddStep?: (label: string, after: string | null) => Promise<void>
+  onRemoveStep?: (step: ProcessStep) => Promise<void>
   /** Set in the overall view: the mandate ref opens that mandate's view. */
   onMandateClick?: () => void
   /** Rendered inside the card, under the stepper — the assessment, per job. */
@@ -106,7 +111,12 @@ export function ProcessCardPanel({
       </div>
 
       <div className="mt-6">
-        <ProcessStepper steps={card.steps} onStepClick={onStepClick} />
+        <ProcessStepper
+          steps={card.steps}
+          onStepClick={onStepClick}
+          onAddStep={onAddStep}
+          onRemoveStep={onRemoveStep}
+        />
       </div>
 
       {children}
