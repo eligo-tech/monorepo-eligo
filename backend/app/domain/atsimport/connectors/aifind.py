@@ -711,6 +711,8 @@ class AiFindConnector:
 
     key = "aifind"
     label = "aiFind (ATS)"
+    hint = "Laufender Abgleich — Firmen, Ansprechpartner, Mandate, Kandidaten"
+    mode = "pull"
     needs = ("username", "secret")
 
     async def fetch(

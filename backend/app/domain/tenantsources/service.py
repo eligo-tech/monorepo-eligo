@@ -41,13 +41,14 @@ logger = get_logger(__name__)
 
 #: Sources a workspace can configure for itself today.
 def kinds() -> tuple[str, ...]:
-    """Which sources a workspace may configure — the connector registry.
+    """Which sources a workspace may store a credential for.
 
-    Deliberately a call, not a constant: the list IS the registry, and a
-    second copy of it here is how "which systems do we support" starts
-    having two answers.
+    The PULL half of the registry: a CSV has no login, is never fetched on a
+    schedule, and must not be configurable here. Deliberately a call, not a
+    constant — the list IS the registry, and a second copy of it is how
+    "which systems do we support" starts having two answers.
     """
-    return tuple(factory.available())
+    return tuple(factory.pull_sources())
 STATUSES: tuple[str, ...] = ("active", "disabled")
 
 
