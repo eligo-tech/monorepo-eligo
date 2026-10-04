@@ -243,8 +243,15 @@ async def parse_auswertung_document(
     in can be checked against the words above it.
     """
     parsed = auswertung.parse_auswertung(payload.text)
+    assessment = parsed["assessment"]
+    score = assessment["fit_score"]
+    if score is not None and not 0 <= score <= 10:
+        # A document that scores "12 / 10" is read, not refused: everything
+        # else in it is still worth filling in. The score is left empty
+        # rather than clamped, because 10 is not what the document said.
+        assessment["fit_score"] = None
     return AuswertungParsed(
-        assessment=AssessmentWrite(**parsed["assessment"]),
+        assessment=AssessmentWrite(**assessment),
         profile=ProfileRead(**parsed["candidate"]),
     )
 

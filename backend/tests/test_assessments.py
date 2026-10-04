@@ -452,3 +452,30 @@ async def test_the_process_carries_the_person_as_well_as_the_fit(two_mandates) -
         "WildFly/JBoss",
     ]
     assert profiles[0]["education"] == ["Fachinformatiker AE · 2003"]
+
+
+async def test_a_score_outside_the_scale_does_not_lose_the_rest_of_the_document() -> None:
+    """"12 / 10" is somebody being emphatic, not a reason to refuse the paste.
+
+    The score comes back empty — clamping it to 10 would put a number in
+    front of a recruiter that the document does not contain — and every
+    other field is still filled.
+    """
+    from app.main import app as fastapi_app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app), base_url="http://t"
+    ) as client:
+        response = await client.post(
+            f"{API}/auswertung/parse",
+            json={
+                "text": (
+                    "A. Passungsbewertung zur Position\n"
+                    "Gesamtbewertung: 12 / 10\n\n"
+                    "Kurzfazit: Ausnahmekandidat.\n"
+                )
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["assessment"]["fit_score"] is None
+    assert response.json()["assessment"]["verdict"] == "Ausnahmekandidat."
