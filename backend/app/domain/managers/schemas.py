@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.common.enums import ConfidenceSource, InteractionType
 
@@ -16,19 +16,35 @@ class ManagerInteractionCreate(BaseModel):
     summary: str | None = Field(default=None, max_length=5000)
     candidate_id: uuid.UUID | None = None
     job_id: uuid.UUID | None = None
+    #: Who was spoken to. Optional: a briefing can be recorded before the
+    #: contact is in the record (see migration 0034).
+    manager_id: uuid.UUID | None = None
 
 
 class ManagerInteractionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    manager_id: uuid.UUID
+    #: None for a mandate-level note written before a contact existed.
+    manager_id: uuid.UUID | None
     candidate_id: uuid.UUID | None
     job_id: uuid.UUID | None
     interaction_type: str
     occurred_at: dt.datetime
     summary: str | None
     external_source: str | None = None
+
+    @field_validator("occurred_at")
+    @classmethod
+    def _aware(cls, value: dt.datetime) -> dt.datetime:
+        """SQLite hands back a naive datetime even for a tz-aware column.
+
+        Without this the same endpoint emits "…T09:00:00" on SQLite and
+        "…T09:00:00Z" on Postgres, and a browser reads the first as LOCAL
+        time — a briefing logged at 09:00 shows as 11:00 in summer. Same fix
+        the pipeline already applies in `as_utc`.
+        """
+        return value if value.tzinfo else value.replace(tzinfo=dt.UTC)
 
 
 class ManagerCreate(BaseModel):

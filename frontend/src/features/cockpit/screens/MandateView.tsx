@@ -13,6 +13,7 @@
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 
+import { AssessmentEditor } from '../ui/AssessmentEditor'
 import { AssessmentPanel } from '../ui/AssessmentPanel'
 import { HistoryTrail } from '../ui/HistoryTrail'
 import { api } from '@/api/client'
@@ -26,6 +27,7 @@ import { QualificationPanel } from './mandate/QualificationPanel'
 import { SourcingPanel } from './mandate/SourcingPanel'
 import { StammdatenPanel } from './mandate/StammdatenPanel'
 import { AssignCandidate } from './mandate/AssignCandidate'
+import { BriefingPanel } from './mandate/BriefingPanel'
 import { SuchprofilPanel } from './mandate/SuchprofilPanel'
 import type { Mandate, ProcessCard, ProcessStep } from '../data/types'
 
@@ -77,6 +79,8 @@ export function MandateView({
   /** Re-read the cockpit after a step was written. */
   onChanged?: () => void
 }) {
+  // Which process is having its Kandidatenauswertung written right now.
+  const [assessing, setAssessing] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ card: ProcessCard; step: ProcessStep } | null>(
     null,
   )
@@ -111,6 +115,9 @@ export function MandateView({
       </header>
 
       <StammdatenPanel mandate={mandate} company={company} manager={manager} />
+
+      {/* What the client asked for, before what the candidates answered. */}
+      <BriefingPanel mandate={mandate} managers={manager ? [manager] : []} />
 
       <FeedbackPanel mandate={mandate} onChanged={onChanged} />
 
@@ -170,12 +177,43 @@ export function MandateView({
                 }
               >
                 {card.salaryFit && <SalaryVerdict fit={card.salaryFit} />}
-                {card.assessment ? (
-                  <AssessmentPanel assessment={card.assessment} />
+                {assessing === card.id ? (
+                  <AssessmentEditor
+                    card={card}
+                    onClose={() => setAssessing(null)}
+                    onSaved={() => onChanged?.()}
+                  />
+                ) : card.assessment ? (
+                  <>
+                    <AssessmentPanel assessment={card.assessment} />
+                    {card.editable && (
+                      <button
+                        type="button"
+                        onClick={() => setAssessing(card.id)}
+                        className="mt-3 font-mono text-[12px] text-cockpit-faint transition-colors hover:text-mint-300"
+                      >
+                        Auswertung bearbeiten
+                      </button>
+                    )}
+                  </>
                 ) : (
-                  <p className="mt-6 border-t border-cockpit-line pt-5 font-mono text-[12px] text-cockpit-faint">
-                    Noch keine Auswertung für dieses Mandat.
-                  </p>
+                  /* After the Qualifikationsgespräch this is the first thing
+                     a recruiter writes down, and it used to be readable but
+                     not writable: the endpoint existed, the form did not. */
+                  <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-cockpit-line pt-5">
+                    <p className="font-mono text-[12px] text-cockpit-faint">
+                      Noch keine Auswertung für dieses Mandat.
+                    </p>
+                    {card.editable && (
+                      <button
+                        type="button"
+                        onClick={() => setAssessing(card.id)}
+                        className="rounded-lg border border-cockpit-line px-2.5 py-1 font-mono text-[12px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
+                      >
+                        Nach dem Gespräch erfassen
+                      </button>
+                    )}
+                  </div>
                 )}
               </ProcessCardPanel>
             ))

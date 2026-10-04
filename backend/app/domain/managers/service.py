@@ -270,16 +270,23 @@ async def log_interaction(
     session: AsyncSession,
     *,
     tenant_id: uuid.UUID,
-    manager_id: uuid.UUID,
+    manager_id: uuid.UUID | None,
     payload: ManagerInteractionCreate,
 ) -> ManagerInteraction | None:
-    manager = await session.scalar(
-        select(Manager).where(
-            Manager.id == manager_id, Manager.tenant_id == tenant_id
+    """Record one touch. `manager_id` may be None for a mandate-level note.
+
+    A briefing belongs to the mandate: the conversation that defines it often
+    happens before the contact is in the record, and refusing the note until
+    somebody creates a `managers` row means the note is never written.
+    """
+    if manager_id is not None:
+        manager = await session.scalar(
+            select(Manager).where(
+                Manager.id == manager_id, Manager.tenant_id == tenant_id
+            )
         )
-    )
-    if manager is None:
-        return None
+        if manager is None:
+            return None
     interaction = ManagerInteraction(
         tenant_id=tenant_id,
         manager_id=manager_id,
@@ -312,3 +319,26 @@ async def list_interactions(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+async def list_for_job(
+    session: AsyncSession, *, tenant_id: uuid.UUID, job_id: uuid.UUID, limit: int = 200
+) -> list[ManagerInteraction]:
+    """Everything said ABOUT one mandate, newest first.
+
+    Reads the same table as a contact's history, from the other side: the
+    briefing, the sharpened Muss-Profil, the "they want someone who can also
+    do X" — all of it is a conversation with a person about a job, and both
+    questions ("what did we discuss with her?" and "what do we know about
+    this mandate?") are worth being able to ask.
+    """
+    rows = await session.scalars(
+        select(ManagerInteraction)
+        .where(
+            ManagerInteraction.tenant_id == tenant_id,
+            ManagerInteraction.job_id == job_id,
+        )
+        .order_by(ManagerInteraction.occurred_at.desc())
+        .limit(limit)
+    )
+    return list(rows)

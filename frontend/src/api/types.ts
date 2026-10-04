@@ -672,6 +672,28 @@ export interface ProcessCandidateDTO {
 }
 
 /** One mandate with every candidate running on it ("Laufende Prozesse"). */
+export interface BriefingDTO {
+  id: string
+  /** Null when the briefing was written before a contact was recorded. */
+  manager_id: string | null
+  job_id: string | null
+  candidate_id: string | null
+  interaction_type: string
+  occurred_at: string
+  summary: string | null
+}
+
+/** The Kandidatenauswertung, written after a Qualifikationsgespräch. */
+export interface AssessmentWriteDTO {
+  fit_score?: number | null
+  verdict?: string | null
+  strengths?: string[]
+  risks?: string[]
+  client_summary?: string | null
+  technologies?: string[]
+  basis?: string | null
+}
+
 export interface ProcessJobDTO {
   job_id: string
   job_title: string
