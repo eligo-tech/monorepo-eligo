@@ -759,7 +759,12 @@ export interface AtsSourceDTO {
   /** Connector key — written to every row it imports. */
   key: string
   label: string
-  /** Which credential fields the form must ask for: "username", "secret". */
+  /** One line saying what it is. */
+  hint: string
+  /** "pull" — the product reads it on a schedule with stored credentials.
+   *  "file" — a human uploads an export; nothing is fetched. */
+  mode: 'pull' | 'file'
+  /** Which credential fields the form must ask for; empty for a file. */
   needs: string[]
 }
 

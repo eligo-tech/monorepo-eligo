@@ -25,7 +25,7 @@ able to tell which system a row came from except by reading its `source`.
 from __future__ import annotations
 
 import dataclasses
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 
 @dataclasses.dataclass(frozen=True)
@@ -158,15 +158,38 @@ class Credentials:
     secret: str | None = None
 
 
-@runtime_checkable
-class AtsConnector(Protocol):
-    """One recruiting system this product can import from."""
+#: How a source is read, which decides who may start it.
+#:
+#: "pull"  — the product logs in and reads on a SCHEDULE. Machine-triggered
+#:           ingestion (ARCHITECTURE.md RULE 1): no user may start it.
+#: "file"  — a human uploads an export they already have. Not ingestion at
+#:           all: the data arrives with the request, nothing is crawled, and
+#:           the person doing it is the one who owns the file.
+#:
+#: The distinction is not cosmetic. It decides whether a credential can be
+#: stored for the source, whether the scheduled runner may pick it up, and
+#: which control the settings screen draws.
+Mode = Literal["pull", "file"]
 
-    #: Stable identifier. It is written to every imported row as `source`, so
-    #: it must not change once a workspace has used it.
+
+@runtime_checkable
+class AtsSource(Protocol):
+    """One system this product can take a book of business from."""
+
+    #: Stable identifier, written to every imported row as `source`, so it
+    #: must not change once a workspace has used it.
     key: str
     #: What a human sees in the settings screen.
     label: str
+    #: One line saying what it is, shown under the label.
+    hint: str
+    mode: Mode
+
+
+@runtime_checkable
+class AtsConnector(AtsSource, Protocol):
+    """A source the product READS on a schedule, with stored credentials."""
+
     #: Which credential fields the form must ask for: "username", "secret".
     needs: tuple[str, ...]
 

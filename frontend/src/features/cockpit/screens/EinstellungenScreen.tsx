@@ -68,7 +68,9 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
       ])
       setCaps(capabilities)
       setSources(rows)
-      const offered = capabilities.sources?.map((x) => x.key) ?? capabilities.kinds
+      const offered =
+        capabilities.sources?.filter((x) => x.mode === 'pull').map((x) => x.key) ??
+        capabilities.kinds
       const chosen = rows[0]?.kind ?? offered[0] ?? ''
       setKind((current) => current || chosen)
       const existing = rows.find((r) => r.kind === chosen)
@@ -137,6 +139,12 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
 
   const source = sources?.find((s) => s.kind === kind)
   const blocked = caps !== null && !caps.secrets_configured
+  // The registry names the systems; this screen names none of them. One
+  // list today reads as two sections because the two halves are genuinely
+  // different: a file arrives with the person, a connection is read while
+  // nobody is watching.
+  const fileSources = caps?.sources?.filter((s) => s.mode === 'file') ?? []
+  const pullSources = caps?.sources?.filter((s) => s.mode === 'pull') ?? []
 
   return (
     <div className="space-y-8">
@@ -157,23 +165,29 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
 
       {/* The file path comes FIRST: it works for every customer, needs no
           credential and no vendor, and is how most onboardings will actually
-          happen. Connecting an ATS account is the special case. */}
-      <section className="space-y-5">
-        <SectionHeader
-          id="section-import"
-          index="01"
-          title="Daten übernehmen"
-          hint="CSV oder Excel aus dem bisherigen System"
-        />
-        <FileImportPanel canCommit={admin} />
-      </section>
+          happen. Connecting an account is the special case. */}
+      {fileSources.length > 0 && (
+        <section className="space-y-5">
+          <SectionHeader
+            id="section-import"
+            index="01"
+            title={`Daten übernehmen · ${fileSources[0].label}`}
+            hint={fileSources[0].hint}
+          />
+          <FileImportPanel canCommit={admin} />
+        </section>
+      )}
 
       <section className="space-y-5">
         <SectionHeader
           id="section-quellen"
           index="02"
           title="Verbundene Systeme"
-          hint="Laufender Abgleich mit einem ATS"
+          hint={
+            pullSources.length > 0
+              ? pullSources.map((s) => s.label).join(' · ')
+              : 'Noch keine Anbindung verfügbar'
+          }
         />
 
         <Panel className="px-6 py-5">
@@ -184,13 +198,15 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
             <div>
               {/* A picker only when there is something to pick: one system
                   today, and the registry decides when that changes. */}
-              {(caps?.sources?.length ?? 0) > 1 ? (
+              {pullSources.length > 1 ? (
                 <select
                   value={kind}
                   onChange={(e) => setKind(e.target.value)}
                   className="rounded-lg border border-cockpit-line bg-cockpit-inset px-2 py-1 text-[16px] font-semibold text-cockpit-text focus:border-cockpit-edge focus:outline-none"
                 >
-                  {caps?.sources?.map((s) => (
+                  {/* Only what can hold a credential: a file has no login
+                      and must not look like something to connect. */}
+                  {pullSources.map((s) => (
                     <option key={s.key} value={s.key}>
                       {s.label}
                     </option>
@@ -198,7 +214,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
                 </select>
               ) : (
                 <h3 className="text-[16px] font-semibold text-cockpit-text">
-                  {kindLabel(kind, caps?.sources)}
+                  {kindLabel(kind, pullSources)}
                 </h3>
               )}
               <p className="text-[13px] text-cockpit-dim">

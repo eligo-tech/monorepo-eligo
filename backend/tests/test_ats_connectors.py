@@ -41,6 +41,8 @@ class FakeAts:
 
     key = "fake-ats"
     label = "Fake ATS"
+    hint = "Erfunden für diesen Test"
+    mode = "pull"
     needs = ("secret",)
 
     def __init__(self) -> None:
@@ -101,16 +103,35 @@ class TestRegistry:
     def test_the_key_is_what_gets_written_to_rows(self) -> None:
         assert factory.get_connector("aifind").key == "aifind"
 
+    def test_a_file_source_is_listed_but_never_fetched(self) -> None:
+        """CSV/Excel is an option, not something the scheduler can start.
+
+        It has no login to schedule and the bytes arrive with the request,
+        so it must appear in the list a recruiter chooses from and nowhere
+        near the runner or the credential store.
+        """
+        described = {row["key"]: row for row in factory.describe()}
+        assert described["datei-import"]["mode"] == "file"
+        assert described["datei-import"]["needs"] == []
+        assert "datei-import" not in factory.pull_sources()
+        with pytest.raises(ValueError, match="uploaded"):
+            factory.get_connector("datei-import")
+
+    def test_a_pull_source_is_both_listed_and_fetchable(self) -> None:
+        described = {row["key"]: row for row in factory.describe()}
+        assert described["aifind"]["mode"] == "pull"
+        assert "aifind" in factory.pull_sources()
+
 
 @pytest.fixture
 def registered() -> FakeAts:
     """Register the fake for one test, then take it out again."""
     connector = FakeAts()
-    factory._CONNECTORS[connector.key] = connector
+    factory._SOURCES[connector.key] = connector
     try:
         yield connector
     finally:
-        factory._CONNECTORS.pop(connector.key, None)
+        factory._SOURCES.pop(connector.key, None)
 
 
 async def test_a_book_from_an_invented_system_imports_end_to_end(
