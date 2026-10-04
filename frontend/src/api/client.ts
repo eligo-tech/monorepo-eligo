@@ -20,6 +20,7 @@ import type {
   ProjectDetailDTO,
   ProjectCandidateDTO,
   CompanyContactsDTO,
+  CriteriaSuggestionDTO,
   JobDTO,
   MatchResultDTO,
   PipelineBoardDTO,
@@ -145,6 +146,12 @@ export const api = {
     return res.blob()
   },
   jobs: () => request<JobDTO[]>('/jobs'),
+
+  /** Muss-Kriterien the mandate's own title names, drawn from the workspace's
+   *  skill vocabulary. Proposals — a human clicks the ones that are really
+   *  non-negotiable, because a hard criterion excludes people. */
+  criteriaSuggestions: (jobId: string) =>
+    request<CriteriaSuggestionDTO[]>(`/jobs/${jobId}/criteria-suggestions`),
   /** Client + prospect companies — used to name the client on a mandate. */
   /** The tenant's own accounts. `limit` matters: the default is 100 and an
    *  imported book runs to hundreds, so a caller building a name lookup must

@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.domain.common.enums import ConfidenceSource
+from app.domain.candidates.models import Candidate
+from app.domain.jobs import criteria
 from app.domain.jobs.models import Job
 from app.domain.jobs.schemas import JobCreate, JobUpdate
 from app.domain.verification import service as verification
@@ -164,3 +166,29 @@ async def update_job(
     await session.commit()
     await session.refresh(job)
     return job
+
+
+async def criteria_suggestions(
+    session: AsyncSession, *, tenant_id: uuid.UUID, job: Job, limit: int = 8
+) -> list[criteria.Suggestion]:
+    """Muss-Kriterien this mandate's own title already names.
+
+    The vocabulary is the workspace's candidates, not a canned skill list:
+    a criterion is only useful if it matches the way this pool writes things
+    down, and a term nobody carries filters everyone out.
+
+    Proposals, never writes — the recruiter clicks the ones that are really
+    non-negotiable, which is the same rule the agents follow.
+    """
+    rows = await session.execute(
+        select(Candidate.skills).where(Candidate.tenant_id == tenant_id)
+    )
+    vocabulary = criteria.normalise_vocabulary(
+        [skill for (skills,) in rows for skill in (skills or [])]
+    )
+    return criteria.suggest_must_have(
+        job.title,
+        vocabulary,
+        already=list(job.must_have_skills or []),
+        limit=limit,
+    )
