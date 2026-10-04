@@ -25,6 +25,7 @@ import { FeedbackPanel } from './mandate/FeedbackPanel'
 import { QualificationPanel } from './mandate/QualificationPanel'
 import { SourcingPanel } from './mandate/SourcingPanel'
 import { StammdatenPanel } from './mandate/StammdatenPanel'
+import { AssignCandidate } from './mandate/AssignCandidate'
 import { SuchprofilPanel } from './mandate/SuchprofilPanel'
 import type { Mandate, ProcessCard, ProcessStep } from '../data/types'
 
@@ -114,16 +115,34 @@ export function MandateView({
       <FeedbackPanel mandate={mandate} onChanged={onChanged} />
 
       <section className="space-y-4">
-        <SectionHeader
-          id="section-prozesse"
-          title={`Laufende Prozesse · ${mandate.ref} · ${mandate.title}`}
-          tone="coral"
-          hint="Schritte antippen · Bewertung je Mandat"
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <SectionHeader
+              id="section-prozesse"
+              title={`Laufende Prozesse · ${mandate.ref} · ${mandate.title}`}
+              tone="coral"
+              hint="Schritte antippen · Bewertung je Mandat"
+            />
+          </div>
+          {/* Both directions are real work: after a Gespräch you are on the
+              person and think of mandates; working a mandate you are on the
+              search and think of people. Only having the first meant filling
+              a mandate required leaving it. */}
+          {mandate.jobId && (
+            <AssignCandidate
+              jobId={mandate.jobId}
+              assignedCandidateIds={mandate.cards
+                .map((c) => c.candidateId)
+                .filter((id): id is string => Boolean(id))}
+              onAssigned={() => onChanged?.()}
+            />
+          )}
+        </div>
         <div className="space-y-4">
           {mandate.cards.length === 0 ? (
             <Panel className="px-6 py-8 text-center text-[14px] text-cockpit-dim">
-              Für dieses Mandat läuft noch kein Prozess.
+              Noch niemand auf diesem Mandat — „Kandidat zuordnen" setzt den
+              ersten Prozess auf.
             </Panel>
           ) : (
             mandate.cards.map((card) => (

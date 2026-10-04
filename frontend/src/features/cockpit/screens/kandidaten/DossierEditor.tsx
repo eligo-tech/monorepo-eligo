@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Trash2, Save, Ban, AlertCircle } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CandidateDTO, CandidateUpdatePayload, EducationDTO, WorkRoleDTO } from '@/api/types'
@@ -277,18 +277,48 @@ function buildPatch(dto: CandidateDTO, d: Draft): CandidateUpdatePayload {
   return patch
 }
 
+/** Scroll to the box the reader came for and put the cursor in it.
+ *
+ *  „fehlt" in the Kerndaten list is a question; opening a form of forty
+ *  inputs at the top is not an answer. */
+function focusTarget(root: HTMLElement | null, field: string | undefined) {
+  if (!root || !field) return
+  const host = root.querySelector<HTMLElement>(`[data-field="${field}"]`)
+  if (!host) return
+  // Focus FIRST, then centre. Focusing scrolls the box minimally into view —
+  // which on a long form lands it against the bottom edge, half under the
+  // action bar — and centring afterwards puts it where a reader expects it.
+  // One frame later, because the form is still laying out on mount.
+  const control = host.querySelector<HTMLElement>('input, textarea, select')
+  window.setTimeout(() => {
+    control?.focus({ preventScroll: true })
+    // Instant, not smooth: the form re-renders while the fetched record
+    // settles, and an animated scroll gets cancelled half way — leaving the
+    // reader at the top of the form they were sent into.
+    host.scrollIntoView({ block: 'center' })
+  }, 120)
+}
+
 export function DossierEditor({
   dto,
   onCancel,
   onSaved,
+  focusField,
 }: {
   dto: CandidateDTO
   onCancel: () => void
   onSaved: (updated: CandidateDTO) => void
+  /** Open on this field — the one the Kerndaten list said was missing. */
+  focusField?: string
 }) {
   const [d, setD] = useState<Draft>(() => seed(dto))
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const root = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    focusTarget(root.current, focusField)
+  }, [focusField])
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setD((prev) => ({ ...prev, [key]: value }))
@@ -310,9 +340,9 @@ export function DossierEditor({
   }
 
   return (
-    <div>
+    <div ref={root}>
       <Group title="Persönliche Daten">
-        <TextInput label="Vollständiger Name" value={d.full_name} onChange={(v) => set('full_name', v)} />
+        <TextInput label="Vollständiger Name" value={d.full_name} onChange={(v) => set('full_name', v)} name="full_name" />
         <TextInput label="Vorname" value={d.first_name} onChange={(v) => set('first_name', v)} />
         <TextInput label="Nachname" value={d.last_name} onChange={(v) => set('last_name', v)} />
         <TextInput label="Geschlecht" value={d.sex} onChange={(v) => set('sex', v)} />
@@ -322,15 +352,16 @@ export function DossierEditor({
           value={d.date_of_birth}
           onChange={(v) => set('date_of_birth', v)}
           placeholder="TT.MM.JJJJ"
+          name="date_of_birth"
         />
       </Group>
 
       <Group title="Kontakt">
-        <TextInput label="E-Mail" value={d.email} onChange={(v) => set('email', v)} type="email" />
-        <TextInput label="Telefon" value={d.phone} onChange={(v) => set('phone', v)} />
-        <TextInput label="LinkedIn" value={d.linkedin_url} onChange={(v) => set('linkedin_url', v)} />
-        <TextInput label="Xing" value={d.xing_url} onChange={(v) => set('xing_url', v)} />
-        <TextInput label="Straße" value={d.street} onChange={(v) => set('street', v)} />
+        <TextInput label="E-Mail" value={d.email} onChange={(v) => set('email', v)} type="email" name="email" />
+        <TextInput label="Telefon" value={d.phone} onChange={(v) => set('phone', v)} name="phone" />
+        <TextInput label="LinkedIn" value={d.linkedin_url} onChange={(v) => set('linkedin_url', v)} name="linkedin_url" />
+        <TextInput label="Xing" value={d.xing_url} onChange={(v) => set('xing_url', v)} name="xing_url" />
+        <TextInput label="Straße" value={d.street} onChange={(v) => set('street', v)} name="street" />
         <TextInput label="PLZ" value={d.postal_code} onChange={(v) => set('postal_code', v)} />
         <TextInput label="Stadt" value={d.city} onChange={(v) => set('city', v)} />
         <TextInput label="Land" value={d.country} onChange={(v) => set('country', v)} />
@@ -338,7 +369,7 @@ export function DossierEditor({
       </Group>
 
       <Group title="Karriere">
-        <TextInput label="Job-Titel" value={d.current_title} onChange={(v) => set('current_title', v)} />
+        <TextInput label="Job-Titel" value={d.current_title} onChange={(v) => set('current_title', v)} name="current_title" />
         <TextInput
           label="Aktuelles Unternehmen"
           value={d.current_company}
@@ -348,6 +379,7 @@ export function DossierEditor({
           label="Anstellungsform"
           value={d.employment_form}
           onChange={(v) => set('employment_form', v)}
+          name="employment_form"
           options={EMPLOYMENT_FORMS}
         />
         <SelectInput
@@ -356,8 +388,8 @@ export function DossierEditor({
           onChange={(v) => set('willing_to_relocate', v)}
           options={RELOCATE}
         />
-        <TextInput label="Kündigungsfrist" value={d.notice_period} onChange={(v) => set('notice_period', v)} />
-        <TextInput label="Verfügbarkeit" value={d.availability} onChange={(v) => set('availability', v)} />
+        <TextInput label="Kündigungsfrist" value={d.notice_period} onChange={(v) => set('notice_period', v)} name="notice_period" />
+        <TextInput label="Verfügbarkeit" value={d.availability} onChange={(v) => set('availability', v)} name="availability" />
         <TextInput
           label="Berufserfahrung (Jahre)"
           value={d.total_years_experience}
@@ -367,18 +399,21 @@ export function DossierEditor({
           label="Aktuelles Gehalt"
           value={d.current_salary}
           onChange={(v) => set('current_salary', v)}
+          name="current_salary"
           type="number"
         />
         <TextInput
           label="Mindestgehalt"
           value={d.salary_minimum}
           onChange={(v) => set('salary_minimum', v)}
+          name="salary_minimum"
           type="number"
         />
         <TextInput
           label="Wunschgehalt"
           value={d.salary_expectation}
           onChange={(v) => set('salary_expectation', v)}
+          name="salary_expectation"
           type="number"
         />
         <TextInput label="Währung" value={d.salary_currency} onChange={(v) => set('salary_currency', v)} />
@@ -402,7 +437,7 @@ export function DossierEditor({
         />
       </Group>
 
-      <section className="mt-7">
+      <section className="mt-7" data-field="other_process_companies">
         <GroupLabel>Andere aktive Prozesse — bei wem</GroupLabel>
         {/* Names, not prose: the same company named by three candidates is a
             hiring need in this niche, and prose cannot be counted. */}
@@ -411,7 +446,7 @@ export function DossierEditor({
           onChange={(v) => set('other_process_companies', v)}
           placeholder="Firma hinzufügen…"
         />
-        <div className="mt-3">
+        <div className="mt-3" data-field="other_processes">
           <TextArea
             value={d.other_processes}
             onChange={(v) => set('other_processes', v)}
@@ -420,7 +455,7 @@ export function DossierEditor({
         </div>
       </section>
 
-      <section className="mt-7">
+      <section className="mt-7" data-field="industries">
         <GroupLabel>Branchen</GroupLabel>
         <TagInput
           tags={d.industries}
@@ -434,12 +469,12 @@ export function DossierEditor({
         <TagInput tags={d.languages} onChange={(v) => set('languages', v)} placeholder="Sprache hinzufügen…" />
       </section>
 
-      <section className="mt-7">
+      <section className="mt-7" data-field="skills">
         <GroupLabel>Skills</GroupLabel>
         <TagInput tags={d.skills} onChange={(v) => set('skills', v)} placeholder="Skill hinzufügen…" />
       </section>
 
-      <section className="mt-7">
+      <section className="mt-7" data-field="work_history">
         <GroupLabel>Berufserfahrung</GroupLabel>
         <div className="space-y-3">
           {d.work_history.map((role, i) => (
@@ -481,7 +516,7 @@ export function DossierEditor({
         />
       </section>
 
-      <section className="mt-7">
+      <section className="mt-7" data-field="motivation">
         <GroupLabel>Wechselmotivation</GroupLabel>
         <TextArea
           value={d.motivation}
