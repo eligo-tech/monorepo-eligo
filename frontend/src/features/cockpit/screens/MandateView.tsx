@@ -15,6 +15,7 @@ import { ArrowLeft } from 'lucide-react'
 
 import { AssessmentPanel } from '../ui/AssessmentPanel'
 import { HistoryTrail } from '../ui/HistoryTrail'
+import { api } from '@/api/client'
 import { ProcessCardPanel } from '../ui/ProcessCardPanel'
 import { StepEditor } from '../ui/StepEditor'
 import { Panel, SectionHeader } from '../ui/primitives'
@@ -131,6 +132,22 @@ export function MandateView({
                 card={card}
                 onStepClick={
                   card.editable ? (step) => setEditing({ card, step }) : undefined
+                }
+                onAddStep={
+                  card.editable
+                    ? async (label, after) => {
+                        await api.addProcessStep(card.id, { label, after })
+                        onChanged?.()
+                      }
+                    : undefined
+                }
+                onRemoveStep={
+                  card.editable
+                    ? async (step) => {
+                        await api.removeProcessStep(card.id, step.key)
+                        onChanged?.()
+                      }
+                    : undefined
                 }
               >
                 {card.salaryFit && <SalaryVerdict fit={card.salaryFit} />}

@@ -7,12 +7,14 @@ import datetime as dt
 import uuid
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -72,8 +74,20 @@ class ProcessStep(Base, IDMixin, TenantMixin, TimestampMixin):
     application_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    #: One of `PROCESS_STEP_KEYS`, or an extra round ("interviewtermin_3").
+    #: One of `PROCESS_STEP_KEYS`, an extra round ("interviewtermin_3"), or a
+    #: step this process added for itself ("custom_probearbeitstag").
     step_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    #: Set only for a custom step — the canonical nine take their label from
+    #: `steps.py`, so renaming one there renames it everywhere at once.
+    label: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    #: False when this process does not have the step. A removed CANONICAL
+    #: step has to leave a row behind: the nine are a template every process
+    #: starts from, and without the row the template would put it straight
+    #: back. Deactivating also keeps whatever was recorded on it, so adding it
+    #: again is not a loss.
+    active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
     #: Sort position. Extra rounds sit just after the step they follow.
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     #: A date in the future: the appointment. "09.09. um 11 Uhr".

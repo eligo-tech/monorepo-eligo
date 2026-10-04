@@ -413,6 +413,27 @@ export const api = {
       `/pipeline/applications/${applicationId}/steps/${stepKey}`,
       { method: 'PATCH', body: JSON.stringify(body) },
     ),
+  /** Add a step to ONE process, after the step `after` names (null = first).
+   *  The nine are a template; a Probearbeitstag is this process's own. */
+  addProcessStep: (applicationId: string, body: { label: string; after?: string | null }) =>
+    request<ProcessStepDTO>(`/pipeline/applications/${applicationId}/steps`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Take a step out of ONE process. 409 when it already happened — clear the
+   *  entry first; the tracker must not be able to deny the past. */
+  removeProcessStep: async (applicationId: string, stepKey: string): Promise<void> => {
+    const res = await fetch(
+      `${BASE}/pipeline/applications/${applicationId}/steps/${stepKey}`,
+      { method: 'DELETE', headers: await authHeaders() },
+    )
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new ApiError(res.status, body || res.statusText)
+    }
+  },
+
   /** Rank the candidate pool against one job (hard filters → soft ranking). */
   matchJob: (jobId: string, includeRejected = true) =>
     request<MatchResultDTO[]>('/matching/job', {

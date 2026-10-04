@@ -73,11 +73,27 @@ class ProcessStepRead(BaseModel):
     step_key: str
     label: str
     kind: str
+    #: Sort position within THIS process. The nine are spaced by ten so an
+    #: added step can sit between two of them without renumbering.
+    position: int = 0
+    #: True for a step this process added for itself.
+    custom: bool = False
     scheduled_at: dt.datetime | None
     done_at: dt.datetime | None
     #: "open" | "pass" | "out" — the tracker's uncoloured / green / red cell.
     outcome: str
     note: str | None
+
+
+class ProcessStepCreate(BaseModel):
+    """Add one step to one process.
+
+    `after` is the step it follows — chronology as a position, because the
+    new step usually has no date yet. None puts it first.
+    """
+
+    label: str = Field(min_length=1, max_length=60)
+    after: str | None = None
 
 
 class ProcessStepUpdate(BaseModel):
@@ -161,6 +177,11 @@ class ProcessCandidateRead(BaseModel):
     next_appointment: dt.datetime | None
     note: str | None
     steps: list[ProcessStepRead]
+    #: Every step key this process shows, in order: the nine-step template
+    #: merged with what this process added, minus what it removed. The rows
+    #: in `steps` only exist for steps someone has touched, so the order
+    #: cannot be read off them.
+    step_order: list[str] = []
     #: Null until someone has assessed this candidate FOR THIS mandate.
     assessment: AssessmentRead | None = None
     salary_fit: SalaryFitRead | None = None

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
@@ -15,6 +15,7 @@ from app.domain.pipeline.schemas import (
     AssessmentRead,
     AssessmentWrite,
     ProcessJobRead,
+    ProcessStepCreate,
     ProcessStepRead,
     ProcessStepUpdate,
     ApplicationCreate,
@@ -121,6 +122,63 @@ async def processes(
     ]
 
 
+@router.post(
+    "/applications/{application_id}/steps",
+    response_model=ProcessStepRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_step(
+    application_id: uuid.UUID,
+    payload: ProcessStepCreate,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> ProcessStepRead:
+    """Add a step to this one process, after the step named in `after`."""
+    try:
+        row = await service.add_step(
+            db,
+            tenant_id=actor.tenant_id,
+            application_id=application_id,
+            label=payload.label,
+            after=payload.after,
+            actor=actor.name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return _step_read(row)
+
+
+@router.delete(
+    "/applications/{application_id}/steps/{step_key}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_step(
+    application_id: uuid.UUID,
+    step_key: str,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Take a step out of this one process.
+
+    409 when the step already happened: a date and a verdict are a record of
+    something that took place, and the tracker must not be able to deny it.
+    Clear the entry first, then remove the step.
+    """
+    try:
+        await service.remove_step(
+            db,
+            tenant_id=actor.tenant_id,
+            application_id=application_id,
+            step_key=step_key,
+            actor=actor.name,
+        )
+    except service.StepHasHappened as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.patch(
     "/applications/{application_id}/steps/{step_key}", response_model=ProcessStepRead
 )
@@ -147,11 +205,18 @@ async def set_step(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return _step_read(row)
+
+
+def _step_read(row) -> ProcessStepRead:
+    """One wire shape for a step, so the two write paths cannot disagree."""
     return ProcessStepRead.model_validate(
         {
             "step_key": row.step_key,
-            "label": steps_mod.label_for(row.step_key),
+            "label": steps_mod.label_for(row.step_key, row.label),
             "kind": steps_mod.kind_for(row.step_key),
+            "position": row.position,
+            "custom": steps_mod.is_custom(row.step_key),
             "scheduled_at": service.as_utc(row.scheduled_at),
             "done_at": service.as_utc(row.done_at),
             "outcome": row.outcome,

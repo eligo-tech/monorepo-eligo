@@ -163,14 +163,24 @@ async def board(
 
 
 async def list_steps(
-    session: AsyncSession, *, tenant_id: uuid.UUID, application_id: uuid.UUID
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    application_id: uuid.UUID,
+    include_removed: bool = False,
 ) -> list[ProcessStep]:
-    rows = await session.execute(
-        select(ProcessStep).where(
-            ProcessStep.tenant_id == tenant_id,
-            ProcessStep.application_id == application_id,
-        )
+    """The steps of one process, in order.
+
+    Removed steps are left out by default — they are rows only so the nine-step
+    template knows not to put them back (see `ProcessStep.active`).
+    """
+    stmt = select(ProcessStep).where(
+        ProcessStep.tenant_id == tenant_id,
+        ProcessStep.application_id == application_id,
     )
+    if not include_removed:
+        stmt = stmt.where(ProcessStep.active.is_(True))
+    rows = await session.execute(stmt)
     return sorted(rows.scalars().all(), key=lambda s: (s.position, s.step_key))
 
 
@@ -258,6 +268,9 @@ async def set_step(
             position=steps_mod.position_for(step_key),
         )
         session.add(row)
+    # Ticking a step the process had removed is how you put it back — the
+    # alternative is a write that silently lands on an invisible row.
+    row.active = True
     if scheduled_at is not None:
         row.scheduled_at = scheduled_at
     if done_at is not None:
@@ -294,6 +307,194 @@ async def set_step(
     await session.commit()
     await session.refresh(row)
     return row
+
+
+async def add_step(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    application_id: uuid.UUID,
+    label: str,
+    after: str | None = None,
+    actor: str = "recruiter",
+) -> ProcessStep:
+    """Add a step to ONE process, positioned after an existing one.
+
+    The nine are what every placement shares. A Probearbeitstag, an Assessment
+    Center, a second site visit are real and common, and a fixed checklist
+    sends the recruiter back to the spreadsheet for exactly the row that does
+    not fit. `after` is a step key; None puts the new step first.
+
+    Chronology is a position, not a date: the step may well have no date yet,
+    and the order is what makes the next action readable.
+    """
+    label = (label or "").strip()
+    if not label:
+        raise ValueError("label required")
+    if len(label) > 60:
+        raise ValueError("label too long")
+
+    app = await get_application(
+        session, tenant_id=tenant_id, application_id=application_id
+    )
+    if app is None:
+        raise ValueError("application not found")
+
+    existing = await list_steps(
+        session, tenant_id=tenant_id, application_id=application_id,
+        include_removed=True,
+    )
+    taken = {s.step_key for s in existing}
+    key = steps_mod.custom_key(label, taken)
+
+    row = ProcessStep(
+        tenant_id=tenant_id,
+        application_id=application_id,
+        step_key=key,
+        label=label,
+        position=_position_after(existing, after),
+        active=True,
+    )
+    session.add(row)
+    await session.flush()
+    _append_history(
+        app,
+        {
+            "at": dt.datetime.now(dt.UTC).isoformat(),
+            "event": "step_added",
+            "step": key,
+            "label": label,
+            "after": after,
+            "actor": actor,
+        },
+    )
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+async def remove_step(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    application_id: uuid.UUID,
+    step_key: str,
+    actor: str = "recruiter",
+) -> None:
+    """Take a step out of ONE process.
+
+    A step that already HAPPENED is not removable: a date and a verdict are
+    the record of something that took place, and deleting them would make the
+    tracker lie about the past. Untick it first — that is an edit of a claim,
+    which the step editor already does and the history already records.
+    """
+    app = await get_application(
+        session, tenant_id=tenant_id, application_id=application_id
+    )
+    if app is None:
+        raise ValueError("application not found")
+
+    row = await session.scalar(
+        select(ProcessStep).where(
+            ProcessStep.tenant_id == tenant_id,
+            ProcessStep.application_id == application_id,
+            ProcessStep.step_key == step_key,
+        )
+    )
+    if row is not None and (row.done_at is not None or row.outcome != "open"):
+        raise StepHasHappened(step_key)
+
+    if row is None:
+        # A canonical step nobody has touched: the row exists only to say the
+        # template must skip it from now on.
+        if not steps_mod.is_known(step_key) or steps_mod.is_custom(step_key):
+            raise ValueError(f"unknown step {step_key}")
+        row = ProcessStep(
+            tenant_id=tenant_id,
+            application_id=application_id,
+            step_key=step_key,
+            position=steps_mod.position_for(step_key),
+        )
+        session.add(row)
+    if steps_mod.is_custom(step_key):
+        # Nothing would put it back, so there is nothing to suppress.
+        await session.delete(row)
+    else:
+        row.active = False
+    await session.flush()
+
+    current = await list_steps(
+        session, tenant_id=tenant_id, application_id=application_id
+    )
+    app.stage = derive_stage(current)
+    _append_history(
+        app,
+        {
+            "at": dt.datetime.now(dt.UTC).isoformat(),
+            "event": "step_removed",
+            "step": step_key,
+            "actor": actor,
+        },
+    )
+    await session.commit()
+
+
+class StepHasHappened(Exception):
+    """Raised when a removal would delete something that took place."""
+
+    def __init__(self, step_key: str) -> None:
+        super().__init__(
+            f"{step_key} hat stattgefunden — erst den Eintrag löschen, dann den Schritt"
+        )
+        self.step_key = step_key
+
+
+def _ordered_positions(rows: list[ProcessStep]) -> list[tuple[int, int, str]]:
+    """(position, tie, key) for every step this process shows.
+
+    ONE scale for everything: the canonical nine keep the template positions
+    from `steps.py` whether or not they have a row yet, and an added step gets
+    a position between two of them. Nothing is ever renumbered — a renumber
+    would move the canonical rows that exist onto a different scale from the
+    canonical steps that do not, which is precisely how an added step ends up
+    rendered one slot late.
+    """
+    removed = {r.step_key for r in rows if not r.active}
+    extra = [r for r in rows if r.active and r.step_key not in steps_mod.STEP_BY_KEY]
+    canonical = [
+        (steps_mod.POSITION[k], i, k)
+        for i, k in enumerate(steps_mod.PROCESS_STEP_KEYS)
+        if k not in removed
+    ]
+    # Added steps lose every tie, so inserting after X puts the new step
+    # between X and whatever follows, never before X itself.
+    return sorted(
+        canonical + [(r.position, 1000 + i, r.step_key) for i, r in enumerate(extra)]
+    )
+
+
+def _process_order(rows: list[ProcessStep]) -> list[str]:
+    """The step keys this process shows, in order."""
+    return [k for _, _, k in _ordered_positions(rows)]
+
+
+def _position_after(rows: list[ProcessStep], after: str | None) -> int:
+    """A position that sorts straight after `after`, on the template scale.
+
+    The template leaves gaps of ten, so the midpoint to the next step is
+    free the first few times; past that the new step shares a position with
+    its neighbour and the insertion-order tie-break keeps it stable.
+    """
+    order = _ordered_positions(rows)
+    if after is None:
+        first = order[0][0] if order else steps_mod.POSITION[steps_mod.PROCESS_STEP_KEYS[0]]
+        return first - 5
+    index = next((i for i, (_, _, key) in enumerate(order) if key == after), None)
+    if index is None:
+        raise ValueError(f"unknown step {after}")
+    anchor = order[index][0]
+    following = order[index + 1][0] if index + 1 < len(order) else anchor + 10
+    return anchor + max(1, (following - anchor) // 2)
 
 
 def _assessment_dict(row: ApplicationAssessment | None) -> dict | None:
@@ -416,6 +617,8 @@ async def processes(
     apps = await list_applications(session, tenant_id=tenant_id)
     if not apps:
         return []
+    # Removed rows come along: the client merges the nine-step template with
+    # what this process changed, so it has to be told what was taken out.
     all_steps = (
         await session.execute(
             select(ProcessStep).where(
@@ -424,9 +627,12 @@ async def processes(
             )
         )
     ).scalars()
+    all_rows: dict[uuid.UUID, list[ProcessStep]] = {}
     by_app: dict[uuid.UUID, list[ProcessStep]] = {}
     for step in all_steps:
-        by_app.setdefault(step.application_id, []).append(step)
+        all_rows.setdefault(step.application_id, []).append(step)
+        if step.active:
+            by_app.setdefault(step.application_id, []).append(step)
 
     assessments = {
         a.application_id: a
@@ -507,10 +713,18 @@ async def processes(
                     default=None,
                 ),
                 "note": app.notes,
+                # The order THIS process has: the nine-step template merged
+                # with what it added and minus what it removed. Computed once,
+                # here — the client re-deriving it from positions is how the
+                # two orders drift, and a step shown in the wrong place is
+                # worse than one not shown at all.
+                "step_order": _process_order(all_rows.get(app.id, [])),
                 "steps": [
                     {
                         "step_key": s.step_key,
-                        "label": steps_mod.label_for(s.step_key),
+                        "label": steps_mod.label_for(s.step_key, s.label),
+                        "position": s.position,
+                        "custom": steps_mod.is_custom(s.step_key),
                         "kind": steps_mod.kind_for(s.step_key),
                         "scheduled_at": as_utc(s.scheduled_at),
                         "done_at": as_utc(s.done_at),
