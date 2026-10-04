@@ -214,7 +214,7 @@ class HubCompanyLink(Base, IDMixin, TenantMixin, TimestampMixin):
     relationship: Mapped[str] = mapped_column(
         String(20), default="watching", nullable=False
     )
-    note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class HubJobPosting(Base, IDMixin, TimestampMixin):

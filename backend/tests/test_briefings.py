@@ -127,3 +127,30 @@ async def test_the_date_defaults_to_now_but_can_be_given() -> None:
         assert dt.datetime.fromisoformat(
             back_then["occurred_at"].replace("Z", "+00:00")
         ) < dt.datetime.now(dt.UTC)
+
+
+async def test_a_whole_transcript_fits() -> None:
+    """The input people will actually paste.
+
+    `summary` was capped at 5,000 characters by a validator while the column
+    behind it is TEXT. A Qualifikationsgespräch transcript is longer than
+    that, and it is the single most valuable thing anyone types into this
+    product — so the cap would have been hit by exactly the note worth
+    keeping, and hit as a 422 after the writing was done.
+    """
+    async with _api() as c:
+        job_id, _ = await _job(c)
+        transcript = (
+            "Interviewer: Erzählen Sie von Ihrer Architekturverantwortung.\n"
+            "Kandidat: Gerne. Ich verantworte seit 2018 die Architektur …\n"
+        ) * 400  # ~44k characters, a realistic hour-long call
+        assert len(transcript) > 40_000
+
+        r = await c.post(
+            f"/api/v1/jobs/{job_id}/briefings",
+            json={"interaction_type": "briefing", "summary": transcript},
+        )
+        assert r.status_code == 201, r.text[:200]
+
+        [row] = (await c.get(f"/api/v1/jobs/{job_id}/briefings")).json()
+        assert row["summary"] == transcript, "stored whole, not truncated"
