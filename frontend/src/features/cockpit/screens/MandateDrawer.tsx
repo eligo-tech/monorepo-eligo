@@ -16,34 +16,14 @@
 // while 76 mandate titles were truncated inside 248 pixels — the width was
 // being spent on the margin instead of on the names.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
+import { useRemembered } from '@/hooks/useRemembered'
 import type { Mandate } from '../data/types'
 
 const STORAGE_KEY = 'eligo.mandateDrawer.open'
-
-/** Remembered per browser; a closed panel stays closed. Storage can throw in
- *  a private window, so the default survives that rather than the screen. */
-function useRemembered(key: string, fallback: boolean) {
-  const [value, setValue] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem(key)
-      return stored === null ? fallback : stored === 'true'
-    } catch {
-      return fallback
-    }
-  })
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, String(value))
-    } catch {
-      /* private window — the choice simply does not persist */
-    }
-  }, [key, value])
-  return [value, setValue] as const
-}
 
 function matches(mandate: Mandate, query: string): boolean {
   if (!query) return true
