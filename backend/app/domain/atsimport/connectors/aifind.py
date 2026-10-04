@@ -1,4 +1,12 @@
-"""aiFind (panam) — importing a recruiter's OWN book of business.
+"""aiFind — ONE connector behind the ATS seam, not the ATS.
+
+A customer's current system, nothing more: everything specific to it lives
+in this file, and the rest of the product sees only `AtsConnector` and the
+neutral records of `connectors/base.py`. Adding the next system is a module
+beside this one plus a line in `factory.py`; removing this one when the
+customer leaves it should not touch anything else.
+
+Where the imported data lands is the design decision worth repeating.
 
 Where this data lands is the whole design question, and it is not the hub.
 
@@ -26,7 +34,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import dataclasses
 import hashlib
 import html
 import re
@@ -34,6 +41,16 @@ import secrets
 import urllib.parse
 
 import httpx
+
+from app.domain.atsimport.connectors.base import (
+    AtsExport,
+    Credentials,
+    SourcedCandidate,
+    SourcedCompany,
+    SourcedJob,
+    SourcedManager,
+    SourcedNote,
+)
 
 ISSUER = "https://kc.apps.aifind.de/auth/realms/panam"
 CLIENT_ID = "aifind-ui"
@@ -185,98 +202,8 @@ DEFAULT_VARIABLES: dict[str, dict] = {
 # it would invent semantics rather than import data.
 
 
-@dataclasses.dataclass(frozen=True)
-class AiFindNote:
-    """One dated entry from the contact history — the relationship itself."""
-
-    external_id: str
-    category: str | None
-    text: str
-    created_at: str | None
 
 
-@dataclasses.dataclass(frozen=True)
-class AiFindManager:
-    external_id: str
-    full_name: str
-    job_title: str | None = None
-    company_external_id: str | None = None
-    # --- detail only --------------------------------------------------------
-    first_name: str | None = None
-    last_name: str | None = None
-    department: str | None = None
-    industry: str | None = None
-    sex: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    code: str | None = None
-    looks_for: str | None = None
-    street: str | None = None
-    postal_code: str | None = None
-    city: str | None = None
-    country: str | None = None
-    last_contact_at: str | None = None
-    linkedin_url: str | None = None
-    xing_url: str | None = None
-    facebook_url: str | None = None
-    skills: list[str] = dataclasses.field(default_factory=list)
-    tags: list[str] = dataclasses.field(default_factory=list)
-    notes: list[AiFindNote] = dataclasses.field(default_factory=list)
-
-
-@dataclasses.dataclass(frozen=True)
-class AiFindCompany:
-    external_id: str
-    name: str
-
-
-@dataclasses.dataclass(frozen=True)
-class AiFindCandidate:
-    """A candidate. The list screen fills the first few; detail fills the rest.
-
-    `skills` is the field that matters and the reason the detail pass exists: a
-    hard filter cannot filter on a job title, and the list query returns no
-    skills at all. With it, 391 people become matchable against the corpus.
-    """
-
-    external_id: str
-    full_name: str
-    job_title: str | None = None
-    employment: str | None = None
-    postal_code: str | None = None
-    # --- detail only --------------------------------------------------------
-    first_name: str | None = None
-    last_name: str | None = None
-    sex: str | None = None
-    name_prefix: str | None = None
-    date_of_birth: str | None = None
-    email: str | None = None
-    xing_url: str | None = None
-    current_company: str | None = None
-    industry: str | None = None
-    street: str | None = None
-    city: str | None = None
-    country: str | None = None
-    skills: list[str] = dataclasses.field(default_factory=list)
-
-
-@dataclasses.dataclass(frozen=True)
-class AiFindJob:
-    """One mandate, normalized. Company and manager are optional by type.
-
-    Every one of the 37 open records carries both, but a mandate logged before
-    the client contact is known is an ordinary state in a CRM, and an importer
-    that assumes otherwise breaks on the first one.
-    """
-
-    external_id: str
-    title: str
-    is_open: bool
-    priority: str | None
-    employment: str | None
-    company: AiFindCompany | None
-    manager: AiFindManager | None
-    owner: str | None
 
 
 def _name(first: object, last: object) -> str:
@@ -313,16 +240,16 @@ def _hits(payload: dict, operation: str) -> list[dict]:
     return ((payload.get("data") or {}).get(operation) or {}).get("hits") or []
 
 
-def parse_companies(payload: dict) -> list[AiFindCompany]:
+def parse_companies(payload: dict) -> list[SourcedCompany]:
     out = []
     for hit in _hits(payload, "companies"):
         name = " ".join(str(hit.get("name") or "").split())
         if hit.get("id") and name:
-            out.append(AiFindCompany(external_id=str(hit["id"]), name=name))
+            out.append(SourcedCompany(external_id=str(hit["id"]), name=name))
     return out
 
 
-def parse_managers(payload: dict) -> list[AiFindManager]:
+def parse_managers(payload: dict) -> list[SourcedManager]:
     out = []
     for hit in _hits(payload, "managers"):
         full = _name(hit.get("first_name"), hit.get("last_name"))
@@ -332,7 +259,7 @@ def parse_managers(payload: dict) -> list[AiFindManager]:
             continue
         company = hit.get("company") or {}
         out.append(
-            AiFindManager(
+            SourcedManager(
                 external_id=str(hit["id"]),
                 full_name=full,
                 job_title=_scalar(hit.get("job_title")),
@@ -344,7 +271,7 @@ def parse_managers(payload: dict) -> list[AiFindManager]:
     return out
 
 
-def parse_candidates(payload: dict) -> list[AiFindCandidate]:
+def parse_candidates(payload: dict) -> list[SourcedCandidate]:
     out = []
     for hit in _hits(payload, "candidates"):
         full = _name(hit.get("first_name"), hit.get("last_name"))
@@ -352,7 +279,7 @@ def parse_candidates(payload: dict) -> list[AiFindCandidate]:
             continue
         address = hit.get("address") or {}
         out.append(
-            AiFindCandidate(
+            SourcedCandidate(
                 external_id=str(hit["id"]),
                 full_name=full,
                 job_title=_scalar(hit.get("job_title")),
@@ -363,9 +290,9 @@ def parse_candidates(payload: dict) -> list[AiFindCandidate]:
     return out
 
 
-def parse_jobs(payload: dict) -> list[AiFindJob]:
+def parse_jobs(payload: dict) -> list[SourcedJob]:
     """GraphQL payload → normalized mandates. Pure: no network, no session."""
-    jobs: list[AiFindJob] = []
+    jobs: list[SourcedJob] = []
     for hit in _hits(payload, "jobs"):
         if not hit.get("id") or not (hit.get("title") or "").strip():
             # An untitled mandate is not a mandate. Skipping beats importing a
@@ -375,14 +302,14 @@ def parse_jobs(payload: dict) -> list[AiFindJob]:
         manager = hit.get("manager") or {}
         manager_name = _name(manager.get("first_name"), manager.get("last_name"))
         jobs.append(
-            AiFindJob(
+            SourcedJob(
                 external_id=str(hit["id"]),
                 title=" ".join(str(hit["title"]).split()),
                 is_open=bool(hit.get("isOpen")),
                 priority=_scalar(hit.get("priority")),
                 employment=_scalar(hit.get("employment")),
                 company=(
-                    AiFindCompany(
+                    SourcedCompany(
                         external_id=str(company["id"]),
                         name=" ".join(str(company.get("name") or "").split()),
                     )
@@ -390,7 +317,7 @@ def parse_jobs(payload: dict) -> list[AiFindJob]:
                     else None
                 ),
                 manager=(
-                    AiFindManager(
+                    SourcedManager(
                         external_id=str(manager["id"]),
                         full_name=manager_name,
                         company_external_id=(
@@ -418,7 +345,7 @@ def _date_only(value: object) -> str | None:
     return text.split("T")[0] if text else None
 
 
-def parse_candidate_detail(payload: dict) -> AiFindCandidate | None:
+def parse_candidate_detail(payload: dict) -> SourcedCandidate | None:
     """One candidate's full record. Pure, like every other parser here."""
     hit = (payload.get("data") or {}).get("candidate")
     if not hit or not hit.get("id"):
@@ -428,7 +355,7 @@ def parse_candidate_detail(payload: dict) -> AiFindCandidate | None:
         return None
     address = hit.get("address") or {}
     skills = hit.get("skills") or []
-    return AiFindCandidate(
+    return SourcedCandidate(
         external_id=str(hit["id"]),
         full_name=full,
         job_title=_scalar(hit.get("job_title")),
@@ -484,7 +411,7 @@ def _first(values: object, key: str) -> str | None:
     return _scalar(first.get(key)) if isinstance(first, dict) else None
 
 
-def parse_manager_detail(payload: dict, notes: list | None = None) -> AiFindManager | None:
+def parse_manager_detail(payload: dict, notes: list | None = None) -> SourcedManager | None:
     """One manager's full record, with their conversation history attached."""
     hit = (payload.get("data") or {}).get("manager")
     if not hit or not hit.get("id"):
@@ -493,7 +420,7 @@ def parse_manager_detail(payload: dict, notes: list | None = None) -> AiFindMana
     if not full or is_tombstone(full):
         return None
     company = hit.get("company") or {}
-    return AiFindManager(
+    return SourcedManager(
         external_id=str(hit["id"]),
         full_name=full,
         job_title=_scalar(hit.get("job_title")),
@@ -525,7 +452,7 @@ def parse_manager_detail(payload: dict, notes: list | None = None) -> AiFindMana
     )
 
 
-def parse_notes(payload: dict) -> list[AiFindNote]:
+def parse_notes(payload: dict) -> list[SourcedNote]:
     """Contact history. An empty note is dropped — a dated blank is not a record."""
     node = (payload.get("data") or {}).get("contactNotes") or {}
     out = []
@@ -534,7 +461,7 @@ def parse_notes(payload: dict) -> list[AiFindNote]:
         if not note.get("id") or not text:
             continue
         out.append(
-            AiFindNote(
+            SourcedNote(
                 external_id=str(note["id"]),
                 category=_scalar(note.get("category")),
                 text=text,
@@ -665,7 +592,7 @@ async def fetch_candidate_details(
     external_ids: list[str],
     concurrency: int = 4,
     on_progress=None,
-) -> list[AiFindCandidate]:
+) -> list[SourcedCandidate]:
     """One detail call per candidate, paced.
 
     The source has no bulk detail query — the list returns six fields and
@@ -678,7 +605,7 @@ async def fetch_candidate_details(
     is a gap; losing the run because of one is an outage.
     """
     semaphore = asyncio.Semaphore(concurrency)
-    results: list[AiFindCandidate] = []
+    results: list[SourcedCandidate] = []
 
     async def one(external_id: str) -> None:
         async with semaphore:
@@ -715,7 +642,7 @@ async def fetch_manager_details(
     external_ids: list[str],
     concurrency: int = 4,
     with_notes: bool = True,
-) -> list[AiFindManager]:
+) -> list[SourcedManager]:
     """Detail plus conversation history, one manager at a time, paced.
 
     Two calls per manager when notes are wanted — 650 contacts is 1,300 requests
@@ -726,7 +653,7 @@ async def fetch_manager_details(
     gap, losing the run because of one is an outage.
     """
     semaphore = asyncio.Semaphore(concurrency)
-    results: list[AiFindManager] = []
+    results: list[SourcedManager] = []
 
     async def one(external_id: str) -> None:
         async with semaphore:
@@ -745,7 +672,7 @@ async def fetch_manager_details(
                 if body.get("errors"):
                     return
 
-                notes: list[AiFindNote] = []
+                notes: list[SourcedNote] = []
                 if with_notes:
                     try:
                         response = await client.post(
@@ -771,3 +698,54 @@ async def fetch_manager_details(
 
     await asyncio.gather(*(one(i) for i in external_ids))
     return results
+
+
+class AiFindConnector:
+    """The seam's implementation for aiFind.
+
+    `fetch` is the only method the rest of the product calls. The two detail
+    passes are what make an import worth running — the list calls carry no
+    skills, no phone numbers and no notes — and also the slow part, so a
+    caller can skip them.
+    """
+
+    key = "aifind"
+    label = "aiFind (ATS)"
+    needs = ("username", "secret")
+
+    async def fetch(
+        self, credentials: Credentials, *, with_details: bool = True
+    ) -> AtsExport:
+        if not credentials.username or not credentials.secret:
+            raise ValueError("aiFind benötigt E-Mail und Passwort")
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            token = await fetch_access_token(
+                client, username=credentials.username, password=credentials.secret
+            )
+            export = AtsExport(
+                companies=await fetch_all(client, token=token, operation="companies"),
+                managers=await fetch_all(client, token=token, operation="managers"),
+                jobs=await fetch_all(client, token=token, operation="jobs"),
+                candidates=await fetch_all(client, token=token, operation="candidates"),
+            )
+            if not with_details:
+                return export
+
+            # Keep the list record for anyone a detail call lost, so a partial
+            # detail pass never shrinks the import.
+            detailed = await fetch_manager_details(
+                client, token=token,
+                external_ids=[m.external_id for m in export.managers],
+            )
+            by_manager = {m.external_id: m for m in export.managers}
+            by_manager.update({m.external_id: m for m in detailed})
+            export.managers = list(by_manager.values())
+
+            detailed_candidates = await fetch_candidate_details(
+                client, token=token,
+                external_ids=[c.external_id for c in export.candidates],
+            )
+            by_candidate = {c.external_id: c for c in export.candidates}
+            by_candidate.update({c.external_id: c for c in detailed_candidates})
+            export.candidates = list(by_candidate.values())
+        return export

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import secrets
 from app.core.auth import Actor, get_current_tenant, get_ingest_tenant, require_admin
 from app.core.database import get_db
+from app.domain.atsimport import factory
 from app.domain.tenantsources import runner, service
 from app.domain.tenantsources.schemas import (
     ImportRequestRead,
@@ -42,7 +43,13 @@ async def capabilities(
     accepts a password and then refuses it is worse than one that explains
     itself up front.
     """
-    return {"kinds": list(service.KINDS), "secrets_configured": secrets.configured()}
+    return {
+        "kinds": list(service.kinds()),
+        # What each one needs, so the form asks for exactly that and the UI
+        # does not have to know any system by name.
+        "sources": factory.describe(),
+        "secrets_configured": secrets.configured(),
+    }
 
 
 @router.put("/{kind}", response_model=TenantSourceRead)

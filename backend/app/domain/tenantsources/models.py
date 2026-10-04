@@ -1,7 +1,7 @@
 """A workspace's own data sources — where ITS book of business comes from.
 
 Onboarding a customer used to mean an operator running
-`scripts/aifind_import --tenant <uuid>` with that customer's ATS password in
+`scripts/ats_import --tenant <uuid>` with that customer's ATS password in
 their shell. That does not scale past one customer and it puts somebody else's
 credential in somebody's terminal history.
 
@@ -27,13 +27,13 @@ class TenantSource(Base, IDMixin, TenantMixin, TimestampMixin):
 
     __tablename__ = "tenant_sources"
     __table_args__ = (
-        # One configuration per source per workspace: two aiFind accounts for
-        # the same tenant would import two books into one record with no way
-        # to tell them apart afterwards.
+        # One configuration per source per workspace: two accounts on the
+        # same system under one tenant would import two books into one record
+        # with no way to tell them apart afterwards.
         UniqueConstraint("tenant_id", "kind", name="uq_tenant_source_kind"),
     )
 
-    #: Which source. "aifind" today; the column is open because the next one
+    #: Which source — a key from the connector registry. Open by design: the next one
     #: (a different ATS, a CSV drop) changes nothing else here.
     kind: Mapped[str] = mapped_column(String(40), nullable=False)
     label: Mapped[str | None] = mapped_column(String(160), nullable=True)

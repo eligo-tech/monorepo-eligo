@@ -85,7 +85,7 @@ The conditions that make it hold:
 
 1. **Public source only.** The value must arrive through scheduled ingestion
    from a public source: job ad, partner job board, career page, Impressum.
-   Anything a tenant brought in (ATS/aiFind imports, CVs, mailbox, notes,
+   Anything a tenant brought in (ATS imports, CVs, mailbox, notes,
    recruiter edits) is tenant data and never enters `hub_*` (RULE 3). This
    includes a person a tenant adopted into `managers`; that row does not flow
    back.
