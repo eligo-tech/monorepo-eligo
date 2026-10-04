@@ -35,15 +35,20 @@ export function TextInput({
   onChange,
   placeholder,
   type = 'text',
+  name,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
   type?: 'text' | 'email' | 'number' | 'password'
+  /** The record field this box writes. Lets a caller scroll to it and focus
+   *  it — "fehlt" in the Kerndaten list should land you in the box, not at
+   *  the top of a form with forty of them. */
+  name?: string
 }) {
   return (
-    <label className="block min-w-0">
+    <label className="block min-w-0" data-field={name}>
       <FieldLabel>{label}</FieldLabel>
       <input
         type={type}
@@ -62,14 +67,16 @@ export function SelectInput({
   value,
   onChange,
   options,
+  name,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string }[]
+  name?: string
 }) {
   return (
-    <label className="block min-w-0">
+    <label className="block min-w-0" data-field={name}>
       <FieldLabel>{label}</FieldLabel>
       <select value={value} onChange={(e) => onChange(e.target.value)} className={FIELD}>
         {options.map((o) => (

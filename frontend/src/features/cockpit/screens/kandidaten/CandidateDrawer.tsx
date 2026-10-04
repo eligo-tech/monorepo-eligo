@@ -60,6 +60,8 @@ export function CandidateDrawer({
   const [cvState, setCvState] = useState<'loading' | 'ready' | 'missing'>('loading')
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
+  // Which box the reader asked for, when they came from a "fehlt" row.
+  const [focusField, setFocusField] = useState<string | undefined>(undefined)
   const [dto, setDto] = useState<CandidateDTO | null>(null)
   const [dtoError, setDtoError] = useState(false)
 
@@ -80,9 +82,10 @@ export function CandidateDrawer({
     [candidate.id, runsKey],
   )
 
-  async function startEdit() {
+  async function startEdit(field?: string) {
     setExpanded(true)
     setEditing(true)
+    setFocusField(field)
     setDtoError(false)
     if (!dto) {
       try {
@@ -238,7 +241,7 @@ export function CandidateDrawer({
             {!editing && (
               <div className="ml-auto flex items-center gap-2">
                 <Button
-                  onClick={startEdit}
+                  onClick={() => void startEdit()}
                   className="whitespace-nowrap px-2.5 py-1 text-[12px]"
                   title="Felder bearbeiten"
                 >
@@ -269,14 +272,19 @@ export function CandidateDrawer({
                 <Placeholder icon={FileWarning}>
                   Profil konnte nicht geladen werden.
                   <button
-                    onClick={startEdit}
+                    onClick={() => void startEdit(focusField)}
                     className="mt-2 block w-full text-mint-400 hover:underline"
                   >
                     Erneut versuchen
                   </button>
                 </Placeholder>
               ) : dto ? (
-                <DossierEditor dto={dto} onCancel={() => setEditing(false)} onSaved={handleSaved} />
+                <DossierEditor
+                  dto={dto}
+                  focusField={focusField}
+                  onCancel={() => setEditing(false)}
+                  onSaved={handleSaved}
+                />
               ) : (
                 <Placeholder>Profil wird geladen…</Placeholder>
               )
@@ -289,7 +297,7 @@ export function CandidateDrawer({
                 <div className="mb-6 border-b border-cockpit-line pb-5">
                   <QualificationChecklist
                     candidate={candidate}
-                    onEdit={() => void startEdit()}
+                    onEdit={(field) => void startEdit(field)}
                   />
                 </div>
 
