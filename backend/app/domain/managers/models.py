@@ -128,8 +128,13 @@ class ManagerInteraction(Base, IDMixin, TenantMixin, TimestampMixin):
 
     __tablename__ = "manager_interactions"
 
-    manager_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("managers.id", ondelete="CASCADE"), nullable=False, index=True
+    #: Nullable since migration 0034: a BRIEFING belongs to the mandate, and
+    #: a mandate whose contact is not recorded yet is an ordinary state — the
+    #: GE example literally reads "Kein Ansprechpartner hinterlegt". Requiring
+    #: a contact first would mean the note does not get written at all, and an
+    #: unwritten briefing is worse than one without a name on it.
+    manager_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("managers.id", ondelete="CASCADE"), nullable=True, index=True
     )
     candidate_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("candidates.id"), nullable=True, index=True

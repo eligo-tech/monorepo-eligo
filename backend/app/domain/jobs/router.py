@@ -9,6 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
+from app.domain.managers import service as managers_service
+from app.domain.managers.schemas import (
+    ManagerInteractionCreate,
+    ManagerInteractionRead,
+)
 from app.domain.jobs import service
 from app.domain.jobs.schemas import (
     CriteriaSuggestion,
@@ -66,6 +71,48 @@ async def criteria_suggestions(
         )
         for s in await service.criteria_suggestions(db, tenant_id=tenant_id, job=job)
     ]
+
+
+@router.get(
+    "/{job_id}/briefings", response_model=list[ManagerInteractionRead]
+)
+async def list_briefings(
+    job_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[ManagerInteractionRead]:
+    """What was said about this mandate, newest first.
+
+    Phase 2 of the Prozess-Doku is a conversation, and until now the product
+    had nowhere to put it: the Suchprofil fields held the OUTCOME of the
+    briefing and nothing held the briefing.
+    """
+    rows = await managers_service.list_for_job(db, tenant_id=tenant_id, job_id=job_id)
+    return [ManagerInteractionRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/{job_id}/briefings",
+    response_model=ManagerInteractionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_briefing(
+    job_id: uuid.UUID,
+    payload: ManagerInteractionCreate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerInteractionRead:
+    """Write down a briefing call. The contact is optional — see 0034."""
+    job = await service.get_job(db, tenant_id=tenant_id, job_id=job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+    payload = payload.model_copy(update={"job_id": job_id})
+    row = await managers_service.log_interaction(
+        db, tenant_id=tenant_id, manager_id=payload.manager_id, payload=payload
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
+    return ManagerInteractionRead.model_validate(row)
 
 
 @router.post("", response_model=JobRead, status_code=status.HTTP_201_CREATED)

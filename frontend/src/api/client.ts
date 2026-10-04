@@ -20,6 +20,9 @@ import type {
   ProjectDetailDTO,
   ProjectCandidateDTO,
   CompanyContactsDTO,
+  AssessmentDTO,
+  AssessmentWriteDTO,
+  BriefingDTO,
   CriteriaSuggestionDTO,
   JobDTO,
   MatchResultDTO,
@@ -401,6 +404,34 @@ export const api = {
   /** "Laufende Prozesse": mandates with their candidates and the nine steps,
    *  as the recruiter's tracker records them. */
   processes: () => request<ProcessJobDTO[]>('/pipeline/processes'),
+
+  /** What was said ABOUT a mandate — the briefing call and what followed. */
+  jobBriefings: (jobId: string) =>
+    request<BriefingDTO[]>(`/jobs/${jobId}/briefings`),
+
+  /** Write down a briefing. The contact is optional: the conversation that
+   *  defines a mandate often happens before anyone is in the record. */
+  addBriefing: (
+    jobId: string,
+    body: {
+      summary: string
+      occurred_at?: string
+      manager_id?: string | null
+      interaction_type?: string
+    },
+  ) =>
+    request<BriefingDTO>(`/jobs/${jobId}/briefings`, {
+      method: 'POST',
+      body: JSON.stringify({ interaction_type: 'briefing', ...body }),
+    }),
+
+  /** The Kandidatenauswertung for one candidate on one mandate. A full
+   *  replacement: a half-updated verdict is worse than none. */
+  setAssessment: (applicationId: string, body: AssessmentWriteDTO) =>
+    request<AssessmentDTO>(`/pipeline/applications/${applicationId}/assessment`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
 
   /** Put a candidate on a mandate. Idempotent per pair — assigning twice
    *  returns the existing process rather than making a second one. */

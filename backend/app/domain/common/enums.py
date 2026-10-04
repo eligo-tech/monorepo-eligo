@@ -104,6 +104,10 @@ class InteractionType(str, enum.Enum):
     MEETING = "meeting"
     MESSAGE = "message"
     NOTE = "note"
+    #: The conversation that defines a mandate (Prozess-Doku, Phase 2). Its
+    #: own kind rather than a call with a job attached, because it is the one
+    #: a recruiter goes looking for: "what did they actually ask for?"
+    BRIEFING = "briefing"
 
 
 #: Provenances that constitute EVIDENCE for a field: somebody or something
