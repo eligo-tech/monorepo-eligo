@@ -154,3 +154,91 @@ async def test_a_whole_transcript_fits() -> None:
 
         [row] = (await c.get(f"/api/v1/jobs/{job_id}/briefings")).json()
         assert row["summary"] == transcript, "stored whole, not truncated"
+
+
+# --------------------------------------------------------------------------
+# Feedback about a candidate — a row per remark, not one field per step
+# --------------------------------------------------------------------------
+
+
+async def _candidate_on(c: AsyncClient, job_id: str, name: str) -> str:
+    candidate = (await c.post("/api/v1/candidates", json={"full_name": name})).json()
+    await c.post(
+        "/api/v1/pipeline/applications",
+        json={"candidate_id": candidate["id"], "job_id": job_id},
+    )
+    return candidate["id"]
+
+
+async def test_feedback_accumulates_instead_of_overwriting() -> None:
+    """THE bug. Feedback was written into the process step's `note`, which is
+    one field — so the second remark on a step silently replaced the first,
+    and nothing said so. A row per remark means both are still there."""
+    async with _api() as c:
+        job_id, _ = await _job(c)
+        candidate_id = await _candidate_on(c, job_id, "AnonymGE")
+        for n, when in enumerate(("2026-09-20T09:00:00Z", "2026-09-22T09:00:00Z")):
+            r = await c.post(
+                f"/api/v1/jobs/{job_id}/feedback",
+                json={
+                    "interaction_type": "feedback",
+                    "candidate_id": candidate_id,
+                    "summary": f"Rückmeldung {n}",
+                    "occurred_at": when,
+                },
+            )
+            assert r.status_code == 201, r.text
+
+        rows = (await c.get(f"/api/v1/jobs/{job_id}/feedback")).json()
+        assert [r["summary"] for r in rows] == ["Rückmeldung 1", "Rückmeldung 0"]
+        assert {r["candidate_id"] for r in rows} == {candidate_id}
+
+
+async def test_feedback_is_always_about_somebody() -> None:
+    """A remark filed against nobody is a remark nobody finds again, and one
+    about a person who was never put forward on this mandate is worse."""
+    async with _api() as c:
+        job_id, _ = await _job(c)
+        other = (await c.post("/api/v1/candidates", json={"full_name": "Nicht im Prozess"})).json()
+
+        nobody = await c.post(
+            f"/api/v1/jobs/{job_id}/feedback",
+            json={"interaction_type": "feedback", "summary": "gut"},
+        )
+        assert nobody.status_code == 422
+
+        stranger = await c.post(
+            f"/api/v1/jobs/{job_id}/feedback",
+            json={
+                "interaction_type": "feedback",
+                "candidate_id": other["id"],
+                "summary": "gut",
+            },
+        )
+        assert stranger.status_code == 404
+
+
+async def test_the_two_lists_do_not_bleed_into_each_other() -> None:
+    """"What does the client want?" and "what did they think of him?" are
+    different questions. A Muss-Kriterium among the remarks about one person
+    is how a briefing gets read as feedback."""
+    async with _api() as c:
+        job_id, _ = await _job(c)
+        candidate_id = await _candidate_on(c, job_id, "AnonymGE")
+        await c.post(
+            f"/api/v1/jobs/{job_id}/briefings",
+            json={"interaction_type": "briefing", "summary": "Muss: Java, WildFly."},
+        )
+        await c.post(
+            f"/api/v1/jobs/{job_id}/feedback",
+            json={
+                "interaction_type": "feedback",
+                "candidate_id": candidate_id,
+                "summary": "Kunde: fachlich überzeugend.",
+            },
+        )
+
+        briefings = (await c.get(f"/api/v1/jobs/{job_id}/briefings")).json()
+        feedback = (await c.get(f"/api/v1/jobs/{job_id}/feedback")).json()
+        assert [b["summary"] for b in briefings] == ["Muss: Java, WildFly."]
+        assert [f["summary"] for f in feedback] == ["Kunde: fachlich überzeugend."]

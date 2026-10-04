@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
+from app.domain.common.enums import InteractionType
 from app.domain.managers import service as managers_service
+from app.domain.pipeline import service as pipeline_service
 from app.domain.managers.schemas import (
     ManagerInteractionCreate,
     ManagerInteractionRead,
@@ -87,7 +89,15 @@ async def list_briefings(
     had nowhere to put it: the Suchprofil fields held the OUTCOME of the
     briefing and nothing held the briefing.
     """
-    rows = await managers_service.list_for_job(db, tenant_id=tenant_id, job_id=job_id)
+    rows = await managers_service.list_for_job(
+        db,
+        tenant_id=tenant_id,
+        job_id=job_id,
+        # Feedback about one candidate is a different question and has its
+        # own list; mixing it in here would put "wirkte nervös" among the
+        # Muss-Kriterien.
+        exclude=[InteractionType.FEEDBACK],
+    )
     return [ManagerInteractionRead.model_validate(r) for r in rows]
 
 
@@ -107,6 +117,65 @@ async def add_briefing(
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     payload = payload.model_copy(update={"job_id": job_id})
+    row = await managers_service.log_interaction(
+        db, tenant_id=tenant_id, manager_id=payload.manager_id, payload=payload
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
+    return ManagerInteractionRead.model_validate(row)
+
+
+@router.get("/{job_id}/feedback", response_model=list[ManagerInteractionRead])
+async def list_feedback(
+    job_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[ManagerInteractionRead]:
+    """What was said about the CANDIDATES on this mandate, newest first."""
+    rows = await managers_service.list_for_job(
+        db, tenant_id=tenant_id, job_id=job_id, kinds=[InteractionType.FEEDBACK]
+    )
+    return [ManagerInteractionRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/{job_id}/feedback",
+    response_model=ManagerInteractionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_feedback(
+    job_id: uuid.UUID,
+    payload: ManagerInteractionCreate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerInteractionRead:
+    """Record a remark about one candidate on this mandate.
+
+    A row per remark. It used to be written into the process step's `note`,
+    which is one field: the second piece of feedback on a step silently
+    replaced the first, and the recruiter only found out by looking.
+
+    The candidate is required and must actually be running on this mandate —
+    feedback is always ABOUT somebody, and a remark filed against a person
+    who was never put forward is a remark nobody will find again.
+    """
+    job = await service.get_job(db, tenant_id=tenant_id, job_id=job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+    if payload.candidate_id is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "candidate_id is required"
+        )
+    running = await pipeline_service.get_application_for(
+        db, tenant_id=tenant_id, job_id=job_id, candidate_id=payload.candidate_id
+    )
+    if running is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "candidate is not on this mandate"
+        )
+    payload = payload.model_copy(
+        update={"job_id": job_id, "interaction_type": InteractionType.FEEDBACK}
+    )
     row = await managers_service.log_interaction(
         db, tenant_id=tenant_id, manager_id=payload.manager_id, payload=payload
     )

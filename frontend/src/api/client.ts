@@ -434,6 +434,27 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /** What was said about the CANDIDATES on this mandate, newest first. */
+  jobFeedback: (jobId: string) =>
+    request<BriefingDTO[]>(`/jobs/${jobId}/feedback`),
+
+  /** One remark about one candidate. A row per remark — it used to be
+   *  written into the process step's single `note`, where the second
+   *  remark replaced the first. */
+  addFeedback: (
+    jobId: string,
+    body: {
+      summary: string
+      candidate_id: string
+      occurred_at?: string
+      manager_id?: string | null
+    },
+  ) =>
+    request<BriefingDTO>(`/jobs/${jobId}/feedback`, {
+      method: 'POST',
+      body: JSON.stringify({ interaction_type: 'feedback', ...body }),
+    }),
+
   /** Read a pasted Kandidatenauswertung into form fields. Stores nothing:
    *  the recruiter sees what was understood, corrects it, and saves. */
   parseAuswertung: (text: string) =>

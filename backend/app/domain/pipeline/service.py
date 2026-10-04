@@ -62,6 +62,27 @@ async def get_application(
     return result.scalar_one_or_none()
 
 
+async def get_application_for(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    job_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+) -> Application | None:
+    """This candidate's run on this mandate, if there is one.
+
+    The pair is unique (see `create_application`), so "is this person on
+    this mandate?" has one answer.
+    """
+    return await session.scalar(
+        select(Application).where(
+            Application.tenant_id == tenant_id,
+            Application.job_id == job_id,
+            Application.candidate_id == candidate_id,
+        )
+    )
+
+
 async def create_application(
     session: AsyncSession, *, data: ApplicationCreate
 ) -> Application:

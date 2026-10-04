@@ -108,6 +108,16 @@ class InteractionType(str, enum.Enum):
     #: own kind rather than a call with a job attached, because it is the one
     #: a recruiter goes looking for: "what did they actually ask for?"
     BRIEFING = "briefing"
+    #: What was said about ONE CANDIDATE on one mandate — by the client after
+    #: a presentation, or by the candidate after an interview. Carries a
+    #: `candidate_id`; a briefing does not. Its own kind because the two
+    #: answer different questions ("what does the client want?" vs "what did
+    #: they think of him?") and are read in different panels.
+    #:
+    #: It is a row per remark rather than the step's `note`, which is one
+    #: field: the second piece of feedback on the same step used to overwrite
+    #: the first.
+    FEEDBACK = "feedback"
 
 
 #: Provenances that constitute EVIDENCE for a field: somebody or something

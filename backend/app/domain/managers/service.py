@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from collections.abc import Collection
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.domain.common.enums import InteractionType
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
@@ -322,7 +324,13 @@ async def list_interactions(
 
 
 async def list_for_job(
-    session: AsyncSession, *, tenant_id: uuid.UUID, job_id: uuid.UUID, limit: int = 200
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    job_id: uuid.UUID,
+    limit: int = 200,
+    kinds: Collection[InteractionType] | None = None,
+    exclude: Collection[InteractionType] | None = None,
 ) -> list[ManagerInteraction]:
     """Everything said ABOUT one mandate, newest first.
 
@@ -331,14 +339,25 @@ async def list_for_job(
     do X" — all of it is a conversation with a person about a job, and both
     questions ("what did we discuss with her?" and "what do we know about
     this mandate?") are worth being able to ask.
+
+    `kinds` / `exclude` split the two readings of that: what the client wants
+    from the mandate, and what anybody thought of one candidate on it. Both
+    are rows here; showing them in one list would mix a Muss-Kriterium with a
+    remark about one person.
     """
-    rows = await session.scalars(
-        select(ManagerInteraction)
-        .where(
-            ManagerInteraction.tenant_id == tenant_id,
-            ManagerInteraction.job_id == job_id,
+    query = select(ManagerInteraction).where(
+        ManagerInteraction.tenant_id == tenant_id,
+        ManagerInteraction.job_id == job_id,
+    )
+    if kinds is not None:
+        query = query.where(
+            ManagerInteraction.interaction_type.in_([k.value for k in kinds])
         )
-        .order_by(ManagerInteraction.occurred_at.desc())
-        .limit(limit)
+    if exclude:
+        query = query.where(
+            ManagerInteraction.interaction_type.notin_([k.value for k in exclude])
+        )
+    rows = await session.scalars(
+        query.order_by(ManagerInteraction.occurred_at.desc()).limit(limit)
     )
     return list(rows)
