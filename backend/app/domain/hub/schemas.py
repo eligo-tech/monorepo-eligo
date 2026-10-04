@@ -280,7 +280,9 @@ class HubCompanyLinkRead(BaseModel):
 
 class TrackRequest(BaseModel):
     relationship: Literal["watching", "prospect", "client", "ignored"] = "watching"
-    note: str | None = Field(default=None, max_length=1000)
+    #: Free text, like every other note in the product (column widened to
+    #: TEXT in migration 0035).
+    note: str | None = None
 
 
 class IngestRequest(BaseModel):

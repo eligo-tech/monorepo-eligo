@@ -13,7 +13,12 @@ from app.domain.common.enums import ConfidenceSource, InteractionType
 class ManagerInteractionCreate(BaseModel):
     interaction_type: InteractionType
     occurred_at: dt.datetime | None = None
-    summary: str | None = Field(default=None, max_length=5000)
+    #: No length cap. The column is TEXT, and the thing people paste here is
+    #: a whole Gesprächstranskript — the one input where an arbitrary limit
+    #: is guaranteed to be hit, by the longest and most valuable note
+    #: somebody ever writes. A limit that truncates work is worse than a
+    #: large row.
+    summary: str | None = None
     candidate_id: uuid.UUID | None = None
     job_id: uuid.UUID | None = None
     #: Who was spoken to. Optional: a briefing can be recorded before the
