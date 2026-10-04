@@ -72,7 +72,7 @@ recruiter can reach. The endpoint takes the machine token only — a valid Clerk
 session gets 401, and `tests/test_operator_endpoints.py` attacks it to prove it.
 
 The old path still works for a one-off, with the credential in the operator's
-environment: `python -m scripts.aifind_import --tenant <uuid>`.
+environment: `python -m scripts.ats_import --tenant <uuid> --source <key>`.
 
 ## Who is acting, and what they may do
 

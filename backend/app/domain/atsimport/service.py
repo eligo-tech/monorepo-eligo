@@ -6,8 +6,8 @@ tenant-scoped `companies`, `managers`, `jobs` and `candidates`, and never a
 clients, contacts and mandates are the opposite of shared. Putting them there
 would publish one customer's book of business to all of them.
 
-Idempotent by construction. Every row carries the id it has in aiFind, so a
-second run updates what it created rather than duplicating it. That is not a
+Idempotent by construction. Every row carries the id it has in the SOURCE
+system, so a second run updates what it created rather than duplicating it. That is not a
 nicety: this is meant to run on a schedule, and an importer that cannot
 recognise its own output doubles the book every night.
 
@@ -25,6 +25,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.atsimport.connectors.base import AtsExport
 from app.domain.candidates.employment import normalize_employment_form
 from app.domain.candidates import service as candidates_service
 from app.domain.candidates.models import Candidate
@@ -32,9 +33,6 @@ from app.domain.common.enums import ConfidenceSource
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
-
-SOURCE = "aifind"
-
 
 def _as_datetime(value: str | None) -> dt.datetime | None:
     """ISO-8601 with a Z suffix -> aware datetime.
@@ -72,39 +70,46 @@ class ImportSummary:
 
 
 async def _by_external_id(
-    session: AsyncSession, model, *, tenant_id: uuid.UUID, source_column: str
+    session: AsyncSession, model, *, tenant_id: uuid.UUID, source_column: str,
+    source: str,
 ) -> dict[str, object]:
     """Everything this tenant has already imported from this source, by its id."""
     rows = await session.scalars(
         select(model).where(
             model.tenant_id == tenant_id,
-            getattr(model, source_column) == SOURCE,
+            getattr(model, source_column) == source,
             model.external_id.is_not(None),
         )
     )
     return {row.external_id: row for row in rows}
 
 
-async def import_aifind(
+async def import_export(
     session: AsyncSession,
     *,
     tenant_id: uuid.UUID,
-    companies: list,
-    managers: list,
-    jobs: list,
-    candidates: list | None = None,
+    export: AtsExport,
+    source: str,
 ) -> ImportSummary:
-    """Upsert one aiFind export into this workspace. Pure of network by design.
+    """Upsert one connector's export into this workspace. No network here.
 
     Takes already-parsed records rather than a client, so the whole mapping is
     testable against a captured payload with no credentials and no network —
     the same split `hub/adapters` uses.
+
+    `source` is the connector key and is written to every row it creates:
+    that is what makes a second run recognise its own output, and what lets
+    two systems feed one workspace without fighting over the same records.
     """
+    companies = export.companies
+    managers = export.managers
+    jobs = export.jobs
+    candidates = export.candidates
     summary = ImportSummary()
 
     # --- companies ---------------------------------------------------------
     existing_companies = await _by_external_id(
-        session, Company, tenant_id=tenant_id, source_column="source"
+        session, Company, tenant_id=tenant_id, source_column="source", source=source
     )
     company_by_external: dict[str, Company] = dict(existing_companies)  # type: ignore[arg-type]
     for record in companies:
@@ -113,7 +118,7 @@ async def import_aifind(
             row = Company(
                 tenant_id=tenant_id,
                 name=record.name,
-                source=SOURCE,
+                source=source,
                 external_id=record.external_id,
                 # These are the workspace's own accounts, not market
                 # observations — that is what importing an ATS means.
@@ -129,7 +134,7 @@ async def import_aifind(
 
     # --- managers ----------------------------------------------------------
     existing_managers = await _by_external_id(
-        session, Manager, tenant_id=tenant_id, source_column="external_source"
+        session, Manager, tenant_id=tenant_id, source_column="external_source", source=source
     )
     manager_by_external: dict[str, Manager] = dict(existing_managers)  # type: ignore[arg-type]
     for record in managers:
@@ -174,7 +179,7 @@ async def import_aifind(
                 full_name=record.full_name,
                 role_title=record.job_title,
                 external_id=record.external_id,
-                external_source=SOURCE,
+                external_source=source,
                 skills=list(record.skills),
                 tags=list(record.tags),
                 # The recruiter's own CRM record, entered by them. Not collected
@@ -184,7 +189,7 @@ async def import_aifind(
                 # is not a new collection. Recorded explicitly so the judgement
                 # is visible and reversible rather than implied by a default.
                 source=ConfidenceSource.HUMAN_VERIFIED.value,
-                source_detail=f"{SOURCE}:{record.external_id}",
+                source_detail=f"{source}:{record.external_id}",
             )
             session.add(row)
             summary.managers_created += 1
@@ -220,7 +225,7 @@ async def import_aifind(
         for row in await session.scalars(
             select(ManagerInteraction).where(
                 ManagerInteraction.tenant_id == tenant_id,
-                ManagerInteraction.external_source == SOURCE,
+                ManagerInteraction.external_source == source,
                 ManagerInteraction.external_id.is_not(None),
             )
         )
@@ -245,14 +250,14 @@ async def import_aifind(
                     or dt.datetime.now(dt.UTC),
                     summary=note.text,
                     external_id=note.external_id,
-                    external_source=SOURCE,
+                    external_source=source,
                 )
             )
             summary.notes_created += 1
 
     # --- jobs --------------------------------------------------------------
     existing_jobs = await _by_external_id(
-        session, Job, tenant_id=tenant_id, source_column="external_source"
+        session, Job, tenant_id=tenant_id, source_column="external_source", source=source
     )
     for record in jobs:
         company = (
@@ -279,7 +284,7 @@ async def import_aifind(
                     manager_id=manager.id if manager else None,
                     status=status,
                     external_id=record.external_id,
-                    external_source=SOURCE,
+                    external_source=source,
                 )
             )
             summary.jobs_created += 1
@@ -298,7 +303,7 @@ async def import_aifind(
 
     # --- candidates --------------------------------------------------------
     existing_candidates = await _by_external_id(
-        session, Candidate, tenant_id=tenant_id, source_column="external_source"
+        session, Candidate, tenant_id=tenant_id, source_column="external_source", source=source
     )
     for record in candidates or []:
         row = existing_candidates.get(record.external_id)
@@ -338,7 +343,7 @@ async def import_aifind(
             row = Candidate(
                 tenant_id=tenant_id,
                 external_id=record.external_id,
-                external_source=SOURCE,
+                external_source=source,
                 skills=list(record.skills),
                 **{k: v for k, v in fields.items() if v is not None},
             )

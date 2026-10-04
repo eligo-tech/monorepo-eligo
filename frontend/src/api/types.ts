@@ -755,8 +755,19 @@ export interface TenantSourceDTO {
   last_error: string | null
 }
 
+export interface AtsSourceDTO {
+  /** Connector key — written to every row it imports. */
+  key: string
+  label: string
+  /** Which credential fields the form must ask for: "username", "secret". */
+  needs: string[]
+}
+
 export interface SourceCapabilitiesDTO {
   kinds: string[]
+  /** What each connector is called and needs, so the UI names no system
+   *  itself — the server's registry is the list. */
+  sources?: AtsSourceDTO[]
   /** False when the server has no ELIGO_SECRET_KEY — no credential can be
    *  stored at all, and the form says so instead of failing on submit. */
   secrets_configured: boolean

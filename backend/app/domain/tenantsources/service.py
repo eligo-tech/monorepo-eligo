@@ -6,7 +6,7 @@ A recruiter pressing "Import anfordern" writes one timestamp to their own row
 — a tenant-scoped database write, no outbound call. A scheduled job then picks
 the request up and performs the import. Three reasons, in order of weight:
 
-1. An aiFind import is hundreds of outbound calls (one per candidate for the
+1. An ATS import is hundreds of outbound calls (one per candidate for the
    detail pass). Holding a request open across that gives no retry, no
    backpressure and a timeout that cannot be told apart from a failure — the
    same deviation ARCHITECTURE.md already names for `/hub/ingest`, and there
@@ -32,6 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import secrets
+from app.domain.atsimport import factory
 from app.core.logging import get_logger
 from app.domain.tenantsources.models import TenantSource
 from app.domain.tenantsources.schemas import TenantSourceWrite
@@ -39,7 +40,14 @@ from app.domain.tenantsources.schemas import TenantSourceWrite
 logger = get_logger(__name__)
 
 #: Sources a workspace can configure for itself today.
-KINDS: tuple[str, ...] = ("aifind",)
+def kinds() -> tuple[str, ...]:
+    """Which sources a workspace may configure — the connector registry.
+
+    Deliberately a call, not a constant: the list IS the registry, and a
+    second copy of it here is how "which systems do we support" starts
+    having two answers.
+    """
+    return tuple(factory.available())
 STATUSES: tuple[str, ...] = ("active", "disabled")
 
 
@@ -100,7 +108,7 @@ async def upsert_source(
     The password is encrypted before it reaches the session, so a value in the
     clear never exists in a transaction, a query log or a failed-rollback.
     """
-    if kind not in KINDS:
+    if kind not in kinds():
         raise UnknownSource(f"unknown source {kind!r}")
     if data.status is not None and data.status not in STATUSES:
         raise UnknownSource(f"unknown status {data.status!r}")

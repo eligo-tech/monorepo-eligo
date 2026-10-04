@@ -16,10 +16,11 @@ import httpx
 
 from app.core.database import AdminSessionLocal, current_tenant_var
 from app.core.logging import get_logger
+from app.domain.atsimport import factory
 from app.domain.atsimport import service as importer
+from app.domain.atsimport.connectors.base import AtsExport, Credentials
 from app.domain.tenantsources import service
 from app.domain.tenantsources.models import TenantSource
-from app.integrations import aifind
 
 logger = get_logger(__name__)
 
@@ -28,59 +29,14 @@ logger = get_logger(__name__)
 DEFAULT_LIMIT = 3
 
 
-async def fetch_aifind(
-    *, username: str, password: str, with_details: bool = True
-) -> dict[str, list]:
-    """Everything the source has for this account.
-
-    The detail passes are what make the import worth running — the list calls
-    carry no skills, no phone numbers and no notes — but they are also the
-    slow part, so a caller can skip them.
-    """
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-        token = await aifind.fetch_access_token(
-            client, username=username, password=password
-        )
-        fetched: dict[str, list] = {}
-        for entity in ("companies", "managers", "jobs", "candidates"):
-            fetched[entity] = await aifind.fetch_all(
-                client, token=token, operation=entity
-            )
-
-        if not with_details:
-            return fetched
-
-        detailed_managers = await aifind.fetch_manager_details(
-            client, token=token, external_ids=[m.external_id for m in fetched["managers"]]
-        )
-        # Keep the list record for anyone the detail call lost, so a partial
-        # detail pass never shrinks the import.
-        by_manager = {m.external_id: m for m in fetched["managers"]}
-        by_manager.update({m.external_id: m for m in detailed_managers})
-        fetched["managers"] = list(by_manager.values())
-
-        detailed_candidates = await aifind.fetch_candidate_details(
-            client, token=token, external_ids=[c.external_id for c in fetched["candidates"]]
-        )
-        by_candidate = {c.external_id: c for c in fetched["candidates"]}
-        by_candidate.update({c.external_id: c for c in detailed_candidates})
-        fetched["candidates"] = list(by_candidate.values())
-    return fetched
-
-
 async def import_into(
-    *, tenant_id: uuid.UUID, fetched: dict[str, list]
+    *, tenant_id: uuid.UUID, export: AtsExport, source: str
 ) -> dict:
     """Write a fetched book into one workspace."""
     current_tenant_var.set(str(tenant_id))
     async with AdminSessionLocal() as session:
-        return await importer.import_aifind(
-            session,
-            tenant_id=tenant_id,
-            companies=fetched["companies"],
-            managers=fetched["managers"],
-            jobs=fetched["jobs"],
-            candidates=fetched["candidates"],
+        return await importer.import_export(
+            session, tenant_id=tenant_id, export=export, source=source
         )
 
 
@@ -102,10 +58,17 @@ async def run_one(row: TenantSource, *, with_details: bool = True) -> dict:
         return {"source": str(source_id), "ok": False, "error": str(exc)}
 
     try:
-        fetched = await fetch_aifind(
-            username=username, password=password, with_details=with_details
+        # Dispatch on the configured source, never on a name written here:
+        # the runner is the scheduler's half and must not know which systems
+        # exist, only that the workspace chose one the registry has.
+        connector = factory.get_connector(kind)
+        export = await connector.fetch(
+            Credentials(username=username, secret=password),
+            with_details=with_details,
         )
-        summary = await import_into(tenant_id=tenant_id, fetched=fetched)
+        summary = await import_into(
+            tenant_id=tenant_id, export=export, source=connector.key
+        )
     except Exception as exc:
         reason = _human_reason(exc)
         logger.warning("import failed for %s/%s: %s", tenant_id, kind, exc)
@@ -125,13 +88,12 @@ async def run_one(row: TenantSource, *, with_details: bool = True) -> dict:
 def _human_reason(exc: Exception) -> str:
     """An error a recruiter can act on, not a stack trace.
 
-    The login path raises a plain `RuntimeError` carrying the source's own
-    wording ("aiFind login did not return an authorization code"), because the
-    integration deliberately never echoes the response body — a failed
-    Keycloak login re-renders the form with the username in it. Matching on
-    that text is the price of not logging credentials, and it is checked by a
-    test so a reworded integration cannot silently degrade this to the generic
-    message.
+    A connector's login path raises a plain `RuntimeError` carrying its own
+    wording ("… login did not return an authorization code"), because a
+    connector deliberately never echoes the response body — a failed login
+    form re-renders with the username in it. Matching on that text is the
+    price of not logging credentials, and a test pins it so a reworded
+    connector cannot silently degrade this to the generic message.
     """
     text = str(exc)
     if "login" in text.lower():

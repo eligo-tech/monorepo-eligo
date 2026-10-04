@@ -17,11 +17,12 @@ from sqlalchemy import func, select
 
 from app.core.database import SessionLocal
 from app.domain.atsimport import service as importer
+from app.domain.atsimport.connectors.base import AtsExport
 from app.domain.common.enums import ConfidenceSource
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager
-from app.integrations import aifind
+from app.domain.atsimport.connectors import aifind
 
 TENANT = uuid.uuid4()
 
@@ -162,8 +163,10 @@ def test_jobs_carry_their_company_and_manager() -> None:
 async def test_import_builds_the_company_manager_job_graph() -> None:
     companies, managers, jobs = _parsed()
     async with SessionLocal() as s:
-        summary = await importer.import_aifind(
-            s, tenant_id=TENANT, companies=companies, managers=managers, jobs=jobs
+        summary = await importer.import_export(
+            s, tenant_id=TENANT,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
         )
 
     assert summary.companies_created == 2
@@ -188,12 +191,16 @@ async def test_running_twice_updates_instead_of_duplicating() -> None:
     companies, managers, jobs = _parsed()
     tenant = uuid.uuid4()
     async with SessionLocal() as s:
-        await importer.import_aifind(
-            s, tenant_id=tenant, companies=companies, managers=managers, jobs=jobs
+        await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
         )
     async with SessionLocal() as s:
-        second = await importer.import_aifind(
-            s, tenant_id=tenant, companies=companies, managers=managers, jobs=jobs
+        second = await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
         )
 
     assert second.companies_created == 0
@@ -220,8 +227,10 @@ async def test_a_manager_who_moved_company_follows_the_move() -> None:
     companies, managers, jobs = _parsed()
     tenant = uuid.uuid4()
     async with SessionLocal() as s:
-        await importer.import_aifind(
-            s, tenant_id=tenant, companies=companies, managers=managers, jobs=jobs
+        await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
         )
 
     moved = aifind.parse_managers(
@@ -245,8 +254,10 @@ async def test_a_manager_who_moved_company_follows_the_move() -> None:
         }
     )
     async with SessionLocal() as s:
-        summary = await importer.import_aifind(
-            s, tenant_id=tenant, companies=companies, managers=moved, jobs=[]
+        summary = await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=moved, jobs=[]),
+            source="aifind",
         )
         row = await s.scalar(
             select(Manager).where(
@@ -271,8 +282,10 @@ async def test_imported_contacts_owe_no_art14_notice() -> None:
     companies, managers, jobs = _parsed()
     tenant = uuid.uuid4()
     async with SessionLocal() as s:
-        await importer.import_aifind(
-            s, tenant_id=tenant, companies=companies, managers=managers, jobs=jobs
+        await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
         )
         rows = list(
             await s.scalars(select(Manager).where(Manager.tenant_id == tenant))
@@ -293,12 +306,10 @@ async def test_nothing_is_written_to_the_shared_corpus() -> None:
     async with SessionLocal() as s:
         before_companies = await s.scalar(select(func.count(HubCompany.id)))
         before_postings = await s.scalar(select(func.count(HubJobPosting.id)))
-        await importer.import_aifind(
-            s,
-            tenant_id=uuid.uuid4(),
-            companies=companies,
-            managers=managers,
-            jobs=jobs,
+        await importer.import_export(
+            s, tenant_id=uuid.uuid4(),
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
         )
         assert await s.scalar(select(func.count(HubCompany.id))) == before_companies
         assert await s.scalar(select(func.count(HubJobPosting.id))) == before_postings
@@ -308,8 +319,10 @@ async def test_another_workspace_sees_none_of_it() -> None:
     companies, managers, jobs = _parsed()
     mine, theirs = uuid.uuid4(), uuid.uuid4()
     async with SessionLocal() as s:
-        await importer.import_aifind(
-            s, tenant_id=mine, companies=companies, managers=managers, jobs=jobs
+        await importer.import_export(
+            s, tenant_id=mine,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
         )
         count = await s.scalar(
             select(func.count(Manager.id)).where(Manager.tenant_id == theirs)
@@ -449,18 +462,20 @@ def test_a_detail_reimport_fills_in_rows_the_list_pass_created() -> None:
             }
         )
         async with SessionLocal() as s:
-            first = await importer.import_aifind(
-                s, tenant_id=tenant, companies=[], managers=[], jobs=[],
-                candidates=thin,
-            )
+            first = await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=[], managers=[], jobs=[], candidates=thin),
+            source="aifind",
+        )
         assert first.candidates_created == 1
 
         rich = [aifind.parse_candidate_detail(CANDIDATE_DETAIL_PAYLOAD)]
         async with SessionLocal() as s:
-            second = await importer.import_aifind(
-                s, tenant_id=tenant, companies=[], managers=[], jobs=[],
-                candidates=rich,
-            )
+            second = await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=[], managers=[], jobs=[], candidates=rich),
+            source="aifind",
+        )
             from app.domain.candidates.models import Candidate
 
             row = await s.scalar(
@@ -486,10 +501,11 @@ def test_a_failed_detail_call_never_blanks_a_good_record() -> None:
         tenant = uuid.uuid4()
         rich = [aifind.parse_candidate_detail(CANDIDATE_DETAIL_PAYLOAD)]
         async with SessionLocal() as s:
-            await importer.import_aifind(
-                s, tenant_id=tenant, companies=[], managers=[], jobs=[],
-                candidates=rich,
-            )
+            await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=[], managers=[], jobs=[], candidates=rich),
+            source="aifind",
+        )
         # the thin list record: everything the detail gave is missing here
         thin = aifind.parse_candidates(
             {
@@ -510,10 +526,11 @@ def test_a_failed_detail_call_never_blanks_a_good_record() -> None:
             }
         )
         async with SessionLocal() as s:
-            await importer.import_aifind(
-                s, tenant_id=tenant, companies=[], managers=[], jobs=[],
-                candidates=thin,
-            )
+            await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=[], managers=[], jobs=[], candidates=thin),
+            source="aifind",
+        )
             from app.domain.candidates.models import Candidate
 
             row = await s.scalar(
@@ -628,13 +645,17 @@ def test_importing_notes_twice_does_not_replay_the_conversation() -> None:
             )
         ]
         async with SessionLocal() as s:
-            first = await importer.import_aifind(
-                s, tenant_id=tenant, companies=companies, managers=detailed, jobs=[]
-            )
+            first = await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=detailed, jobs=[]),
+            source="aifind",
+        )
         async with SessionLocal() as s:
-            second = await importer.import_aifind(
-                s, tenant_id=tenant, companies=companies, managers=detailed, jobs=[]
-            )
+            second = await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=detailed, jobs=[]),
+            source="aifind",
+        )
             from app.domain.managers.models import ManagerInteraction
 
             total = await s.scalar(
@@ -673,9 +694,11 @@ def test_the_sources_own_category_is_kept_verbatim() -> None:
             )
         ]
         async with SessionLocal() as s:
-            await importer.import_aifind(
-                s, tenant_id=tenant, companies=companies, managers=detailed, jobs=[]
-            )
+            await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=detailed, jobs=[]),
+            source="aifind",
+        )
             from app.domain.managers.models import ManagerInteraction
 
             kinds = list(

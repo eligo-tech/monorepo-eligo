@@ -22,9 +22,10 @@ import { FileImportPanel } from './FileImportPanel'
 import { Button, TextInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 
-const KIND_LABEL: Record<string, string> = {
-  aifind: 'aiFind (ATS)',
-}
+/** Fallback label for a connector the server lists but does not name. The
+ *  UI deliberately knows no system by name: the registry does. */
+const kindLabel = (kind: string, sources?: { key: string; label: string }[]) =>
+  sources?.find((s) => s.key === kind)?.label ?? kind
 
 function dateTimeDe(iso: string): string {
   return new Date(iso).toLocaleString('de-DE', {
@@ -49,6 +50,10 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
   const admin = isAdmin(me)
   const [caps, setCaps] = useState<SourceCapabilitiesDTO | null>(null)
   const [sources, setSources] = useState<TenantSourceDTO[] | null>(null)
+  // Which system this form is configuring. The server's registry decides
+  // what is on offer; one connector today, and the picker appears by itself
+  // when there are two. Nothing here names a vendor.
+  const [kind, setKind] = useState('')
   const [username, setUsername] = useState('')
   const [secret, setSecret] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,7 +68,10 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
       ])
       setCaps(capabilities)
       setSources(rows)
-      const existing = rows.find((r) => r.kind === 'aifind')
+      const offered = capabilities.sources?.map((x) => x.key) ?? capabilities.kinds
+      const chosen = rows[0]?.kind ?? offered[0] ?? ''
+      setKind((current) => current || chosen)
+      const existing = rows.find((r) => r.kind === chosen)
       if (existing) setUsername((u) => u || existing.username)
     } catch {
       setSources([])
@@ -87,7 +95,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
     setError(null)
     setNotice(null)
     try {
-      await api.saveTenantSource('aifind', {
+      await api.saveTenantSource(kind, {
         username: username.trim(),
         ...(secret ? { secret } : {}),
       })
@@ -104,7 +112,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
     setBusy(true)
     setError(null)
     try {
-      const result = await api.requestImport('aifind')
+      const result = await api.requestImport(kind)
       setNotice(result.detail)
       await reload()
     } catch (e) {
@@ -117,7 +125,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
     setBusy(true)
     setError(null)
     try {
-      await api.deleteTenantSource('aifind')
+      await api.deleteTenantSource(kind)
       setSecret('')
       setNotice('Quelle getrennt.')
       await reload()
@@ -127,7 +135,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
     setBusy(false)
   }
 
-  const source = sources?.find((s) => s.kind === 'aifind')
+  const source = sources?.find((s) => s.kind === kind)
   const blocked = caps !== null && !caps.secrets_configured
 
   return (
@@ -174,9 +182,25 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
               <Database className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-[16px] font-semibold text-cockpit-text">
-                {KIND_LABEL.aifind}
-              </h3>
+              {/* A picker only when there is something to pick: one system
+                  today, and the registry decides when that changes. */}
+              {(caps?.sources?.length ?? 0) > 1 ? (
+                <select
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value)}
+                  className="rounded-lg border border-cockpit-line bg-cockpit-inset px-2 py-1 text-[16px] font-semibold text-cockpit-text focus:border-cockpit-edge focus:outline-none"
+                >
+                  {caps?.sources?.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <h3 className="text-[16px] font-semibold text-cockpit-text">
+                  {kindLabel(kind, caps?.sources)}
+                </h3>
+              )}
               <p className="text-[13px] text-cockpit-dim">
                 Firmen, Ansprechpartner, Mandate und Kandidaten aus Ihrem
                 bestehenden System.

@@ -97,7 +97,7 @@ propose redacting it.
 **A violation — flag it:**
 
 1. A person in `hub_*` whose value did **not** come from a public source via
-   scheduled ingestion — an ATS/aiFind import, a CV, a mailbox, a note, a
+   scheduled ingestion — an ATS import, a CV, a mailbox, a note, a
    recruiter edit, a tenant's `managers` row flowing back into the corpus.
 2. A person in `hub_*` with no provenance (posting/URL + fetch time).
 3. Enrichment in the shared layer: email/phone from a data provider, a
