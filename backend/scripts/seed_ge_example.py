@@ -53,7 +53,7 @@ from app.domain.pipeline.models import Application
 from app.domain.registry import *  # noqa: F401,F403 — register every table
 from app.domain.verification import service as verification
 from app.domain.verification.schemas import ProposedChange
-from scripts.import_assessment import parse_assessment
+from app.domain.pipeline.auswertung import parse_auswertung
 
 COMPANY = "GE Software"
 JOB_TITLE = "Senior Backend-Entwickler mit Architekturkenntnissen (Position 1)"
@@ -353,7 +353,7 @@ async def seed(tenant_id: uuid.UUID) -> dict:
         app_id, job_id, candidate_id = application.id, job.id, candidate.id
 
         # Section B's profile summary belongs on the person, not the mandate.
-        parsed = parse_assessment(EXAMPLE.read_text(encoding="utf-8"))
+        parsed = parse_auswertung(EXAMPLE.read_text(encoding="utf-8"))
         for field, value in parsed["candidate"].items():
             setattr(candidate, field, value)
         await s.commit()
@@ -449,7 +449,7 @@ def main() -> None:
         raise SystemExit(f"{EXAMPLE} not found")
 
     if args.dry_run:
-        parsed = parse_assessment(EXAMPLE.read_text(encoding="utf-8"))
+        parsed = parse_auswertung(EXAMPLE.read_text(encoding="utf-8"))
         print(f"würde anlegen: {COMPANY} · {JOB_TITLE}")
         print(f"  Kandidat: {CANDIDATE} (vorher: {LEGACY_CANDIDATE})")
         print(f"  CV: {CV_FILENAME}, {len(cv_html())} Bytes, {len(WORK_HISTORY)} Stationen")

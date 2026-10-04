@@ -22,6 +22,7 @@ import type {
   CompanyContactsDTO,
   AssessmentDTO,
   AssessmentWriteDTO,
+  AuswertungParsedDTO,
   BriefingDTO,
   CriteriaSuggestionDTO,
   JobDTO,
@@ -431,6 +432,14 @@ export const api = {
     request<AssessmentDTO>(`/pipeline/applications/${applicationId}/assessment`, {
       method: 'PUT',
       body: JSON.stringify(body),
+    }),
+
+  /** Read a pasted Kandidatenauswertung into form fields. Stores nothing:
+   *  the recruiter sees what was understood, corrects it, and saves. */
+  parseAuswertung: (text: string) =>
+    request<AuswertungParsedDTO>('/pipeline/auswertung/parse', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
     }),
 
   /** Put a candidate on a mandate. Idempotent per pair — assigning twice

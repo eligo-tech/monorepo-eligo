@@ -9,11 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
+from app.domain.pipeline import auswertung
 from app.domain.pipeline import service
 from app.domain.pipeline import steps as steps_mod
 from app.domain.pipeline.schemas import (
     AssessmentRead,
     AssessmentWrite,
+    AuswertungParse,
+    AuswertungParsed,
+    ProfileRead,
     ProcessJobRead,
     ProcessStepCreate,
     ProcessStepRead,
@@ -222,6 +226,33 @@ def _step_read(row) -> ProcessStepRead:
             "outcome": row.outcome,
             "note": row.note,
         }
+    )
+
+
+@router.post("/auswertung/parse", response_model=AuswertungParsed)
+async def parse_auswertung_document(
+    payload: AuswertungParse,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+) -> AuswertungParsed:
+    """Read a pasted Kandidatenauswertung into the fields of the form.
+
+    Stores nothing and touches no database. The recruiter pastes the document
+    they just wrote, sees what was understood, corrects it and saves — the
+    same split the rest of the system runs on: this proposes, the human
+    commits. It is deterministic text parsing, not a model, so what it fills
+    in can be checked against the words above it.
+    """
+    parsed = auswertung.parse_auswertung(payload.text)
+    assessment = parsed["assessment"]
+    score = assessment["fit_score"]
+    if score is not None and not 0 <= score <= 10:
+        # A document that scores "12 / 10" is read, not refused: everything
+        # else in it is still worth filling in. The score is left empty
+        # rather than clamped, because 10 is not what the document said.
+        assessment["fit_score"] = None
+    return AuswertungParsed(
+        assessment=AssessmentWrite(**assessment),
+        profile=ProfileRead(**parsed["candidate"]),
     )
 
 

@@ -200,9 +200,12 @@ function toProfile(dto: CandidateDTO): CandidateProfile {
     education: toEducation(dto.education),
     motivation: dto.motivation ?? undefined,
     profileSummary: dto.profile_summary ?? undefined,
+    focusAreas: dto.focus_areas ?? [],
+    technicalProfile: dto.technical_profile ?? undefined,
     interviewAvailability: dto.interview_availability ?? undefined,
     otherProcesses: dto.other_processes ?? undefined,
     otherProcessCompanies: dto.other_process_companies ?? [],
+    otherNotes: dto.other_notes ?? undefined,
     source: dto.source ?? undefined,
     allSkills: dto.skills,
   }

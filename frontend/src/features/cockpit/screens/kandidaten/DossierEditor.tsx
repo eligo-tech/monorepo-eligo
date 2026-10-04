@@ -45,9 +45,12 @@ interface Draft {
   salary_minimum: string
   salary_currency: string
   profile_summary: string
+  focus_areas: string[]
+  technical_profile: string
   interview_availability: string
   other_processes: string
   other_process_companies: string[]
+  other_notes: string
   work_permit: string
   source: string
   motivation: string
@@ -119,9 +122,12 @@ function seed(dto: CandidateDTO): Draft {
     salary_minimum: numStr(dto.salary_minimum),
     salary_currency: dto.salary_currency || 'EUR',
     profile_summary: s(dto.profile_summary),
+    focus_areas: [...(dto.focus_areas ?? [])],
+    technical_profile: s(dto.technical_profile),
     interview_availability: s(dto.interview_availability),
     other_processes: s(dto.other_processes),
     other_process_companies: [...(dto.other_process_companies ?? [])],
+    other_notes: s(dto.other_notes),
     work_permit: dto.work_permit || 'unknown',
     source: s(dto.source),
     motivation: s(dto.motivation),
@@ -226,8 +232,10 @@ function buildPatch(dto: CandidateDTO, d: Draft): CandidateUpdatePayload {
   str('source', d.source, dto.source)
   str('motivation', d.motivation, dto.motivation)
   str('profile_summary', d.profile_summary, dto.profile_summary)
+  str('technical_profile', d.technical_profile, dto.technical_profile)
   str('interview_availability', d.interview_availability, dto.interview_availability)
   str('other_processes', d.other_processes, dto.other_processes)
+  str('other_notes', d.other_notes, dto.other_notes)
 
   // Currency is never null (defaults to EUR on the backend).
   const cur = d.salary_currency.trim().toUpperCase()
@@ -251,6 +259,10 @@ function buildPatch(dto: CandidateDTO, d: Draft): CandidateUpdatePayload {
   // Lists — compare JSON; backend re-diffs and skips no-ops anyway.
   const skills = cleanList(d.skills)
   if (JSON.stringify(skills) !== JSON.stringify(dto.skills ?? [])) patch.skills = skills
+  const focusAreas = cleanList(d.focus_areas)
+  if (JSON.stringify(focusAreas) !== JSON.stringify(dto.focus_areas ?? [])) {
+    patch.focus_areas = focusAreas
+  }
   const industries = cleanList(d.industries)
   if (JSON.stringify(industries) !== JSON.stringify(dto.industries ?? [])) {
     patch.industries = industries
@@ -507,12 +519,34 @@ export function DossierEditor({
         </div>
       </section>
 
-      <section className="mt-7">
+      <section className="mt-7" data-field="profile_summary">
         <GroupLabel>Profil-Zusammenfassung</GroupLabel>
         <TextArea
           value={d.profile_summary}
           onChange={(v) => set('profile_summary', v)}
           placeholder="Zusammenfassung des Profils aus dem Gespräch…"
+        />
+      </section>
+
+      <section className="mt-7" data-field="focus_areas">
+        <GroupLabel>Schwerpunkte</GroupLabel>
+        <TagInput
+          tags={d.focus_areas}
+          onChange={(v) => set('focus_areas', v)}
+          placeholder="Schwerpunkt hinzufügen…"
+        />
+      </section>
+
+      {/* Prose, and deliberately not the Skills list above it: that one is
+          what the deterministic Muss-Kriterien are checked against, and a
+          sentence shredded into it would put "MariaDB bekannt (persönlich
+          nicht bevorzugt)" in front of a hard filter. */}
+      <section className="mt-7" data-field="technical_profile">
+        <GroupLabel>Technisches Know-how</GroupLabel>
+        <TextArea
+          value={d.technical_profile}
+          onChange={(v) => set('technical_profile', v)}
+          placeholder="Java (Experte), Jakarta EE, WildFly, JBoss; Hibernate, JPA …"
         />
       </section>
 
@@ -522,6 +556,19 @@ export function DossierEditor({
           value={d.motivation}
           onChange={(v) => set('motivation', v)}
           placeholder="Warum will der Kandidat wechseln?"
+        />
+      </section>
+
+      {/* The open tail of the Gesprächszusammenfassung. One free-text block
+          rather than a column each: the list is open, and a recruiter
+          writing it down after a call must not be stopped by a missing
+          slot. */}
+      <section className="mt-7" data-field="other_notes">
+        <GroupLabel>Weitere relevante Punkte</GroupLabel>
+        <TextArea
+          value={d.other_notes}
+          onChange={(v) => set('other_notes', v)}
+          placeholder={'Aktuelle Rolle / Arbeitgeber: …\nRelevante Projekterfahrung: …\nSprachkenntnisse: …'}
         />
       </section>
 

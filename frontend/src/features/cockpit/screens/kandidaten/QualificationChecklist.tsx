@@ -99,6 +99,35 @@ function groups(c: Candidate, p: CandidateProfile | undefined): [string, Row[]][
           field: 'salary_expectation',
         },
         { label: 'Wechselmotivation', value: text(p?.motivation), field: 'motivation' },
+        // Section B of the Kandidatenauswertung, line for line. Each one was
+        // a question somebody asked on the call, so each one is a row here —
+        // the list is what says whether the conversation was written down.
+        {
+          label: 'Profil-Zusammenfassung',
+          value: text(p?.profileSummary),
+          field: 'profile_summary',
+        },
+        { label: 'Schwerpunkte', value: list(p?.focusAreas), field: 'focus_areas' },
+        {
+          label: 'Technisches Know-how',
+          value: text(p?.technicalProfile),
+          field: 'technical_profile',
+        },
+        {
+          label: 'Höchster Abschluss',
+          value: p?.education?.length ? `${p.education.length} erfasst` : null,
+          field: 'education',
+        },
+        {
+          label: 'Interview-Verfügbarkeit',
+          value: text(p?.interviewAvailability),
+          field: 'interview_availability',
+        },
+        {
+          label: 'Weitere relevante Punkte',
+          value: text(p?.otherNotes),
+          field: 'other_notes',
+        },
         { label: 'Andere Prozesse', value: text(p?.otherProcesses), field: 'other_processes' },
         {
           label: '… bei welchen Firmen',

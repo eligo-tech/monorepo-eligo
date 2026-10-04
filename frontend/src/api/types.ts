@@ -71,12 +71,19 @@ export interface CandidateDTO {
   salary_minimum?: number | null
   /** The recruiter's summary of the conversation — holds across mandates. */
   profile_summary?: string | null
+  /** "Schwerpunkte" — what the person is known for, as items. */
+  focus_areas?: string[] | null
+  /** "Technisches Know-how" in prose, qualifiers kept. Deliberately not
+   *  `skills`: that list is what the deterministic hard filters read. */
+  technical_profile?: string | null
   /** "Mi/Do ab 11 Uhr" — needed when booking a round. */
   interview_availability?: string | null
   /** Where else they are in process, in the candidate's own words. */
   other_processes?: string | null
   /** The companies behind that — countable across the pool, unlike prose. */
   other_process_companies?: string[] | null
+  /** "Weitere relevante Punkte" — the open tail of the conversation. */
+  other_notes?: string | null
   languages?: string[] | null
   education?: EducationDTO[] | string[] | null
   working_experience?: string[] | null
@@ -115,9 +122,15 @@ export interface CandidateUpdatePayload {
   salary_expectation?: number | null
   salary_minimum?: number | null
   profile_summary?: string | null
+  /** "Schwerpunkte" — what the person is known for, as items. */
+  focus_areas?: string[]
+  /** "Technisches Know-how" in prose. Separate from `skills`. */
+  technical_profile?: string | null
   interview_availability?: string | null
   other_processes?: string | null
   other_process_companies?: string[]
+  /** "Weitere relevante Punkte", one per line. */
+  other_notes?: string | null
   salary_currency?: string
   work_permit?: string
   source?: string | null
@@ -652,6 +665,32 @@ export interface AssessmentDTO {
   assessed_at: string | null
 }
 
+/** Section B of the Kandidatenauswertung: the PERSON, not the fit.
+ *
+ *  Carried on the process so a candidate's card opens with the summary
+ *  already in hand. These are `candidates` columns mirrored read-only — the
+ *  Gesprächszusammenfassung holds across every mandate they run on. */
+export interface ProfileDTO {
+  profile_summary: string | null
+  /** "Schwerpunkte" — what the person is known for, as items. */
+  focus_areas: string[]
+  /** "Technisches Know-how" in prose. NOT `skills`, which the hard filters read. */
+  technical_profile: string | null
+  notice_period: string | null
+  availability: string | null
+  motivation: string | null
+  interview_availability: string | null
+  education: string[]
+  /** "Weitere relevante Punkte", one per line. */
+  other_notes: string | null
+  other_processes: string | null
+  other_process_companies: string[]
+  salary_minimum: number | null
+  salary_expectation: number | null
+  current_salary: number | null
+  salary_currency: string | null
+}
+
 export interface ProcessCandidateDTO {
   application_id: string
   candidate_id: string
@@ -667,6 +706,8 @@ export interface ProcessCandidateDTO {
   step_order?: string[]
   /** Null while nobody has assessed this candidate FOR THIS mandate. */
   assessment: AssessmentDTO | null
+  /** The person's own summary — identical on every mandate they run on. */
+  profile?: ProfileDTO
   /** Null when the figures to compare are not all there. */
   salary_fit: SalaryFitDTO | null
 }
@@ -692,6 +733,13 @@ export interface AssessmentWriteDTO {
   client_summary?: string | null
   technologies?: string[]
   basis?: string | null
+}
+
+/** What a pasted Kandidatenauswertung was understood to say. Nothing is
+ *  stored by parsing it: the form fills, the recruiter corrects and saves. */
+export interface AuswertungParsedDTO {
+  assessment: AssessmentWriteDTO
+  profile: ProfileDTO
 }
 
 export interface ProcessJobDTO {

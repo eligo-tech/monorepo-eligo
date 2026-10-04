@@ -19,15 +19,8 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
-import { scoreTone } from './ScoreBar'
 import { Chip, Label } from './primitives'
 import type { CandidateAssessment } from '../data/types'
-
-const TONE_TEXT = {
-  mint: 'text-mint-300',
-  gold: 'text-gold-300',
-  coral: 'text-coral-300',
-} as const
 
 /** "18.09.2026" — the day the assessment was made, in German order. */
 function dateDe(iso: string): string {
@@ -79,33 +72,22 @@ function provenance(assessment: CandidateAssessment): string | null {
 
 export function AssessmentPanel({ assessment }: { assessment: CandidateAssessment }) {
   const [showClientText, setShowClientText] = useState(false)
-  const { fitScore } = assessment
-  const tone = fitScore === null ? 'gold' : scoreTone(fitScore * 10)
-  // The Kurzfazit is the first paragraph; the rest is the argument behind it.
-  const [headline, ...rest] = (assessment.verdict ?? '').split('\n\n')
+  // The Kurzfazit and the score are the summary at the TOP of the card
+  // (`CandidateSummary`); what is left here is the detail behind them.
+  // Printing the headline twice on one card made the second copy read as a
+  // second, differing verdict.
+  const [, ...rest] = (assessment.verdict ?? '').split('\n\n')
 
   return (
     <div className="mt-6 border-t border-cockpit-line pt-5">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <Label>Passung zum Mandat</Label>
-        {fitScore !== null && (
-          <span className={cn('font-mono text-[20px] font-semibold', TONE_TEXT[tone])}>
-            {fitScore}
-            <span className="text-[14px] text-cockpit-faint"> / 10</span>
-          </span>
-        )}
+        <Label>Auswertung im Detail</Label>
         {provenance(assessment) && (
           <span className="font-mono text-[12px] text-cockpit-faint">
             {provenance(assessment)}
           </span>
         )}
       </div>
-
-      {headline && (
-        <p className="mt-3 max-w-4xl text-[15px] leading-relaxed text-cockpit-text">
-          {headline}
-        </p>
-      )}
 
       {(assessment.strengths.length > 0 || assessment.risks.length > 0) && (
         <div className="mt-5 flex flex-wrap gap-x-10 gap-y-5">

@@ -379,10 +379,39 @@ export function CandidateDrawer({
                   </p>
                 </CvSection>
 
+                {(p?.focusAreas?.length ?? 0) > 0 && (
+                  <CvSection icon={Sparkles} title="Schwerpunkte">
+                    <div className="flex flex-wrap gap-1.5">
+                      {p?.focusAreas.map((area) => (
+                        <Chip key={area}>{area}</Chip>
+                      ))}
+                    </div>
+                  </CvSection>
+                )}
+
+                {/* Prose, and deliberately next to the Skills chips rather
+                    than merged into them: the chips are what the hard
+                    filters read, this is what the person actually said. */}
+                {p?.technicalProfile?.trim() && (
+                  <CvSection icon={Sparkles} title="Technisches Know-how">
+                    <p className="text-[14px] leading-relaxed text-cockpit-dim">
+                      {p.technicalProfile}
+                    </p>
+                  </CvSection>
+                )}
+
                 {p?.profileSummary?.trim() && p?.motivation?.trim() && (
                   <CvSection icon={Sparkles} title="Wechselmotivation">
                     <p className="text-[14px] leading-relaxed text-cockpit-dim">
                       {p.motivation}
+                    </p>
+                  </CvSection>
+                )}
+
+                {p?.otherNotes?.trim() && (
+                  <CvSection icon={Sparkles} title="Weitere relevante Punkte">
+                    <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-cockpit-dim">
+                      {p.otherNotes}
                     </p>
                   </CvSection>
                 )}

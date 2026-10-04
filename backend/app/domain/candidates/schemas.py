@@ -57,9 +57,17 @@ class CandidateBase(BaseModel):
     current_salary: int | None = None
     salary_minimum: int | None = None
     profile_summary: str | None = None
+    #: "Schwerpunkte" — what the person is known for, as items.
+    focus_areas: list[str] | None = None
+    #: "Technisches Know-how" in prose, qualifiers kept. Separate from
+    #: `skills`, which is the token list the hard filters read.
+    technical_profile: str | None = None
     interview_availability: str | None = None
     other_processes: str | None = None
     other_process_companies: list[str] | None = None
+    #: "Weitere relevante Punkte" — the open tail of the Gesprächs-
+    #: zusammenfassung. No length cap: it is a free-text note.
+    other_notes: str | None = None
     languages: list[str] | None = None
     # Structured entries ({degree, institution, dates}) or legacy strings.
     education: list[dict] | list[str] | None = None
@@ -111,9 +119,12 @@ class CandidateUpdate(BaseModel):
     salary_expectation: int | None = Field(default=None, ge=0)
     salary_minimum: int | None = Field(default=None, ge=0)
     profile_summary: str | None = None
+    focus_areas: list[str] | None = None
+    technical_profile: str | None = None
     interview_availability: str | None = None
     other_processes: str | None = None
     other_process_companies: list[str] | None = None
+    other_notes: str | None = None
     salary_currency: str | None = None
     availability_weeks: int | None = Field(default=None, ge=0)
     work_permit: WorkPermitStatus | None = None

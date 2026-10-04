@@ -11,6 +11,10 @@ The document is the recruiter's own template, four sections deep:
 Only A/C/D are per-mandate; B describes the person and therefore lands on
 `candidates`, where it holds for every mandate they run on.
 
+The parsing itself is `app.domain.pipeline.auswertung.parse_auswertung` — the
+same pure function the cockpit's paste box calls, so a document imported from
+a file and one pasted into the form are read identically.
+
 **The application is named, never guessed.** The example document is
 anonymised ("GE Software", "Position 1") and the real tracker holds real
 people; matching it onto a candidate by resemblance would attach invented
@@ -27,9 +31,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import datetime as dt
 import pathlib
-import re
 import uuid
 
 from sqlalchemy import select
@@ -39,153 +41,9 @@ from app.domain.candidates.models import Candidate
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.pipeline import service as pipeline_service
+from app.domain.pipeline.auswertung import parse_auswertung
 from app.domain.pipeline.models import Application
 from app.domain.registry import *  # noqa: F401,F403 — register every table
-
-#: "Gesamtbewertung: 8 / 10" — the score, on the document's own scale.
-SCORE = re.compile(r"Gesamtbewertung:\s*(\d{1,2})\s*/\s*10")
-#: "Grundlage: CV (Kurzversion) + Gesprächstranskript (18.09.2026)"
-BASIS = re.compile(r"^Grundlage:\s*(.+)$", re.MULTILINE)
-GERMAN_DATE = re.compile(r"(\d{1,2})\.(\d{1,2})\.(\d{4})")
-
-#: Section headings, as the template writes them. Matched at the start of a
-#: line so a mention inside a paragraph cannot split the document.
-_SECTIONS = (
-    ("A", re.compile(r"^A\.\s", re.MULTILINE)),
-    ("B", re.compile(r"^B\.\s", re.MULTILINE)),
-    ("C", re.compile(r"^C\.\s", re.MULTILINE)),
-    ("D", re.compile(r"^D\.\s", re.MULTILINE)),
-)
-
-#: Labelled lines of section B → the candidate column each belongs in.
-#: Everything here describes the PERSON, not their fit for one position.
-_B_FIELDS: dict[str, str] = {
-    "Zusammenfassung des Profils": "profile_summary",
-    "Kündigungsfrist / Verfügbarkeit": "notice_period",
-    "Wechselmotivation": "motivation",
-    "Verfügbarkeit für Interviews": "interview_availability",
-}
-
-
-def _split_sections(text: str) -> dict[str, str]:
-    """The document as {"A": …, "B": …, "C": …, "D": …}, text before A dropped."""
-    marks: list[tuple[str, int]] = []
-    for name, pattern in _SECTIONS:
-        match = pattern.search(text)
-        if match:
-            marks.append((name, match.start()))
-    marks.sort(key=lambda m: m[1])
-    out: dict[str, str] = {}
-    for index, (name, start) in enumerate(marks):
-        end = marks[index + 1][1] if index + 1 < len(marks) else len(text)
-        out[name] = text[start:end].strip()
-    return out
-
-
-def _lines_between(block: str, start_label: str, stop_labels: tuple[str, ...]) -> list[str]:
-    """The bullet lines under `start_label:` up to the next labelled line.
-
-    The template writes its lists as one item per line with no bullet
-    character, so the terminator is the next label rather than a marker.
-    """
-    out: list[str] = []
-    collecting = False
-    for raw in block.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        if line.rstrip(":") == start_label:
-            collecting = True
-            continue
-        if collecting:
-            if any(line.startswith(stop) for stop in stop_labels):
-                break
-            out.append(line)
-    return out
-
-
-def _labelled(block: str, label: str) -> str | None:
-    """The text after `Label:` — the paragraph it introduces, one line."""
-    for raw in block.splitlines():
-        line = raw.strip()
-        if line.startswith(f"{label}:"):
-            value = line.split(":", 1)[1].strip()
-            return value or None
-    return None
-
-
-def parse_assessment(text: str) -> dict:
-    """The document as data. Pure: takes the text, returns what to store.
-
-    Unknown or missing sections come back empty rather than raising — a
-    recruiter's file that stops after section A is still worth importing, and
-    a parser that insists on all four would simply never be used.
-    """
-    sections = _split_sections(text)
-    a, b = sections.get("A", ""), sections.get("B", "")
-
-    score = SCORE.search(a)
-    basis_match = BASIS.search(text)
-    basis = basis_match.group(1).strip() if basis_match else None
-    assessed_at = None
-    if basis:
-        date = GERMAN_DATE.search(basis)
-        if date:
-            day, month, year = (int(g) for g in date.groups())
-            assessed_at = dt.datetime(year, month, day, tzinfo=dt.UTC)
-
-    # The Kurzfazit is the headline; the "Fachliche & professionelle Passung"
-    # paragraph is the same verdict argued out. Both are section A's prose and
-    # are kept together — splitting them across fields would leave the cockpit
-    # showing a conclusion with its reasoning elsewhere.
-    verdict_parts = [
-        part
-        for part in (
-            _labelled(a, "Kurzfazit"),
-            _labelled(a, "Fachliche & professionelle Passung"),
-        )
-        if part
-    ]
-
-    technologies = [
-        tech.strip()
-        for tech in re.split(r"[,;]", _technology_text(sections.get("D", "")))
-        if tech.strip()
-    ]
-
-    return {
-        "assessment": {
-            "fit_score": int(score.group(1)) if score else None,
-            "verdict": "\n\n".join(verdict_parts) or None,
-            "strengths": _lines_between(a, "Stärken", ("Lücken/Risiken",)),
-            "risks": _lines_between(
-                a, "Lücken/Risiken", ("Fachliche & professionelle Passung",)
-            ),
-            "client_summary": _client_summary(sections.get("C", "")),
-            "technologies": technologies,
-            "basis": basis,
-            "assessed_at": assessed_at,
-        },
-        "candidate": {
-            field: value
-            for label, field in _B_FIELDS.items()
-            if (value := _labelled(b, label))
-        },
-    }
-
-
-def _body(block: str) -> str:
-    """A section without its heading line."""
-    lines = block.splitlines()
-    return "\n".join(line.strip() for line in lines[1:] if line.strip())
-
-
-def _client_summary(block: str) -> str | None:
-    return _body(block) or None
-
-
-def _technology_text(block: str) -> str:
-    return _body(block)
 
 
 async def load(
@@ -258,7 +116,7 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    parsed = parse_assessment(args.file.read_text(encoding="utf-8"))
+    parsed = parse_auswertung(args.file.read_text(encoding="utf-8"))
     a = parsed["assessment"]
     print(f"Bewertung {a['fit_score']}/10 · {len(a['strengths'])} Stärken · "
           f"{len(a['risks'])} Risiken · {len(a['technologies'])} Technologien")

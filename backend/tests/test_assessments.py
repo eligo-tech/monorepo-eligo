@@ -26,7 +26,7 @@ from app.domain.jobs.models import Job
 from app.domain.pipeline import service
 from app.domain.pipeline.models import Application
 from scripts import import_assessment
-from scripts.import_assessment import parse_assessment
+from app.domain.pipeline.auswertung import parse_auswertung
 
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
 OTHER = uuid.uuid4()
@@ -241,7 +241,7 @@ def test_the_real_evaluation_parses_into_its_four_sections() -> None:
     A fixture written from memory would agree with whatever the parser does;
     the recruiter's own document can disagree.
     """
-    parsed = parse_assessment(EXAMPLE.read_text(encoding="utf-8"))
+    parsed = parse_auswertung(EXAMPLE.read_text(encoding="utf-8"))
     a = parsed["assessment"]
 
     assert a["fit_score"] == 8
@@ -261,20 +261,58 @@ def test_the_real_evaluation_parses_into_its_four_sections() -> None:
     assert "Microservices-Architektur" in a["technologies"]
     assert a["client_summary"].startswith("Der Kandidat ist ein Senior Software")
 
-    # Section B describes the person, so it lands on the candidate.
-    assert set(parsed["candidate"]) == {
+    # Section B describes the person, so it lands on the candidate. Every
+    # labelled line of it has a column — the three that did not (Schwerpunkte,
+    # Technisches Know-how, Weitere relevante Punkte) were silently dropped
+    # on every import until migration 0036 gave them one.
+    b = parsed["candidate"]
+    assert set(b) == {
         "profile_summary",
+        "focus_areas",
+        "technical_profile",
         "notice_period",
         "motivation",
+        "education",
         "interview_availability",
+        "other_notes",
+        "current_salary",
+        "salary_minimum",
+        "salary_expectation",
     }
-    assert "Mittwoch/Donnerstag" in parsed["candidate"]["interview_availability"]
+    assert "Mittwoch/Donnerstag" in b["interview_availability"]
+
+    # Schwerpunkte is read as items, and the comma inside the bracket does
+    # not split one of them in half.
+    assert b["focus_areas"][:2] == ["Java-Enterprise-Architektur", "WildFly/JBoss"]
+    assert "Legacy-Modernisierung (Swing/XML → Microservices)" in b["focus_areas"]
+
+    # "Technisches Know-how" stays prose and stays OUT of `skills`: that list
+    # feeds the deterministic hard filters, and "MariaDB bekannt (persönlich
+    # nicht bevorzugt)" must never arrive there as a skill.
+    assert "skills" not in b
+    assert b["technical_profile"].startswith("Java (Experte)")
+
+    # "Weitere relevante Punkte" is an open list, kept line by line.
+    assert b["other_notes"].count("\n") == 4
+    assert b["other_notes"].startswith("Aktuelle Rolle / Arbeitgeber:")
+
+    # Each salary comes from the clause that names it, never from position.
+    assert (b["current_salary"], b["salary_minimum"], b["salary_expectation"]) == (
+        105_000,
+        92_000,
+        100_000,
+    )
+    assert b["education"] == [
+        "Fachinformatiker Anwendungsentwicklung (IHK); zahlreiche Zertifizierungen"
+        " (zertifizierter Enterprise Architect, JBoss Certified Application"
+        " Administrator, Certified Java Programmer u. a.)."
+    ]
 
 
 def test_a_document_that_stops_after_section_a_still_imports() -> None:
     """Half a file is not an error. A parser that insisted on all four
     sections would be bypassed, and then nothing would be captured at all."""
-    parsed = parse_assessment(
+    parsed = parse_auswertung(
         "Kandidatenauswertung\n"
         "Grundlage: CV\n\n"
         "A. Passungsbewertung zur Position\n"
@@ -326,3 +364,118 @@ async def test_the_importer_writes_both_halves(two_mandates) -> None:
         )
     assert row.fit_score == 8 and row.technologies == ["WildFly"]
     assert candidate.interview_availability == "Mi/Do ab 11 Uhr"
+
+
+# --------------------------------------------------------------------------
+# Pasting the document into the cockpit
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not EXAMPLE.exists(), reason="example not in this checkout")
+async def test_pasting_the_document_fills_the_form_and_stores_nothing() -> None:
+    """The paste box proposes; the recruiter commits.
+
+    A parse that wrote straight to the record would put salary figures it
+    lifted out of a sentence into the columns a hard filter reads, with
+    nobody having looked at them. So the endpoint returns the fields and
+    changes no row — which is also what makes it safe to paste a draft.
+    """
+    from app.main import app as fastapi_app
+
+    text = EXAMPLE.read_text(encoding="utf-8")
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app), base_url="http://t"
+    ) as client:
+        response = await client.post(f"{API}/auswertung/parse", json={"text": text})
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["assessment"]["fit_score"] == 8
+    assert len(body["assessment"]["strengths"]) == 7
+    assert body["assessment"]["technologies"][0] == "Java"
+    assert body["profile"]["focus_areas"][1] == "WildFly/JBoss"
+    assert body["profile"]["salary_minimum"] == 92_000
+    assert body["profile"]["other_notes"].startswith("Aktuelle Rolle")
+
+    # Nothing was written: no assessment row exists for anybody.
+    async with SessionLocal() as s:
+        from app.domain.pipeline.models import ApplicationAssessment
+
+        rows = (await s.execute(select(ApplicationAssessment))).scalars().all()
+    assert rows == []
+
+
+async def test_pasting_something_that_is_not_the_template_is_not_an_error() -> None:
+    """An empty answer is the honest one. Raising would mean a recruiter who
+    pasted the wrong half of a document loses the window they typed in."""
+    from app.main import app as fastapi_app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app), base_url="http://t"
+    ) as client:
+        response = await client.post(
+            f"{API}/auswertung/parse", json={"text": "Guten Tag, anbei mein Lebenslauf."}
+        )
+    assert response.status_code == 200
+    assert response.json()["assessment"]["fit_score"] is None
+    assert response.json()["profile"]["profile_summary"] is None
+
+
+async def test_the_process_carries_the_person_as_well_as_the_fit(two_mandates) -> None:
+    """The cockpit opens a candidate's card with the summary already in hand.
+
+    Section B holds across mandates, so it is read off the candidate and
+    appears identically on BOTH of this person's runs — the opposite of the
+    assessment, which is per mandate on purpose.
+    """
+    async with SessionLocal() as s:
+        candidate = await s.scalar(
+            select(Candidate).where(Candidate.tenant_id == TENANT)
+        )
+        candidate.profile_summary = "Senior Software Entwickler & Architekt."
+        candidate.focus_areas = ["Java-Enterprise-Architektur", "WildFly/JBoss"]
+        candidate.technical_profile = "Java (Experte), WildFly, JPA/Hibernate."
+        candidate.other_notes = "Sprachkenntnisse: Deutsch, Englisch."
+        # An ATS import leaves education as dicts; the cockpit reads a line.
+        candidate.education = [{"degree": "Fachinformatiker AE", "year": "2003"}]
+        await s.commit()
+
+        grouped = await service.processes(s, tenant_id=TENANT)
+
+    profiles = [c["profile"] for job in grouped for c in job["candidates"]]
+    assert len(profiles) == 2
+    assert {p["profile_summary"] for p in profiles} == {
+        "Senior Software Entwickler & Architekt."
+    }
+    assert profiles[0]["focus_areas"] == [
+        "Java-Enterprise-Architektur",
+        "WildFly/JBoss",
+    ]
+    assert profiles[0]["education"] == ["Fachinformatiker AE · 2003"]
+
+
+async def test_a_score_outside_the_scale_does_not_lose_the_rest_of_the_document() -> None:
+    """"12 / 10" is somebody being emphatic, not a reason to refuse the paste.
+
+    The score comes back empty — clamping it to 10 would put a number in
+    front of a recruiter that the document does not contain — and every
+    other field is still filled.
+    """
+    from app.main import app as fastapi_app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app), base_url="http://t"
+    ) as client:
+        response = await client.post(
+            f"{API}/auswertung/parse",
+            json={
+                "text": (
+                    "A. Passungsbewertung zur Position\n"
+                    "Gesamtbewertung: 12 / 10\n\n"
+                    "Kurzfazit: Ausnahmekandidat.\n"
+                )
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["assessment"]["fit_score"] is None
+    assert response.json()["assessment"]["verdict"] == "Ausnahmekandidat."
