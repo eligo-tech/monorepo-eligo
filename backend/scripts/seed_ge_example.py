@@ -30,20 +30,29 @@ from __future__ import annotations
 import argparse
 import asyncio
 import datetime as dt
+import json
 import pathlib
 import uuid
 
 from sqlalchemy import select
 
 from app.core.database import SessionLocal, current_tenant_var
+from app.domain.candidates import service as candidates_service
 from app.domain.candidates.models import Candidate
-from app.domain.common.enums import ApplicationStatus, DocumentKind, EmploymentForm
+from app.domain.common.enums import (
+    ApplicationStatus,
+    ConfidenceSource,
+    DocumentKind,
+    EmploymentForm,
+)
 from app.domain.documents.models import CandidateDocument
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.pipeline import service as pipeline_service
 from app.domain.pipeline.models import Application
 from app.domain.registry import *  # noqa: F401,F403 — register every table
+from app.domain.verification import service as verification
+from app.domain.verification.schemas import ProposedChange
 from scripts.import_assessment import parse_assessment
 
 COMPANY = "GE Software"
@@ -225,6 +234,51 @@ async def _one(session, model, **where):
     return await session.scalar(select(model).filter_by(**where))
 
 
+#: The fields the document actually states, among those the score measures.
+#: Contact details, date of birth and LinkedIn are NOT in it — the document
+#: is anonymised — so they stay unevidenced, which is the honest result.
+EVIDENCED_FIELDS = (
+    "full_name",
+    "current_title",
+    "location",
+    "skills",
+    "salary_expectation",
+)
+
+
+async def _record_evidence(session, *, tenant_id: uuid.UUID, candidate) -> list[str]:
+    """Commit each document-derived field through the verification gate.
+
+    Not decoration: `verification_score` counts committed enrichment records
+    naming a checkable source, and the source here is a file the workspace
+    holds. Writing the columns directly — as this script used to — produced a
+    candidate with a CV attached and no evidence behind a single field.
+    """
+    done: list[str] = []
+    for field in EVIDENCED_FIELDS:
+        value = getattr(candidate, field, None)
+        if value in (None, "", [], {}):
+            continue
+        await verification.verify_and_commit(
+            session,
+            change=ProposedChange(
+                tenant_id=tenant_id,
+                entity_type="candidate",
+                entity_id=candidate.id,
+                field=field,
+                proposed_value=json.dumps(value, ensure_ascii=False, default=str)
+                if isinstance(value, (list, dict))
+                else str(value),
+                source=ConfidenceSource.DOCUMENT_EXTRACTION,
+                source_detail=f"{CV_FILENAME} + Gesprächstranskript 18.09.2026",
+                confidence=0.95,
+            ),
+            agent="seed_ge_example",
+        )
+        done.append(field)
+    return done
+
+
 async def seed(tenant_id: uuid.UUID) -> dict:
     current_tenant_var.set(str(tenant_id))
     async with SessionLocal() as s:
@@ -304,6 +358,18 @@ async def seed(tenant_id: uuid.UUID) -> dict:
             setattr(candidate, field, value)
         await s.commit()
 
+        # Everything above was read off the CV and the Gesprächstranskript,
+        # so the record should be able to prove it. Routing those fields
+        # through the gate leaves a committed enrichment record per field —
+        # which is what `verification_score` counts, and what makes the
+        # evidence pane and the number agree. Without it the showcase
+        # profile shows a CV on the left and "ohne Beleg" on the right.
+        evidenced = await _record_evidence(s, tenant_id=tenant_id, candidate=candidate)
+        await candidates_service.recompute_scores(
+            s, tenant_id=tenant_id, candidate=candidate
+        )
+        await s.commit()
+
         await pipeline_service.set_step(
             s, tenant_id=tenant_id, application_id=app_id,
             step_key="vorgestellt", done_at=PRESENTED_AT, outcome="pass",
@@ -316,6 +382,7 @@ async def seed(tenant_id: uuid.UUID) -> dict:
     return {
         "job_id": str(job_id),
         "candidate_id": str(candidate_id),
+        "belegte_felder": len(evidenced),
         "application": str(app_id),
         "cv_bytes": len(body),
         "fit_score": parsed["assessment"]["fit_score"],
