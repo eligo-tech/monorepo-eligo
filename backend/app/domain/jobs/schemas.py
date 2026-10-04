@@ -57,3 +57,17 @@ class JobUpdate(BaseModel):
     salary_max: int | None = Field(default=None, ge=0)
     salary_currency: str | None = None
     status: str | None = None
+
+
+class CriteriaSuggestion(BaseModel):
+    """One proposed Muss-Kriterium, and the reason it is proposed.
+
+    A proposal, not a write: hard criteria exclude people, so a human picks
+    the ones that are really non-negotiable (the same rule the agents follow).
+    """
+
+    skill: str
+    evidence: str
+    #: How many of this workspace's candidates carry the skill — a criterion
+    #: nobody has filters everyone out, so the number is part of the offer.
+    candidates: int = 0

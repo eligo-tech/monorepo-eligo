@@ -38,6 +38,31 @@ def _norm(value: str) -> str:
     return value.strip().lower()
 
 
+def active_criteria(job: Job) -> list[str]:
+    """Which hard criteria this mandate actually carries.
+
+    `apply_hard_filters` cannot filter on what is not recorded, and on the
+    live workspace 63 of 76 mandates have no Muss-Kriterien and 72 no salary
+    band — so for most of the book the deterministic half of the matching
+    rule decides nothing and what reaches the recruiter is soft ranking over
+    an unfiltered pool. That is not visible from a score, so every match
+    result carries this list: empty means "nothing was filtered", and the
+    screen says so rather than implying a verdict nobody reached.
+    """
+    criteria: list[str] = []
+    if job.requires_work_permit:
+        criteria.append("Arbeitserlaubnis")
+    if job.location and job.location_radius_km is not None:
+        criteria.append(f"Ort {job.location} ±{job.location_radius_km} km")
+    if job.salary_max is not None:
+        criteria.append(f"Gehaltsobergrenze {job.salary_max:,}".replace(",", ".") + " €")
+    if job.required_certifications:
+        criteria.append(f"{len(job.required_certifications)} Zertifikat(e)")
+    if job.must_have_skills:
+        criteria.append(f"{len(job.must_have_skills)} Muss-Skill(s)")
+    return criteria
+
+
 def apply_hard_filters(candidate: Candidate, job: Job) -> list[str]:
     """Return a list of hard-filter failure reasons (empty == candidate passes).
 
@@ -191,12 +216,14 @@ async def match_candidate(
 ) -> MatchResult:
     """Full pipeline for one candidate<->job pair: hard filters, then soft rank."""
     failures = apply_hard_filters(candidate, job)
+    criteria = active_criteria(job)
     if failures:
         return MatchResult(
             candidate_id=candidate.id,
             job_id=job.id,
             passed_hard_filters=False,
             hard_filter_failures=failures,
+            hard_criteria=criteria,
             score=0.0,
             strength=MatchStrength.WEAK,
             reasons=[],
@@ -209,6 +236,7 @@ async def match_candidate(
         job_id=job.id,
         passed_hard_filters=True,
         hard_filter_failures=[],
+        hard_criteria=criteria,
         score=score,
         strength=strength,
         reasons=reasons,

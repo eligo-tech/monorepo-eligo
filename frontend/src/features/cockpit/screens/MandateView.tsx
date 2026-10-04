@@ -165,7 +165,7 @@ export function MandateView({
       </section>
 
       <ActivityPanel mandate={mandate} />
-      <SuchprofilPanel mandate={mandate} />
+      <SuchprofilPanel mandate={mandate} onChanged={onChanged} />
       <SourcingPanel mandate={mandate} />
       <QualificationPanel mandate={mandate} />
 

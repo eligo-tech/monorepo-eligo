@@ -86,6 +86,10 @@ export function JobsScreen({
 
   const [filter, setFilter] = useState('')
   const [status, setStatus] = useState('')
+  // 63 of 76 mandates carry no Muss-Kriterien, which makes the matcher's
+  // deterministic half a no-op for most of the book. Not visible from a
+  // list of titles, so it gets its own lens.
+  const [onlyUnfiltered, setOnlyUnfiltered] = useState(false)
 
   const all = (jobs.data ?? []).map((j) => saved[j.id] ?? j)
 
@@ -99,6 +103,7 @@ export function JobsScreen({
   const rows = useMemo(() => {
     const scored = all
       .filter((job) => !status || job.status === status)
+      .filter((job) => !onlyUnfiltered || (job.must_have_skills ?? []).length === 0)
       .map((job) => ({
         job,
         score: searchScore(
@@ -120,6 +125,9 @@ export function JobsScreen({
   // Counted over the filtered list: "2 von 10 Mandaten · 6 offen" would read
   // as if the filter had kept six of them.
   const open = rows.filter((j) => j.status === 'open').length
+  const withoutCriteria = all.filter(
+    (j) => (j.must_have_skills ?? []).length === 0,
+  ).length
 
   const reset = () => {
     setFilter('')
@@ -168,6 +176,21 @@ export function JobsScreen({
               </button>
             )}
           </label>
+
+          <button
+            type="button"
+            onClick={() => setOnlyUnfiltered((v) => !v)}
+            aria-pressed={onlyUnfiltered}
+            title="Mandate ohne Muss-Kriterien — das Matching filtert bei ihnen nicht, es sortiert nur"
+            className={cn(
+              'rounded-lg border px-2.5 py-1.5 font-mono text-[12px] transition-colors',
+              onlyUnfiltered
+                ? 'border-gold-600 bg-gold-500/10 text-gold-300'
+                : 'border-cockpit-line text-cockpit-faint hover:text-cockpit-dim',
+            )}
+          >
+            ohne Muss-Kriterien {withoutCriteria}
+          </button>
 
           <div className="flex flex-wrap gap-1.5">
             {STATUS_FILTERS.map((option) => (
@@ -373,8 +396,19 @@ export function JobsScreen({
                     <span className="truncate text-cockpit-faint">kein Band</span>
                   )}
                 </span>
-                <span>
+                <span className="flex items-center gap-1.5">
                   <Chip tone={STATUS_TONE[job.status]}>{job.status}</Chip>
+                  {/* The matcher cannot filter on what is not recorded, and
+                      a ranked list that was never filtered looks exactly
+                      like one that was. */}
+                  {(job.must_have_skills ?? []).length === 0 && (
+                    <span
+                      title="Keine Muss-Kriterien — das Matching sortiert nur, es filtert nicht"
+                      className="cursor-help font-mono text-[11px] text-gold-400"
+                    >
+                      ungefiltert
+                    </span>
+                  )}
                 </span>
                 <button
                   type="button"

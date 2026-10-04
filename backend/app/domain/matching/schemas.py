@@ -31,6 +31,10 @@ class MatchResult(BaseModel):
     job_id: uuid.UUID
     passed_hard_filters: bool
     hard_filter_failures: list[str] = Field(default_factory=list)
+    #: The hard criteria the mandate actually carries. EMPTY means nothing
+    #: was filtered — `passed_hard_filters` is then true because there was
+    #: nothing to fail, which is a different claim and has to read as one.
+    hard_criteria: list[str] = Field(default_factory=list)
     score: float
     strength: MatchStrength
     reasons: list[MatchReason] = Field(default_factory=list)

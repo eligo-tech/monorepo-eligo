@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.jobs import service
-from app.domain.jobs.schemas import JobCreate, JobRead, JobUpdate
+from app.domain.jobs.schemas import (
+    CriteriaSuggestion,
+    JobCreate,
+    JobRead,
+    JobUpdate,
+)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -35,6 +40,32 @@ async def get_job(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     return JobRead.model_validate(row)
+
+
+@router.get(
+    "/{job_id}/criteria-suggestions", response_model=list[CriteriaSuggestion]
+)
+async def criteria_suggestions(
+    job_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[CriteriaSuggestion]:
+    """Muss-Kriterien this mandate's title already names.
+
+    63 of 76 mandates in the live workspace have none, which makes the
+    deterministic half of matching a no-op for most of the book. These are
+    proposals drawn from the title and the workspace's own skill vocabulary —
+    deterministic, explainable, and committed only by a human click.
+    """
+    job = await service.get_job(db, tenant_id=tenant_id, job_id=job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+    return [
+        CriteriaSuggestion(
+            skill=s.skill, evidence=s.evidence, candidates=s.candidates
+        )
+        for s in await service.criteria_suggestions(db, tenant_id=tenant_id, job=job)
+    ]
 
 
 @router.post("", response_model=JobRead, status_code=status.HTTP_201_CREATED)

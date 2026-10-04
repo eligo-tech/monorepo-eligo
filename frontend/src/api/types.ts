@@ -128,6 +128,15 @@ export interface CandidateUpdatePayload {
   work_history?: WorkRoleDTO[]
 }
 
+export interface CriteriaSuggestionDTO {
+  skill: string
+  /** Why it is proposed — "Der Titel nennt »Java«". */
+  evidence: string
+  /** How many of this workspace's candidates carry it. A criterion nobody
+   *  has filters everyone out, so the number is part of the offer. */
+  candidates: number
+}
+
 export interface JobDTO {
   id: string
   tenant_id: string
