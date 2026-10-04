@@ -2,8 +2,14 @@
 //
 // The whole pool, live from /candidates. Free-text search, AND-semantics skill
 // filtering and CSV export are unchanged from the original view; only the surface
-// is cockpit now. Verification is surfaced as a column because it is the one number
-// on a candidate the record can actually vouch for.
+// is cockpit now.
+//
+// TWO numbers, because one was lying. The column used to read "Verif." and
+// showed the share of key fields that had a VALUE — completeness wearing the
+// word "verified" — and because only a manual edit ever recomputed it, 446 of
+// 447 records showed 0%. Now: `Vollständig` is how much of the profile is
+// filled in, and `Beleg` is how much of it something actually checked against
+// a source we can name. An imported record is legitimately 0% belegt.
 
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDownUp, Check, Download, Search, SlidersHorizontal, Upload, X } from 'lucide-react'
@@ -24,11 +30,12 @@ type SortKey = 'created' | 'name' | 'verification'
 const SORT_LABELS: Record<SortKey, string> = {
   created: 'Neueste zuerst',
   name: 'Name (A–Z)',
-  verification: 'Verifizierung',
+  verification: 'Beleg zuerst',
 }
 const SORT_ORDER: SortKey[] = ['created', 'name', 'verification']
 
 /** Verification thresholds — same ladder as the rest of the cockpit. */
+/** Tone of the completeness bar — the same ladder as the rest of the cockpit. */
 function verificationTone(v: number): 'mint' | 'gold' | 'coral' {
   if (v >= 90) return 'mint'
   if (v >= 75) return 'gold'
@@ -186,7 +193,15 @@ function SkillFilter({
 }
 
 const GRID = 'grid-cols-[1.7fr_0.5fr_1.5fr_1fr_1.4fr_1.1fr_0.7fr]'
-const COLUMNS = ['Name', 'LI', 'E-Mail', 'Telefon', 'Erfahrung', 'Skills', 'Verif.']
+const COLUMNS = [
+  'Name',
+  'LI',
+  'E-Mail',
+  'Telefon',
+  'Erfahrung',
+  'Skills',
+  'Vollständig',
+]
 
 export function KandidatenScreen({
   candidateId,
@@ -284,15 +299,21 @@ export function KandidatenScreen({
     }
     const sorted = [...out]
     if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'de'))
-    else if (sort === 'verification') sorted.sort((a, b) => b.verification - a.verification)
+    else if (sort === 'verification')
+      sorted.sort(
+        (a, b) => b.verification - a.verification || b.completeness - a.completeness,
+      )
     else if (!byRelevance)
       sorted.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
     return sorted
   }, [all, term, byRelevance, sort, skillFilter])
 
-  const avgVerification = all.length
-    ? Math.round(all.reduce((s, c) => s + c.verification, 0) / all.length)
+  const avgCompleteness = all.length
+    ? Math.round(all.reduce((s, c) => s + c.completeness, 0) / all.length)
     : 0
+  // The number that matters for the product's own claim: how much of the
+  // pool rests on something checkable at all.
+  const withEvidence = all.filter((c) => c.verification > 0).length
 
   const cycleSort = () =>
     setSort((s) => SORT_ORDER[(SORT_ORDER.indexOf(s) + 1) % SORT_ORDER.length])
@@ -355,10 +376,23 @@ export function KandidatenScreen({
             <span className="text-cockpit-text">{skillOptions.length}</span> Technologien
           </span>
           <span>
-            Ø Verifizierung{' '}
-            <span className={TONE_TEXT[verificationTone(avgVerification)]}>
-              {avgVerification}%
+            Ø Vollständigkeit{' '}
+            <span className={TONE_TEXT[verificationTone(avgCompleteness)]}>
+              {avgCompleteness}%
             </span>
+          </span>
+          <span
+            title="Profile, bei denen mindestens ein Feld gegen eine Quelle geprüft ist — heute kommt das aus dem CV-Import."
+            className="cursor-help"
+          >
+            <span
+              className={
+                withEvidence > 0 ? 'text-cockpit-text' : 'text-cockpit-faint'
+              }
+            >
+              {withEvidence}
+            </span>{' '}
+            mit Beleg
           </span>
         </div>
 
@@ -508,17 +542,35 @@ export function KandidatenScreen({
                   )}
                 </div>
 
-                {/* Verification — live from the record, so no provenance mark. */}
+                {/* Completeness as the bar — that is what helps scan a pool.
+                    Evidence as a mark beside it: a chip when something was
+                    checked, a quiet dash when nothing was. A red 0% on nine
+                    rows in ten is noise; "ohne Beleg" is information. */}
                 <div className="flex items-center justify-end gap-2">
                   <span className="h-[5px] w-10 overflow-hidden rounded-full bg-[#26281f]">
                     <span
                       className={cn('block h-full rounded-full', TONE_BAR[tone])}
-                      style={{ width: `${Math.max(0, Math.min(100, c.verification))}%` }}
+                      style={{ width: `${Math.max(0, Math.min(100, c.completeness))}%` }}
                     />
                   </span>
                   <span className={cn('w-9 text-right font-mono text-[13px]', TONE_TEXT[tone])}>
-                    {c.verification}%
+                    {c.completeness}%
                   </span>
+                  {c.verification > 0 ? (
+                    <span
+                      title={`${c.verification}% der Schlüsselfelder sind gegen eine Quelle geprüft`}
+                      className="w-[4.5rem] shrink-0 rounded border border-mint-700 bg-mint-800/40 px-1.5 text-center font-mono text-[11px] leading-5 text-mint-400"
+                    >
+                      {c.verification}% Beleg
+                    </span>
+                  ) : (
+                    <span
+                      title="Kein Feld dieses Profils ist gegen eine Quelle geprüft — importiert, nicht verifiziert"
+                      className="w-[4.5rem] shrink-0 text-center font-mono text-[11px] leading-5 text-cockpit-faint"
+                    >
+                      ohne Beleg
+                    </span>
+                  )}
                 </div>
               </div>
             )

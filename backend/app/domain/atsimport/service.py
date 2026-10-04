@@ -26,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.candidates.employment import normalize_employment_form
+from app.domain.candidates import service as candidates_service
 from app.domain.candidates.models import Candidate
 from app.domain.common.enums import ConfidenceSource
 from app.domain.companies.models import Company
@@ -334,15 +335,14 @@ async def import_aifind(
             or None,
         }
         if row is None:
-            session.add(
-                Candidate(
-                    tenant_id=tenant_id,
-                    external_id=record.external_id,
-                    external_source=SOURCE,
-                    skills=list(record.skills),
-                    **{k: v for k, v in fields.items() if v is not None},
-                )
+            row = Candidate(
+                tenant_id=tenant_id,
+                external_id=record.external_id,
+                external_source=SOURCE,
+                skills=list(record.skills),
+                **{k: v for k, v in fields.items() if v is not None},
             )
+            session.add(row)
             summary.candidates_created += 1
         else:
             changed = False
@@ -356,6 +356,14 @@ async def import_aifind(
                 row.skills = list(record.skills)
                 changed = True
             summary.candidates_updated += int(changed)
+
+        # Completeness moves with every import; the verified share does not
+        # (an import is a claim, not a check) — but both are recomputed from
+        # the record so neither can drift away from it.
+        await session.flush()
+        await candidates_service.recompute_scores(
+            session, tenant_id=tenant_id, candidate=row
+        )
 
     await session.commit()
     return summary

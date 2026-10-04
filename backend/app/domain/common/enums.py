@@ -106,6 +106,34 @@ class InteractionType(str, enum.Enum):
     NOTE = "note"
 
 
+#: Provenances that constitute EVIDENCE for a field: somebody or something
+#: checked the value against a source that can be named. A bulk import is not
+#: in this set — it asserts what another system held, which is a claim, not a
+#: check. That distinction is the whole of `verification_score`: without it
+#: the number counts rows, and a number that counts rows is a completeness
+#: measure wearing the word "verified".
+EVIDENCE_SOURCES = frozenset(
+    {
+        ConfidenceSource.DOCUMENT_EXTRACTION,  # read off a CV we hold
+        ConfidenceSource.HUMAN_VERIFIED,  # a person checked it
+        ConfidenceSource.PUBLIC_WEB,  # a page we can cite
+        ConfidenceSource.THIRD_PARTY_SOURCE,  # a provider we can name
+    }
+)
+
+
+def is_evidence(source: ConfidenceSource | str | None) -> bool:
+    """True when a field established this way counts as verified."""
+    if source is None:
+        return False
+    if isinstance(source, str):
+        try:
+            source = ConfidenceSource(source)
+        except ValueError:
+            return False
+    return source in EVIDENCE_SOURCES
+
+
 #: Provenances that owe a GDPR Art. 14 notification when they carry personal
 #: data: the subject did not give it to us, so they must be told we hold it.
 #: One definition, used by both the enrichment agent and the managers domain —

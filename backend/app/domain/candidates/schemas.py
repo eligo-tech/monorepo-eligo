@@ -147,7 +147,11 @@ class CandidateRead(CandidateBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
     merged_identities: list[str] = Field(default_factory=list)
+    #: Share of key fields with evidence behind them (committed record naming
+    #: a checkable source). 0 for an imported record — nothing was checked.
     verification_score: float
+    #: Share of key fields that merely have a value.
+    completeness_score: float = 0.0
     created_at: dt.datetime
     updated_at: dt.datetime
 

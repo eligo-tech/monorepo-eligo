@@ -119,8 +119,16 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
         String(30), default=WorkPermitStatus.UNKNOWN, nullable=False
     )
 
-    # 0.0-1.0 — share of the profile that is verified rather than proposed.
+    #: 0.0-1.0 — share of the key fields with EVIDENCE behind them: a
+    #: committed enrichment record naming a source a reader could check. An
+    #: imported value has none, so an imported record scores 0 and says so.
     verification_score: Mapped[float] = mapped_column(
+        Float, default=0.0, nullable=False
+    )
+    #: 0.0-1.0 — share of the key fields that have a value at all. Useful for
+    #: scanning a pool, and deliberately NOT the same number: for 446 of 447
+    #: records the old single score conflated the two and showed neither.
+    completeness_score: Mapped[float] = mapped_column(
         Float, default=0.0, nullable=False
     )
 
