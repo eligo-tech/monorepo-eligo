@@ -261,6 +261,13 @@ async def extract_cv(
         await agent.commit(session, agent_result)
         review_items += agent_result.review_items
 
+        # Both scores read off what just landed: the extraction leaves a
+        # committed record per accepted field, which is exactly the evidence
+        # `verified_share` counts.
+        await candidates_service.recompute_scores(
+            session, tenant_id=tenant_id, candidate=created
+        )
+
         # ── Postcondition: re-query the system-of-record and prove the write
         #    landed (the laufwise "verify against real state after execute" step).
         notes += [o.as_note() for o in await _verify_persisted(session, tenant_id, candidate_id, accepted.get("email"))]

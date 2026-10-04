@@ -148,6 +148,7 @@ export function toCandidate(dto: CandidateDTO): Candidate {
     extraSkills: Math.max(0, dto.skills.length - 2),
     location: dto.location ?? '—',
     verification: Math.round(dto.verification_score * 100),
+    completeness: Math.round((dto.completeness_score ?? 0) * 100),
     aiSummary: synthSummary(dto),
     stats: { avgTenure: fmtYears(avg), current: fmtYears(current), total: fmtYears(total) },
     experience: toRoles(dto.work_history).map((r) => ({

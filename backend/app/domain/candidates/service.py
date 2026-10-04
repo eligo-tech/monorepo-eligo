@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.domain.candidates.models import Candidate
 from app.domain.candidates.schemas import CandidateCreate, CandidateUpdate
-from app.domain.common.enums import ConfidenceSource, WorkPermitStatus
+from app.domain.common.enums import ConfidenceSource, WorkPermitStatus, is_evidence
 from app.domain.verification import service as verification
+from app.domain.verification.models import EnrichmentRecord
 from app.domain.verification.schemas import ProposedChange
 
 
@@ -81,8 +82,8 @@ async def create_candidate(
 # Columns declared NOT NULL — a manual edit must not blank these out.
 _NON_NULLABLE = frozenset({"full_name", "salary_currency", "work_permit"})
 
-# Fields that count toward the "verified share" surfaced to recruiters. A manual
-# edit human-verifies a field, so completing these raises verification_score.
+# The fields both scores are measured over. One list, so "70% vollständig"
+# and "40% verifiziert" are shares of the same thing and can be compared.
 _KEY_FIELDS = (
     "full_name",
     "email",
@@ -124,9 +125,60 @@ def _is_filled(value: object) -> bool:
     return True
 
 
-def _verification_score(candidate: Candidate) -> float:
+def completeness(candidate: Candidate) -> float:
+    """Share of the key fields that have a value. Says nothing about truth.
+
+    This is what `verification_score` used to compute, and the mismatch
+    mattered: the pool is 447 records of which 446 scored 0, because the only
+    path that recomputed it was a manual edit — so a column labelled
+    "Verifizierung" showed neither verification nor completeness.
+    """
     filled = sum(1 for f in _KEY_FIELDS if _is_filled(getattr(candidate, f, None)))
     return round(filled / len(_KEY_FIELDS), 4)
+
+
+async def verified_share(
+    session: AsyncSession, *, tenant_id: uuid.UUID, candidate_id: uuid.UUID
+) -> float:
+    """Share of the key fields that have EVIDENCE behind them.
+
+    A field counts when a committed `EnrichmentRecord` says where the value
+    came from and that source is one a reader could check — a CV we hold, a
+    page we can cite, a person who confirmed it (`EVIDENCE_SOURCES`). An
+    imported value has no such record and therefore does not count: the ATS
+    said so, which is a claim, not a check.
+
+    So an imported record scores 0, and that is the honest answer rather than
+    a bug. The number only moves when something is actually established.
+    """
+    rows = await session.execute(
+        select(EnrichmentRecord.field, EnrichmentRecord.source).where(
+            EnrichmentRecord.tenant_id == tenant_id,
+            EnrichmentRecord.entity_type == "candidate",
+            EnrichmentRecord.entity_id == candidate_id,
+            EnrichmentRecord.committed.is_(True),
+        )
+    )
+    evidenced = {
+        field for field, source in rows if field in _KEY_FIELDS and is_evidence(source)
+    }
+    return round(len(evidenced) / len(_KEY_FIELDS), 4)
+
+
+async def recompute_scores(
+    session: AsyncSession, *, tenant_id: uuid.UUID, candidate: Candidate
+) -> Candidate:
+    """Bring both numbers in line with the record as it now stands.
+
+    Called from every path that writes a candidate — the manual edit, the ATS
+    import, and `verify_and_commit` — because a score maintained by exactly
+    one of three writers is a score that is wrong for the other two.
+    """
+    candidate.completeness_score = completeness(candidate)
+    candidate.verification_score = await verified_share(
+        session, tenant_id=tenant_id, candidate_id=candidate.id
+    )
+    return candidate
 
 
 async def update_candidate(
@@ -197,11 +249,11 @@ async def update_candidate(
         applied.append(field)
 
     if applied:
-        # A human-entered field is verified; reflect that in the score, but never
-        # lower a score an agent already established.
-        candidate.verification_score = max(
-            candidate.verification_score, _verification_score(candidate)
-        )
+        # The edit went through `verify_and_commit`, so each field now has a
+        # `human_verified` record behind it — the score is read back off those
+        # records rather than assumed from the fact that someone typed.
+        await session.flush()
+        await recompute_scores(session, tenant_id=tenant_id, candidate=candidate)
         await session.flush()
 
     await session.commit()

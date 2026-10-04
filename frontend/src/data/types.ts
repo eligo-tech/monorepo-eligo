@@ -102,7 +102,12 @@ export interface Candidate {
   extraSkills: number
   location: string
   /** 0-100 — how much of the profile is verified against a real source */
+  /** 0-100: share of key fields with EVIDENCE behind them. 0 means nothing
+   *  was ever checked against a source — which is the true answer for an
+   *  imported record, not a missing number. */
   verification: number
+  /** 0-100: share of key fields that have a value at all. */
+  completeness: number
   aiSummary: string
   stats: { avgTenure: string; current: string; total: string }
   experience: Experience[]

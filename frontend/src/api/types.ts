@@ -37,7 +37,9 @@ export interface CandidateDTO {
   availability_weeks: number | null
   work_permit: string
   merged_identities: string[]
-  verification_score: number // 0..1
+  verification_score: number
+  /** Share of key fields that merely have a value. */
+  completeness_score?: number // 0..1
   created_at: string
   updated_at: string
 
