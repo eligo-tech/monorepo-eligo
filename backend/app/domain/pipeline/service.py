@@ -515,6 +515,42 @@ def _position_after(rows: list[ProcessStep], after: str | None) -> int:
     return anchor + max(1, (following - anchor) // 2)
 
 
+def _as_line(entry: object) -> str:
+    """One education entry as a line, whatever shape the import left it in.
+
+    ATS exports write `{"degree": …, "institution": …}`; the
+    Gesprächszusammenfassung writes a sentence. The cockpit reads a line
+    either way rather than refusing the record whose importer chose a dict.
+    """
+    if isinstance(entry, dict):
+        parts = [str(v).strip() for v in entry.values() if str(v or "").strip()]
+        return " · ".join(parts)
+    return str(entry).strip()
+
+
+def _profile_dict(candidate) -> dict:  # noqa: ANN001 — the Candidate model
+    """Section B, read off the candidate: the summary the card leads with."""
+    return {
+        "profile_summary": candidate.profile_summary,
+        "focus_areas": list(candidate.focus_areas or []),
+        "technical_profile": candidate.technical_profile,
+        "notice_period": candidate.notice_period,
+        "availability": candidate.availability,
+        "motivation": candidate.motivation,
+        "interview_availability": candidate.interview_availability,
+        "education": [
+            line for entry in (candidate.education or []) if (line := _as_line(entry))
+        ],
+        "other_notes": candidate.other_notes,
+        "other_processes": candidate.other_processes,
+        "other_process_companies": list(candidate.other_process_companies or []),
+        "salary_minimum": candidate.salary_minimum,
+        "salary_expectation": candidate.salary_expectation,
+        "current_salary": candidate.current_salary,
+        "salary_currency": candidate.salary_currency,
+    }
+
+
 def _assessment_dict(row: ApplicationAssessment | None) -> dict | None:
     """The stored assessment as the wire contract wants it, or nothing.
 
@@ -753,6 +789,7 @@ async def processes(
                     for s in steps
                 ],
                 "assessment": _assessment_dict(assessments.get(app.id)),
+                "profile": _profile_dict(candidate),
                 "salary_fit": _salary_fit_dict(candidate, job),
             }
         )

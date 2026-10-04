@@ -15,6 +15,7 @@ import { ArrowLeft } from 'lucide-react'
 
 import { AssessmentEditor } from '../ui/AssessmentEditor'
 import { AssessmentPanel } from '../ui/AssessmentPanel'
+import { CandidateSummary } from '../ui/CandidateSummary'
 import { HistoryTrail } from '../ui/HistoryTrail'
 import { api } from '@/api/client'
 import { ProcessCardPanel } from '../ui/ProcessCardPanel'
@@ -174,6 +175,14 @@ export function MandateView({
                         onChanged?.()
                       }
                     : undefined
+                }
+                summary={
+                  assessing === card.id ? undefined : (
+                    <CandidateSummary
+                      card={card}
+                      onEdit={card.editable ? () => setAssessing(card.id) : undefined}
+                    />
+                  )
                 }
               >
                 {card.salaryFit && <SalaryVerdict fit={card.salaryFit} />}

@@ -69,12 +69,19 @@ export interface CandidateProfile {
   motivation?: string
   /** The recruiter's own summary of the conversation. */
   profileSummary?: string
+  /** "Schwerpunkte" — what the person is known for, as items. */
+  focusAreas: string[]
+  /** "Technisches Know-how" in prose. Separate from `allSkills`, which is
+   *  the token list the deterministic Muss-Kriterien are checked against. */
+  technicalProfile?: string
   /** "Mi/Do ab 11 Uhr" — what a round gets booked against. */
   interviewAvailability?: string
   /** Where else they are in process: timing risk and sales signal. */
   otherProcesses?: string
   /** The companies behind that. */
   otherProcessCompanies: string[]
+  /** "Weitere relevante Punkte" — the open tail of the conversation. */
+  otherNotes?: string
   source?: string
   /** all skills (the table only shows the first two) */
   allSkills: string[]

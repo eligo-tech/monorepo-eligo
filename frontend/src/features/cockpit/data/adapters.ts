@@ -21,6 +21,7 @@ import {
   demo,
   live,
   type CandidateAssessment,
+  type CandidateProfile,
   type ClosingDeal,
   type Figure,
   type JobScore,
@@ -232,6 +233,7 @@ export function processCardsFromSteps(
         steps,
         editable: true,
         assessment: toAssessment(person.assessment),
+        profile: toProfile(person.profile),
         salaryFit:
           person.salary_fit && person.salary_fit.status !== 'unknown'
             ? {
@@ -279,6 +281,29 @@ function stepChips(
     ]
   }
   return undefined
+}
+
+function toProfile(
+  dto: ProcessCandidateDTO['profile'],
+): CandidateProfile | undefined {
+  if (!dto) return undefined
+  return {
+    summary: dto.profile_summary,
+    focusAreas: dto.focus_areas ?? [],
+    technicalProfile: dto.technical_profile,
+    noticePeriod: dto.notice_period,
+    availability: dto.availability,
+    motivation: dto.motivation,
+    interviewAvailability: dto.interview_availability,
+    education: dto.education ?? [],
+    otherNotes: dto.other_notes,
+    otherProcesses: dto.other_processes,
+    otherProcessCompanies: dto.other_process_companies ?? [],
+    salaryMinimum: dto.salary_minimum,
+    salaryExpectation: dto.salary_expectation,
+    currentSalary: dto.current_salary,
+    salaryCurrency: dto.salary_currency,
+  }
 }
 
 function toAssessment(

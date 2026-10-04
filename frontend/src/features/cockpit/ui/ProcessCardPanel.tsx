@@ -21,6 +21,7 @@ export function ProcessCardPanel({
   onAddStep,
   onRemoveStep,
   onMandateClick,
+  summary,
   children,
 }: {
   card: ProcessCard
@@ -30,6 +31,11 @@ export function ProcessCardPanel({
   onRemoveStep?: (step: ProcessStep) => Promise<void>
   /** Set in the overall view: the mandate ref opens that mandate's view. */
   onMandateClick?: () => void
+  /** Rendered between the title and the stepper — the summary, per mandate.
+   *  Above the stepper on purpose: a recruiter opening a mandate asks who
+   *  this is before they ask which step is next. The overall list leaves it
+   *  out, where the question is the opposite one. */
+  summary?: ReactNode
   /** Rendered inside the card, under the stepper — the assessment, per job. */
   children?: ReactNode
 }) {
@@ -109,6 +115,8 @@ export function ProcessCardPanel({
           <span className="font-mono text-[12px] text-cockpit-faint">Fee-Potenzial</span>
         </div>
       </div>
+
+      {summary}
 
       <div className="mt-6">
         <ProcessStepper

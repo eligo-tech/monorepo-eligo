@@ -80,7 +80,9 @@ async def create_candidate(
 
 
 # Columns declared NOT NULL — a manual edit must not blank these out.
-_NON_NULLABLE = frozenset({"full_name", "salary_currency", "work_permit"})
+_NON_NULLABLE = frozenset(
+    {"full_name", "salary_currency", "work_permit", "focus_areas", "skills"}
+)
 
 # The fields both scores are measured over. One list, so "70% vollständig"
 # and "40% verifiziert" are shares of the same thing and can be compared.

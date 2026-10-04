@@ -173,6 +173,32 @@ export interface CandidateAssessment {
   assessedAt: string | null
 }
 
+/** Section B of the Kandidatenauswertung: the PERSON, not their fit for one
+ *  mandate. The same object appears on every process this candidate runs —
+ *  a Gesprächszusammenfassung that differed per mandate would be two answers
+ *  to one question. */
+export interface CandidateProfile {
+  /** "Zusammenfassung des Profils" — the paragraph the card leads with. */
+  summary: string | null
+  /** "Schwerpunkte". */
+  focusAreas: string[]
+  /** "Technisches Know-how" in prose, qualifiers kept. */
+  technicalProfile: string | null
+  noticePeriod: string | null
+  availability: string | null
+  motivation: string | null
+  interviewAvailability: string | null
+  education: string[]
+  /** "Weitere relevante Punkte", one per line. */
+  otherNotes: string | null
+  otherProcesses: string | null
+  otherProcessCompanies: string[]
+  salaryMinimum: number | null
+  salaryExpectation: number | null
+  currentSalary: number | null
+  salaryCurrency: string | null
+}
+
 export interface ProcessCard {
   id: string
   /** The mandate this run belongs to, when the card comes from the record.
@@ -200,6 +226,8 @@ export interface ProcessCard {
    *  row to write to. */
   editable?: boolean
   assessment?: CandidateAssessment
+  /** The person behind the process. Absent on demo cards. */
+  profile?: CandidateProfile
   /** Deterministic: what the candidate needs vs. what the mandate pays.
    *  Absent when the figures to compare are not all on the record. */
   salaryFit?: SalaryFit

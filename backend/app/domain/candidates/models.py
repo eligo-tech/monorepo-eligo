@@ -98,6 +98,21 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
     #: of the Kandidatenauswertung) — holds across mandates, so it lives here
     #: and not on the application.
     profile_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: "Schwerpunkte" — the two or three things this person is actually known
+    #: for, as the Gesprächszusammenfassung names them. A list, because it is
+    #: the line that opens a client presentation and is read as items, not as
+    #: a sentence; distinct from `skills`, which is a technology inventory.
+    focus_areas: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    #: "Technisches Know-how" as the recruiter wrote it: prose, with the
+    #: qualifiers that make it true ("Java (Experte)", "MariaDB bekannt,
+    #: persönlich nicht bevorzugt").
+    #:
+    #: Deliberately NOT `skills`. That list feeds the deterministic hard
+    #: filters (ARCHITECTURE.md RULE 5); a sentence shredded into it on commas
+    #: would put "MariaDB bekannt (persönlich nicht bevorzugt)" in front of a
+    #: Muss-Kriterium check. The inventory stays machine-readable, the nuance
+    #: stays readable.
+    technical_profile: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: "Mittwoch/Donnerstag ab 11–12 Uhr" — scheduling needs the window, and a
     #: window buried in a note cannot be read when booking a round.
     interview_availability: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -113,6 +128,12 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
     other_process_companies: Mapped[list] = mapped_column(
         JSONList, default=list, nullable=False
     )
+    #: "Weitere relevante Punkte" — the tail of the Gesprächszusammenfassung:
+    #: current role, project history, languages, location, Besonderheiten. One
+    #: free-text block rather than a column each, because the list is open and
+    #: a recruiter writing it down after a call must not be stopped by a
+    #: missing slot. No length cap, for the same reason as the briefing note.
+    other_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     availability_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     work_permit: Mapped[WorkPermitStatus] = mapped_column(

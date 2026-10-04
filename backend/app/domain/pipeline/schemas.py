@@ -165,6 +165,40 @@ class SalaryFitRead(BaseModel):
     wish: int | None = None
 
 
+class ProfileRead(BaseModel):
+    """Section B of the Kandidatenauswertung — the PERSON, not the fit.
+
+    Carried on the process so the cockpit can open a candidate's card with
+    the summary already in hand. These are `candidates` columns, mirrored
+    read-only: the Gesprächszusammenfassung holds across every mandate the
+    person runs on, and the cockpit showing a per-mandate copy of it is how
+    two answers to one question appear.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    #: "Zusammenfassung des Profils" — the paragraph the card leads with.
+    profile_summary: str | None = None
+    #: "Schwerpunkte".
+    focus_areas: list[str] = Field(default_factory=list)
+    #: "Technisches Know-how", in prose. Not `skills`.
+    technical_profile: str | None = None
+    notice_period: str | None = None
+    availability: str | None = None
+    motivation: str | None = None
+    interview_availability: str | None = None
+    #: "Höchster Abschluss" and the certifications around it.
+    education: list[str] = Field(default_factory=list)
+    #: "Weitere relevante Punkte", one per line.
+    other_notes: str | None = None
+    other_processes: str | None = None
+    other_process_companies: list[str] = Field(default_factory=list)
+    salary_minimum: int | None = None
+    salary_expectation: int | None = None
+    current_salary: int | None = None
+    salary_currency: str | None = None
+
+
 class ProcessCandidateRead(BaseModel):
     """One candidate's run at one job."""
 
@@ -184,6 +218,8 @@ class ProcessCandidateRead(BaseModel):
     step_order: list[str] = []
     #: Null until someone has assessed this candidate FOR THIS mandate.
     assessment: AssessmentRead | None = None
+    #: The person's own summary — the same on every mandate they run on.
+    profile: ProfileRead = Field(default_factory=ProfileRead)
     salary_fit: SalaryFitRead | None = None
 
 
@@ -203,3 +239,22 @@ class ProcessJobRead(BaseModel):
     salary_currency: str | None = None
     status: str | None = None
     candidates: list[ProcessCandidateRead]
+
+
+class AuswertungParse(BaseModel):
+    """A pasted Kandidatenauswertung, on its way to being read."""
+
+    #: No length cap: the thing pasted here is a whole document.
+    text: str
+
+
+class AuswertungParsed(BaseModel):
+    """What the document was understood to say. Nothing is stored.
+
+    Two halves, because the document has two subjects: the assessment belongs
+    to one application, the profile to the person. The recruiter reads both
+    back in the form and saves — parsing proposes, the human commits.
+    """
+
+    assessment: AssessmentWrite
+    profile: ProfileRead
