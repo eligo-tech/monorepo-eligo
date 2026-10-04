@@ -37,6 +37,8 @@ import { cn } from '@/lib/cn'
 import { Chip } from '../../ui/primitives'
 import { Button, CloseButton, Drawer } from '../../ui/forms'
 import { HistoryTrail } from '../../ui/HistoryTrail'
+import { AssignToMandate } from './AssignToMandate'
+import { QualificationChecklist } from './QualificationChecklist'
 import { AttachmentsPanel } from './AttachmentsPanel'
 import { DossierEditor } from './DossierEditor'
 
@@ -44,11 +46,15 @@ export function CandidateDrawer({
   candidate,
   onClose,
   onSaved,
+  onPipelineChanged,
 }: {
   candidate: Candidate
   onClose: () => void
   /** Called after a manual edit is persisted, with the fresh record. */
   onSaved?: (updated: CandidateDTO) => void
+  /** Called after an assignment: the cockpit's board just changed, and the
+   *  next thing the recruiter does is open it. */
+  onPipelineChanged?: () => void
 }) {
   const [cvUrl, setCvUrl] = useState<string | null>(null)
   const [cvState, setCvState] = useState<'loading' | 'ready' | 'missing'>('loading')
@@ -60,6 +66,7 @@ export function CandidateDrawer({
   // Which mandates this person is running on. The cockpit links here; without
   // the way back, the record is a dead end — you read the CV and then have to
   // find the search again by name.
+  const [runsKey, setRunsKey] = useState(0)
   const { data: runs } = useAsync(
     () =>
       api
@@ -70,7 +77,7 @@ export function CandidateDrawer({
             .map((j) => ({ id: j.job_id, title: j.job_title, client: j.company_name })),
         )
         .catch(() => []),
-    [candidate.id],
+    [candidate.id, runsKey],
   )
 
   async function startEdit() {
@@ -147,7 +154,15 @@ export function CandidateDrawer({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-2">
+          <AssignToMandate
+            candidateId={candidate.id}
+            assignedJobIds={(runs ?? []).map((r) => r.id)}
+            onAssigned={() => {
+              setRunsKey((k) => k + 1)
+              onPipelineChanged?.()
+            }}
+          />
           {(runs ?? []).map((run) => (
             <a
               key={run.id}
@@ -267,6 +282,17 @@ export function CandidateDrawer({
               )
             ) : (
               <>
+                {/* What the Qualifikationsgespräch is supposed to produce,
+                    and what of it the record already holds. The editor
+                    behind "Erfassen" has always written every one of these
+                    fields; nobody could tell which were still empty. */}
+                <div className="mb-6 border-b border-cockpit-line pb-5">
+                  <QualificationChecklist
+                    candidate={candidate}
+                    onEdit={() => void startEdit()}
+                  />
+                </div>
+
                 {expanded ? (
                   <Profile360 candidate={candidate} p={p} />
                 ) : (

@@ -243,10 +243,23 @@ async def test_processes_group_by_mandate(application) -> None:
     assert candidate["next_appointment"] == dt.datetime(2026, 9, 17, 16, 0, tzinfo=dt.UTC)
 
 
-async def test_a_candidate_with_no_steps_is_not_a_running_process(application) -> None:
-    """The sheet only has rows from the presentation onwards, and so does this."""
+async def test_an_assigned_candidate_appears_before_being_presented(
+    application,
+) -> None:
+    """Assignment is the start of the work, not the presentation.
+
+    The sheet begins at the presentation because a sheet has nowhere to put
+    someone before that. The cockpit does — the Qualifikationsgespräch, the
+    documents and the client text all happen in between — so the candidate
+    shows up as soon as they are put on the mandate, with every step still
+    open and `presented_at` null.
+    """
     async with SessionLocal() as s:
-        assert await service.processes(s, tenant_id=TENANT) == []
+        [job] = await service.processes(s, tenant_id=TENANT)
+        [person] = job["candidates"]
+        assert person["presented_at"] is None
+        assert person["steps"] == [], "nothing ticked yet"
+        assert person["step_order"][0] == "vorgestellt"
 
 
 async def test_routes(application) -> None:

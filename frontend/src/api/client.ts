@@ -402,6 +402,14 @@ export const api = {
    *  as the recruiter's tracker records them. */
   processes: () => request<ProcessJobDTO[]>('/pipeline/processes'),
 
+  /** Put a candidate on a mandate. Idempotent per pair — assigning twice
+   *  returns the existing process rather than making a second one. */
+  assignToJob: (candidateId: string, jobId: string) =>
+    request<{ id: string }>('/pipeline/applications', {
+      method: 'POST',
+      body: JSON.stringify({ candidate_id: candidateId, job_id: jobId }),
+    }),
+
   /** Set a date, a verdict ("pass"/"out") or a note on one step. */
   setProcessStep: (
     applicationId: string,
