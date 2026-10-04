@@ -5,11 +5,21 @@
 // same card. Two renderings of one process would drift, and a recruiter
 // comparing the overall list with a mandate would have to work out which one
 // to believe.
+//
+// It collapses. A mandate with five candidates is five summaries, five
+// steppers and five assessments, and the question "who is on this mandate?"
+// then needs a page of scrolling to answer. Collapsed, the card keeps the
+// line that identifies it — ref, name, role, mandate, fee — and adds the
+// step it is on, so a folded card still says something.
+//
+// The choice is remembered per card, because a collapse that forgets itself
+// on reload is a collapse nobody uses twice.
 
 import type { ReactNode } from 'react'
 
-import { ExternalLink } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 
+import { useRemembered } from '@/hooks/useRemembered'
 import { ProgressRing } from './Gauge'
 import { ProcessStepper } from './ProcessStepper'
 import { Chip, Money, Panel } from './primitives'
@@ -39,6 +49,13 @@ export function ProcessCardPanel({
   /** Rendered inside the card, under the stepper — the assessment, per job. */
   children?: ReactNode
 }) {
+  const [collapsed, setCollapsed] = useRemembered(
+    `eligo.processCard.${card.id}.collapsed`,
+    false,
+  )
+  // What a folded card still says: where the process stands.
+  const current = card.steps.find((s) => s.state === 'current')
+
   return (
     <Panel tone="raised" className="px-7 py-6">
       <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
@@ -95,6 +112,9 @@ export function ProcessCardPanel({
                 °
               </sup>
             )}
+            {collapsed && current && (
+              <span className="text-cockpit-dim"> · bei „{current.label}“</span>
+            )}
           </p>
         </div>
 
@@ -114,20 +134,41 @@ export function ProcessCardPanel({
           )}
           <span className="font-mono text-[12px] text-cockpit-faint">Fee-Potenzial</span>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setCollapsed((shut) => !shut)}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Prozess ausklappen' : 'Prozess einklappen'}
+          className="-mr-1 shrink-0 self-start rounded-lg border border-cockpit-line p-1.5 text-cockpit-faint transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
+        >
+          {collapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+          <span className="sr-only">
+            {collapsed ? 'Prozess ausklappen' : 'Prozess einklappen'}
+          </span>
+        </button>
       </div>
 
-      {summary}
+      {!collapsed && (
+        <>
+          {summary}
 
-      <div className="mt-6">
-        <ProcessStepper
-          steps={card.steps}
-          onStepClick={onStepClick}
-          onAddStep={onAddStep}
-          onRemoveStep={onRemoveStep}
-        />
-      </div>
+          <div className="mt-6">
+            <ProcessStepper
+              steps={card.steps}
+              onStepClick={onStepClick}
+              onAddStep={onAddStep}
+              onRemoveStep={onRemoveStep}
+            />
+          </div>
 
-      {children}
+          {children}
+        </>
+      )}
     </Panel>
   )
 }
