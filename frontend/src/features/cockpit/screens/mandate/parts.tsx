@@ -6,6 +6,7 @@
 // hidden. `DemoText` is the prose equivalent of the `°` a Figure carries.
 
 import type { ReactNode } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
 import { ProvenanceMark } from '../../ui/primitives'
@@ -89,25 +90,70 @@ export function PanelTag({
   )
 }
 
-/** Panel heading: tag, title, and an optional right-aligned note. */
+/** Panel heading: tag, title, an optional right-aligned note — and, when the
+ *  panel can fold, the chevron that folds it.
+ *
+ *  Same control and same gesture as a process card, deliberately: a mandate
+ *  is a column of panels, and a reader who learns to fold one should not
+ *  have to work out how each of the others does it. Pass `onToggle` and the
+ *  heading grows the button; leave it out and nothing changes.
+ *
+ *  The whole heading is the hit area, not just the chevron. */
 export function PanelHead({
   tag,
   tone,
   title,
   note,
+  collapsed,
+  onToggle,
 }: {
   tag: string
   tone?: 'mint' | 'gold' | 'coral' | 'lav'
   title: ReactNode
   note?: ReactNode
+  collapsed?: boolean
+  onToggle?: () => void
 }) {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-3">
+  const head = (
+    <>
       <PanelTag tone={tone}>{tag}</PanelTag>
       <h3 className="text-[16px] font-semibold text-cockpit-text">{title}</h3>
       {note && (
         <span className="ml-auto font-mono text-[11px] text-cockpit-faint">{note}</span>
       )}
-    </div>
+    </>
+  )
+
+  if (!onToggle) {
+    return <div className="mb-4 flex flex-wrap items-center gap-3">{head}</div>
+  }
+
+  const label = collapsed ? 'ausklappen' : 'einklappen'
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      title={label}
+      className={cn(
+        'group flex w-full flex-wrap items-center gap-3 text-left',
+        collapsed ? 'mb-0' : 'mb-4',
+      )}
+    >
+      {head}
+      <span
+        className={cn(
+          'shrink-0 rounded-lg border border-cockpit-line p-1.5 text-cockpit-faint transition-colors group-hover:border-cockpit-edge group-hover:text-cockpit-text',
+          note ? '' : 'ml-auto',
+        )}
+      >
+        {collapsed ? (
+          <ChevronRight className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
+        <span className="sr-only">{label}</span>
+      </span>
+    </button>
   )
 }

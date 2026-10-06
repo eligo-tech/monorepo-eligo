@@ -16,6 +16,7 @@ import { CheckCircle2, Plus } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CriteriaSuggestionDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
+import { useRemembered } from '@/hooks/useRemembered'
 import { Chip, Panel } from '../../ui/primitives'
 import { DemoText, PanelHead } from './parts'
 import type { Mandate } from '../../data/types'
@@ -115,6 +116,12 @@ export function SuchprofilPanel({
   mandate: Mandate
   onChanged?: () => void
 }) {
+  // Remembered across mandates, not per mandate: a reader who folds the
+  // Suchprofil away is saying it is not what they are here for today.
+  const [collapsed, setCollapsed] = useRemembered(
+    'eligo.panel.suchprofil.collapsed',
+    false,
+  )
   const band =
     mandate.salaryMin !== null && mandate.salaryMax !== null
       ? `${mandate.salaryMin.toLocaleString('de-DE')} – ${mandate.salaryMax.toLocaleString('de-DE')} €`
@@ -129,85 +136,91 @@ export function SuchprofilPanel({
         tone="lav"
         title="Ideales Kandidatenprofil"
         note={`aus dem Mandat ${mandate.ref} · ${mandate.title}`}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((shut) => !shut)}
       />
 
-      <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-mint-700/50 bg-mint-800/20 px-4 py-2.5 text-[13px] text-cockpit-dim">
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-mint-400" />
-        <span>
-          <DemoText source="Kein Feedback-zu-Suchprofil-Lauf angebunden">
-            Manager-Feedback zu den letzten Profilen fließt hier ein und schärft die
-            Muss-Kriterien.
-          </DemoText>
-        </span>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
-              Musskriterien
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {mandate.mustHave.length > 0 ? (
-                mandate.mustHave.map((skill) => (
-                  <Chip key={skill} tone="gold">
-                    {skill}
-                  </Chip>
-                ))
-              ) : (
-                <span className="text-[13px] text-cockpit-faint">
-                  Keine hinterlegt — ohne sie filtert das Matching nicht.
-                </span>
-              )}
-            </div>
-            <CriteriaSuggestions mandate={mandate} onAdded={onChanged} />
-          </div>
-
-          <div className="space-y-2">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
-              Nice-to-have
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {NICE_TO_HAVE.map((skill) => (
-                <Chip key={skill}>
-                  <DemoText source="Nice-to-have ist am Mandat noch kein Feld">
-                    {skill}
-                  </DemoText>
-                </Chip>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
-            Kultur
+      {collapsed ? null : (
+        <>
+        <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-mint-700/50 bg-mint-800/20 px-4 py-2.5 text-[13px] text-cockpit-dim">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-mint-400" />
+          <span>
+            <DemoText source="Kein Feedback-zu-Suchprofil-Lauf angebunden">
+              Manager-Feedback zu den letzten Profilen fließt hier ein und schärft die
+              Muss-Kriterien.
+            </DemoText>
           </span>
-          <p className="text-[13px] text-cockpit-dim">
-            <DemoText source="Kultur ist am Mandat noch kein Feld">{CULTURE}</DemoText>
-          </p>
-          <div className="mt-3">
-            <Fact label="Seniorität">
-              <DemoText source="Seniorität ist am Mandat noch kein Feld">
-                Lead / Head
-              </DemoText>
-            </Fact>
-            <Fact label="Region">
-              {mandate.location ? (
-                mandate.location
-              ) : (
-                <span className="text-cockpit-faint">nicht hinterlegt</span>
-              )}
-            </Fact>
-            <Fact label="Gehaltsrahmen">
-              {band ?? <span className="text-cockpit-faint">nicht hinterlegt</span>}
-            </Fact>
-            <Fact label="Verfügbarkeit">
-              <DemoText source="Startdatum ist am Mandat noch kein Feld">ab Q3</DemoText>
-            </Fact>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
+                Musskriterien
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {mandate.mustHave.length > 0 ? (
+                  mandate.mustHave.map((skill) => (
+                    <Chip key={skill} tone="gold">
+                      {skill}
+                    </Chip>
+                  ))
+                ) : (
+                  <span className="text-[13px] text-cockpit-faint">
+                    Keine hinterlegt — ohne sie filtert das Matching nicht.
+                  </span>
+                )}
+              </div>
+              <CriteriaSuggestions mandate={mandate} onAdded={onChanged} />
+            </div>
+
+            <div className="space-y-2">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
+                Nice-to-have
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {NICE_TO_HAVE.map((skill) => (
+                  <Chip key={skill}>
+                    <DemoText source="Nice-to-have ist am Mandat noch kein Feld">
+                      {skill}
+                    </DemoText>
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
+              Kultur
+            </span>
+            <p className="text-[13px] text-cockpit-dim">
+              <DemoText source="Kultur ist am Mandat noch kein Feld">{CULTURE}</DemoText>
+            </p>
+            <div className="mt-3">
+              <Fact label="Seniorität">
+                <DemoText source="Seniorität ist am Mandat noch kein Feld">
+                  Lead / Head
+                </DemoText>
+              </Fact>
+              <Fact label="Region">
+                {mandate.location ? (
+                  mandate.location
+                ) : (
+                  <span className="text-cockpit-faint">nicht hinterlegt</span>
+                )}
+              </Fact>
+              <Fact label="Gehaltsrahmen">
+                {band ?? <span className="text-cockpit-faint">nicht hinterlegt</span>}
+              </Fact>
+              <Fact label="Verfügbarkeit">
+                <DemoText source="Startdatum ist am Mandat noch kein Feld">ab Q3</DemoText>
+              </Fact>
+            </div>
           </div>
         </div>
-      </div>
+        </>
+      )}
     </Panel>
   )
 }
