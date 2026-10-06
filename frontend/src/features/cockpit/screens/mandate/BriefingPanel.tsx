@@ -22,6 +22,7 @@ import { MessageSquareQuote } from 'lucide-react'
 import { api } from '@/api/client'
 import type { BriefingDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
+import { useRemembered } from '@/hooks/useRemembered'
 import { Panel } from '../../ui/primitives'
 import { Button } from '../../ui/forms'
 import { PanelHead } from './parts'
@@ -52,6 +53,12 @@ export function BriefingPanel({
   const [error, setError] = useState<string | null>(null)
   const [key, setKey] = useState(0)
 
+  // Folded by the reader, not per mandate: the briefing is what you read
+  // once when picking a mandate up, and scroll past on every later visit.
+  const [collapsed, setCollapsed] = useRemembered(
+    'eligo.panel.briefing.collapsed',
+    false,
+  )
   const { data, loading } = useAsync<BriefingDTO[]>(
     () =>
       mandate.jobId
@@ -95,83 +102,89 @@ export function BriefingPanel({
         tone="gold"
         title="Was der Kunde gesagt hat"
         note={`${mandate.ref} · ${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'}`}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((shut) => !shut)}
       />
 
-      {loading && rows.length === 0 && (
-        <p className="font-mono text-[12px] text-cockpit-faint">lädt…</p>
-      )}
+      {collapsed ? null : (
+        <>
+        {loading && rows.length === 0 && (
+          <p className="font-mono text-[12px] text-cockpit-faint">lädt…</p>
+        )}
 
-      {!loading && rows.length === 0 && (
-        <p className="mb-4 text-[13.5px] leading-relaxed text-cockpit-dim">
-          Noch kein Briefing notiert. Das Suchprofil unten hält das Ergebnis des
-          Gesprächs — hier steht, was tatsächlich gesagt wurde.
-        </p>
-      )}
+        {!loading && rows.length === 0 && (
+          <p className="mb-4 text-[13.5px] leading-relaxed text-cockpit-dim">
+            Noch kein Briefing notiert. Das Suchprofil unten hält das Ergebnis des
+            Gesprächs — hier steht, was tatsächlich gesagt wurde.
+          </p>
+        )}
 
-      {rows.length > 0 && (
-        <ul className="mb-5 space-y-3">
-          {rows.map((row) => (
-            <li
-              key={row.id}
-              className="border-l-2 border-gold-600/40 pl-3 text-[13.5px] leading-relaxed text-cockpit-dim"
+        {rows.length > 0 && (
+          <ul className="mb-5 space-y-3">
+            {rows.map((row) => (
+              <li
+                key={row.id}
+                className="border-l-2 border-gold-600/40 pl-3 text-[13.5px] leading-relaxed text-cockpit-dim"
+              >
+                <span className="mr-2 font-mono text-[12px] text-cockpit-faint">
+                  {dateDe(row.occurred_at)}
+                  {nameOf(row.manager_id) ? ` · ${nameOf(row.manager_id)}` : ''}
+                </span>
+                <span className="whitespace-pre-wrap text-cockpit-text">
+                  {row.summary}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="space-y-2 border-t border-cockpit-line pt-4">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={3}
+            placeholder="Nach dem Gespräch: was gesucht wird, was nicht geht, worauf es ankommt …"
+            className="w-full rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 text-[13.5px] leading-relaxed text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
+              am
+              <input
+                type="date"
+                value={when}
+                onChange={(e) => setWhen(e.target.value)}
+                className="rounded-md border border-cockpit-line bg-cockpit-inset px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
+              mit
+              <select
+                value={who}
+                onChange={(e) => setWho(e.target.value)}
+                className="rounded-md border border-cockpit-line bg-cockpit-inset px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
+              >
+                <option value="">ohne Ansprechpartner</option>
+                {(managers ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.full_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              tone="primary"
+              onClick={() => void save()}
+              disabled={busy || !text.trim()}
+              className="ml-auto"
             >
-              <span className="mr-2 font-mono text-[12px] text-cockpit-faint">
-                {dateDe(row.occurred_at)}
-                {nameOf(row.manager_id) ? ` · ${nameOf(row.manager_id)}` : ''}
-              </span>
-              <span className="whitespace-pre-wrap text-cockpit-text">
-                {row.summary}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="space-y-2 border-t border-cockpit-line pt-4">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={3}
-          placeholder="Nach dem Gespräch: was gesucht wird, was nicht geht, worauf es ankommt …"
-          className="w-full rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 text-[13.5px] leading-relaxed text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
-        />
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-            am
-            <input
-              type="date"
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
-              className="rounded-md border border-cockpit-line bg-cockpit-inset px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
-            />
-          </label>
-          <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-            mit
-            <select
-              value={who}
-              onChange={(e) => setWho(e.target.value)}
-              className="rounded-md border border-cockpit-line bg-cockpit-inset px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
-            >
-              <option value="">ohne Ansprechpartner</option>
-              {(managers ?? []).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            tone="primary"
-            onClick={() => void save()}
-            disabled={busy || !text.trim()}
-            className="ml-auto"
-          >
-            <MessageSquareQuote className="h-4 w-4" />
-            {busy ? 'Speichert…' : 'Briefing notieren'}
-          </Button>
+              <MessageSquareQuote className="h-4 w-4" />
+              {busy ? 'Speichert…' : 'Briefing notieren'}
+            </Button>
+          </div>
+          {error && <p className="text-[12px] text-coral-400">{error}</p>}
         </div>
-        {error && <p className="text-[12px] text-coral-400">{error}</p>}
-      </div>
+        </>
+      )}
     </Panel>
   )
 }
