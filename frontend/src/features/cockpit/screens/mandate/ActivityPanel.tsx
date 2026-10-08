@@ -10,6 +10,7 @@
 // its mark. The "noch nicht probiert" row is the useful half even as a demo:
 // it names the channels nobody has tried for this search.
 
+import { useRemembered } from '@/hooks/useRemembered'
 import { Panel } from '../../ui/primitives'
 import { DEMO_HINT, DemoText, PanelHead } from './parts'
 import type { Mandate } from '../../data/types'
@@ -42,6 +43,10 @@ function Step({
 }
 
 export function ActivityPanel({ mandate }: { mandate: Mandate }) {
+  const [collapsed, setCollapsed] = useRemembered(
+    'eligo.panel.aktivitaet.collapsed',
+    false,
+  )
   const sent = CHANNELS.reduce((n, c) => n + c.sent, 0)
   const answered = CHANNELS.reduce((n, c) => n + c.resp, 0)
   const interested = CHANNELS.reduce((n, c) => n + c.pos, 0)
@@ -56,62 +61,68 @@ export function ActivityPanel({ mandate }: { mandate: Mandate }) {
         tone="lav"
         title="Was haben wir für diesen Job getan?"
         note={DEMO_HINT}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((shut) => !shut)}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Step value={String(sent)} label="Angesprochen" demo />
-        <span className="text-cockpit-faint">›</span>
-        <Step
-          value={`${answered} · ${Math.round((answered / sent) * 100)}%`}
-          label="Antworten"
-          demo
-        />
-        <span className="text-cockpit-faint">›</span>
-        <Step value={String(interested)} label="Interessiert" demo />
-        <span className="text-cockpit-faint">›</span>
-        <Step value={String(presented)} label="Vorgestellt" />
-      </div>
+      {collapsed ? null : (
+        <>
+        <div className="flex flex-wrap items-center gap-2">
+          <Step value={String(sent)} label="Angesprochen" demo />
+          <span className="text-cockpit-faint">›</span>
+          <Step
+            value={`${answered} · ${Math.round((answered / sent) * 100)}%`}
+            label="Antworten"
+            demo
+          />
+          <span className="text-cockpit-faint">›</span>
+          <Step value={String(interested)} label="Interessiert" demo />
+          <span className="text-cockpit-faint">›</span>
+          <Step value={String(presented)} label="Vorgestellt" />
+        </div>
 
-      <div className="mt-5 space-y-2">
-        {CHANNELS.map((channel) => {
-          const rate = Math.round((channel.resp / channel.sent) * 100)
-          return (
-            <div
-              key={channel.name}
-              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]"
+        <div className="mt-5 space-y-2">
+          {CHANNELS.map((channel) => {
+            const rate = Math.round((channel.resp / channel.sent) * 100)
+            return (
+              <div
+                key={channel.name}
+                className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]"
+              >
+                <span className="w-[140px] shrink-0 text-cockpit-text">{channel.name}</span>
+                <span className="w-[110px] shrink-0 font-mono text-[11.5px] text-cockpit-faint">
+                  {channel.sent} angesprochen
+                </span>
+                <span className="h-1.5 min-w-[80px] flex-1 overflow-hidden rounded-full bg-cockpit-line">
+                  <span
+                    className="block h-full rounded-full bg-lav-400/70"
+                    style={{ width: `${Math.min(100, rate)}%` }}
+                  />
+                </span>
+                <span className="w-[42px] shrink-0 text-right font-mono text-[11.5px] text-cockpit-dim">
+                  {rate}%
+                </span>
+                <span className="w-[72px] shrink-0 text-right font-mono text-[11.5px] text-mint-400">
+                  {channel.pos} positiv
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px]">
+          <span className="text-cockpit-faint">Noch nicht probiert:</span>
+          {UNTRIED.map((channel) => (
+            <span
+              key={channel}
+              className="rounded-md border border-gold-600/45 px-2.5 py-1 font-mono text-[11.5px] text-gold-300"
             >
-              <span className="w-[140px] shrink-0 text-cockpit-text">{channel.name}</span>
-              <span className="w-[110px] shrink-0 font-mono text-[11.5px] text-cockpit-faint">
-                {channel.sent} angesprochen
-              </span>
-              <span className="h-1.5 min-w-[80px] flex-1 overflow-hidden rounded-full bg-cockpit-line">
-                <span
-                  className="block h-full rounded-full bg-lav-400/70"
-                  style={{ width: `${Math.min(100, rate)}%` }}
-                />
-              </span>
-              <span className="w-[42px] shrink-0 text-right font-mono text-[11.5px] text-cockpit-dim">
-                {rate}%
-              </span>
-              <span className="w-[72px] shrink-0 text-right font-mono text-[11.5px] text-mint-400">
-                {channel.pos} positiv
-              </span>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px]">
-        <span className="text-cockpit-faint">Noch nicht probiert:</span>
-        {UNTRIED.map((channel) => (
-          <span
-            key={channel}
-            className="rounded-md border border-gold-600/45 px-2.5 py-1 font-mono text-[11.5px] text-gold-300"
-          >
-            {channel} · starten
-          </span>
-        ))}
-      </div>
+              {channel} · starten
+            </span>
+          ))}
+        </div>
+        </>
+      )}
     </Panel>
   )
 }

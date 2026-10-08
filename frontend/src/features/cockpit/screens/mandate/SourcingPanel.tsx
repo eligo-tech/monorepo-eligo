@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { Search, Sparkles } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
+import { useRemembered } from '@/hooks/useRemembered'
 import { Panel } from '../../ui/primitives'
 import { Button } from '../../ui/forms'
 import { DEMO_HINT, PanelHead } from './parts'
@@ -29,6 +30,16 @@ const CRAWL_REASON =
   'Portalsuche ist ein ausgehender Abruf — die laufen als geplanter Job, nie aus einem Klick (ARCHITECTURE.md Regel 1).'
 
 export function SourcingPanel({ mandate }: { mandate: Mandate }) {
+  // Two panels, two flags: somebody who folds the message draft away is
+  // not saying they are done searching.
+  const [searchShut, setSearchShut] = useRemembered(
+    'eligo.panel.zentraleSuche.collapsed',
+    false,
+  )
+  const [reachShut, setReachShut] = useRemembered(
+    'eligo.panel.ansprache.collapsed',
+    false,
+  )
   const [active, setActive] = useState<string[]>(['db'])
   const [form, setForm] = useState<'Sie' | 'Du'>('Sie')
 
@@ -52,54 +63,60 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
           tone="lav"
           title="Datenbank & Portale"
           note={DEMO_HINT}
+          collapsed={searchShut}
+          onToggle={() => setSearchShut((shut) => !shut)}
         />
 
-        <div className="flex items-center gap-2.5 rounded-lg border border-cockpit-line bg-cockpit-inset px-3">
-          <Search className="h-[15px] w-[15px] shrink-0 text-cockpit-faint" />
-          <input
-            disabled
-            placeholder="Intelligente Suche über alle Quellen …"
-            className="flex-1 bg-transparent py-2.5 text-[13px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
-          />
-        </div>
+        {searchShut ? null : (
+          <>
+          <div className="flex items-center gap-2.5 rounded-lg border border-cockpit-line bg-cockpit-inset px-3">
+            <Search className="h-[15px] w-[15px] shrink-0 text-cockpit-faint" />
+            <input
+              disabled
+              placeholder="Intelligente Suche über alle Quellen …"
+              className="flex-1 bg-transparent py-2.5 text-[13px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
+            />
+          </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {SOURCES.map((source) => (
-            <button
-              key={source.key}
-              type="button"
-              onClick={() => toggle(source.key)}
-              className={cn(
-                'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12.5px] transition-colors',
-                active.includes(source.key)
-                  ? 'border-cockpit-edge bg-white/[0.06] text-cockpit-text'
-                  : 'border-cockpit-line text-cockpit-faint hover:text-cockpit-dim',
-              )}
-            >
-              <span
+          <div className="mt-3 flex flex-wrap gap-2">
+            {SOURCES.map((source) => (
+              <button
+                key={source.key}
+                type="button"
+                onClick={() => toggle(source.key)}
                 className={cn(
-                  'h-2 w-2 rounded-full',
-                  active.includes(source.key) ? source.tone : 'bg-cockpit-line',
+                  'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12.5px] transition-colors',
+                  active.includes(source.key)
+                    ? 'border-cockpit-edge bg-white/[0.06] text-cockpit-text'
+                    : 'border-cockpit-line text-cockpit-faint hover:text-cockpit-dim',
                 )}
-              />
-              {source.label}
-            </button>
-          ))}
-        </div>
+              >
+                <span
+                  className={cn(
+                    'h-2 w-2 rounded-full',
+                    active.includes(source.key) ? source.tone : 'bg-cockpit-line',
+                  )}
+                />
+                {source.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-[12.5px] text-cockpit-dim">
-            <input type="checkbox" className="h-[15px] w-[15px] accent-[#e0897a]" />
-            Nur eigene Datenbank
-          </label>
-          <Button tone="primary" disabled title={CRAWL_REASON}>
-            Kandidaten suchen →
-          </Button>
-        </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-[12.5px] text-cockpit-dim">
+              <input type="checkbox" className="h-[15px] w-[15px] accent-[#e0897a]" />
+              Nur eigene Datenbank
+            </label>
+            <Button tone="primary" disabled title={CRAWL_REASON}>
+              Kandidaten suchen →
+            </Button>
+          </div>
 
-        <p className="mt-3 border-t border-cockpit-line pt-3 text-[12px] text-cockpit-faint">
-          {CRAWL_REASON}
-        </p>
+          <p className="mt-3 border-t border-cockpit-line pt-3 text-[12px] text-cockpit-faint">
+            {CRAWL_REASON}
+          </p>
+          </>
+        )}
       </Panel>
 
       <Panel className="px-6 py-5">
@@ -108,39 +125,45 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
           tone="gold"
           title="Nachricht an Kandidaten"
           note={`${form}-Form · ${DEMO_HINT}`}
+          collapsed={reachShut}
+          onToggle={() => setReachShut((shut) => !shut)}
         />
 
-        <div className="inline-flex gap-1 rounded-xl border border-cockpit-line bg-cockpit-inset p-1">
-          {(['Sie', 'Du'] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setForm(option)}
-              aria-pressed={form === option}
-              className={cn(
-                'rounded-lg px-4 py-1.5 text-[13px] transition-colors',
-                form === option
-                  ? 'bg-white/[0.07] text-cockpit-text'
-                  : 'text-cockpit-dim hover:text-cockpit-text',
-              )}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
+        {reachShut ? null : (
+          <>
+          <div className="inline-flex gap-1 rounded-xl border border-cockpit-line bg-cockpit-inset p-1">
+            {(['Sie', 'Du'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setForm(option)}
+                aria-pressed={form === option}
+                className={cn(
+                  'rounded-lg px-4 py-1.5 text-[13px] transition-colors',
+                  form === option
+                    ? 'bg-white/[0.07] text-cockpit-text'
+                    : 'text-cockpit-dim hover:text-cockpit-text',
+                )}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
 
-        <p className="mt-3 rounded-xl border border-cockpit-line bg-cockpit-inset px-4 py-3 text-[13.5px] leading-relaxed text-cockpit-dim">
-          {greeting}, ich bin auf {verb} aufmerksam geworden — für eine spannende Rolle
-          als <span className="text-cockpit-text">{mandate.title}</span>
-          {mandate.location ? ` (${mandate.location})` : ''} suche ich jemanden mit Ihrem
-          Hintergrund. {closing}
-        </p>
+          <p className="mt-3 rounded-xl border border-cockpit-line bg-cockpit-inset px-4 py-3 text-[13.5px] leading-relaxed text-cockpit-dim">
+            {greeting}, ich bin auf {verb} aufmerksam geworden — für eine spannende Rolle
+            als <span className="text-cockpit-text">{mandate.title}</span>
+            {mandate.location ? ` (${mandate.location})` : ''} suche ich jemanden mit Ihrem
+            Hintergrund. {closing}
+          </p>
 
-        <p className="mt-3 flex items-center gap-2 text-[12px] text-cockpit-faint">
-          <Sparkles className="h-3.5 w-3.5 text-gold-400" />
-          Entwurf aus dem Mandat zusammengesetzt — der Outreach-Agent (Phase 5)
-          schreibt und lernt ihn später, und verschickt nie ohne Freigabe.
-        </p>
+          <p className="mt-3 flex items-center gap-2 text-[12px] text-cockpit-faint">
+            <Sparkles className="h-3.5 w-3.5 text-gold-400" />
+            Entwurf aus dem Mandat zusammengesetzt — der Outreach-Agent (Phase 5)
+            schreibt und lernt ihn später, und verschickt nie ohne Freigabe.
+          </p>
+          </>
+        )}
       </Panel>
     </div>
   )
