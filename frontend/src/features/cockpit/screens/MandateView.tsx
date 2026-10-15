@@ -26,7 +26,6 @@ import { useRemembered } from '@/hooks/useRemembered'
 import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { ActivityPanel } from './mandate/ActivityPanel'
 import { FeedbackPanel } from './mandate/FeedbackPanel'
-import { QualificationPanel } from './mandate/QualificationPanel'
 import { SourcingPanel } from './mandate/SourcingPanel'
 import { StammdatenPanel } from './mandate/StammdatenPanel'
 import { AssignCandidate } from './mandate/AssignCandidate'
@@ -113,7 +112,7 @@ export function MandateView({
         </h1>
         <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-cockpit-dim">
           Die Stammdaten des Mandats plus die komplette Kandidatensuche in einem
-          Bereich — vom Job über Ansprache und Ergebnisse bis zur Qualifizierung.
+          Bereich — vom Job über Ansprache bis zu den Ergebnissen.
         </p>
         <p className="mt-3 font-mono text-[13px] text-cockpit-faint">
           {mandate.ref} · {mandate.client} · {mandate.cards.length}{' '}
@@ -265,7 +264,6 @@ export function MandateView({
       <ActivityPanel mandate={mandate} />
       <SuchprofilPanel mandate={mandate} onChanged={onChanged} />
       <SourcingPanel mandate={mandate} />
-      <QualificationPanel mandate={mandate} />
 
       {/* The mandate's own ledger. Its band and radius are hard filters, so
           "who widened the cap, and when" is the question this answers. */}
