@@ -20,6 +20,8 @@
 //    it is keyboard-reachable and middle-clickable like the name on the card,
 //    rather than a div with an onClick.
 
+import { useState } from 'react'
+
 import { cn } from '@/lib/cn'
 import { scoreTone } from './ScoreBar'
 import { Label } from './primitives'
@@ -52,18 +54,18 @@ const TEXT = {
   none: 'fill-cockpit-faint',
 } as const
 
-type Tone = keyof typeof STROKE
+export type Tone = keyof typeof STROKE
 
 /** The fit score decides the tone, on the same thresholds as everything else:
  *  `scoreTone` owns ≥70 mint / ≥50 gold / else coral, and the assessment is
  *  scored 0–10. An unassessed candidate has no tone, not a bad one. */
-function toneOf(card: ProcessCard): Tone {
+export function toneOf(card: ProcessCard): Tone {
   const fit = card.assessment?.fitScore
   return fit === null || fit === undefined ? 'none' : scoreTone(fit * 10)
 }
 
 /** Where the process stands — the same line the collapsed card shows. */
-function standing(card: ProcessCard): string {
+export function standing(card: ProcessCard): string {
   const out = card.steps.find((s) => s.state === 'out')
   if (out) return `abgesagt · ${out.label}`
   const current = card.steps.find((s) => s.state === 'current')
@@ -74,7 +76,7 @@ function standing(card: ProcessCard): string {
 
 /** Cut a label to fit its box. SVG does not wrap, and an ellipsis is more
  *  honest than a name that runs out of the panel. */
-function clip(text: string, max: number): string {
+export function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`
 }
 
@@ -252,6 +254,291 @@ export function MandateGraphLegend() {
           {label}
         </span>
       ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The whole book of business, three levels deep
+// ---------------------------------------------------------------------------
+//
+// `#cockpit` is every mandate at once, and a flat fan of root → candidate
+// would be twenty rows tall — longer than the cards it is supposed to save
+// you from reading. So the book graph is the same picture one level up:
+//
+//     alle Prozesse ──→ Mandat ──→ Kandidat
+//
+// Mandates are the children, ranked by the BEST fit anybody on them has, and
+// a mandate opens in place to show who that is. Which answers the question
+// the Gesamt view exists for and the per-mandate graph cannot: where is there
+// somebody who fits, and which searches have nobody yet.
+//
+// The edge to a mandate carries its best candidate's score — an aggregate,
+// and the node says which number it is showing ("bester Fit 8/10") so it is
+// never mistaken for an average or for a judgement about the mandate itself.
+
+const BOOK_ROOT = { x: 4, w: 196, h: 76 }
+const BOOK_MANDATE = { x: 268, w: 316, h: 62 }
+const BOOK_CAND = { x: 652, w: 356, h: 54 }
+const ROW_GAP = 10
+
+/** The best fit on a mandate, and the tone that goes with it. `null` when
+ *  nobody on it has been assessed — which is a finding, not a zero. */
+function bestFit(mandate: Mandate): number | null {
+  const scores = mandate.cards
+    .map((c) => c.assessment?.fitScore)
+    .filter((f): f is number => f !== null && f !== undefined)
+  return scores.length > 0 ? Math.max(...scores) : null
+}
+
+type Row =
+  | { kind: 'mandate'; y: number; mandate: Mandate }
+  | { kind: 'candidate'; y: number; card: ProcessCard; parent: string }
+
+export function BookGraph({
+  mandates,
+  onOpenMandate,
+}: {
+  mandates: Mandate[]
+  /** Opens the per-job view. Absent for a demo mandate with no job row. */
+  onOpenMandate?: (mandateId: string) => void
+}) {
+  const [open, setOpen] = useState<Set<string>>(new Set())
+
+  // Mandates with a fitting candidate first; mandates nobody has assessed
+  // last, sorted by how many people are waiting on them — that is the work
+  // the graph is pointing at.
+  const ranked = [...mandates].sort((a, b) => {
+    const fa = bestFit(a)
+    const fb = bestFit(b)
+    if (fa === null && fb === null) return b.cards.length - a.cards.length
+    if (fa === null) return 1
+    if (fb === null) return -1
+    return fb - fa
+  })
+
+  const rows: Row[] = []
+  let y = PAD
+  for (const mandate of ranked) {
+    rows.push({ kind: 'mandate', y, mandate })
+    y += BOOK_MANDATE.h + ROW_GAP
+    if (!open.has(mandate.id)) continue
+    for (const card of [...mandate.cards].sort(
+      (a, b) => (b.assessment?.fitScore ?? -1) - (a.assessment?.fitScore ?? -1),
+    )) {
+      rows.push({ kind: 'candidate', y, card, parent: mandate.id })
+      y += BOOK_CAND.h + ROW_GAP
+    }
+  }
+  if (rows.length === 0) return null
+
+  const height = y - ROW_GAP + PAD
+  const width = BOOK_CAND.x + BOOK_CAND.w + 4
+  const rootY = Math.min(height / 2 - BOOK_ROOT.h / 2, 220)
+  const rootMid = rootY + BOOK_ROOT.h / 2
+  const rootRight = BOOK_ROOT.x + BOOK_ROOT.w
+  const total = mandates.reduce((n, m) => n + m.cards.length, 0)
+
+  const mandateRow = (id: string) =>
+    rows.find((r) => r.kind === 'mandate' && r.mandate.id === id) as
+      | { kind: 'mandate'; y: number; mandate: Mandate }
+      | undefined
+
+  const toggle = (id: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  return (
+    <div className="overflow-x-auto">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        style={{ minWidth: 680, maxHeight: height }}
+        role="img"
+        aria-label={`${mandates.length} Mandate mit ${total} Kandidaten, nach bester Passung sortiert`}
+      >
+        {rows.map((row) => {
+          if (row.kind === 'mandate') {
+            const fit = bestFit(row.mandate)
+            const tone: Tone = fit === null ? 'none' : scoreTone(fit * 10)
+            const mid = (rootRight + BOOK_MANDATE.x) / 2
+            const y2 = row.y + BOOK_MANDATE.h / 2
+            return (
+              <path
+                key={`e-${row.mandate.id}`}
+                d={`M ${rootRight} ${rootMid} C ${mid} ${rootMid}, ${mid} ${y2}, ${BOOK_MANDATE.x} ${y2}`}
+                fill="none"
+                strokeWidth={fit === null ? 1 : 1.25 + (fit / 10) * 2.25}
+                className={cn(STROKE[tone], tone === 'none' && 'opacity-70')}
+              />
+            )
+          }
+          const parent = mandateRow(row.parent)
+          if (!parent) return null
+          const tone = toneOf(row.card)
+          const fit = row.card.assessment?.fitScore
+          const from = parent.y + BOOK_MANDATE.h / 2
+          const to = row.y + BOOK_CAND.h / 2
+          const mid = (BOOK_MANDATE.x + BOOK_MANDATE.w + BOOK_CAND.x) / 2
+          return (
+            <path
+              key={`e-${row.card.id}`}
+              d={`M ${BOOK_MANDATE.x + BOOK_MANDATE.w} ${from} C ${mid} ${from}, ${mid} ${to}, ${BOOK_CAND.x} ${to}`}
+              fill="none"
+              strokeWidth={fit == null ? 1 : 1.25 + (fit / 10) * 2.25}
+              className={cn(STROKE[tone], tone === 'none' && 'opacity-70')}
+            />
+          )
+        })}
+
+        {/* The book. */}
+        <rect
+          x={BOOK_ROOT.x}
+          y={rootY}
+          width={BOOK_ROOT.w}
+          height={BOOK_ROOT.h}
+          rx={12}
+          className="fill-cockpit-raised stroke-cockpit-edge"
+          strokeWidth={1}
+        />
+        <text x={BOOK_ROOT.x + 16} y={rootY + 26} className="fill-cockpit-faint font-mono text-[11px]">
+          Laufende Prozesse
+        </text>
+        <text x={BOOK_ROOT.x + 16} y={rootY + 48} className="fill-cockpit-text text-[15px] font-semibold">
+          {mandates.length} {mandates.length === 1 ? 'Mandat' : 'Mandate'}
+        </text>
+        <text x={BOOK_ROOT.x + 16} y={rootY + 65} className="fill-cockpit-dim font-mono text-[11px]">
+          {total} {total === 1 ? 'Kandidat' : 'Kandidaten'}
+        </text>
+
+        {rows.map((row) => {
+          if (row.kind === 'mandate') {
+            const { mandate } = row
+            const fit = bestFit(mandate)
+            const tone: Tone = fit === null ? 'none' : scoreTone(fit * 10)
+            const shown = open.has(mandate.id)
+            return (
+              <g key={mandate.id}>
+                {/* The body toggles; the arrow at the end opens the mandate.
+                    Two targets, because "show me who" and "take me there"
+                    are different intentions and one click cannot be both. */}
+                <g className="group cursor-pointer" onClick={() => toggle(mandate.id)}>
+                  <rect
+                    x={BOOK_MANDATE.x}
+                    y={row.y}
+                    width={BOOK_MANDATE.w}
+                    height={BOOK_MANDATE.h}
+                    rx={11}
+                    className="fill-cockpit-surface stroke-cockpit-line transition-colors group-hover:stroke-cockpit-edge"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={BOOK_MANDATE.x + 16}
+                    y={row.y + 25}
+                    className="fill-cockpit-text text-[13px] font-semibold"
+                  >
+                    {clip(mandate.title, 30)}
+                  </text>
+                  <text
+                    x={BOOK_MANDATE.x + 16}
+                    y={row.y + 44}
+                    className="fill-cockpit-faint font-mono text-[11px]"
+                  >
+                    {clip(mandate.client, 18)} · {mandate.cards.length}{' '}
+                    {mandate.cards.length === 1 ? 'Kandidat' : 'Kandidaten'}
+                    {fit === null ? ' · ohne Bewertung' : ` · bester Fit ${fit}/10`}
+                  </text>
+                  <circle
+                    cx={BOOK_MANDATE.x + BOOK_MANDATE.w - 52}
+                    cy={row.y + BOOK_MANDATE.h / 2}
+                    r={4}
+                    className={DOT[tone]}
+                  />
+                  <text
+                    x={BOOK_MANDATE.x + BOOK_MANDATE.w - 38}
+                    y={row.y + BOOK_MANDATE.h / 2 + 4}
+                    className="fill-cockpit-faint font-mono text-[12px]"
+                  >
+                    {shown ? '▾' : '▸'}
+                  </text>
+                </g>
+                {onOpenMandate && (
+                  <g
+                    className="cursor-pointer"
+                    onClick={() => onOpenMandate(mandate.id)}
+                  >
+                    <title>Mandat öffnen</title>
+                    <rect
+                      x={BOOK_MANDATE.x + BOOK_MANDATE.w - 26}
+                      y={row.y + BOOK_MANDATE.h / 2 - 11}
+                      width={22}
+                      height={22}
+                      rx={6}
+                      className="fill-transparent stroke-cockpit-line hover:stroke-cockpit-edge"
+                      strokeWidth={1}
+                    />
+                    <text
+                      x={BOOK_MANDATE.x + BOOK_MANDATE.w - 19}
+                      y={row.y + BOOK_MANDATE.h / 2 + 4}
+                      className="fill-cockpit-dim font-mono text-[12px]"
+                    >
+                      ›
+                    </text>
+                  </g>
+                )}
+              </g>
+            )
+          }
+
+          const { card } = row
+          const tone = toneOf(card)
+          const fit = card.assessment?.fitScore
+          const node = (
+            <>
+              <rect
+                x={BOOK_CAND.x}
+                y={row.y}
+                width={BOOK_CAND.w}
+                height={BOOK_CAND.h}
+                rx={11}
+                className="fill-cockpit-inset stroke-cockpit-line transition-colors group-hover:stroke-cockpit-edge"
+                strokeWidth={1}
+              />
+              <circle cx={BOOK_CAND.x + 18} cy={row.y + BOOK_CAND.h / 2} r={3.5} className={DOT[tone]} />
+              <text x={BOOK_CAND.x + 32} y={row.y + 23} className="fill-cockpit-text text-[13px] font-semibold">
+                {clip(card.candidateName, 26)}
+              </text>
+              <text x={BOOK_CAND.x + 32} y={row.y + 40} className="fill-cockpit-faint font-mono text-[10.5px]">
+                {clip(standing(card), 34)}
+              </text>
+              <text
+                x={BOOK_CAND.x + BOOK_CAND.w - 14}
+                y={row.y + 33}
+                textAnchor="end"
+                className={cn('font-mono text-[15px] font-semibold', TEXT[tone])}
+              >
+                {fit == null ? '—' : `${fit}/10`}
+              </text>
+            </>
+          )
+          return card.candidateId ? (
+            <a
+              key={card.id}
+              href={`#kandidaten/${card.candidateId}`}
+              className="group cursor-pointer"
+              aria-label={`${card.candidateName}, Passung ${fit ?? 'nicht bewertet'} — Kandidatenakte öffnen`}
+            >
+              {node}
+            </a>
+          ) : (
+            <g key={card.id}>{node}</g>
+          )
+        })}
+      </svg>
     </div>
   )
 }

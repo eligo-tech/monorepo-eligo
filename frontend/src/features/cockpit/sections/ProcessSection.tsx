@@ -14,6 +14,9 @@
 import { useState } from 'react'
 
 import { api } from '@/api/client'
+import { useRemembered } from '@/hooks/useRemembered'
+import { BookGraph, MandateGraphLegend } from '../ui/MandateGraph'
+import { PanelHead } from '../screens/mandate/parts'
 import { StepEditor } from '../ui/StepEditor'
 import { ProcessCardPanel } from '../ui/ProcessCardPanel'
 import { Money, Panel, SectionHeader } from '../ui/primitives'
@@ -83,6 +86,10 @@ export function ProcessSection({
     null,
   )
   const total = mandates.reduce((n, m) => n + m.cards.length, 0)
+  const [graphShut, setGraphShut] = useRemembered(
+    'eligo.panel.bookGraph.collapsed',
+    false,
+  )
 
   return (
     <section className="space-y-5">
@@ -93,6 +100,32 @@ export function ProcessSection({
         tone="coral"
         hint="Schritte antippen · Mandat öffnen"
       />
+
+      {/* The book as one picture, before the column of cards. A flat fan of
+          every mandate's candidates would be taller than the cards it saves
+          you from reading, so the mandates are the children and open in
+          place. Ranked by the best fit anybody on them has: the searches
+          with nobody who fits sort to the bottom, which is the point. */}
+      {total > 0 && (
+        <Panel className="px-6 py-5">
+          <PanelHead
+            tag="Überblick"
+            tone="mint"
+            title="Mandate und ihre Kandidaten"
+            note={`${mandates.length} ${
+              mandates.length === 1 ? 'Mandat' : 'Mandate'
+            } · ${total} ${total === 1 ? 'Kandidat' : 'Kandidaten'} · nach bester Passung`}
+            collapsed={graphShut}
+            onToggle={() => setGraphShut((shut) => !shut)}
+          />
+          {graphShut ? null : (
+            <>
+              <BookGraph mandates={mandates} onOpenMandate={onOpenMandate} />
+              <MandateGraphLegend />
+            </>
+          )}
+        </Panel>
+      )}
 
       {total === 0 ? (
         <Panel className="px-6 py-10 text-center text-[15px] text-cockpit-dim">
