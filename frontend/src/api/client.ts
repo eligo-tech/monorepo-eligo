@@ -22,6 +22,7 @@ import type {
   CompanyContactsDTO,
   AssessmentDTO,
   AssessmentWriteDTO,
+  JobCreatePayload,
   AuswertungParsedDTO,
   BriefingDTO,
   CriteriaSuggestionDTO,
@@ -133,6 +134,18 @@ export const api = {
 
   /** Fetch a single candidate's full record (used to seed the edit form). */
   candidate: (id: string) => request<CandidateDTO>(`/candidates/${id}`),
+
+  /** A new client. Needed before a mandate can hang off one, and there was
+   *  no way to do it from the UI at all. */
+  createCompany: (body: { name: string; is_client?: boolean; website?: string | null }) =>
+    request<CompanyDTO>('/companies', {
+      method: 'POST',
+      body: JSON.stringify({ is_client: true, ...body }),
+    }),
+
+  /** A new mandate. `POST /jobs` has always existed; nothing called it. */
+  createJob: (body: JobCreatePayload) =>
+    request<JobDTO>('/jobs', { method: 'POST', body: JSON.stringify(body) }),
 
   /** Apply a manual recruiter edit. Each changed field is committed through the
    *  backend verification gate as a human-verified change (with a receipt). */

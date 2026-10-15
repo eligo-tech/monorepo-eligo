@@ -230,6 +230,10 @@ class ProcessJobRead(BaseModel):
     job_title: str
     company_id: uuid.UUID | None
     company_name: str | None
+    #: The mandate's Ansprechpartner. The cockpit used to show the FIRST
+    #: contact at the client instead, which named an arbitrary colleague as
+    #: the person who briefed the search.
+    manager_id: uuid.UUID | None = None
     #: The Suchprofil, so the per-job view can say what is being searched for
     #: next to who is running — the two halves of one mandate.
     location: str | None = None

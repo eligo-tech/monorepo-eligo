@@ -70,14 +70,17 @@ export function MandateView({
   mandate,
   company,
   manager,
+  managers,
   onBack,
   onChanged,
 }: {
   mandate: Mandate
   /** The client company record, for the Stammdaten block. */
   company?: CompanyDTO
-  /** Its hiring manager, when one has been enriched. */
+  /** The mandate's OWN Ansprechpartner, when one has been named. */
   manager?: ManagerDTO
+  /** Everyone at the client, to pick a contact from. */
+  managers?: ManagerDTO[]
   onBack: () => void
   /** Re-read the cockpit after a step was written. */
   onChanged?: () => void
@@ -121,10 +124,16 @@ export function MandateView({
         </p>
       </header>
 
-      <StammdatenPanel mandate={mandate} company={company} manager={manager} />
+      <StammdatenPanel
+        mandate={mandate}
+        company={company}
+        manager={manager}
+        managers={managers}
+        onChanged={onChanged}
+      />
 
       {/* What the client asked for, before what the candidates answered. */}
-      <BriefingPanel mandate={mandate} managers={manager ? [manager] : []} />
+      <BriefingPanel mandate={mandate} managers={managers ?? []} />
 
       <FeedbackPanel mandate={mandate} onChanged={onChanged} />
 

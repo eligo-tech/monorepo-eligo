@@ -13,6 +13,7 @@ from app.domain.common.enums import ConfidenceSource
 from app.domain.candidates.models import Candidate
 from app.domain.jobs import criteria
 from app.domain.jobs.models import Job
+from app.domain.managers.models import Manager
 from app.domain.jobs.schemas import JobCreate, JobUpdate
 from app.domain.verification import service as verification
 from app.domain.verification.schemas import ProposedChange
@@ -39,11 +40,55 @@ async def get_job(
     return result.scalar_one_or_none()
 
 
+#: Columns that are UUIDs. `model_dump(mode="json")` hands them over as
+#: strings, and SQLAlchemy's UUID type then raises on `value.hex` — a set
+#: rather than an `if` per field, because the first one to be forgotten here
+#: fails at write time and only for the one endpoint that patches it.
+_UUID_FIELDS = frozenset({"client_company_id", "manager_id"})
+
+
+class ContactNotAtClient(Exception):
+    """The Ansprechpartner does not work at this mandate's client.
+
+    Raised rather than silently storing it. A mandate whose contact belongs to
+    a different company sends the shortlist to the wrong person, and the row
+    would look perfectly valid afterwards — `manager_id` is a UUID either
+    way. The tenant check is the same guard one level up.
+    """
+
+
+async def _check_contact(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    manager_id: uuid.UUID | None,
+    company_id: uuid.UUID | None,
+) -> None:
+    """A contact must exist in this tenant and work at this client."""
+    if manager_id is None:
+        return
+    manager = await session.scalar(
+        select(Manager).where(Manager.tenant_id == tenant_id, Manager.id == manager_id)
+    )
+    if manager is None:
+        raise ContactNotAtClient("contact not found in this workspace")
+    if company_id is not None and manager.company_id != company_id:
+        raise ContactNotAtClient("contact does not work at this client")
+
+
 async def create_job(session: AsyncSession, *, data: JobCreate) -> Job:
+    tenant_id = data.tenant_id or settings.default_tenant_id
+    await _check_contact(
+        session,
+        tenant_id=tenant_id,
+        manager_id=data.manager_id,
+        company_id=data.client_company_id,
+    )
     job = Job(
-        tenant_id=data.tenant_id or settings.default_tenant_id,
+        tenant_id=tenant_id,
         title=data.title,
         client_company_id=data.client_company_id,
+        manager_id=data.manager_id,
         location=data.location,
         location_radius_km=data.location_radius_km,
         must_have_skills=data.must_have_skills,
@@ -121,6 +166,19 @@ async def update_job(
     if status_value is not None and status_value not in JOB_STATUSES:
         raise InvalidBand(f"unknown status {status_value!r}")
 
+    # Same rule as on create, and against the RESULTING row: moving a mandate
+    # to another client with its old contact still attached would leave the
+    # shortlist addressed to someone at the previous company.
+    if "manager_id" in changes or "client_company_id" in changes:
+        resulting_contact = changes.get("manager_id", job.manager_id)
+        resulting_client = changes.get("client_company_id", job.client_company_id)
+        await _check_contact(
+            session,
+            tenant_id=tenant_id,
+            manager_id=uuid.UUID(str(resulting_contact)) if resulting_contact else None,
+            company_id=uuid.UUID(str(resulting_client)) if resulting_client else None,
+        )
+
     detail = f"manual edit via recruiter UI ({editor})" if editor else (
         "manual edit via recruiter UI"
     )
@@ -151,7 +209,7 @@ async def update_job(
             _field: str = field,
             _value: object = new_value,
         ) -> None:
-            if _field == "client_company_id" and _value is not None:
+            if _field in _UUID_FIELDS and _value is not None:
                 _value = uuid.UUID(str(_value))
             setattr(job, _field, _value)
 

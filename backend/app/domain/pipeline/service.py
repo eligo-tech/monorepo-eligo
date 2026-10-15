@@ -762,6 +762,7 @@ async def processes(
                 "job_title": job.title,
                 "company_id": company.id if company else None,
                 "company_name": company.name if company else None,
+                "manager_id": job.manager_id,
                 "location": job.location,
                 "must_have_skills": list(job.must_have_skills or []),
                 "salary_min": job.salary_min,

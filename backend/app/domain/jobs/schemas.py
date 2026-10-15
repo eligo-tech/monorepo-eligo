@@ -11,6 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class JobBase(BaseModel):
     title: str
     client_company_id: uuid.UUID | None = None
+    #: The Ansprechpartner at the client — who the briefing came from and who
+    #: gets the shortlist. The column has existed since the first migration
+    #: and was in no schema, so the mandate could only ever say "Kein
+    #: Ansprechpartner hinterlegt" and point at another screen.
+    #:
+    #: Must be a contact at `client_company_id`; the service refuses one
+    #: belonging to a different client rather than quietly storing it.
+    manager_id: uuid.UUID | None = None
     location: str | None = None
     location_radius_km: int | None = None
     must_have_skills: list[str] = Field(default_factory=list)
@@ -48,6 +56,7 @@ class JobUpdate(BaseModel):
 
     title: str | None = None
     client_company_id: uuid.UUID | None = None
+    manager_id: uuid.UUID | None = None
     location: str | None = None
     location_radius_km: int | None = Field(default=None, ge=0)
     must_have_skills: list[str] | None = None

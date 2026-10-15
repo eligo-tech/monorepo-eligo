@@ -191,7 +191,10 @@ async def create_job(
     db: AsyncSession = Depends(get_db),
 ) -> JobRead:
     payload.tenant_id = tenant_id  # force the authenticated tenant
-    row = await service.create_job(db, data=payload)
+    try:
+        row = await service.create_job(db, data=payload)
+    except service.ContactNotAtClient as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     return JobRead.model_validate(row)
 
 
@@ -215,7 +218,7 @@ async def update_job(
             patch=payload,
             editor=actor.name,
         )
-    except service.InvalidBand as exc:
+    except (service.InvalidBand, service.ContactNotAtClient) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")

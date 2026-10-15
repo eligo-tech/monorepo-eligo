@@ -155,6 +155,9 @@ export interface JobDTO {
   tenant_id: string
   title: string
   client_company_id: string
+  /** The Ansprechpartner at the client — who briefed the mandate and who
+   *  gets the shortlist. Null while nobody has been recorded. */
+  manager_id?: string | null
   location: string | null
   location_radius_km: number | null
   must_have_skills: string[]
@@ -746,6 +749,8 @@ export interface ProcessJobDTO {
   job_id: string
   job_title: string
   company_id: string | null
+  /** The mandate's own Ansprechpartner, not just someone at the client. */
+  manager_id?: string | null
   company_name: string | null
   /** The Suchprofil — the other half of a mandate. */
   location: string | null
@@ -798,11 +803,27 @@ export interface SalaryFitDTO {
 export interface JobUpdatePayload {
   title?: string
   client_company_id?: string | null
+  manager_id?: string | null
   location?: string | null
   location_radius_km?: number | null
   must_have_skills?: string[]
   required_certifications?: string[]
   requires_work_permit?: boolean
+  salary_min?: number | null
+  salary_max?: number | null
+  salary_currency?: string
+  status?: string
+}
+
+/** POST body for a new mandate. The title is the only thing truly required —
+ *  a search can start before the band, the region or the contact are known,
+ *  and refusing it would mean nothing gets written down at all. */
+export interface JobCreatePayload {
+  title: string
+  client_company_id?: string | null
+  manager_id?: string | null
+  location?: string | null
+  must_have_skills?: string[]
   salary_min?: number | null
   salary_max?: number | null
   salary_currency?: string

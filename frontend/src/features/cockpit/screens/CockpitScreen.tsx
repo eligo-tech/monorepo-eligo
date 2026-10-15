@@ -15,10 +15,11 @@ import { SignalsPanel } from '../sections/SignalsPanel'
 import { MandateDrawer } from './MandateDrawer'
 import { MandateView } from './MandateView'
 import { cn } from '@/lib/cn'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import { api } from '@/api/client'
 import { useAsync } from '@/hooks/useAsync'
+import { NewMandate } from './NewMandate'
 import { mandateFromJob } from '../data/adapters'
 import type { CockpitState } from '../data/useCockpitData'
 import type { ScreenKey } from '../CockpitShell'
@@ -42,6 +43,7 @@ export function CockpitScreen({
   // on: choosing a mandate to work ON is exactly the case where the process
   // list is empty. `/jobs` is the full set; the process-derived ones carry
   // the candidate counts, so they win on merge.
+  const [creating, setCreating] = useState(false)
   const { data: allJobs } = useAsync(() => api.jobs().catch(() => []), [])
   const { data: allCompanies } = useAsync(() => api.companies().catch(() => []), [])
 
@@ -73,21 +75,40 @@ export function CockpitScreen({
   // use for them, and the cockpit's rule is one failing call degrades one
   // panel, so each is settled to undefined rather than thrown.
   const company = (allCompanies ?? []).find((c) => c.id === mandate?.companyId)
-  const { data: manager } = useAsync(
+  // Every contact at the client, so the mandate can show ITS OWN one and
+  // offer the rest to choose from. It used to take `limit: 1` and render
+  // whoever came back as "der Ansprechpartner", which named an arbitrary
+  // colleague as the person who briefed the search.
+  const { data: clientContacts } = useAsync(
     () =>
       mandate?.companyId
-        ? api
-            .managers({ companyId: mandate.companyId, limit: 1 })
-            .then((rows) => rows[0])
-        : Promise.resolve(undefined),
+        ? api.managers({ companyId: mandate.companyId, limit: 200 }).catch(() => [])
+        : Promise.resolve([]),
     [mandate?.companyId],
   )
+  const manager = mandate?.managerId
+    ? (clientContacts ?? []).find((m) => m.id === mandate.managerId)
+    : undefined
+
+  const newMandate = creating ? (
+    <NewMandate
+      onClose={() => setCreating(false)}
+      onCreated={(jobId) => {
+        setCreating(false)
+        // Straight into the mandate just created — the next thing after
+        // writing a search down is working it.
+        onSelectMandate?.(jobId)
+        reload()
+      }}
+    />
+  ) : null
 
   const drawer = onSelectMandate ? (
     <MandateDrawer
       mandates={mandates}
       activeIds={selectedIds}
       onSelect={onSelectMandate}
+      onCreate={() => setCreating(true)}
     />
   ) : null
 
@@ -102,7 +123,8 @@ export function CockpitScreen({
     }
     return (
       <div className="flex gap-5 xl:gap-7">
-        {drawer}
+        {newMandate}
+      {drawer}
         <div className="mx-auto min-w-0 max-w-[1560px] flex-1 space-y-10 px-6">
           <header className="flex flex-wrap items-center gap-3">
             <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-cockpit-text">
@@ -137,7 +159,8 @@ export function CockpitScreen({
   if (mandateId && !mandate) {
     return (
       <div className="flex gap-5 xl:gap-7">
-        {drawer}
+        {newMandate}
+      {drawer}
         <p className="mx-auto min-w-0 max-w-[1560px] flex-1 px-6 text-[15px] text-cockpit-dim">
           Dieses Mandat gibt es in diesem Workspace nicht (mehr) — links eines
           auswählen.
@@ -149,12 +172,14 @@ export function CockpitScreen({
   if (mandate) {
     return (
       <div className="flex gap-5 xl:gap-7">
-        {drawer}
+        {newMandate}
+      {drawer}
         <div className="mx-auto min-w-0 max-w-[1560px] flex-1 px-6">
           <MandateView
             mandate={mandate}
             company={company ?? undefined}
-            manager={manager ?? undefined}
+            manager={manager}
+            managers={clientContacts ?? []}
             onBack={() => onSelectMandate?.(null)}
             onChanged={reload}
           />
@@ -165,6 +190,7 @@ export function CockpitScreen({
 
   return (
     <div className="flex gap-5 xl:gap-7">
+      {newMandate}
       {drawer}
 
       <div className="mx-auto min-w-0 max-w-[1560px] flex-1 space-y-10 px-6">
