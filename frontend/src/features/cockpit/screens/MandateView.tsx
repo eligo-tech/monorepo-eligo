@@ -16,11 +16,13 @@ import { ArrowLeft } from 'lucide-react'
 import { AssessmentEditor } from '../ui/AssessmentEditor'
 import { AssessmentPanel } from '../ui/AssessmentPanel'
 import { CandidateSummary } from '../ui/CandidateSummary'
+import { MandateGraph, MandateGraphLegend } from '../ui/MandateGraph'
 import { HistoryTrail } from '../ui/HistoryTrail'
 import { api } from '@/api/client'
 import { ProcessCardPanel } from '../ui/ProcessCardPanel'
 import { StepEditor } from '../ui/StepEditor'
 import { Panel, SectionHeader } from '../ui/primitives'
+import { useRemembered } from '@/hooks/useRemembered'
 import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { ActivityPanel } from './mandate/ActivityPanel'
 import { FeedbackPanel } from './mandate/FeedbackPanel'
@@ -28,6 +30,7 @@ import { QualificationPanel } from './mandate/QualificationPanel'
 import { SourcingPanel } from './mandate/SourcingPanel'
 import { StammdatenPanel } from './mandate/StammdatenPanel'
 import { AssignCandidate } from './mandate/AssignCandidate'
+import { PanelHead } from './mandate/parts'
 import { BriefingPanel } from './mandate/BriefingPanel'
 import { SuchprofilPanel } from './mandate/SuchprofilPanel'
 import type { Mandate, ProcessCard, ProcessStep } from '../data/types'
@@ -82,6 +85,10 @@ export function MandateView({
 }) {
   // Which process is having its Kandidatenauswertung written right now.
   const [assessing, setAssessing] = useState<string | null>(null)
+  const [graphShut, setGraphShut] = useRemembered(
+    'eligo.panel.mandateGraph.collapsed',
+    false,
+  )
   const [editing, setEditing] = useState<{ card: ProcessCard; step: ProcessStep } | null>(
     null,
   )
@@ -146,6 +153,31 @@ export function MandateView({
             />
           )}
         </div>
+        {/* The shape of the mandate before its detail: one root, one child
+            per candidate, best fit at the top. The cards below say more —
+            but they say it in a column a screen and a half long, and "who is
+            on this and which of them fits" is one glance. */}
+        {mandate.cards.length > 0 && (
+          <Panel className="mb-4 px-6 py-5">
+            <PanelHead
+              tag="Überblick"
+              tone="mint"
+              title="Mandat und seine Kandidaten"
+              note={`${mandate.cards.length} ${
+                mandate.cards.length === 1 ? 'Kandidat' : 'Kandidaten'
+              } · nach Passung`}
+              collapsed={graphShut}
+              onToggle={() => setGraphShut((shut) => !shut)}
+            />
+            {graphShut ? null : (
+              <>
+                <MandateGraph mandate={mandate} />
+                <MandateGraphLegend />
+              </>
+            )}
+          </Panel>
+        )}
+
         <div className="space-y-4">
           {mandate.cards.length === 0 ? (
             <Panel className="px-6 py-8 text-center text-[14px] text-cockpit-dim">
