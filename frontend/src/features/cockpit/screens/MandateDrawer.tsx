@@ -17,7 +17,7 @@
 // being spent on the margin instead of on the names.
 
 import { useMemo, useState } from 'react'
-import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
+import { PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
 import { useRemembered } from '@/hooks/useRemembered'
@@ -75,12 +75,15 @@ export function MandateDrawer({
   mandates,
   activeIds,
   onSelect,
+  onCreate,
 }: {
   /** Every mandate in the workspace, in process or not. */
   mandates: Mandate[]
   /** What the cockpit is currently showing — one, several, or none. */
   activeIds: string[]
   onSelect: (id: string | null) => void
+  /** Opens the "Neues Mandat" form. Absent where creating makes no sense. */
+  onCreate?: () => void
 }) {
   const [open, setOpen] = useRemembered(STORAGE_KEY, true)
   const [query, setQuery] = useState('')
@@ -116,11 +119,26 @@ export function MandateDrawer({
         <span className="font-mono text-[11px] text-cockpit-faint">
           {mandates.length}
         </span>
+        {/* Second entry point for a new mandate: the drawer is where you
+            look when the search you want is not in the list yet. */}
+        {onCreate && (
+          <button
+            type="button"
+            onClick={onCreate}
+            title="Neues Mandat anlegen"
+            className="ml-auto flex items-center gap-1 font-mono text-[11px] text-mint-300 transition-colors hover:text-mint-200"
+          >
+            <Plus className="h-3.5 w-3.5" /> Neu
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setOpen(false)}
           title="Mandate ausblenden"
-          className="ml-auto text-cockpit-faint transition-colors hover:text-cockpit-text"
+          className={cn(
+            'text-cockpit-faint transition-colors hover:text-cockpit-text',
+            !onCreate && 'ml-auto',
+          )}
         >
           <PanelLeftClose className="h-4 w-4" />
         </button>

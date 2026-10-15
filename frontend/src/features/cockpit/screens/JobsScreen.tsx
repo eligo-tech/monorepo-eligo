@@ -11,6 +11,7 @@ import {
   Briefcase,
   MapPin,
   Pencil,
+  Plus,
   Search,
   Wallet,
   X,
@@ -21,6 +22,7 @@ import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { searchScore } from '@/lib/search'
 import { Button } from '../ui/forms'
+import { NewMandate } from './NewMandate'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { MandateEditor } from './MandateEditor'
 
@@ -67,8 +69,11 @@ export function JobsScreen({
   query?: string
   onClearQuery?: () => void
 }) {
-  const jobs = useAsync<JobDTO[]>(() => api.jobs(), [])
-  const companies = useAsync<CompanyDTO[]>(() => api.companies(), [])
+  // Bumped after a mandate is created, so the list re-reads: `useAsync` has
+  // no reload of its own, it re-runs when its deps change.
+  const [reloadKey, setReloadKey] = useState(0)
+  const jobs = useAsync<JobDTO[]>(() => api.jobs(), [reloadKey])
+  const companies = useAsync<CompanyDTO[]>(() => api.companies(), [reloadKey])
 
   const companyName = useMemo(() => {
     const byId = new Map((companies.data ?? []).map((c) => [c.id, c.name]))
@@ -76,6 +81,9 @@ export function JobsScreen({
   }, [companies.data])
 
   const [editing, setEditing] = useState<JobDTO | null>(null)
+  // The first thing a new workspace needs, and the one thing it could not do:
+  // nothing in the frontend called POST /jobs or POST /companies.
+  const [creating, setCreating] = useState(false)
   // Which mandates to take to the cockpit. One opens its workspace, several
   // open the overall view narrowed to them — a shortlist of searches to work
   // through, which is what "select several jobs" is for.
@@ -149,12 +157,17 @@ export function JobsScreen({
       </header>
 
       <section className="space-y-5">
-        <SectionHeader
-          id="section-mandate"
-          index="01"
-          title="Mandate"
-          hint={jobs.error ? 'offline' : 'live aus dem Datensatz'}
-        />
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <SectionHeader
+            id="section-mandate"
+            index="01"
+            title="Mandate"
+            hint={jobs.error ? 'offline' : 'live aus dem Datensatz'}
+          />
+          <Button tone="primary" onClick={() => setCreating(true)}>
+            <Plus className="h-4 w-4" /> Neues Mandat
+          </Button>
+        </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex min-w-[16rem] flex-1 items-center gap-2.5 rounded-lg border border-cockpit-line bg-cockpit-inset px-3 focus-within:border-cockpit-edge">
@@ -424,6 +437,19 @@ export function JobsScreen({
           </div>
         )}
       </section>
+
+      {creating && (
+        <NewMandate
+          onClose={() => setCreating(false)}
+          onCreated={(jobId) => {
+            setCreating(false)
+            setReloadKey((k) => k + 1)
+            // Straight into the mandate: the next thing after creating a
+            // search is working it, not finding it again in the list.
+            window.location.hash = `#cockpit/${jobId}`
+          }}
+        />
+      )}
 
       {editing && (
         <MandateEditor

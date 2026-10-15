@@ -15,6 +15,7 @@ import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { Panel } from '../../ui/primitives'
 import { Button } from '../../ui/forms'
 import { DemoText, PanelHead, StammRow } from './parts'
+import { SetContact } from './SetContact'
 import type { Mandate } from '../../data/types'
 
 /** How complete the mandate record is, as a percentage of what matters.
@@ -40,10 +41,16 @@ export function StammdatenPanel({
   mandate,
   company,
   manager,
+  managers,
+  onChanged,
 }: {
   mandate: Mandate
   company?: CompanyDTO
+  /** The mandate's OWN contact, read off `jobs.manager_id`. */
   manager?: ManagerDTO
+  /** Everyone recorded at this client, to pick one from. */
+  managers?: ManagerDTO[]
+  onChanged?: () => void
 }) {
   const complete = briefingCompleteness(mandate, manager)
   const band =
@@ -103,10 +110,22 @@ export function StammdatenPanel({
               </>
             )}
           </>
+        ) : mandate.jobId ? (
+          <>
+            <span className="text-cockpit-faint">
+              Kein Ansprechpartner hinterlegt.{' '}
+            </span>
+            <SetContact
+              jobId={mandate.jobId}
+              jobTitle={mandate.title}
+              companyId={mandate.companyId}
+              companyName={mandate.client}
+              candidates={managers ?? []}
+              onDone={() => onChanged?.()}
+            />
+          </>
         ) : (
-          <span className="text-cockpit-faint">
-            Kein Ansprechpartner hinterlegt — über „Projekte“ anreichern.
-          </span>
+          <span className="text-cockpit-faint">Kein Ansprechpartner hinterlegt.</span>
         )}
       </StammRow>
 

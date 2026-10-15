@@ -257,6 +257,10 @@ export interface Mandate {
   /** The client company's id, when the mandate comes from the record — the
    *  workspace loads its Stammdaten and manager from it. */
   companyId?: string
+  /** The Ansprechpartner recorded ON THIS MANDATE. Absent while nobody has
+   *  been named — which is not the same as "the client has no contacts", and
+   *  the panel used to show the first of those instead. */
+  managerId?: string
   /** The Suchprofil. Null/empty where the mandate carries none yet — shown as
    *  a gap to fill, never invented. */
   location: string | null
