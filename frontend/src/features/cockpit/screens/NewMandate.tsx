@@ -49,6 +49,20 @@ function toAmount(text: string): number | null {
   return /k$/i.test(trimmed) && value < 1000 ? value * 1000 : value
 }
 
+/** The typed name, when it is not one of the rows: what would be created.
+ *
+ *  Pressing the button has to do what the form looks like it will do. A name
+ *  typed and left in the box is an answer; requiring a click on a suggestion
+ *  row to "really" mean it is a trap, and it is the one people walked into. */
+export function typedName<T>(rows: T[], query: string, nameOf: (row: T) => string): string {
+  const text = query.trim()
+  if (text.length < 2) return ''
+  const exists = rows.some(
+    (row) => nameOf(row).trim().toLowerCase() === text.toLowerCase(),
+  )
+  return exists ? '' : text
+}
+
 /** Pick one of these, or type a name that is not in the list yet. */
 function Picker<T extends { id: string }>({
   rows,
@@ -60,6 +74,8 @@ function Picker<T extends { id: string }>({
   onPick,
   draft,
   onDraft,
+  query,
+  onQuery,
   icon: Icon,
 }: {
   rows: T[]
@@ -69,12 +85,20 @@ function Picker<T extends { id: string }>({
   hintOf?: (row: T) => string | null
   value: string | null
   onPick: (id: string | null) => void
-  /** The typed name, when it matches nothing — what would be created. */
+  /** A name the reader confirmed by clicking "neu anlegen". */
   draft: string
   onDraft: (text: string) => void
+  /** The typed text, OWNED BY THE PARENT.
+   *
+   *  It used to live in here, and that was a bug people hit immediately:
+   *  typing "New Firm" and pressing "Mandat anlegen" did nothing, because
+   *  the only state the form could see was set by CLICKING the "neu
+   *  anlegen" row. The button stayed disabled under a hint that said the
+   *  client was missing while the reader was looking at it on screen. */
+  query: string
+  onQuery: (text: string) => void
   icon: typeof Building2
 }) {
-  const [query, setQuery] = useState('')
   const picked = rows.find((r) => r.id === value) ?? null
 
   const matches = useMemo(() => {
@@ -112,7 +136,7 @@ function Picker<T extends { id: string }>({
             onClick={() => {
               onPick(null)
               onDraft('')
-              setQuery('')
+              onQuery('')
             }}
             className="shrink-0 text-cockpit-faint transition-colors hover:text-coral-300"
             title="ändern"
@@ -138,7 +162,7 @@ function Picker<T extends { id: string }>({
             type="button"
             onClick={() => {
               onDraft('')
-              setQuery('')
+              onQuery('')
             }}
             className="shrink-0 text-cockpit-faint transition-colors hover:text-coral-300"
             title="verwerfen"
@@ -152,7 +176,7 @@ function Picker<T extends { id: string }>({
 
   return (
     <div className="space-y-1">
-      <TextInput label={label} value={query} onChange={setQuery} placeholder={placeholder} />
+      <TextInput label={label} value={query} onChange={onQuery} placeholder={placeholder} />
       {(matches.length > 0 || wouldCreate) && (
         <div className="mt-1 overflow-hidden rounded-lg border border-cockpit-line">
           {matches.map((row) => (
@@ -198,8 +222,10 @@ export function NewMandate({
   const [title, setTitle] = useState('')
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [companyDraft, setCompanyDraft] = useState('')
+  const [companyQuery, setCompanyQuery] = useState('')
   const [managerId, setManagerId] = useState<string | null>(null)
   const [managerDraft, setManagerDraft] = useState('')
+  const [managerQuery, setManagerQuery] = useState('')
   const [managerRole, setManagerRole] = useState('')
   const [managerEmail, setManagerEmail] = useState('')
   const [location, setLocation] = useState('')
@@ -223,8 +249,21 @@ export function NewMandate({
     [companyId],
   )
 
-  const hasClient = Boolean(companyId || companyDraft.trim())
-  const canSave = title.trim().length > 1 && hasClient && !busy
+  // What the form WILL create: a confirmed draft, or simply what was typed.
+  const newClient =
+    companyDraft.trim() || typedName(companies ?? [], companyQuery, (c) => c.name)
+  const newContact =
+    managerDraft.trim() || typedName(managers ?? [], managerQuery, (m) => m.full_name)
+
+  const hasClient = Boolean(companyId || newClient)
+  const hasTitle = title.trim().length > 1
+  const canSave = hasTitle && hasClient && !busy
+  // Name only what is actually missing. The old hint said "Titel und Kunde
+  // fehlen noch" with the title filled in and the client name on screen,
+  // which is how a form teaches people to distrust it.
+  const missing = [!hasTitle && 'ein Job-Titel', !hasClient && 'ein Kunde'].filter(
+    Boolean,
+  ) as string[]
 
   async function save() {
     if (!canSave) return
@@ -232,16 +271,16 @@ export function NewMandate({
     setError(null)
     try {
       let client = companyId
-      if (!client && companyDraft.trim()) {
-        client = (await api.createCompany({ name: companyDraft.trim() })).id
+      if (!client && newClient) {
+        client = (await api.createCompany({ name: newClient })).id
       }
 
       let contact = managerId
-      if (!contact && managerDraft.trim() && client) {
+      if (!contact && newContact && client) {
         contact = (
           await api.createManager({
             company_id: client,
-            full_name: managerDraft.trim(),
+            full_name: newContact,
             role_title: managerRole.trim() || null,
             email: managerEmail.trim() || null,
             // Provenance on the way in: the Art. 14 flow reads this later,
@@ -308,6 +347,8 @@ export function NewMandate({
           }}
           draft={companyDraft}
           onDraft={setCompanyDraft}
+          query={companyQuery}
+          onQuery={setCompanyQuery}
           icon={Building2}
         />
 
@@ -327,9 +368,11 @@ export function NewMandate({
               onPick={setManagerId}
               draft={managerDraft}
               onDraft={setManagerDraft}
+              query={managerQuery}
+              onQuery={setManagerQuery}
               icon={UserRound}
             />
-            {managerDraft && (
+            {newContact && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextInput
                   label="Rolle"
@@ -391,9 +434,9 @@ export function NewMandate({
           <Button onClick={onClose}>
             <X className="h-4 w-4" /> Abbrechen
           </Button>
-          {!canSave && !busy && (
+          {missing.length > 0 && !busy && (
             <span className="ml-auto font-mono text-[11px] text-cockpit-faint">
-              Titel und Kunde fehlen noch
+              Es fehlt noch {missing.join(' und ')}
             </span>
           )}
         </div>
