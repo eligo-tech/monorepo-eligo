@@ -279,8 +279,19 @@ export function MandateGraphLegend() {
 
 const BOOK_ROOT = { x: 4, w: 196, h: 76 }
 const BOOK_MANDATE = { x: 268, w: 392, h: 62 }
-const BOOK_CAND = { x: 728, w: 330, h: 54 }
+const BOOK_CAND = { x: 720, w: 396, h: 62 }
 const ROW_GAP = 10
+
+/** The candidate node's inset, and the column it keeps clear on the right.
+ *  The reserve is measured against the WIDEST score, not the common one:
+ *  "10/10" is five characters at 16px mono, 48px, and the four-character
+ *  "8/10" is what made the old 14px reserve look sufficient. */
+const CAND_PAD = 16
+const CAND_SCORE = 72
+
+/** Where the candidate's two lines start, and how wide they may be. */
+const CAND_TEXT = CAND_PAD + 22
+const CAND_LINE = BOOK_CAND.w - CAND_TEXT - CAND_SCORE
 
 /** The mandate node's own left inset. Wider than `PAD`, which is the gap
  *  around the whole picture. */
@@ -295,6 +306,19 @@ const MANDATE_CONTROLS = 58
  *  its place — are 0.6em, which is what makes the character budget below an
  *  exact width rather than a guess. */
 const MONO_ADVANCE = 0.6
+
+/** How many characters of the mono face fit in `widthPx`. */
+function monoFit(widthPx: number, fontPx: number): number {
+  return Math.max(Math.floor(widthPx / (fontPx * MONO_ADVANCE)), 2)
+}
+
+/** Clip a mono line to the pixels it is allowed.
+ *
+ *  Only for mono: the sans face has no fixed advance, so a character count
+ *  there is an estimate and is kept deliberately short of the real room. */
+export function fitMono(text: string, widthPx: number, fontPx: number): string {
+  return clip(text, monoFit(widthPx, fontPx))
+}
 
 /** The mandate caption, measured tail-first.
  *
@@ -313,7 +337,7 @@ export function mandateCaption(
     fit === null ? ' · ohne Bewertung' : ` · bester Fit ${fit}/10`
   }`
   const room = width - MANDATE_PAD - MANDATE_CONTROLS
-  const budget = Math.floor(room / (fontPx * MONO_ADVANCE)) - tail.length
+  const budget = monoFit(room, fontPx) - tail.length
   return `${clip(client, Math.max(budget, 2))}${tail}`
 }
 
@@ -541,18 +565,31 @@ export function BookGraph({
                 className="fill-cockpit-inset stroke-cockpit-line transition-colors group-hover:stroke-cockpit-edge"
                 strokeWidth={1}
               />
-              <circle cx={BOOK_CAND.x + 18} cy={row.y + BOOK_CAND.h / 2} r={3.5} className={DOT[tone]} />
-              <text x={BOOK_CAND.x + 32} y={row.y + 23} className="fill-cockpit-text text-[13px] font-semibold">
-                {clip(card.candidateName, 26)}
-              </text>
-              <text x={BOOK_CAND.x + 32} y={row.y + 40} className="fill-cockpit-faint font-mono text-[10.5px]">
-                {clip(standing(card), 34)}
+              <circle
+                cx={BOOK_CAND.x + CAND_PAD + 4}
+                cy={row.y + BOOK_CAND.h / 2}
+                r={4}
+                className={DOT[tone]}
+              />
+              <text
+                x={BOOK_CAND.x + CAND_TEXT}
+                y={row.y + 26}
+                className="fill-cockpit-text text-[13.5px] font-semibold"
+              >
+                {clip(card.candidateName, 34)}
               </text>
               <text
-                x={BOOK_CAND.x + BOOK_CAND.w - 14}
-                y={row.y + 33}
+                x={BOOK_CAND.x + CAND_TEXT}
+                y={row.y + 45}
+                className="fill-cockpit-faint font-mono text-[11px]"
+              >
+                {fitMono(standing(card), CAND_LINE, 11)}
+              </text>
+              <text
+                x={BOOK_CAND.x + BOOK_CAND.w - CAND_PAD}
+                y={row.y + BOOK_CAND.h / 2 + 6}
                 textAnchor="end"
-                className={cn('font-mono text-[15px] font-semibold', TEXT[tone])}
+                className={cn('font-mono text-[16px] font-semibold', TEXT[tone])}
               >
                 {fit == null ? '—' : `${fit}/10`}
               </text>

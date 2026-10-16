@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { mandateCaption } from './MandateGraph'
+import { fitMono, mandateCaption } from './MandateGraph'
+
+import { PROCESS_STEPS } from '../data/mock'
 
 /** The regression this file exists for:
  *
@@ -59,5 +61,35 @@ describe('mandateCaption', () => {
     expect(mandateCaption('Computacenter', 5, 8, { width: 180 })).toMatch(
       /^C?…? ?· 5 Kandidaten · bester Fit 8\/10$/,
     )
+  })
+})
+
+/** The candidate node, one level further in. Its two lines share the box
+ *  with the score on the right, so the room they have is the box minus the
+ *  inset, the dot, and the reserve a "10/10" needs. */
+const CAND_LINE = 396 - (16 + 22) - 72
+
+describe('the candidate line', () => {
+  it('holds every standing the process can be in', () => {
+    for (const { label } of PROCESS_STEPS) {
+      for (const standing of [label, `${label} ✓`, `abgesagt · ${label}`]) {
+        expect(fitMono(standing, CAND_LINE, 11)).toBe(standing)
+      }
+    }
+  })
+
+  it('holds the state a process with no step at all is in', () => {
+    expect(fitMono('noch kein Schritt', CAND_LINE, 11)).toBe('noch kein Schritt')
+  })
+
+  it('cuts a longer line rather than running it under the score', () => {
+    const long = 'abgesagt · ' + 'Interviewtermin mit dem Fachbereich und der IT-Leitung'
+    const cut = fitMono(long, CAND_LINE, 11)
+    expect(cut.endsWith('…')).toBe(true)
+    expect(cut.length * 11 * 0.6).toBeLessThanOrEqual(CAND_LINE)
+  })
+
+  it('keeps at least two characters, however little room there is', () => {
+    expect(fitMono('Vorgestellt', 4, 11).length).toBe(2)
   })
 })
