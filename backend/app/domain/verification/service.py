@@ -21,10 +21,11 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.common.enums import ReceiptAction
 from app.domain.verification.models import EnrichmentRecord, Receipt
@@ -101,7 +102,47 @@ async def _chain_head(
     return result.first()
 
 
-# Two writers racing resolve in one retry; more only under heavy contention.
+#: Namespace for the per-tenant advisory lock, so the two-argument
+#: `pg_advisory_xact_lock(key1, key2)` can never collide with a lock some
+#: other part of the system takes on a bare hash.
+_APPEND_LOCK_NAMESPACE = 0x52435054  # "RCPT"
+
+
+async def _serialise_appends(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    """Hold this tenant's append slot until the caller's transaction ends.
+
+    A chain IS a sequence, so appends to one tenant's ledger have to happen
+    one at a time; the only question is whether the database finds that out
+    before or after the insert. The optimistic loop below found out after,
+    and the cost was quadratic: eight parallel `POST /matching/job` calls —
+    which is literally one cockpit page load, `useCockpitData` fans out over
+    the open mandates with `Promise.all` — produced 28 rejected inserts to
+    place 8 receipts, each one a `23505` in the Postgres log. At
+    `_MAX_APPEND_ATTEMPTS = 5` the last writer in that fan-out needed eight
+    tries and had five, so the page load was one scheduling accident away
+    from a 500 on a mandate's score.
+
+    The lock is taken HERE, at the append, not when the caller's transaction
+    opens — the matcher does all its scoring first — so what serialises is
+    the tail of the transaction, not the work.
+
+    No-op off Postgres: SQLite has no advisory locks and no concurrency worth
+    the name in the scaffold, and the retry loop still covers it.
+    """
+    if not settings.is_postgres:
+        return
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(:ns, :key)"),
+        # The low 31 bits of the tenant uuid. Collisions between two tenants
+        # cost a little waiting and nothing else — the uniqueness constraint
+        # is still the thing that guarantees correctness.
+        {"ns": _APPEND_LOCK_NAMESPACE, "key": tenant_id.int & 0x7FFFFFFF},
+    )
+
+
+# The advisory lock above means a conflict now needs a writer that bypassed
+# it — a second process on SQLite, or a tenant-key collision. Rare, but the
+# constraint is the guarantee and the retry is what makes losing survivable.
 _MAX_APPEND_ATTEMPTS = 5
 
 
@@ -122,6 +163,9 @@ async def append_receipt(
     This is the ONLY way receipts are created. There is no update/delete path.
     """
     payload = payload or {}
+
+    # One writer per tenant from here to the end of the transaction.
+    await _serialise_appends(session, tenant_id)
 
     # Read the head, claim the next position, and let the DATABASE arbitrate.
     # Reading and inserting are not atomic, so two concurrent appends for one

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import delete, select, update
@@ -187,3 +188,86 @@ def test_provisioning_keeps_update_granted_on_receipts() -> None:
     assert "REVOKE UPDATE" not in source, "see migration 0024 — the FK needs UPDATE"
     assert "GRANT UPDATE ON receipts" in source
     assert "REVOKE DELETE ON receipts" in source
+
+
+# ---------------------------------------------------------------------------
+# F6. One writer per tenant, decided before the insert and not after
+# ---------------------------------------------------------------------------
+#
+# The optimistic loop was correct and quadratic. A single cockpit page load
+# fans out over the open mandates (`useCockpitData`, Promise.all, eight of
+# them), each ending in one append for the same tenant: 28 rejected inserts
+# to place 8 receipts, 28 `23505 duplicate key value violates unique
+# constraint "uq_receipt_chain_position"` lines in the Postgres log, and a
+# last writer that needed eight attempts out of a budget of five.
+
+
+class _Recorder:
+    """A session that only remembers what it was asked to execute."""
+
+    def __init__(self) -> None:
+        self.statements: list[tuple[str, dict | None]] = []
+
+    async def execute(self, clause, params=None):  # noqa: ANN001 - test double
+        self.statements.append((str(clause), params))
+        return None
+
+
+async def test_the_append_slot_is_taken_before_the_head_is_read(tenant, monkeypatch) -> None:
+    """The lock has to come first, or it is guarding nothing."""
+    order: list[str] = []
+
+    original_head = service._chain_head
+    original_lock = service._serialise_appends
+
+    async def spy_head(session, tenant_id):
+        order.append("read-head")
+        return await original_head(session, tenant_id)
+
+    async def spy_lock(session, tenant_id):
+        order.append("lock")
+        return await original_lock(session, tenant_id)
+
+    monkeypatch.setattr(service, "_chain_head", spy_head)
+    monkeypatch.setattr(service, "_serialise_appends", spy_lock)
+
+    async with SessionLocal() as s:
+        await _append(s, tenant, "ordered")
+        await s.commit()
+
+    assert order == ["lock", "read-head"]
+
+
+async def test_no_lock_is_taken_off_postgres(monkeypatch) -> None:
+    """SQLite has no advisory locks; the retry loop still covers the scaffold."""
+    monkeypatch.setattr(service, "settings", SimpleNamespace(is_postgres=False))
+    recorder = _Recorder()
+    await service._serialise_appends(recorder, uuid.uuid4())
+    assert recorder.statements == []
+
+
+async def test_the_lock_key_is_per_tenant_and_fits_an_int4(monkeypatch) -> None:
+    """Two tenants append in parallel without waiting on each other, and the
+    key stays inside what `pg_advisory_xact_lock(int4, int4)` accepts."""
+    monkeypatch.setattr(service, "settings", SimpleNamespace(is_postgres=True))
+
+    keys = []
+    for _ in range(50):
+        recorder = _Recorder()
+        tenant_id = uuid.uuid4()
+        await service._serialise_appends(recorder, tenant_id)
+        (sql, params), = recorder.statements
+        assert "pg_advisory_xact_lock" in sql
+        assert params["ns"] == service._APPEND_LOCK_NAMESPACE
+        assert 0 <= params["key"] <= 0x7FFFFFFF
+        keys.append(params["key"])
+
+    # Same tenant, same slot — the lock would serialise nothing otherwise.
+    fixed = uuid.uuid4()
+    first, second = _Recorder(), _Recorder()
+    await service._serialise_appends(first, fixed)
+    await service._serialise_appends(second, fixed)
+    assert first.statements[0][1]["key"] == second.statements[0][1]["key"]
+
+    # And different tenants land in different slots often enough to matter.
+    assert len(set(keys)) == len(keys)

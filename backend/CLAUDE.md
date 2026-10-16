@@ -63,8 +63,14 @@ These are enforced in code. Do not route around them.
   `UNIQUE (tenant_id, chain_index)` is what makes the chain single-headed:
   reading the head and inserting is not atomic, so concurrent appends would
   otherwise both claim the same predecessor and make a valid workload look like
-  tampering. `append_receipt` retries on conflict inside a SAVEPOINT, so a lost
-  race never rolls back the caller's other work.
+  tampering. `append_receipt` takes a per-tenant **transaction advisory lock**
+  at the append — not when the caller's transaction opens — so appends
+  serialise at the tail of the work rather than racing and being rejected;
+  it still retries on conflict inside a SAVEPOINT, so a lost race never rolls
+  back the caller's other work. The optimistic loop alone was quadratic: one
+  cockpit page load fans out eight `POST /matching/job` calls for one tenant,
+  which cost 28 rejected inserts to place 8 receipts and came within one
+  scheduling accident of exhausting the five-attempt budget.
 - `verify_chain` checks hashes AND contiguity — a hash chain alone would not
   notice a removed row whose successor was re-pointed. **Truncation at the head
   is still invisible from inside**; that needs an externally anchored head.
