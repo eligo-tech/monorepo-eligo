@@ -278,9 +278,44 @@ export function MandateGraphLegend() {
 // never mistaken for an average or for a judgement about the mandate itself.
 
 const BOOK_ROOT = { x: 4, w: 196, h: 76 }
-const BOOK_MANDATE = { x: 268, w: 316, h: 62 }
-const BOOK_CAND = { x: 652, w: 356, h: 54 }
+const BOOK_MANDATE = { x: 268, w: 392, h: 62 }
+const BOOK_CAND = { x: 728, w: 330, h: 54 }
 const ROW_GAP = 10
+
+/** The mandate node's own left inset. Wider than `PAD`, which is the gap
+ *  around the whole picture. */
+const MANDATE_PAD = 16
+
+/** What the mandate node keeps clear on its right: the tone dot, the expand
+ *  caret and the button that opens the mandate. The caption stops before it. */
+const MANDATE_CONTROLS = 58
+
+/** Advance width of one character in the mono face, as a fraction of the font
+ *  size. JetBrains Mono — and the two faces the Jet · Mono · Heli switch puts in
+ *  its place — are 0.6em, which is what makes the character budget below an
+ *  exact width rather than a guess. */
+const MONO_ADVANCE = 0.6
+
+/** The mandate caption, measured tail-first.
+ *
+ *  The score is the point of the line, so when the room runs out it is the
+ *  client name that gives way, never the number. What this replaces wrote the
+ *  line left to right and clipped only the client, at a fixed 18 characters:
+ *  "Linde + Wiemann · 3 Kandidaten · bester Fit 8/10" is 48 characters, the box
+ *  held 36, and the part that hung outside it was the part worth reading. */
+export function mandateCaption(
+  client: string,
+  count: number,
+  fit: number | null,
+  { width = BOOK_MANDATE.w, fontPx = 11 }: { width?: number; fontPx?: number } = {},
+): string {
+  const tail = ` · ${count} ${count === 1 ? 'Kandidat' : 'Kandidaten'}${
+    fit === null ? ' · ohne Bewertung' : ` · bester Fit ${fit}/10`
+  }`
+  const room = width - MANDATE_PAD - MANDATE_CONTROLS
+  const budget = Math.floor(room / (fontPx * MONO_ADVANCE)) - tail.length
+  return `${clip(client, Math.max(budget, 2))}${tail}`
+}
 
 /** The best fit on a mandate, and the tone that goes with it. `null` when
  *  nobody on it has been assessed — which is a finding, not a zero. */
@@ -357,7 +392,7 @@ export function BookGraph({
       <svg
         viewBox={`0 0 ${width} ${height}`}
         width="100%"
-        style={{ minWidth: 680, maxHeight: height }}
+        style={{ minWidth: 720, maxHeight: height }}
         role="img"
         aria-label={`${mandates.length} Mandate mit ${total} Kandidaten, nach bester Passung sortiert`}
       >
@@ -437,20 +472,18 @@ export function BookGraph({
                     strokeWidth={1}
                   />
                   <text
-                    x={BOOK_MANDATE.x + 16}
+                    x={BOOK_MANDATE.x + MANDATE_PAD}
                     y={row.y + 25}
                     className="fill-cockpit-text text-[13px] font-semibold"
                   >
-                    {clip(mandate.title, 30)}
+                    {clip(mandate.title, 38)}
                   </text>
                   <text
-                    x={BOOK_MANDATE.x + 16}
+                    x={BOOK_MANDATE.x + MANDATE_PAD}
                     y={row.y + 44}
                     className="fill-cockpit-faint font-mono text-[11px]"
                   >
-                    {clip(mandate.client, 18)} · {mandate.cards.length}{' '}
-                    {mandate.cards.length === 1 ? 'Kandidat' : 'Kandidaten'}
-                    {fit === null ? ' · ohne Bewertung' : ` · bester Fit ${fit}/10`}
+                    {mandateCaption(mandate.client, mandate.cards.length, fit)}
                   </text>
                   <circle
                     cx={BOOK_MANDATE.x + BOOK_MANDATE.w - 52}
