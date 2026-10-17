@@ -135,6 +135,10 @@ def test_the_admin_only_routes_are_the_ones_we_meant() -> None:
     }
     assert admin_only == {
         ("PUT", "/tenant-sources/{kind}"),
+        # Switching a gated feature on or off binds the whole workspace to its
+        # terms — an admin's decision, not a recruiter's.
+        ("POST", "/features/{key}/consent"),
+        ("DELETE", "/features/{key}/consent"),
         ("DELETE", "/tenant-sources/{kind}"),
         ("POST", "/tenant-sources/{kind}/import"),
         ("POST", "/imports/commit"),
