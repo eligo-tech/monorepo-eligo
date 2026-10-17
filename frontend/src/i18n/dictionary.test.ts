@@ -166,6 +166,16 @@ describe('t()', () => {
     )
   })
 
+  it('works where there is no localStorage at all, which CI is', () => {
+    // Not the same as storage throwing: the identifier does not exist, so
+    // reading it is a ReferenceError. The first run of this guard re-threw
+    // that and took the whole suite down on CI while passing locally.
+    vi.stubGlobal('navigator', { language: 'de-DE' })
+    vi.stubGlobal('localStorage', undefined)
+    expect(preferredLang()).toBe('de')
+    expect(() => setLang('en')).not.toThrow()
+  })
+
   it('still renders when storage throws, which private mode does', () => {
     vi.stubGlobal('navigator', { language: 'de-DE' })
     vi.stubGlobal('localStorage', {

@@ -40,18 +40,25 @@ const isLang = (v: string | null | undefined): v is Lang =>
  *  the alternative is a stranger's first impression being a language they
  *  did not ask for. */
 export function preferredLang(): Lang {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (isLang(stored)) return stored
-  } catch (err) {
-    // Private mode and blocked site data throw here, and falling through
-    // to the browser's own preference is the right answer for those.
-    //
-    // A ReferenceError is NOT one of those: it means this ran before
-    // something it needs was initialised, which is exactly the bug this
-    // catch once hid — the stored language was ignored in every session
-    // and nothing anywhere said so. Let it through.
-    if (err instanceof ReferenceError) throw err
+  // `typeof` rather than a bare reference: there is no `localStorage` at all
+  // under the test runner, and reading an identifier that does not exist is
+  // a ReferenceError, not a storage error. That distinction is the point of
+  // the catch below.
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (isLang(stored)) return stored
+    } catch (err) {
+      // Private mode and blocked site data throw here, and falling through
+      // to the browser's own preference is right for those.
+      //
+      // A ReferenceError past the guard above is NOT one of those: it means
+      // this ran before something it needs was initialised, which is the bug
+      // this catch once hid — `STORAGE_KEY` and `isLang` were declared below
+      // the module-level call that reads them, so the stored language was
+      // ignored in every session and nothing anywhere said so. Let it through.
+      if (err instanceof ReferenceError) throw err
+    }
   }
   const asked = typeof navigator === 'undefined' ? '' : navigator.language
   return asked.toLowerCase().startsWith('de') ? 'de' : 'en'
@@ -83,11 +90,13 @@ export const getLang = (): Lang => current
  *  route survives it, the bundle is warm, and nobody switches language
  *  twice in a session. */
 export function setLang(lang: Lang): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, lang)
-  } catch {
-    // Blocked storage: the switch still applies for this page, it just
-    // will not be remembered. Better than refusing to change language.
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY, lang)
+    } catch {
+      // Blocked storage: the switch still applies for this page, it just
+      // will not be remembered. Better than refusing to change language.
+    }
   }
   current = lang
   // Guarded because this module is also loaded without a DOM — by the test
