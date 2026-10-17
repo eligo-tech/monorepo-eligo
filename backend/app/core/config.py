@@ -91,6 +91,16 @@ class Settings(BaseSettings):
         default=None, validation_alias="OPENAI_API_KEY"
     )
 
+    # --- Interviewer agent (gated feature) -------------------------------
+    # Three gates, all of which must open (see `domain/features`):
+    #   1. this switch — the operator's kill switch, OFF unless set;
+    #   2. the allowlist — when non-empty, only these workspaces (comma-
+    #      separated tenant UUIDs) may opt in; empty means any workspace may;
+    #   3. a workspace admin's recorded consent to the current terms.
+    # And per interview, the candidate's own recorded consent.
+    interviewer_enabled: bool = False
+    interviewer_allowed_tenants: str = ""
+
     # --- Information hub (public-source ingestion) -----------------------
     # Identify the crawler honestly: Nominatim and most public APIs require a
     # real User-Agent with a contact route, and it is what makes a rate-limit
