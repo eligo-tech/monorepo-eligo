@@ -15,6 +15,10 @@
 //     transkript (18.09.2026)" is an opinion with no source, which is exactly
 //     what this product refuses to display.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 
@@ -24,7 +28,7 @@ import type { CandidateAssessment } from '../data/types'
 
 /** "18.09.2026" — the day the assessment was made, in German order. */
 function dateDe(iso: string): string {
-  return new Date(iso).toLocaleDateString('de-DE', {
+  return new Date(iso).toLocaleDateString(locale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -65,7 +69,7 @@ function Bullets({
 function provenance(assessment: CandidateAssessment): string | null {
   const { basis, assessedAt } = assessment
   const when = assessedAt ? dateDe(assessedAt) : null
-  if (!basis) return when ? `Bewertet am ${when}` : null
+  if (!basis) return when ? t('Bewertet am {when}', { when }) : null
   const alreadyDated = !!when && basis.includes(when)
   return `Grundlage: ${basis}${when && !alreadyDated ? ` · ${when}` : ''}`
 }
@@ -81,7 +85,7 @@ export function AssessmentPanel({ assessment }: { assessment: CandidateAssessmen
   return (
     <div className="mt-6 border-t border-cockpit-line pt-5">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <Label>Auswertung im Detail</Label>
+        <Label>{t('Auswertung im Detail')}</Label>
         {provenance(assessment) && (
           <span className="font-mono text-[12px] text-cockpit-faint">
             {provenance(assessment)}
@@ -91,14 +95,14 @@ export function AssessmentPanel({ assessment }: { assessment: CandidateAssessmen
 
       {(assessment.strengths.length > 0 || assessment.risks.length > 0) && (
         <div className="mt-5 flex flex-wrap gap-x-10 gap-y-5">
-          <Bullets title="Stärken" items={assessment.strengths} tone="mint" />
-          <Bullets title="Lücken / Risiken" items={assessment.risks} tone="coral" />
+          <Bullets title={t('Stärken')} items={assessment.strengths} tone="mint" />
+          <Bullets title={t('Lücken / Risiken')} items={assessment.risks} tone="coral" />
         </div>
       )}
 
       {assessment.technologies.length > 0 && (
         <div className="mt-5 space-y-2">
-          <Label>Relevante Technologien</Label>
+          <Label>{t('Relevante Technologien')}</Label>
           <div className="flex flex-wrap gap-1.5">
             {assessment.technologies.map((tech) => (
               <Chip key={tech}>{tech}</Chip>
@@ -130,7 +134,7 @@ export function AssessmentPanel({ assessment }: { assessment: CandidateAssessmen
               ))}
               {assessment.clientSummary && (
                 <div className="rounded-xl border border-lav-600/50 bg-lav-800/25 p-4">
-                  <Label className="text-lav-400">Für die Kundenvorstellung</Label>
+                  <Label className="text-lav-400">{t('Für die Kundenvorstellung')}</Label>
                   <p className="mt-2 text-[14px] leading-relaxed text-cockpit-dim">
                     {assessment.clientSummary}
                   </p>

@@ -2,6 +2,8 @@
 // split and mint ahead of it (the headroom the potential can still fill).
 // Pure SVG — no chart library, matching src/features/reporting/PieChart.tsx.
 
+import { t } from '@/i18n'
+
 import { cn } from '@/lib/cn'
 import type { Figure as FigureModel } from '../data/types'
 import { Money, ProvenanceMark } from './primitives'
@@ -126,11 +128,11 @@ export function Gauge({
           className="text-[46px] font-medium leading-none tracking-tight text-cockpit-text"
         />
         <div className="font-mono text-[15px] text-gold-400">
-          {pct}% Ziel
+          {t('{pct}% Ziel', { pct })}
           <ProvenanceMark provenance={target.provenance} source={target.source} />
         </div>
         <div className="font-mono text-[15px] text-gold-400">
-          + <Money figure={potential} compact /> Boost
+          + <Money figure={potential} compact /> {t('Boost')}
         </div>
         <div className="mt-1 font-mono text-[12px] uppercase tracking-[0.18em] text-cockpit-faint">
           {caption}

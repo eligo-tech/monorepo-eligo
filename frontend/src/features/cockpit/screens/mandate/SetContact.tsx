@@ -11,6 +11,8 @@
 // — that provenance is what the Art. 14 flow reads later, and a contact whose
 // origin was never recorded cannot be assessed for it at all.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { Check, Plus, UserRound, X } from 'lucide-react'
 
@@ -54,8 +56,8 @@ export function SetContact({
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 422
-          ? 'Dieser Kontakt gehört zu einer anderen Firma.'
-          : 'Nicht gespeichert — bitte erneut versuchen.',
+          ? t('Dieser Kontakt gehört zu einer anderen Firma.')
+          : t('Nicht gespeichert — bitte erneut versuchen.'),
       )
     }
     setBusy(false)
@@ -72,7 +74,7 @@ export function SetContact({
         role_title: role.trim() || null,
         email: email.trim() || null,
         source: 'self_reported',
-        source_detail: `Ansprechpartner für das Mandat „${jobTitle}" erfasst`,
+        source_detail: t('Ansprechpartner für das Mandat „{title}” erfasst', { title: jobTitle }),
       })
       await api.updateJob(jobId, { manager_id: manager.id })
       onDone()
@@ -82,7 +84,7 @@ export function SetContact({
       setRole('')
       setEmail('')
     } catch {
-      setError('Nicht gespeichert — bitte erneut versuchen.')
+      setError(t('Nicht gespeichert — bitte erneut versuchen.'))
     }
     setBusy(false)
   }
@@ -90,7 +92,7 @@ export function SetContact({
   if (!companyId) {
     return (
       <span className="font-mono text-[11.5px] text-cockpit-faint">
-        Erst einen Kunden am Mandat hinterlegen.
+        {t('Erst einen Kunden am Mandat hinterlegen.')}
       </span>
     )
   }
@@ -102,7 +104,7 @@ export function SetContact({
         onClick={() => setOpen(true)}
         className="font-mono text-[12px] text-mint-300 underline-offset-2 transition-colors hover:underline"
       >
-        Ansprechpartner festlegen
+        {t('Ansprechpartner festlegen')}
       </button>
     )
   }
@@ -153,20 +155,20 @@ export function SetContact({
       {adding && (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <TextInput label="Name" value={name} onChange={setName} placeholder="Vor- und Nachname" />
-            <TextInput label="Rolle" value={role} onChange={setRole} placeholder="Head of IT" />
-            <TextInput label="E-Mail" value={email} onChange={setEmail} placeholder="optional" />
+            <TextInput label={t('Name')} value={name} onChange={setName} placeholder={t('Vor- und Nachname')} />
+            <TextInput label={t('Rolle')} value={role} onChange={setRole} placeholder="Head of IT" />
+            <TextInput label={t('E-Mail')} value={email} onChange={setEmail} placeholder={t('optional')} />
           </div>
           <div className="flex items-center gap-2">
             <Button tone="primary" onClick={() => void create()} disabled={busy || !name.trim()}>
-              <Check className="h-4 w-4" /> {busy ? 'Speichert…' : 'Anlegen & zuordnen'}
+              <Check className="h-4 w-4" /> {busy ? t('Speichert…') : t('Anlegen & zuordnen')}
             </Button>
             <Button onClick={() => setAdding(false)}>
               <X className="h-4 w-4" /> Zurück
             </Button>
           </div>
           <p className="font-mono text-[11px] text-cockpit-faint">
-            Wird mit Herkunft erfasst — Grundlage für die Art.-14-Information.
+            {t('Wird mit Herkunft erfasst — Grundlage für die Art.-14-Information.')}
           </p>
         </>
       )}

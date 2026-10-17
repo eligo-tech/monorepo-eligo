@@ -16,6 +16,10 @@
 // "Kein Ansprechpartner hinterlegt" — and refusing the note until somebody
 // creates a `managers` row means the note never gets written.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useMemo, useState } from 'react'
 import { MessageSquareQuote } from 'lucide-react'
 
@@ -29,7 +33,7 @@ import { PanelHead } from './parts'
 import type { Mandate } from '../../data/types'
 
 const dateDe = (iso: string) =>
-  new Date(iso).toLocaleDateString('de-DE', {
+  new Date(iso).toLocaleDateString(locale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -89,7 +93,7 @@ export function BriefingPanel({
       setText('')
       setKey((k) => k + 1)
     } catch {
-      setError('Nicht gespeichert — bitte erneut versuchen.')
+      setError(t('Nicht gespeichert — bitte erneut versuchen.'))
     } finally {
       setBusy(false)
     }
@@ -98,10 +102,10 @@ export function BriefingPanel({
   return (
     <Panel className="px-6 py-5">
       <PanelHead
-        tag="Briefing"
+        tag={t('Briefing')}
         tone="gold"
-        title="Was der Kunde gesagt hat"
-        note={`${mandate.ref} · ${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'}`}
+        title={t('Was der Kunde gesagt hat')}
+        note={`${mandate.ref} · ${rows.length} ${rows.length === 1 ? t('Eintrag') : t('Einträge')}`}
         collapsed={collapsed}
         onToggle={() => setCollapsed((shut) => !shut)}
       />
@@ -109,13 +113,12 @@ export function BriefingPanel({
       {collapsed ? null : (
         <>
         {loading && rows.length === 0 && (
-          <p className="font-mono text-[12px] text-cockpit-faint">lädt…</p>
+          <p className="font-mono text-[12px] text-cockpit-faint">{t('lädt…')}</p>
         )}
 
         {!loading && rows.length === 0 && (
           <p className="mb-4 text-[13.5px] leading-relaxed text-cockpit-dim">
-            Noch kein Briefing notiert. Das Suchprofil unten hält das Ergebnis des
-            Gesprächs — hier steht, was tatsächlich gesagt wurde.
+            {t('Noch kein Briefing notiert. Das Suchprofil unten hält das Ergebnis des Gesprächs — hier steht, was tatsächlich gesagt wurde.')}
           </p>
         )}
 
@@ -143,12 +146,12 @@ export function BriefingPanel({
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={3}
-            placeholder="Nach dem Gespräch: was gesucht wird, was nicht geht, worauf es ankommt …"
+            placeholder={t('Nach dem Gespräch: was gesucht wird, was nicht geht, worauf es ankommt …')}
             className="w-full rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 text-[13.5px] leading-relaxed text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
           />
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-              am
+              {t('am')}
               <input
                 type="date"
                 value={when}
@@ -157,13 +160,13 @@ export function BriefingPanel({
               />
             </label>
             <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-              mit
+              {t('mit')}
               <select
                 value={who}
                 onChange={(e) => setWho(e.target.value)}
                 className="rounded-md border border-cockpit-line bg-cockpit-inset px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
               >
-                <option value="">ohne Ansprechpartner</option>
+                <option value="">{t('ohne Ansprechpartner')}</option>
                 {(managers ?? []).map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.full_name}
@@ -178,7 +181,7 @@ export function BriefingPanel({
               className="ml-auto"
             >
               <MessageSquareQuote className="h-4 w-4" />
-              {busy ? 'Speichert…' : 'Briefing notieren'}
+              {busy ? t('Speichert…') : t('Briefing notieren')}
             </Button>
           </div>
           {error && <p className="text-[12px] text-coral-400">{error}</p>}

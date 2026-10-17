@@ -12,6 +12,7 @@ import {
   Quote,
 } from 'lucide-react'
 import './landing.css'
+import { getLang, setLang, type Lang as I18nLang } from '@/i18n'
 
 // ── Design tokens ──────────────────────────────────────────────────────────
 // The cockpit palette (see tailwind.config.js) expressed for this page's inline
@@ -71,10 +72,16 @@ const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 
 const container: CSSProperties = { maxWidth: 1200, margin: '0 auto', padding: '0 28px' }
 
-type Lang = 'de' | 'en'
+// This page had a working DE/EN switch before the cockpit had one, and its
+// own `L(de, en)` pairs — around fifty of them — are the English this
+// product already shipped. None of that is replaced here. What changes is
+// WHERE the choice lives: in `src/i18n` with the rest of the app, so that
+// picking English on the landing page and clicking through to the cockpit
+// does not land you back in German, and so the choice survives a reload.
+type Lang = I18nLang
 
 export function LandingPage({ onEnterApp }: { onEnterApp: () => void }) {
-  const [lang, setLang] = useState<Lang>('de')
+  const lang = getLang()
   const [showBanner, setShowBanner] = useState(true)
   const L = (de: string, en: string) => (lang === 'de' ? de : en)
 

@@ -21,6 +21,10 @@
 // backend `pipeline/steps.py`). The chooser prefixes the text with the
 // speaker rather than pretending to one.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useMemo, useState } from 'react'
 
 import { ApiError, api } from '@/api/client'
@@ -31,9 +35,13 @@ import { Button, SelectInput, TextArea } from '../../ui/forms'
 import { PanelHead, PanelTag } from './parts'
 import type { Mandate } from '../../data/types'
 
+// `value` is STORED — it becomes the "Kunde: …" prefix of the remark in the
+// database, and `split` below reads it back. It stays German in every
+// language; only the label is translated. Translating the value would make
+// an English session write rows a German session cannot parse.
 const WHO = [
-  { value: 'Kunde', label: 'Kunde' },
-  { value: 'Kandidat', label: 'Kandidat' },
+  { value: t('Kunde'), label: t('Kunde') },
+  { value: 'Kandidat', label: t('Kandidat') },
 ]
 
 interface Entry {
@@ -45,7 +53,7 @@ interface Entry {
 }
 
 const dateDe = (iso: string) =>
-  new Date(iso).toLocaleDateString('de-DE', {
+  new Date(iso).toLocaleDateString(locale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -54,9 +62,9 @@ const dateDe = (iso: string) =>
 /** "Kunde: fachlich überzeugend" → who + what, without inventing a column. */
 function split(text: string): { who: string; text: string } {
   const [prefix, ...rest] = text.split(':')
-  return rest.length > 0 && ['Kunde', 'Kandidat'].includes(prefix.trim())
+  return rest.length > 0 && [t('Kunde'), 'Kandidat'].includes(prefix.trim())
     ? { who: prefix.trim(), text: rest.join(':').trim() }
-    : { who: 'Notiz', text }
+    : { who: t('Notiz'), text }
 }
 
 /** Notes left on this mandate's steps, from before feedback had its own
@@ -69,7 +77,7 @@ function fromSteps(mandate: Mandate): Entry[] {
       out.push({
         ...split(step.note),
         candidate: card.candidateName,
-        origin: `Notiz an „${step.label}“`,
+        origin: t('Notiz an „{step}“', { step: step.label }),
       })
     }
   }
@@ -83,7 +91,7 @@ export function FeedbackPanel({
   mandate: Mandate
   onChanged?: () => void
 }) {
-  const [who, setWho] = useState('Kunde')
+  const [who, setWho] = useState(t('Kunde'))
   const [about, setAbout] = useState(mandate.cards[0]?.id ?? '')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -104,7 +112,7 @@ export function FeedbackPanel({
         .filter((c) => c.candidateId)
         .map((c) => [c.candidateId as string, c.candidateName]),
     )
-    return (id: string | null) => (id ? (byId.get(id) ?? 'Kandidat') : 'Kandidat')
+    return (id: string | null) => (id ? (byId.get(id) ?? t('Kandidat')) : t('Kandidat'))
   }, [mandate.cards])
 
   const recorded: Entry[] = (data ?? []).map((row) => ({
@@ -136,8 +144,8 @@ export function FeedbackPanel({
     } catch (e) {
       setError(
         e instanceof ApiError
-          ? `Konnte nicht gespeichert werden (HTTP ${e.status}).`
-          : 'Konnte nicht gespeichert werden.',
+          ? t('Konnte nicht gespeichert werden (HTTP {status}).', { status: e.status })
+          : t('Konnte nicht gespeichert werden.'),
       )
     }
     setBusy(false)
@@ -146,20 +154,18 @@ export function FeedbackPanel({
   return (
     <Panel className="px-6 py-5">
       <PanelHead
-        tag="Feedback"
+        tag={t('Feedback')}
         tone="gold"
-        title="Rückmeldungen zu den Kandidaten"
-        note={`${list.length} ${list.length === 1 ? 'Eintrag' : 'Einträge'}`}
+        title={t('Rückmeldungen zu den Kandidaten')}
+        note={`${list.length} ${list.length === 1 ? t('Eintrag') : t('Einträge')}`}
       />
       <p className="-mt-2 mb-4 text-[13px] text-cockpit-dim">
-        Was über die vorgestellten Kandidaten gesagt wurde — vom Kunden und von den
-        Kandidaten selbst, aus den Prozessschritten (inkl. Interview). Schärft die
-        nächsten Vorschläge.
+        {t('Was über die vorgestellten Kandidaten gesagt wurde — vom Kunden und von den Kandidaten selbst, aus den Prozessschritten (inkl. Interview). Schärft die nächsten Vorschläge.')}
       </p>
 
       {list.length === 0 ? (
         <p className="text-[13px] italic text-cockpit-faint">
-          Noch keine Rückmeldung notiert.
+          {t('Noch keine Rückmeldung notiert.')}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -167,7 +173,7 @@ export function FeedbackPanel({
             <li key={i} className="flex flex-wrap items-baseline gap-2 text-[13px]">
               <span className="font-semibold text-cockpit-text">{entry.candidate}</span>
               <PanelTag tone={entry.who === 'Kandidat' ? 'coral' : 'gold'}>
-                {entry.who === 'Notiz' ? 'Notiz' : `von ${entry.who}`}
+                {entry.who === 'Notiz' ? t('Notiz') : t('von {who}', { who: t(entry.who) })}
               </PanelTag>
               <span className="font-mono text-[11px] text-cockpit-faint">
                 {entry.origin}
@@ -183,17 +189,17 @@ export function FeedbackPanel({
           <TextArea
             value={text}
             onChange={setText}
-            placeholder="Rückmeldung zu diesem Kandidaten notieren …"
+            placeholder={t('Rückmeldung zu diesem Kandidaten notieren …')}
           />
           <div className="flex flex-wrap items-end justify-end gap-2">
             <SelectInput
-              label="Gesagt von"
+              label={t('Gesagt von')}
               value={who}
               onChange={setWho}
               options={WHO}
             />
             <SelectInput
-              label="Über Kandidat"
+              label={t('Über Kandidat')}
               value={about}
               onChange={setAbout}
               options={candidates}
@@ -203,13 +209,13 @@ export function FeedbackPanel({
               onClick={add}
               disabled={busy || !text.trim() || !card?.candidateId}
             >
-              Feedback hinzufügen
+              {t('Feedback hinzufügen')}
             </Button>
           </div>
           {/* Said out loud, because the old behaviour was the opposite and
               silent: nothing is replaced, every remark stays. */}
           <p className="text-right font-mono text-[11px] text-cockpit-faint">
-            wird als eigener Eintrag gespeichert — bestehende bleiben stehen
+            {t('wird als eigener Eintrag gespeichert — bestehende bleiben stehen')}
           </p>
           {error && <p className="text-[13px] text-coral-400">{error}</p>}
         </div>

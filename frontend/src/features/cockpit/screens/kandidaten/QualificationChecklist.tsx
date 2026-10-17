@@ -11,6 +11,10 @@
 // Each row is a claim about the record, never about the person: "fehlt"
 // means nothing is stored, not that the candidate has nothing to say.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { CheckCircle2, Circle, Pencil } from 'lucide-react'
 
 import type { Candidate, CandidateProfile } from '@/data/types'
@@ -25,7 +29,7 @@ interface Row {
 
 const money = (value: number | null | undefined, currency = 'EUR') =>
   value != null
-    ? `${value.toLocaleString('de-DE')} ${currency === 'EUR' ? '€' : currency}`
+    ? `${value.toLocaleString(locale())} ${currency === 'EUR' ? '€' : currency}`
     : null
 
 const list = (values: string[] | undefined, max = 4) =>
@@ -48,89 +52,89 @@ function groups(c: Candidate, p: CandidateProfile | undefined): [string, Row[]][
     [
       'Anschrift & Kontakt',
       [
-        { label: 'Name', value: text(c.name), field: 'full_name' },
-        { label: 'Adresse', value: text(address), field: 'street' },
-        { label: 'Geburtsdatum', value: text(p?.dateOfBirth), field: 'date_of_birth' },
-        { label: 'E-Mail', value: text(c.email), field: 'email' },
-        { label: 'Telefon', value: text(c.phone), field: 'phone' },
+        { label: t('Name'), value: text(c.name), field: 'full_name' },
+        { label: t('Adresse'), value: text(address), field: 'street' },
+        { label: t('Geburtsdatum'), value: text(p?.dateOfBirth), field: 'date_of_birth' },
+        { label: t('E-Mail'), value: text(c.email), field: 'email' },
+        { label: t('Telefon'), value: text(c.phone), field: 'phone' },
       ],
     ],
     [
-      'Beruf & Profil',
+      t('Beruf & Profil'),
       [
-        { label: 'Job-Titel', value: text(c.currentTitle), field: 'current_title' },
-        { label: 'Branchen', value: list(p?.industries), field: 'industries' },
-        { label: 'Anstellungsform', value: text(p?.employmentForm), field: 'employment_form' },
+        { label: t('Job-Titel'), value: text(c.currentTitle), field: 'current_title' },
+        { label: t('Branchen'), value: list(p?.industries), field: 'industries' },
+        { label: t('Anstellungsform'), value: text(p?.employmentForm), field: 'employment_form' },
         {
-          label: 'Werdegang',
+          label: t('Werdegang'),
           value: p?.roles?.length ? `${p.roles.length} Stationen` : null,
           field: 'work_history',
         },
         {
-          label: 'Skills',
+          label: t('Skills'),
           value: p?.allSkills?.length ? `${p.allSkills.length} erfasst` : null,
           field: 'skills',
         },
         {
           label: 'LinkedIn / Xing',
-          value: [c.linkedinUrl, p?.xingUrl].some(Boolean) ? 'verknüpft' : null,
+          value: [c.linkedinUrl, p?.xingUrl].some(Boolean) ? t('verknüpft') : null,
           field: 'linkedin_url',
         },
       ],
     ],
     [
-      'Nach dem Qualifikationsgespräch',
+      t('Nach dem Qualifikationsgespräch'),
       [
-        { label: 'Verfügbarkeit', value: text(p?.availability), field: 'availability' },
-        { label: 'Kündigungsfrist', value: text(p?.noticePeriod), field: 'notice_period' },
+        { label: t('Verfügbarkeit'), value: text(p?.availability), field: 'availability' },
+        { label: t('Kündigungsfrist'), value: text(p?.noticePeriod), field: 'notice_period' },
         {
-          label: 'Aktuelles Gehalt',
+          label: t('Aktuelles Gehalt'),
           value: money(p?.currentSalary, p?.salaryCurrency),
           field: 'current_salary',
         },
         {
-          label: 'Mindestgehalt',
+          label: t('Mindestgehalt'),
           value: money(p?.salaryMinimum, p?.salaryCurrency),
           field: 'salary_minimum',
         },
         {
-          label: 'Wunschgehalt',
+          label: t('Wunschgehalt'),
           value: money(p?.salaryExpectation, p?.salaryCurrency),
           field: 'salary_expectation',
         },
-        { label: 'Wechselmotivation', value: text(p?.motivation), field: 'motivation' },
+        { label: t('Wechselmotivation'), value: text(p?.motivation), field: 'motivation' },
         // Section B of the Kandidatenauswertung, line for line. Each one was
         // a question somebody asked on the call, so each one is a row here —
         // the list is what says whether the conversation was written down.
         {
-          label: 'Profil-Zusammenfassung',
+          label: t('Profil-Zusammenfassung'),
           value: text(p?.profileSummary),
           field: 'profile_summary',
         },
-        { label: 'Schwerpunkte', value: list(p?.focusAreas), field: 'focus_areas' },
+        { label: t('Schwerpunkte'), value: list(p?.focusAreas), field: 'focus_areas' },
         {
-          label: 'Technisches Know-how',
+          label: t('Technisches Know-how'),
           value: text(p?.technicalProfile),
           field: 'technical_profile',
         },
         {
-          label: 'Höchster Abschluss',
+          label: t('Höchster Abschluss'),
           value: p?.education?.length ? `${p.education.length} erfasst` : null,
           field: 'education',
         },
         {
-          label: 'Interview-Verfügbarkeit',
+          label: t('Interview-Verfügbarkeit'),
           value: text(p?.interviewAvailability),
           field: 'interview_availability',
         },
         {
-          label: 'Weitere relevante Punkte',
+          label: t('Weitere relevante Punkte'),
           value: text(p?.otherNotes),
           field: 'other_notes',
         },
-        { label: 'Andere Prozesse', value: text(p?.otherProcesses), field: 'other_processes' },
+        { label: t('Andere Prozesse'), value: text(p?.otherProcesses), field: 'other_processes' },
         {
-          label: '… bei welchen Firmen',
+          label: t('… bei welchen Firmen'),
           value: list(p?.otherProcessCompanies),
           field: 'other_process_companies',
         },
@@ -156,7 +160,7 @@ export function QualificationChecklist({
     <div className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-          Kerndaten
+          {t('Kerndaten')}
         </span>
         <span className="font-mono text-[12px] text-cockpit-faint">
           <span className="text-cockpit-text">{filled}</span> von {rows.length} erfasst
@@ -164,7 +168,7 @@ export function QualificationChecklist({
         <button
           type="button"
           onClick={() => onEdit(rows.find((r) => r.value === null)?.field)}
-          title="Öffnet das Formular beim ersten fehlenden Feld"
+          title={t('Öffnet das Formular beim ersten fehlenden Feld')}
           className="ml-auto flex items-center gap-1.5 rounded-lg border border-cockpit-line px-2.5 py-1 text-[12px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
         >
           <Pencil className="h-3.5 w-3.5" /> Erfassen

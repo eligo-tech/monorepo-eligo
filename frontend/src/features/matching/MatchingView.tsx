@@ -97,7 +97,7 @@ export function MatchingView() {
   const move = (d: number) => setIndex((i) => Math.min(ranked.length - 1, Math.max(0, i + d)))
 
   // ── Empty / loading states ────────────────────────────────────────────────
-  if (jobsLoading && !jobs) return <Centered><p className="text-[14px] text-ink-muted">Lädt…</p></Centered>
+  if (jobsLoading && !jobs) return <Centered><p className="text-[14px] text-ink-muted">{'Lädt…'}</p></Centered>
   if (!jobs?.length) {
     return (
       <Centered>
@@ -121,7 +121,7 @@ export function MatchingView() {
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-1.5 text-[14px]">
             <Target className="h-4 w-4 text-brand-500" />
-            <span className="text-ink-muted">Rolle</span>
+            <span className="text-ink-muted">{'Rolle'}</span>
             <select
               value={jobId ?? ''}
               onChange={(e) => setJobId(e.target.value)}
@@ -215,13 +215,13 @@ export function MatchingView() {
                 <User className="h-[18px] w-[18px] text-brand-500" /> Details
               </h2>
               <div className="mt-2">
-                <DetailRow icon={Mail} label="E-Mail">
+                <DetailRow icon={Mail} label={'E-Mail'}>
                   <span className="font-medium text-brand-600">{candidate.email}</span>
                 </DetailRow>
-                <DetailRow icon={Phone} label="Telefon">
+                <DetailRow icon={Phone} label={'Telefon'}>
                   <span className="font-medium text-brand-600">{candidate.phone}</span>
                 </DetailRow>
-                <DetailRow icon={MapPin} label="Standort">
+                <DetailRow icon={MapPin} label={'Standort'}>
                   {candidate.location}
                 </DetailRow>
                 <DetailRow icon={User} label="KI-Zusammenfassung">
@@ -234,8 +234,8 @@ export function MatchingView() {
               </h2>
               <div className="mt-3 grid grid-cols-3 gap-3">
                 <StatCard label="Ø Verweildauer" value={candidate.stats.avgTenure} />
-                <StatCard label="Aktuell" value={candidate.stats.current} />
-                <StatCard label="Gesamt" value={candidate.stats.total} />
+                <StatCard label={'Aktuell'} value={candidate.stats.current} />
+                <StatCard label={'Gesamt'} value={candidate.stats.total} />
               </div>
 
               <div className="mt-4 space-y-3">

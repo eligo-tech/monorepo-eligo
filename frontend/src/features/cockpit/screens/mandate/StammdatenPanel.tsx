@@ -9,6 +9,8 @@
 // Suchprofil this mandate actually carries. That makes it the one figure on
 // the panel that improves when you fill the form in — which is the point.
 
+import { t } from '@/i18n'
+
 import { ExternalLink, Globe, Linkedin } from 'lucide-react'
 
 import type { CompanyDTO, ManagerDTO } from '@/api/types'
@@ -60,13 +62,13 @@ export function StammdatenPanel({
 
   return (
     <Panel className="px-6 py-5">
-      <PanelHead tag="Stammdaten" title="Firma · Manager · Job · Konditionen" />
+      <PanelHead tag={t('Stammdaten')} title={t('Firma · Manager · Job · Konditionen')} />
 
       <StammRow
-        label="Firma"
+        label={t('Firma')}
         sub={
           <>
-            <DemoText source="Handelsregister — noch keine Quelle angebunden">
+            <DemoText source={t('Handelsregister — noch keine Quelle angebunden')}>
               HRB — · USt-ID —
             </DemoText>
             {company?.location && ` · Standort: ${company.location}`}
@@ -125,21 +127,21 @@ export function StammdatenPanel({
             />
           </>
         ) : (
-          <span className="text-cockpit-faint">Kein Ansprechpartner hinterlegt.</span>
+          <span className="text-cockpit-faint">{t('Kein Ansprechpartner hinterlegt.')}</span>
         )}
       </StammRow>
 
-      <StammRow label="Job">
+      <StammRow label={t('Job')}>
         <b className="font-semibold">{mandate.title}</b>
         {mandate.location && ` · ${mandate.location}`}
         {band && ` · ${band}`}
         {' · '}
-        <DemoText source="Seniorität und Anstellungsart sind am Mandat noch nicht erfasst">
-          Lead / Head · Festanstellung
+        <DemoText source={t('Seniorität und Anstellungsart sind am Mandat noch nicht erfasst')}>
+          {t('Lead / Head · Festanstellung')}
         </DemoText>
       </StammRow>
 
-      <StammRow label="Briefing">
+      <StammRow label={t('Briefing')}>
         Vollständigkeit{' '}
         <b className={complete >= 70 ? 'text-mint-300' : 'text-gold-300'}>{complete}%</b>
         <span className="ml-2 text-cockpit-faint">
@@ -147,17 +149,17 @@ export function StammdatenPanel({
         </span>
       </StammRow>
 
-      <StammRow label="Konditionen" tone="lav">
-        <DemoText source="Kein Vertragsmodell im Datensatz — Rahmenvertrag folgt">
+      <StammRow label={t('Konditionen')} tone="lav">
+        <DemoText source={t('Kein Vertragsmodell im Datensatz — Rahmenvertrag folgt')}>
           25 % vom Bruttojahresgehalt · Basis — · 14 Tage netto · 6 Monate Garantie
         </DemoText>
       </StammRow>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button disabled title="Firmendaten-Anreicherung ist noch nicht angebunden">
+        <Button disabled title={t('Firmendaten-Anreicherung ist noch nicht angebunden')}>
           <Globe className="h-4 w-4" /> Firma aus Internet
         </Button>
-        <Button disabled title="LinkedIn-Anreicherung ist noch nicht angebunden">
+        <Button disabled title={t('LinkedIn-Anreicherung ist noch nicht angebunden')}>
           <ExternalLink className="h-4 w-4" /> Manager via LinkedIn
         </Button>
       </div>

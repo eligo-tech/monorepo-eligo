@@ -10,6 +10,8 @@
 // Suchprofil, from the job record) and who is running on it (the same process
 // cards as the overall view, plus each candidate's Kandidatenauswertung).
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 
@@ -47,9 +49,9 @@ function SalaryVerdict({ fit }: { fit: NonNullable<ProcessCard['salaryFit']> }) 
     above_band: 'border-coral-600 bg-coral-800/30 text-coral-300',
   } as const
   const LABEL = {
-    fits: 'Gehalt im Band',
-    negotiable: 'Gehalt verhandelbar',
-    above_band: 'Gehalt über Band',
+    fits: t('Gehalt im Band'),
+    negotiable: t('Gehalt verhandelbar'),
+    above_band: t('Gehalt über Band'),
   } as const
 
   return (
@@ -105,21 +107,20 @@ export function MandateView({
           className="flex items-center gap-1.5 font-mono text-[12px] uppercase tracking-[0.08em] text-cockpit-faint transition-colors hover:text-cockpit-text"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Gesamtansicht
+          {t('Gesamtansicht')}
         </button>
         <span className="mt-3 block font-mono text-[11px] uppercase tracking-[0.22em] text-lav-400">
-          Job-Workspace
+          {t('Job-Workspace')}
         </span>
         <h1 className="mt-1.5 text-[40px] font-semibold leading-tight tracking-tight text-cockpit-text">
-          Mandat &amp; Kandidatensuche
+          {t('Mandat & Kandidatensuche')}
         </h1>
         <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-cockpit-dim">
-          Die Stammdaten des Mandats plus die komplette Kandidatensuche in einem
-          Bereich — vom Job über Ansprache bis zu den Ergebnissen.
+          {t('Die Stammdaten des Mandats plus die komplette Kandidatensuche in einem Bereich — vom Job über Ansprache bis zu den Ergebnissen.')}
         </p>
         <p className="mt-3 font-mono text-[13px] text-cockpit-faint">
           {mandate.ref} · {mandate.client} · {mandate.cards.length}{' '}
-          {mandate.cards.length === 1 ? 'Kandidat' : 'Kandidaten'} im Prozess
+          {mandate.cards.length === 1 ? t('Kandidat') : t('Kandidaten')} im Prozess
           {assessed > 0 && ` · ${assessed} bewertet`}
         </p>
       </header>
@@ -144,7 +145,7 @@ export function MandateView({
               id="section-prozesse"
               title={`Laufende Prozesse · ${mandate.ref} · ${mandate.title}`}
               tone="coral"
-              hint="Schritte antippen · Bewertung je Mandat"
+              hint={t('Schritte antippen · Bewertung je Mandat')}
             />
           </div>
           {/* Both directions are real work: after a Gespräch you are on the
@@ -168,11 +169,11 @@ export function MandateView({
         {mandate.cards.length > 0 && (
           <Panel className="mb-4 px-6 py-5">
             <PanelHead
-              tag="Überblick"
+              tag={t('Überblick')}
               tone="mint"
-              title="Mandat und seine Kandidaten"
+              title={t('Mandat und seine Kandidaten')}
               note={`${mandate.cards.length} ${
-                mandate.cards.length === 1 ? 'Kandidat' : 'Kandidaten'
+                mandate.cards.length === 1 ? t('Kandidat') : t('Kandidaten')
               } · nach Passung`}
               collapsed={graphShut}
               onToggle={() => setGraphShut((shut) => !shut)}
@@ -189,8 +190,7 @@ export function MandateView({
         <div className="space-y-4">
           {mandate.cards.length === 0 ? (
             <Panel className="px-6 py-8 text-center text-[14px] text-cockpit-dim">
-              Noch niemand auf diesem Mandat — „Kandidat zuordnen" setzt den
-              ersten Prozess auf.
+              {t('Noch niemand auf diesem Mandat — „Kandidat zuordnen" setzt den ersten Prozess auf.')}
             </Panel>
           ) : (
             mandate.cards.map((card) => (
@@ -241,7 +241,7 @@ export function MandateView({
                         onClick={() => setAssessing(card.id)}
                         className="mt-3 font-mono text-[12px] text-cockpit-faint transition-colors hover:text-mint-300"
                       >
-                        Auswertung bearbeiten
+                        {t('Auswertung bearbeiten')}
                       </button>
                     )}
                   </>
@@ -251,7 +251,7 @@ export function MandateView({
                      not writable: the endpoint existed, the form did not. */
                   <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-cockpit-line pt-5">
                     <p className="font-mono text-[12px] text-cockpit-faint">
-                      Noch keine Auswertung für dieses Mandat.
+                      {t('Noch keine Auswertung für dieses Mandat.')}
                     </p>
                     {card.editable && (
                       <button
@@ -259,7 +259,7 @@ export function MandateView({
                         onClick={() => setAssessing(card.id)}
                         className="rounded-lg border border-cockpit-line px-2.5 py-1 font-mono text-[12px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
                       >
-                        Nach dem Gespräch erfassen
+                        {t('Nach dem Gespräch erfassen')}
                       </button>
                     )}
                   </div>

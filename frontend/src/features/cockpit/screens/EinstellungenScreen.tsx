@@ -12,6 +12,10 @@
 //  * Without a server-side key no credential can be stored at all. The form
 //    says that up front rather than accepting a password and refusing it.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Database, Loader2, Trash2 } from 'lucide-react'
 
@@ -28,7 +32,7 @@ const kindLabel = (kind: string, sources?: { key: string; label: string }[]) =>
   sources?.find((s) => s.key === kind)?.label ?? kind
 
 function dateTimeDe(iso: string): string {
-  return new Date(iso).toLocaleString('de-DE', {
+  return new Date(iso).toLocaleString(locale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -87,12 +91,12 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
   const describe = (e: unknown) =>
     e instanceof ApiError
       ? e.status === 503
-        ? 'Der Server kann noch keine Zugangsdaten speichern (ELIGO_SECRET_KEY fehlt).'
+        ? t('Der Server kann noch keine Zugangsdaten speichern (ELIGO_SECRET_KEY fehlt).')
         : `Fehlgeschlagen (HTTP ${e.status}).`
-      : 'Fehlgeschlagen — keine Antwort vom Server.'
+      : t('Fehlgeschlagen — keine Antwort vom Server.')
 
   async function save() {
-    if (!username.trim()) return setError('Benutzername darf nicht leer sein.')
+    if (!username.trim()) return setError(t('Benutzername darf nicht leer sein.'))
     setBusy(true)
     setError(null)
     setNotice(null)
@@ -102,7 +106,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
         ...(secret ? { secret } : {}),
       })
       setSecret('')
-      setNotice('Quelle gespeichert.')
+      setNotice(t('Quelle gespeichert.'))
       await reload()
     } catch (e) {
       setError(describe(e))
@@ -129,7 +133,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
     try {
       await api.deleteTenantSource(kind)
       setSecret('')
-      setNotice('Quelle getrennt.')
+      setNotice(t('Quelle getrennt.'))
       await reload()
     } catch (e) {
       setError(describe(e))
@@ -150,16 +154,13 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
     <div className="space-y-8">
       <header id="section-einstellungen" className="scroll-mt-24">
         <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-lav-400">
-          Workspace
+          {t('Workspace')}
         </span>
         <h1 className="mt-1.5 text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
-          Einstellungen
+          {t('Einstellungen')}
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
-          Dieser Workspace und seine Daten gehören nur Ihnen — den Markt teilen
-          sich alle, Kandidaten, Mandate und Ansprechpartner nicht. Hier kommen
-          Ihre Daten herein: als Datei aus dem alten System, oder laufend aus
-          einem angebundenen ATS.
+          {t('Dieser Workspace und seine Daten gehören nur Ihnen — den Markt teilen sich alle, Kandidaten, Mandate und Ansprechpartner nicht. Hier kommen Ihre Daten herein: als Datei aus dem alten System, oder laufend aus einem angebundenen ATS.')}
         </p>
       </header>
 
@@ -171,7 +172,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
           <SectionHeader
             id="section-import"
             index="01"
-            title={`Daten übernehmen · ${fileSources[0].label}`}
+            title={t('Daten übernehmen · {source}', { source: fileSources[0].label })}
             hint={fileSources[0].hint}
           />
           <FileImportPanel canCommit={admin} />
@@ -182,11 +183,11 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
         <SectionHeader
           id="section-quellen"
           index="02"
-          title="Verbundene Systeme"
+          title={t('Verbundene Systeme')}
           hint={
             pullSources.length > 0
               ? pullSources.map((s) => s.label).join(' · ')
-              : 'Noch keine Anbindung verfügbar'
+              : t('Noch keine Anbindung verfügbar')
           }
         />
 
@@ -218,8 +219,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
                 </h3>
               )}
               <p className="text-[13px] text-cockpit-dim">
-                Firmen, Ansprechpartner, Mandate und Kandidaten aus Ihrem
-                bestehenden System.
+                {t('Firmen, Ansprechpartner, Mandate und Kandidaten aus Ihrem bestehenden System.')}
               </p>
             </div>
             {source && (
@@ -231,28 +231,24 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
 
           {!admin ? (
             <p className="mt-4 rounded-xl border border-cockpit-line bg-cockpit-inset px-4 py-3 text-[13px] text-cockpit-dim">
-              Nur Administratoren können Datenquellen ändern. Sie sehen den
-              Stand dieses Workspace, aber nicht die Zugangsdaten — und der
-              Server weist eine Änderung ohnehin ab, nicht nur dieses Formular.
+              {t('Nur Administratoren können Datenquellen ändern. Sie sehen den Stand dieses Workspace, aber nicht die Zugangsdaten — und der Server weist eine Änderung ohnehin ab, nicht nur dieses Formular.')}
             </p>
           ) : blocked ? (
             <p className="mt-4 rounded-xl border border-coral-600/50 bg-coral-800/20 px-4 py-3 text-[13px] text-coral-300">
-              Der Server hat keinen Schlüssel für Zugangsdaten hinterlegt
-              (ELIGO_SECRET_KEY). Bis dahin lassen sich keine Quellen verbinden —
-              Passwörter im Klartext zu speichern wäre die schlechtere Antwort.
+              {t('Der Server hat keinen Schlüssel für Zugangsdaten hinterlegt (ELIGO_SECRET_KEY). Bis dahin lassen sich keine Quellen verbinden — Passwörter im Klartext zu speichern wäre die schlechtere Antwort.')}
             </p>
           ) : (
             <>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <TextInput
-                  label="Benutzername"
+                  label={t('Benutzername')}
                   value={username}
                   onChange={setUsername}
                   type="email"
-                  placeholder="name@firma.de"
+                  placeholder={t('name@firma.de')}
                 />
                 <TextInput
-                  label={source?.has_secret ? 'Passwort (nur zum Ändern)' : 'Passwort'}
+                  label={source?.has_secret ? t('Passwort (nur zum Ändern)') : t('Passwort')}
                   value={secret}
                   onChange={setSecret}
                   type="password"
@@ -261,19 +257,16 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
               </div>
 
               <p className="mt-3 text-[12px] leading-relaxed text-cockpit-faint">
-                Das Passwort wird verschlüsselt gespeichert und nie wieder
-                ausgeliefert — auch nicht an diesen Workspace. Der Import läuft als
-                geplanter Lauf, nicht im Klick: Hunderte Abrufe gehören nicht in
-                eine Browser-Anfrage, und so bleibt jede Datenerhebung protokolliert.
+                {t('Das Passwort wird verschlüsselt gespeichert und nie wieder ausgeliefert — auch nicht an diesen Workspace. Der Import läuft als geplanter Lauf, nicht im Klick: Hunderte Abrufe gehören nicht in eine Browser-Anfrage, und so bleibt jede Datenerhebung protokolliert.')}
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <Button tone="primary" onClick={save} disabled={busy}>
-                  {source ? 'Zugang aktualisieren' : 'Quelle verbinden'}
+                  {source ? 'Zugang aktualisieren' : t('Quelle verbinden')}
                 </Button>
                 {source?.has_secret && (
                   <Button onClick={requestImport} disabled={busy}>
-                    Import anfordern
+                    {t('Import anfordern')}
                   </Button>
                 )}
                 {source && (

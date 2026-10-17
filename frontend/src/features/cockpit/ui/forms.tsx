@@ -4,6 +4,8 @@
 // one place to change so no screen hand-rolls its own. Overlay shells (Drawer,
 // Modal) own the backdrop, Escape handling and scroll lock.
 
+import { t } from '@/i18n'
+
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -271,7 +273,7 @@ export function Drawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button
-        aria-label="Schließen"
+        aria-label={t('Schließen')}
         onClick={onClose}
         className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"
       />
@@ -325,7 +327,7 @@ export function CloseButton({ onClose }: { onClose: () => void }) {
     <button
       type="button"
       onClick={onClose}
-      aria-label="Schließen"
+      aria-label={t('Schließen')}
       className="rounded-xl border border-cockpit-line p-2 text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
     >
       <X className="h-5 w-5" />

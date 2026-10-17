@@ -17,6 +17,8 @@
 // companies (they are the shared corpus's) nor the contacts (they are this
 // workspace's own).
 
+import { t } from '@/i18n'
+
 import { useCallback, useMemo, useState } from 'react'
 import {
   ArrowLeft,
@@ -67,8 +69,8 @@ function NewProject({ onCreated }: { onCreated: () => void }) {
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 409
-          ? 'Ein Projekt mit diesem Namen gibt es schon.'
-          : 'Projekt konnte nicht angelegt werden.',
+          ? t('Ein Projekt mit diesem Namen gibt es schon.')
+          : t('Projekt konnte nicht angelegt werden.'),
       )
     } finally {
       setBusy(false)
@@ -82,12 +84,12 @@ function NewProject({ onCreated }: { onCreated: () => void }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="Projektname — z. B. TypeScript Berlin Q4"
+          placeholder={t('Projektname — z. B. TypeScript Berlin Q4')}
           className={cn(FIELD, 'min-w-[20rem] flex-1 py-2.5 text-[15px]')}
         />
         <Button tone="primary" onClick={submit} disabled={busy || !name.trim()}>
           <FolderPlus className="h-4 w-4" />
-          {busy ? 'Legt an…' : 'Projekt anlegen'}
+          {busy ? t('Legt an…') : t('Projekt anlegen')}
         </Button>
       </div>
       {error && <p className="text-[13px] text-coral-400">{error}</p>}
@@ -118,8 +120,8 @@ function ProjectCard({
         </button>
         {project.company_count > 0 && project.companies_with_contact === project.company_count && (
           <Chip tone="mint">
-            <span title="Für jede Firma im Projekt ist ein Ansprechpartner hinterlegt">
-              vollständig
+            <span title={t('Für jede Firma im Projekt ist ein Ansprechpartner hinterlegt')}>
+              {t('vollständig')}
             </span>
           </Chip>
         )}
@@ -128,15 +130,15 @@ function ProjectCard({
           <span>
             <span className="text-cockpit-text">{de(project.company_count)}</span> Firmen
           </span>
-          <span title="Firmen mit mindestens einem Ansprechpartner in diesem Workspace">
+          <span title={t('Firmen mit mindestens einem Ansprechpartner in diesem Workspace')}>
             <span className="text-cockpit-text">{de(project.companies_with_contact)}</span> mit
             Kontakt
           </span>
           <span>
             <span className="text-cockpit-text">{de(project.open_roles)}</span> Rollen
           </span>
-          <span title="Angelegt">{dateDe(project.created_at)}</span>
-          <Button onClick={onOpen}>Öffnen</Button>
+          <span title={t('Angelegt')}>{dateDe(project.created_at)}</span>
+          <Button onClick={onOpen}>{t('Öffnen')}</Button>
           {/* Two clicks, because a project is work someone organised — but no
               dialog, because deleting one removes only the grouping. */}
           {confirming ? (
@@ -148,14 +150,14 @@ function ProjectCard({
               }}
               className="font-mono text-[12px] text-coral-400 hover:text-coral-300"
             >
-              wirklich löschen?
+              {t('wirklich löschen?')}
             </button>
           ) : (
             <button
               type="button"
               onClick={() => setConfirming(true)}
-              aria-label={`${project.name} löschen`}
-              title="Projekt löschen — Firmen und Kontakte bleiben"
+              aria-label={t('{name} löschen', { name: project.name })}
+              title={t('Projekt löschen — Firmen und Kontakte bleiben')}
               className="text-cockpit-faint transition-colors hover:text-coral-400"
             >
               <Trash2 className="h-4 w-4" />
@@ -202,7 +204,7 @@ function AddCompanies({
     return (
       <Button onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" />
-        Firmen hinzufügen
+        {t('Firmen hinzufügen')}
       </Button>
     )
   }
@@ -228,24 +230,23 @@ function AddCompanies({
         <ListSearch
           value={query}
           onChange={setQuery}
-          placeholder="Firma oder Ort…"
+          placeholder={t('Firma oder Ort…')}
           count={watched.length}
         />
         <Button className="ml-auto" onClick={() => setOpen(false)}>
-          Abbrechen
+          {t('Abbrechen')}
         </Button>
         <Button tone="primary" onClick={add} disabled={busy || picked.length === 0}>
-          {busy ? 'Fügt hinzu…' : `${picked.length} hinzufügen`}
+          {busy ? t('Fügt hinzu…') : t('{n} hinzufügen', { n: picked.length })}
         </Button>
       </div>
 
       {candidates.loading && (
-        <p className="font-mono text-[12px] text-cockpit-faint">lädt…</p>
+        <p className="font-mono text-[12px] text-cockpit-faint">{t('lädt…')}</p>
       )}
       {!candidates.loading && watched.length === 0 && (
         <p className="max-w-2xl text-[13px] leading-relaxed text-cockpit-dim">
-          Keine weiteren beobachteten Firmen. Im Markt suchen und dort
-          „Beobachten“ klicken — die Firmen erscheinen dann hier.
+          {t('Keine weiteren beobachteten Firmen. Im Markt suchen und dort „Beobachten“ klicken — die Firmen erscheinen dann hier.')}
         </p>
       )}
       {!candidates.loading && watched.length > 0 && list.length === 0 && (
@@ -327,8 +328,8 @@ function ContactLine({ contact }: { contact: ProjectContactDTO }) {
       </span>
       {contact.art14_outstanding && (
         <Chip tone="gold" className="ml-auto cursor-help">
-          <span title="Nicht vom Betroffenen selbst erhalten — die Information nach Art. 14 DSGVO ist fällig und unter „Manager“ vorgemerkt">
-            Art. 14 offen
+          <span title={t('Nicht vom Betroffenen selbst erhalten — die Information nach Art. 14 DSGVO ist fällig und unter „Manager“ vorgemerkt')}>
+            {t('Art. 14 offen')}
           </span>
         </Chip>
       )}
@@ -370,7 +371,7 @@ function AddContact({
       setOpen(false)
       onAdded()
     } catch {
-      setError('Kontakt konnte nicht gespeichert werden.')
+      setError(t('Kontakt konnte nicht gespeichert werden.'))
     } finally {
       setBusy(false)
     }
@@ -380,7 +381,7 @@ function AddContact({
     return (
       <Button onClick={() => setOpen(true)}>
         <UserPlus className="h-4 w-4" />
-        Person hinzufügen
+        {t('Person hinzufügen')}
       </Button>
     )
   }
@@ -393,27 +394,26 @@ function AddContact({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="Name — z. B. Corina Freund"
+          placeholder={t('Name — z. B. Corina Freund')}
           className={cn(FIELD, 'min-w-[16rem] flex-1')}
         />
         <input
           value={role}
           onChange={(e) => setRole(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="Rolle (optional)"
+          placeholder={t('Rolle (optional)')}
           className={cn(FIELD, 'w-56')}
         />
-        <Button onClick={() => setOpen(false)}>Abbrechen</Button>
+        <Button onClick={() => setOpen(false)}>{t('Abbrechen')}</Button>
         <Button tone="primary" onClick={submit} disabled={busy || !name.trim()}>
-          {busy ? 'Speichert…' : 'Speichern'}
+          {busy ? t('Speichert…') : t('Speichern')}
         </Button>
       </div>
       {/* The only field with legal weight: data we found ourselves owes an
           Art. 14 notice, data the person gave us does not. */}
       <label className="flex items-center gap-2 text-[12px] text-cockpit-dim">
         <input type="checkbox" checked={self} onChange={(e) => setSelf(e.target.checked)} />
-        Die Person hat mir diese Daten selbst gegeben (sonst: öffentlich gefunden,
-        Art.-14-Information wird fällig)
+        {t('Die Person hat mir diese Daten selbst gegeben (sonst: öffentlich gefunden, Art.-14-Information wird fällig)')}
       </label>
       {error && <p className="text-[12px] text-coral-400">{error}</p>}
     </div>
@@ -449,8 +449,8 @@ function CompanyRow({
           </Chip>
         ) : (
           <Chip tone="gold">
-            <span title="Noch niemand hinterlegt — anreichern oder Person hinzufügen">
-              kein Kontakt
+            <span title={t('Noch niemand hinterlegt — anreichern oder Person hinzufügen')}>
+              {t('kein Kontakt')}
             </span>
           </Chip>
         )}
@@ -464,22 +464,22 @@ function CompanyRow({
           <span>
             <span className="text-[15px] text-cockpit-text">{de(company.open_roles)}</span> Rollen
           </span>
-          <span title="Jüngste offene Anzeige">{dateDe(company.last_posted_at)}</span>
+          <span title={t('Jüngste offene Anzeige')}>{dateDe(company.last_posted_at)}</span>
           {/* Enrichment from the company's own ads: the contact the employer
               published, with the ad line as evidence. */}
           <Button
             tone={showContacts ? 'primary' : 'ghost'}
             onClick={() => setShowContacts((v) => !v)}
-            title="Ansprechpartner aus den Anzeigen dieser Firma lesen"
+            title={t('Ansprechpartner aus den Anzeigen dieser Firma lesen')}
           >
             <Sparkles className="h-4 w-4" />
-            Anreichern
+            {t('Anreichern')}
           </Button>
           <button
             type="button"
             onClick={onRemove}
-            aria-label={`${company.name} aus dem Projekt entfernen`}
-            title="Aus dem Projekt entfernen — die Firma und ihre Kontakte bleiben"
+            aria-label={t('{name} aus dem Projekt entfernen', { name: company.name })}
+            title={t('Aus dem Projekt entfernen — die Firma und ihre Kontakte bleiben')}
             className="text-cockpit-faint transition-colors hover:text-coral-400"
           >
             <Trash2 className="h-4 w-4" />
@@ -507,8 +507,7 @@ function CompanyRow({
           </ul>
         ) : (
           <p className="min-w-[18rem] flex-1 py-1 text-[13px] text-cockpit-dim">
-            Noch kein Ansprechpartner. „Anreichern“ liest die Anzeigen dieser
-            Firma; wen sie nicht nennen, tragen Sie selbst ein.
+            {t('Noch kein Ansprechpartner. „Anreichern“ liest die Anzeigen dieser Firma; wen sie nicht nennen, tragen Sie selbst ein.')}
           </p>
         )}
         <AddContact projectId={projectId} company={company} onAdded={onChanged} />
@@ -549,7 +548,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
   ])
 
   if (loaded.loading && !detail) {
-    return <p className="font-mono text-[13px] text-cockpit-faint">lädt Projekt…</p>
+    return <p className="font-mono text-[13px] text-cockpit-faint">{t('lädt Projekt…')}</p>
   }
   if (loaded.error || !detail) {
     return (
@@ -567,7 +566,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
-          Alle Projekte
+          {t('Alle Projekte')}
         </Button>
         <h2 className="text-[22px] font-semibold text-cockpit-text">{detail.name}</h2>
         <span className="font-mono text-[13px] text-cockpit-faint">
@@ -584,7 +583,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
           <ListSearch
             value={query}
             onChange={setQuery}
-            placeholder="Firma, Ort oder Ansprechpartner…"
+            placeholder={t('Firma, Ort oder Ansprechpartner…')}
             count={detail.companies.length}
           />
           <AddCompanies projectId={projectId} onAdded={setOverride} />
@@ -604,8 +603,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
               <Building2 className="h-5 w-5" />
             </span>
             <p className="max-w-2xl text-[14px] leading-relaxed text-cockpit-dim">
-              Noch keine Firmen in diesem Projekt. „Firmen hinzufügen“ bietet
-              alles an, was Sie im Markt beobachten.
+              {t('Noch keine Firmen in diesem Projekt. „Firmen hinzufügen“ bietet alles an, was Sie im Markt beobachten.')}
             </p>
           </div>
         </Panel>
@@ -662,7 +660,7 @@ function UnassignedWatched({ reloadKey }: { reloadKey: number }) {
         )}
       </ul>
       <p className="text-[12px] leading-relaxed text-cockpit-faint">
-        In einem Projekt auf „Firmen hinzufügen“ klicken, um sie zu übernehmen.
+        {t('In einem Projekt auf „Firmen hinzufügen“ klicken, um sie zu übernehmen.')}
       </p>
     </Panel>
   )
@@ -699,7 +697,7 @@ function ListSearch({
         <button
           type="button"
           onClick={() => onChange('')}
-          aria-label="Suche leeren"
+          aria-label={t('Suche leeren')}
           className="text-cockpit-faint transition-colors hover:text-cockpit-text"
         >
           <X className="h-3.5 w-3.5" />
@@ -734,12 +732,10 @@ export function ProjekteScreen() {
     <div className="space-y-8">
       <header id="section-projekte" className="scroll-mt-24">
         <h1 className="text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
-          Projekte
+          {t('Projekte')}
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
-          Ihre Zielfirmen, gruppiert unter einem Namen. Ein Projekt hält die
-          Firmen zusammen, die Sie im Markt beobachten, und zeigt pro Firma den
-          Ansprechpartner — aus den Anzeigen gelesen oder selbst eingetragen.
+          {t('Ihre Zielfirmen, gruppiert unter einem Namen. Ein Projekt hält die Firmen zusammen, die Sie im Markt beobachten, und zeigt pro Firma den Ansprechpartner — aus den Anzeigen gelesen oder selbst eingetragen.')}
         </p>
       </header>
 
@@ -756,15 +752,15 @@ export function ProjekteScreen() {
           <>
             <SectionHeader
               index="01"
-              title="Projekte"
+              title={t('Projekte')}
               hint={
                 projects.data
                   ? query
                     ? `${de(list.length)} von ${de(all.length)}`
-                    : `${de(all.length)} ${all.length === 1 ? 'Projekt' : 'Projekte'}`
+                    : `${de(all.length)} ${all.length === 1 ? t('Projekt') : t('Projekte')}`
                   : projects.error
                     ? 'offline'
-                    : 'lädt…'
+                    : t('lädt…')
               }
             />
 
@@ -773,7 +769,7 @@ export function ProjekteScreen() {
               <ListSearch
                 value={query}
                 onChange={setQuery}
-                placeholder="Projekt suchen…"
+                placeholder={t('Projekt suchen…')}
                 count={all.length}
               />
             </div>
@@ -801,9 +797,7 @@ export function ProjekteScreen() {
                     <Search className="h-5 w-5" />
                   </span>
                   <p className="max-w-2xl text-[14px] leading-relaxed text-cockpit-dim">
-                    Noch kein Projekt. Geben Sie oben einen Namen ein — danach
-                    können Sie die Firmen hinzufügen, die Sie im Markt
-                    beobachten.
+                    {t('Noch kein Projekt. Geben Sie oben einen Namen ein — danach können Sie die Firmen hinzufügen, die Sie im Markt beobachten.')}
                   </p>
                 </div>
               </Panel>

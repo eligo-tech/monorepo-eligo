@@ -5,6 +5,10 @@
 // recruiter can check any field against its source — which is the whole product
 // thesis rendered as a screen.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useEffect, useState } from 'react'
 import {
   Briefcase,
@@ -170,7 +174,7 @@ export function CandidateDrawer({
             <a
               key={run.id}
               href={`#cockpit/${run.id}`}
-              title={`${run.title} im Cockpit öffnen`}
+              title={t('{title} im Cockpit öffnen', { title: run.title })}
               className="flex max-w-[15rem] items-center gap-1.5 rounded-xl border border-cockpit-line px-3.5 py-2 text-[13px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
             >
               <Briefcase className="h-4 w-4 shrink-0" />
@@ -201,7 +205,7 @@ export function CandidateDrawer({
       <div className="grid flex-1 grid-cols-2 overflow-hidden">
         {/* LEFT — the evidence */}
         <div className="flex flex-col border-r border-cockpit-line bg-cockpit-inset">
-          <PanelLabel icon={FileText} title="Original-CV">
+          <PanelLabel icon={FileText} title={t('Original-CV')}>
             {cvState === 'ready' && cvUrl && (
               <a
                 href={cvUrl}
@@ -213,18 +217,18 @@ export function CandidateDrawer({
             )}
           </PanelLabel>
           <div className="flex-1 overflow-hidden p-3">
-            {cvState === 'loading' && <Placeholder>CV wird geladen…</Placeholder>}
+            {cvState === 'loading' && <Placeholder>{t('CV wird geladen…')}</Placeholder>}
             {cvState === 'missing' && (
               <Placeholder icon={FileWarning}>
-                Kein Original-CV hinterlegt.
+                {t('Kein Original-CV hinterlegt.')}
                 <span className="mt-1 block text-[12px]">
-                  Nur über den CV-Upload importierte Kandidaten haben ein angehängtes Original.
+                  {t('Nur über den CV-Upload importierte Kandidaten haben ein angehängtes Original.')}
                 </span>
               </Placeholder>
             )}
             {cvState === 'ready' && cvUrl && (
               <iframe
-                title="Original-CV"
+                title={t('Original-CV')}
                 src={`${cvUrl}#toolbar=1&view=FitH`}
                 className="h-full w-full rounded-lg border border-cockpit-line bg-white"
               />
@@ -236,21 +240,21 @@ export function CandidateDrawer({
         <div className="flex flex-col overflow-hidden bg-cockpit-bg">
           <PanelLabel icon={Sparkles} title="Parsed CV">
             <Chip tone="mint" className="whitespace-nowrap">
-              verifiziert extrahiert
+              {t('verifiziert extrahiert')}
             </Chip>
             {!editing && (
               <div className="ml-auto flex items-center gap-2">
                 <Button
                   onClick={() => void startEdit()}
                   className="whitespace-nowrap px-2.5 py-1 text-[12px]"
-                  title="Felder bearbeiten"
+                  title={t('Felder bearbeiten')}
                 >
                   <Pencil className="h-3.5 w-3.5" /> Bearbeiten
                 </Button>
                 <Button
                   onClick={() => setExpanded((e) => !e)}
                   className="whitespace-nowrap px-2.5 py-1 text-[12px]"
-                  title={expanded ? 'Kompaktansicht' : 'Vollständiges Profil (Dossier 360)'}
+                  title={expanded ? t('Kompaktansicht') : t('Vollständiges Profil (Dossier 360)')}
                 >
                   {expanded ? (
                     <>
@@ -270,12 +274,12 @@ export function CandidateDrawer({
             {editing ? (
               dtoError ? (
                 <Placeholder icon={FileWarning}>
-                  Profil konnte nicht geladen werden.
+                  {t('Profil konnte nicht geladen werden.')}
                   <button
                     onClick={() => void startEdit(focusField)}
                     className="mt-2 block w-full text-mint-400 hover:underline"
                   >
-                    Erneut versuchen
+                    {t('Erneut versuchen')}
                   </button>
                 </Placeholder>
               ) : dto ? (
@@ -286,7 +290,7 @@ export function CandidateDrawer({
                   onSaved={handleSaved}
                 />
               ) : (
-                <Placeholder>Profil wird geladen…</Placeholder>
+                <Placeholder>{t('Profil wird geladen…')}</Placeholder>
               )
             ) : (
               <>
@@ -305,7 +309,7 @@ export function CandidateDrawer({
                   <Profile360 candidate={candidate} p={p} />
                 ) : (
                   <dl className="grid grid-cols-2 gap-x-6 gap-y-1">
-                    <InfoRow icon={Mail} label="E-Mail">
+                    <InfoRow icon={Mail} label={t('E-Mail')}>
                       <a
                         href={`mailto:${candidate.email}`}
                         className="font-mono text-mint-400 hover:underline"
@@ -313,29 +317,29 @@ export function CandidateDrawer({
                         {candidate.email}
                       </a>
                     </InfoRow>
-                    <InfoRow icon={Phone} label="Telefon" value={candidate.phone} mono />
-                    <InfoRow icon={MapPin} label="Standort" value={address || candidate.location} />
+                    <InfoRow icon={Phone} label={t('Telefon')} value={candidate.phone} mono />
+                    <InfoRow icon={MapPin} label={t('Standort')} value={address || candidate.location} />
                     <InfoRow
                       icon={Building2}
-                      label="Branchen"
+                      label={t('Branchen')}
                       value={p?.industries.join(' · ')}
                     />
                     <InfoRow
                       icon={Briefcase}
-                      label="Anstellungsform"
+                      label={t('Anstellungsform')}
                       value={employmentFormLabel(p?.employmentForm)}
                     />
-                    <InfoRow icon={CalendarClock} label="Verfügbarkeit" value={p?.availability} />
-                    <InfoRow icon={CalendarClock} label="Kündigungsfrist" value={p?.noticePeriod} />
-                    <InfoRow icon={Wallet} label="Gehalt" value={salary} mono />
+                    <InfoRow icon={CalendarClock} label={t('Verfügbarkeit')} value={p?.availability} />
+                    <InfoRow icon={CalendarClock} label={t('Kündigungsfrist')} value={p?.noticePeriod} />
+                    <InfoRow icon={Wallet} label={t('Gehalt')} value={salary} mono />
                     <InfoRow
                       icon={ShieldCheck}
-                      label="Arbeitserlaubnis"
+                      label={t('Arbeitserlaubnis')}
                       value={permitLabel(p?.workPermit)}
                     />
                     <InfoRow
                       icon={Briefcase}
-                      label="Erfahrung"
+                      label={t('Erfahrung')}
                       value={yearsLabel(candidate, p?.totalYearsExperience)}
                     />
                   </dl>
@@ -343,7 +347,7 @@ export function CandidateDrawer({
 
                 {p?.languages?.length ? (
                   <div className="mt-6">
-                    <MiniLabel icon={Languages}>Sprachen</MiniLabel>
+                    <MiniLabel icon={Languages}>{t('Sprachen')}</MiniLabel>
                     <div className="flex flex-wrap gap-1.5">
                       {p.languages.map((l) => (
                         <Chip key={l}>{l}</Chip>
@@ -353,7 +357,7 @@ export function CandidateDrawer({
                 ) : null}
 
                 <div className="mt-6">
-                  <MiniLabel>Skills</MiniLabel>
+                  <MiniLabel>{t('Skills')}</MiniLabel>
                   <div className="flex flex-wrap gap-1.5">
                     {skills.length ? (
                       skills.map((s) => (
@@ -362,7 +366,7 @@ export function CandidateDrawer({
                         </Chip>
                       ))
                     ) : (
-                      <Empty>Keine Skills erfasst</Empty>
+                      <Empty>{t('Keine Skills erfasst')}</Empty>
                     )}
                   </div>
                 </div>
@@ -371,7 +375,7 @@ export function CandidateDrawer({
 
                 {/* The recruiter's summary of the conversation outranks the
                     synthesised one — a person wrote it, having spoken to them. */}
-                <CvSection icon={Sparkles} title="Profil">
+                <CvSection icon={Sparkles} title={t('Profil')}>
                   <p className="text-[14px] leading-relaxed text-cockpit-dim">
                     {p?.profileSummary?.trim() ||
                       p?.motivation?.trim() ||
@@ -380,7 +384,7 @@ export function CandidateDrawer({
                 </CvSection>
 
                 {(p?.focusAreas?.length ?? 0) > 0 && (
-                  <CvSection icon={Sparkles} title="Schwerpunkte">
+                  <CvSection icon={Sparkles} title={t('Schwerpunkte')}>
                     <div className="flex flex-wrap gap-1.5">
                       {p?.focusAreas.map((area) => (
                         <Chip key={area}>{area}</Chip>
@@ -393,7 +397,7 @@ export function CandidateDrawer({
                     than merged into them: the chips are what the hard
                     filters read, this is what the person actually said. */}
                 {p?.technicalProfile?.trim() && (
-                  <CvSection icon={Sparkles} title="Technisches Know-how">
+                  <CvSection icon={Sparkles} title={t('Technisches Know-how')}>
                     <p className="text-[14px] leading-relaxed text-cockpit-dim">
                       {p.technicalProfile}
                     </p>
@@ -401,7 +405,7 @@ export function CandidateDrawer({
                 )}
 
                 {p?.profileSummary?.trim() && p?.motivation?.trim() && (
-                  <CvSection icon={Sparkles} title="Wechselmotivation">
+                  <CvSection icon={Sparkles} title={t('Wechselmotivation')}>
                     <p className="text-[14px] leading-relaxed text-cockpit-dim">
                       {p.motivation}
                     </p>
@@ -409,14 +413,14 @@ export function CandidateDrawer({
                 )}
 
                 {p?.otherNotes?.trim() && (
-                  <CvSection icon={Sparkles} title="Weitere relevante Punkte">
+                  <CvSection icon={Sparkles} title={t('Weitere relevante Punkte')}>
                     <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-cockpit-dim">
                       {p.otherNotes}
                     </p>
                   </CvSection>
                 )}
 
-                <CvSection icon={Briefcase} title="Berufserfahrung">
+                <CvSection icon={Briefcase} title={t('Berufserfahrung')}>
                   {roles ? (
                     <ol className="relative space-y-5 border-l border-cockpit-line pl-5">
                       {roles.map((r, i) => (
@@ -424,7 +428,7 @@ export function CandidateDrawer({
                           <span className="absolute -left-[23px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-cockpit-bg bg-mint-500" />
                           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                             <span className="text-[14px] font-semibold text-cockpit-text">
-                              {r.title || 'Rolle'}
+                              {r.title || t('Rolle')}
                             </span>
                             {r.period && (
                               <span className="font-mono text-[12px] text-cockpit-faint">
@@ -454,11 +458,11 @@ export function CandidateDrawer({
                       ))}
                     </ol>
                   ) : (
-                    <Empty>Keine Berufserfahrung erfasst</Empty>
+                    <Empty>{t('Keine Berufserfahrung erfasst')}</Empty>
                   )}
                 </CvSection>
 
-                <CvSection icon={GraduationCap} title="Ausbildung">
+                <CvSection icon={GraduationCap} title={t('Ausbildung')}>
                   {education.length ? (
                     <ul className="space-y-3">
                       {education.map((e, i) => (
@@ -482,11 +486,11 @@ export function CandidateDrawer({
                       ))}
                     </ul>
                   ) : (
-                    <Empty>Keine Ausbildung erfasst</Empty>
+                    <Empty>{t('Keine Ausbildung erfasst')}</Empty>
                   )}
                 </CvSection>
 
-                <CvSection icon={Paperclip} title="Dateien">
+                <CvSection icon={Paperclip} title={t('Dateien')}>
                   <AttachmentsPanel
                     candidateId={candidate.id}
                     onCandidateChanged={handleSaved}
@@ -632,52 +636,52 @@ function Profile360({ candidate, p }: { candidate: Candidate; p?: CandidateProfi
     fields: FieldT[]
   }[] = [
     {
-      title: 'Persönliche Daten',
+      title: t('Persönliche Daten'),
       icon: User,
       fields: [
-        ['Vollständiger Name', candidate.name],
-        ['Vorname', p?.firstName],
-        ['Nachname', p?.lastName],
-        ['Geschlecht', p?.sex],
-        ['Namenszusatz', p?.namePrefix],
-        ['Geburtsdatum', p?.dateOfBirth],
+        [t('Vollständiger Name'), candidate.name],
+        [t('Vorname'), p?.firstName],
+        [t('Nachname'), p?.lastName],
+        [t('Geschlecht'), p?.sex],
+        [t('Namenszusatz'), p?.namePrefix],
+        [t('Geburtsdatum'), p?.dateOfBirth],
       ],
     },
     {
-      title: 'Kontakt',
+      title: t('Kontakt'),
       icon: Mail,
       fields: [
-        ['E-Mail', candidate.email, `mailto:${candidate.email}`],
-        ['Telefon', val(candidate.phone)],
+        [t('E-Mail'), candidate.email, `mailto:${candidate.email}`],
+        [t('Telefon'), val(candidate.phone)],
         ['LinkedIn', p?.linkedinUrl, p?.linkedinUrl],
         ['Xing', p?.xingUrl, p?.xingUrl],
-        ['Straße', p?.street],
-        ['PLZ', p?.postalCode],
-        ['Stadt', p?.city],
-        ['Land', p?.country],
-        ['Standort', val(candidate.location)],
+        [t('Straße'), p?.street],
+        [t('PLZ'), p?.postalCode],
+        [t('Stadt'), p?.city],
+        [t('Land'), p?.country],
+        [t('Standort'), val(candidate.location)],
       ],
     },
     {
-      title: 'Karriere',
+      title: t('Karriere'),
       icon: Briefcase,
       fields: [
-        ['Job-Titel', val(candidate.currentTitle)],
-        ['Aktuelles Unternehmen', val(candidate.currentCompany)],
-        ['Branchen', p?.industries.join(' · ') || undefined],
-        ['Anstellungsform', employmentFormLabel(p?.employmentForm)],
+        [t('Job-Titel'), val(candidate.currentTitle)],
+        [t('Aktuelles Unternehmen'), val(candidate.currentCompany)],
+        [t('Branchen'), p?.industries.join(' · ') || undefined],
+        [t('Anstellungsform'), employmentFormLabel(p?.employmentForm)],
         // What the source called it, kept visible as provenance for the form.
-        ['Anstellungsart (Quelle)', p?.employmentType],
-        ['Umzugsbereit', relocate(p?.willingToRelocate)],
-        ['Kündigungsfrist', p?.noticePeriod],
-        ['Verfügbarkeit', p?.availability],
-        ['Berufserfahrung', yearsLabel(candidate, p?.totalYearsExperience)],
-        ['Aktuelles Gehalt', money(p?.currentSalary)],
-        ['Mindestgehalt', money(p?.salaryMinimum)],
-        ['Wunschgehalt', money(p?.salaryExpectation)],
-        ['Währung', p?.salaryCurrency],
-        ['Arbeitserlaubnis', permitLabel(p?.workPermit)],
-        ['Quelle', p?.source],
+        [t('Anstellungsart (Quelle)'), p?.employmentType],
+        [t('Umzugsbereit'), relocate(p?.willingToRelocate)],
+        [t('Kündigungsfrist'), p?.noticePeriod],
+        [t('Verfügbarkeit'), p?.availability],
+        [t('Berufserfahrung'), yearsLabel(candidate, p?.totalYearsExperience)],
+        [t('Aktuelles Gehalt'), money(p?.currentSalary)],
+        [t('Mindestgehalt'), money(p?.salaryMinimum)],
+        [t('Wunschgehalt'), money(p?.salaryExpectation)],
+        [t('Währung'), p?.salaryCurrency],
+        [t('Arbeitserlaubnis'), permitLabel(p?.workPermit)],
+        [t('Quelle'), p?.source],
       ],
     },
   ]
@@ -685,13 +689,13 @@ function Profile360({ candidate, p }: { candidate: Candidate; p?: CandidateProfi
   // Only after the Qualifikationsgespräch is there anything here; an empty
   // block of "—" would suggest the conversation happened and yielded nothing.
   const qualification: FieldT[] = [
-    ['Verfügbarkeit für Interviews', p?.interviewAvailability],
-    ['Andere Prozesse bei', p?.otherProcessCompanies.join(' · ') || undefined],
-    ['Notiz zu anderen Prozessen', p?.otherProcesses],
+    [t('Verfügbarkeit für Interviews'), p?.interviewAvailability],
+    [t('Andere Prozesse bei'), p?.otherProcessCompanies.join(' · ') || undefined],
+    [t('Notiz zu anderen Prozessen'), p?.otherProcesses],
   ]
   if (qualification.some(([, value]) => value)) {
     sections.push({
-      title: 'Nach dem Qualifikationsgespräch',
+      title: t('Nach dem Qualifikationsgespräch'),
       icon: CalendarClock,
       fields: qualification,
     })
@@ -714,9 +718,9 @@ function Profile360({ candidate, p }: { candidate: Candidate; p?: CandidateProfi
 }
 
 const EMPLOYMENT_FORM_LABELS: Record<string, string> = {
-  festanstellung: 'Festanstellung',
+  festanstellung: t('Festanstellung'),
   freelance: 'Freelance',
-  beides: 'Beides',
+  beides: t('Beides'),
 }
 
 /** Unset means nobody established it — shown as a gap, not as a guess. */
@@ -754,16 +758,16 @@ const relocate = (v?: string) =>
   v == null || v === ''
     ? undefined
     : /^(ja|yes|true)$/i.test(v)
-      ? 'Ja'
+      ? t('Ja')
       : /^(nein|no|false)$/i.test(v)
-        ? 'Nein'
+        ? t('Nein')
         : v
 
 /* ---------- formatting ---------- */
 
 function fmtMoney(amount: number, currency = 'EUR'): string {
   try {
-    return new Intl.NumberFormat('de-DE', {
+    return new Intl.NumberFormat(locale(), {
       style: 'currency',
       currency,
       maximumFractionDigits: 0,
@@ -774,11 +778,11 @@ function fmtMoney(amount: number, currency = 'EUR'): string {
 }
 
 const PERMIT_LABELS: Record<string, string> = {
-  citizen: 'Staatsbürger',
-  permanent: 'Unbefristet',
-  work_visa: 'Arbeitsvisum',
-  needs_sponsorship: 'Sponsoring nötig',
-  unknown: 'Unbekannt',
+  citizen: t('Staatsbürger'),
+  permanent: t('Unbefristet'),
+  work_visa: t('Arbeitsvisum'),
+  needs_sponsorship: t('Sponsoring nötig'),
+  unknown: t('Unbekannt'),
 }
 const permitLabel = (v?: string) => (v ? (PERMIT_LABELS[v] ?? v) : undefined)
 

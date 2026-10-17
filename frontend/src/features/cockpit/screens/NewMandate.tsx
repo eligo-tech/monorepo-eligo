@@ -22,6 +22,8 @@
 //     reads later. A contact recorded with no origin cannot be assessed for
 //     it afterwards.
 
+import { t } from '@/i18n'
+
 import { useMemo, useState } from 'react'
 import { Building2, Check, Plus, UserRound, X } from 'lucide-react'
 
@@ -139,7 +141,7 @@ function Picker<T extends { id: string }>({
               onQuery('')
             }}
             className="shrink-0 text-cockpit-faint transition-colors hover:text-coral-300"
-            title="ändern"
+            title={t('ändern')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -156,7 +158,7 @@ function Picker<T extends { id: string }>({
           <Plus className="h-4 w-4 shrink-0 text-gold-400" />
           <span className="min-w-0 flex-1 truncate text-[13.5px] text-cockpit-text">
             {draft}
-            <span className="ml-2 font-mono text-[11px] text-gold-300">wird neu angelegt</span>
+            <span className="ml-2 font-mono text-[11px] text-gold-300">{t('wird neu angelegt')}</span>
           </span>
           <button
             type="button"
@@ -165,7 +167,7 @@ function Picker<T extends { id: string }>({
               onQuery('')
             }}
             className="shrink-0 text-cockpit-faint transition-colors hover:text-coral-300"
-            title="verwerfen"
+            title={t('verwerfen')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -261,7 +263,7 @@ export function NewMandate({
   // Name only what is actually missing. The old hint said "Titel und Kunde
   // fehlen noch" with the title filled in and the client name on screen,
   // which is how a form teaches people to distrust it.
-  const missing = [!hasTitle && 'ein Job-Titel', !hasClient && 'ein Kunde'].filter(
+  const missing = [!hasTitle && t('ein Job-Titel'), !hasClient && t('ein Kunde')].filter(
     Boolean,
   ) as string[]
 
@@ -305,8 +307,8 @@ export function NewMandate({
     } catch (e) {
       setError(
         e instanceof ApiError
-          ? `Nicht angelegt (HTTP ${e.status}). ${e.status === 422 ? 'Bitte Eingaben prüfen.' : ''}`
-          : 'Nicht angelegt — bitte erneut versuchen.',
+          ? `Nicht angelegt (HTTP ${e.status}). ${e.status === 422 ? t('Bitte Eingaben prüfen.') : ''}`
+          : t('Nicht angelegt — bitte erneut versuchen.'),
       )
       setBusy(false)
     }
@@ -315,20 +317,18 @@ export function NewMandate({
   return (
     <Modal onClose={onClose} className="max-w-3xl">
       <div className="flex items-center gap-3 border-b border-cockpit-line px-7 py-4">
-        <Label>Neues Mandat</Label>
+        <Label>{t('Neues Mandat')}</Label>
         <span className="ml-auto">
           <CloseButton onClose={onClose} />
         </span>
       </div>
       <div className="space-y-5 overflow-y-auto px-7 py-6">
         <p className="text-[13px] leading-relaxed text-cockpit-dim">
-          Kunde, Job und Ansprechpartner in einem Schritt. Nur der Job-Titel ist
-          nötig — Ort, Band und Muss-Kriterien lassen sich im Mandat jederzeit
-          nachtragen.
+          {t('Kunde, Job und Ansprechpartner in einem Schritt. Nur der Job-Titel ist nötig — Ort, Band und Muss-Kriterien lassen sich im Mandat jederzeit nachtragen.')}
         </p>
 
         <TextInput
-          label="Job-Titel"
+          label={t('Job-Titel')}
           value={title}
           onChange={setTitle}
           placeholder="IT-Administrator produktionsnahe IT / OT (m/w/d)"
@@ -336,8 +336,8 @@ export function NewMandate({
 
         <Picker
           rows={companies ?? []}
-          label="Kunde"
-          placeholder="Firma suchen oder neuen Namen eingeben…"
+          label={t('Kunde')}
+          placeholder={t('Firma suchen oder neuen Namen eingeben…')}
           nameOf={(c) => c.name}
           value={companyId}
           onPick={(id) => {
@@ -356,11 +356,11 @@ export function NewMandate({
           <>
             <Picker
               rows={managers ?? []}
-              label="Ansprechpartner (optional)"
+              label={t('Ansprechpartner (optional)')}
               placeholder={
                 companyId
-                  ? 'Kontakt suchen oder neuen Namen eingeben…'
-                  : 'Name des Ansprechpartners…'
+                  ? t('Kontakt suchen oder neuen Namen eingeben…')
+                  : t('Name des Ansprechpartners…')
               }
               nameOf={(m) => m.full_name}
               hintOf={(m) => m.role_title ?? null}
@@ -375,16 +375,16 @@ export function NewMandate({
             {newContact && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextInput
-                  label="Rolle"
+                  label={t('Rolle')}
                   value={managerRole}
                   onChange={setManagerRole}
                   placeholder="Head of IT"
                 />
                 <TextInput
-                  label="E-Mail"
+                  label={t('E-Mail')}
                   value={managerEmail}
                   onChange={setManagerEmail}
-                  placeholder="optional"
+                  placeholder={t('optional')}
                 />
               </div>
             )}
@@ -392,22 +392,22 @@ export function NewMandate({
         )}
 
         <div className="space-y-3 border-t border-cockpit-line pt-4">
-          <Label>Suchprofil · später ergänzbar</Label>
+          <Label>{t('Suchprofil · später ergänzbar')}</Label>
           <div className="grid gap-3 sm:grid-cols-3">
             <TextInput
-              label="Ort"
+              label={t('Ort')}
               value={location}
               onChange={setLocation}
               placeholder="Dillenburg"
             />
             <TextInput
-              label="Band von"
+              label={t('Band von')}
               value={salaryMin}
               onChange={setSalaryMin}
               placeholder="60000"
             />
             <TextInput
-              label="bis"
+              label={t('bis')}
               value={salaryMax}
               onChange={setSalaryMax}
               placeholder="70000"
@@ -415,11 +415,11 @@ export function NewMandate({
           </div>
           <div className="space-y-1">
             {/* Said out loud: these are hard filters, not keywords. */}
-            <FieldLabel>Muss-Kriterien — der Matcher schließt daran aus</FieldLabel>
+            <FieldLabel>{t('Muss-Kriterien — der Matcher schließt daran aus')}</FieldLabel>
             <TagInput
               tags={mustHave}
               onChange={setMustHave}
-              placeholder="Kriterium hinzufügen…"
+              placeholder={t('Kriterium hinzufügen…')}
             />
           </div>
         </div>
@@ -429,14 +429,14 @@ export function NewMandate({
         <div className="flex items-center gap-2 border-t border-cockpit-line pt-4">
           <Button tone="primary" onClick={() => void save()} disabled={!canSave}>
             <Check className="h-4 w-4" />
-            {busy ? 'Legt an…' : 'Mandat anlegen'}
+            {busy ? t('Legt an…') : t('Mandat anlegen')}
           </Button>
           <Button onClick={onClose}>
             <X className="h-4 w-4" /> Abbrechen
           </Button>
           {missing.length > 0 && !busy && (
             <span className="ml-auto font-mono text-[11px] text-cockpit-faint">
-              Es fehlt noch {missing.join(' und ')}
+              Es fehlt noch {missing.join(t(' und '))}
             </span>
           )}
         </div>

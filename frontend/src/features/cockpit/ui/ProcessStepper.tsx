@@ -4,6 +4,8 @@
 // waiting on, coral ring = blocked (a party still owes us something), dim = not
 // reached. Sub-chips show which of the two parties has delivered.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { Check, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -98,7 +100,7 @@ export function ProcessStepper({
                     e.stopPropagation()
                     void onRemoveStep(step)
                   }}
-                  title={`${step.label} aus diesem Prozess entfernen`}
+                  title={t('{step} aus diesem Prozess entfernen', { step: step.label })}
                   aria-label={`${step.label} entfernen`}
                   className="absolute -top-0.5 right-1/2 z-20 translate-x-[18px] rounded-full border border-cockpit-line bg-cockpit-bg p-0.5 text-cockpit-faint opacity-0 transition-opacity hover:border-coral-400 hover:text-coral-400 group-hover/stepper:opacity-100"
                 >
@@ -172,7 +174,7 @@ function AddStep({
       setLabel('')
       setOpen(false)
     } catch (e) {
-      setError(e instanceof Error ? e.message.slice(0, 120) : 'nicht gespeichert')
+      setError(e instanceof Error ? e.message.slice(0, 120) : t('nicht gespeichert'))
     } finally {
       setBusy(false)
     }
@@ -183,7 +185,7 @@ function AddStep({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="Eigenen Schritt in diesen Prozess einfügen"
+        title={t('Eigenen Schritt in diesen Prozess einfügen')}
         className="mt-[7px] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 border-dashed border-[#2b2e25] text-cockpit-faint transition-colors hover:border-mint-600 hover:text-mint-400"
       >
         <Plus className="h-3.5 w-3.5" strokeWidth={3} />
@@ -202,17 +204,17 @@ function AddStep({
           if (e.key === 'Escape') setOpen(false)
         }}
         maxLength={60}
-        placeholder="Schritt, z. B. Probearbeitstag"
+        placeholder={t('Schritt, z. B. Probearbeitstag')}
         className="w-full rounded-md border border-cockpit-line bg-cockpit-bg px-2 py-1.5 text-[13px] text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
       />
       <label className="block font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-        danach
+        {t('danach')}
         <select
           value={after}
           onChange={(e) => setAfter(e.target.value)}
           className="mt-1 w-full rounded-md border border-cockpit-line bg-cockpit-bg px-2 py-1.5 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
         >
-          <option value="">ganz am Anfang</option>
+          <option value="">{t('ganz am Anfang')}</option>
           {/* Numbered: the nine contain two steps called "Feedback", and a
               dropdown with the same word twice is a coin toss. */}
           {steps.map((s, i) => (
@@ -230,14 +232,14 @@ function AddStep({
           disabled={busy || !label.trim()}
           className="rounded-md border border-mint-600 bg-mint-800/40 px-2.5 py-1 text-[12px] text-mint-300 transition-colors hover:bg-mint-800/70 disabled:opacity-40"
         >
-          {busy ? 'Fügt ein…' : 'Einfügen'}
+          {busy ? t('Fügt ein…') : t('Einfügen')}
         </button>
         <button
           type="button"
           onClick={() => setOpen(false)}
           className="font-mono text-[12px] text-cockpit-faint transition-colors hover:text-cockpit-text"
         >
-          Abbrechen
+          {t('Abbrechen')}
         </button>
       </div>
     </div>

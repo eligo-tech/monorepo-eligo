@@ -10,6 +10,8 @@
 // recruiter corrects. Asking a customer to rename columns before the product
 // works is how onboarding dies.
 
+import { t } from '@/i18n'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowRight, FileSpreadsheet, Upload } from 'lucide-react'
 
@@ -27,7 +29,7 @@ const ACTION_TONE: Record<string, string> = {
 const ACTION_LABEL: Record<string, string> = {
   create: 'neu',
   update: 'aktualisiert',
-  skip: 'übersprungen',
+  skip: t('übersprungen'),
 }
 
 export function FileImportPanel({
@@ -64,7 +66,7 @@ export function FileImportPanel({
         e.status === 422 || e.status === 400
         ? stripDetail(e.message)
         : `Fehlgeschlagen (HTTP ${e.status}).`
-      : 'Fehlgeschlagen — keine Antwort vom Server.'
+      : t('Fehlgeschlagen — keine Antwort vom Server.')
 
   const run = useCallback(
     async (chosen: File, kind: string, mapping?: Record<string, string>) => {
@@ -131,18 +133,18 @@ export function FileImportPanel({
         </span>
         <div className="min-w-0">
           <h3 className="text-[16px] font-semibold text-cockpit-text">
-            Datei importieren
+            {t('Datei importieren')}
           </h3>
           <p className="text-[13px] text-cockpit-dim">
             {spec?.hint ??
-              'CSV oder Excel aus Ihrem bisherigen System — Spalten werden erkannt.'}
+              t('CSV oder Excel aus Ihrem bisherigen System — Spalten werden erkannt.')}
           </p>
         </div>
       </div>
 
       <div className="mt-5 flex flex-wrap items-end gap-3">
         <SelectInput
-          label="Was enthält die Datei?"
+          label={t('Was enthält die Datei?')}
           value={entity}
           onChange={(v) => {
             setEntity(v)
@@ -167,7 +169,7 @@ export function FileImportPanel({
           }}
         />
         <Button onClick={() => fileRef.current?.click()} disabled={busy}>
-          <Upload className="h-4 w-4" /> {file ? 'Andere Datei' : 'Datei wählen'}
+          <Upload className="h-4 w-4" /> {file ? t('Andere Datei') : t('Datei wählen')}
         </Button>
         {file && (
           <span className="font-mono text-[12px] text-cockpit-faint">{file.name}</span>
@@ -211,9 +213,9 @@ export function FileImportPanel({
             <table className="w-full min-w-[520px] border-collapse text-left">
               <thead>
                 <tr className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-                  <th className="border-b border-cockpit-line pb-2 pr-4">Spalte</th>
-                  <th className="border-b border-cockpit-line pb-2 pr-4">Beispiel</th>
-                  <th className="border-b border-cockpit-line pb-2">Feld</th>
+                  <th className="border-b border-cockpit-line pb-2 pr-4">{t('Spalte')}</th>
+                  <th className="border-b border-cockpit-line pb-2 pr-4">{t('Beispiel')}</th>
+                  <th className="border-b border-cockpit-line pb-2">{t('Feld')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,13 +280,13 @@ export function FileImportPanel({
                 !canCommit ||
                 preview.counts.create + preview.counts.update === 0
               }
-              title={canCommit ? undefined : 'Nur Administratoren können importieren'}
+              title={canCommit ? undefined : t('Nur Administratoren können importieren')}
             >
               {preview.counts.create + preview.counts.update} Zeilen importieren
               <ArrowRight className="h-4 w-4" />
             </Button>
             <span className="font-mono text-[11.5px] text-cockpit-faint">
-              {!canCommit && 'Nur Administratoren können importieren. '}
+              {!canCommit && t('Nur Administratoren können importieren. ')}
               Noch wurde nichts geschrieben. Dieselbe Datei erneut zu importieren
               aktualisiert die Datensätze, statt sie zu verdoppeln.
             </span>
@@ -314,7 +316,7 @@ export function FileImportPanel({
         <p className="mt-4 text-[12px] leading-relaxed text-cockpit-faint">
           CSV (auch mit Semikolon und Umlauten) oder .xlsx. Die Spalten werden
           erkannt und vor dem Import angezeigt — geschrieben wird erst, wenn Sie
-          bestätigen. <Chip>max. 20 MB</Chip>
+          bestätigen. <Chip>{t('max. 20 MB')}</Chip>
         </p>
       )}
     </Panel>

@@ -2,6 +2,8 @@
 // Native scroll-snap does the paging, so trackpad swipe, shift-scroll and the
 // dots all work without a gesture library.
 
+import { t } from '@/i18n'
+
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
@@ -56,7 +58,7 @@ export function Carousel({
             key={i}
             type="button"
             onClick={() => goTo(i)}
-            aria-label={`Panel ${i + 1} von ${count}`}
+            aria-label={t('Panel {i} von {n}', { i: i + 1, n: count })}
             aria-current={i === active}
             className={cn(
               'h-1.5 rounded-full transition-all',

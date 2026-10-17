@@ -5,6 +5,8 @@
 // more honest than one that silently isn't there. It says what it will hold, so
 // nobody mistakes it for something broken.
 
+import { t } from '@/i18n'
+
 import type { ReactNode } from 'react'
 import { Panel, SectionHeader } from '../ui/primitives'
 
@@ -29,7 +31,7 @@ export function PlaceholderScreen({
       </header>
 
       <section className="space-y-5">
-        <SectionHeader index="01" title="Noch nicht gebaut" tone="gold" />
+        <SectionHeader index="01" title={t('Noch nicht gebaut')} tone="gold" />
         <Panel className="p-6">
           <div className="max-w-2xl space-y-3 text-[14px] leading-relaxed text-cockpit-dim">
             {children}

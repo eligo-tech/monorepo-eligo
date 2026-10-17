@@ -134,7 +134,7 @@ export function ReportingView() {
         </div>
         <div className="flex items-center gap-2.5">
           <button className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-[14px] font-medium text-ink-soft hover:bg-slate-50">
-            <Table2 className="h-4 w-4 text-ink-muted" /> Bewerbung <ChevronDown className="h-4 w-4" />
+            <Table2 className="h-4 w-4 text-ink-muted" /> {'Bewerbung'} <ChevronDown className="h-4 w-4" />
           </button>
           <button className="flex items-center gap-1.5 rounded-xl bg-ink px-4 py-2 text-[14px] font-semibold text-white hover:bg-ink-soft">
             <Plus className="h-4 w-4" /> Neuer Insight

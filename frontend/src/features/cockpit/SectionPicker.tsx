@@ -4,6 +4,8 @@
 // order and to page through screens you did not want; a named list says where
 // you can go and takes you there in one action.
 
+import { t } from '@/i18n'
+
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -92,7 +94,7 @@ export function SectionPicker<K extends string>({
                 {option.label}
                 {option.placeholder && (
                   <span className="ml-auto font-mono text-[11px] text-cockpit-faint">
-                    bald
+                    {t('bald')}
                   </span>
                 )}
               </button>

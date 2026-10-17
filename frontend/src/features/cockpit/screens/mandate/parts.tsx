@@ -5,6 +5,8 @@
 // figure we cannot vouch for must never look verified — not that it must be
 // hidden. `DemoText` is the prose equivalent of the `°` a Figure carries.
 
+import { t } from '@/i18n'
+
 import type { ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 
@@ -14,7 +16,7 @@ import { ProvenanceMark } from '../../ui/primitives'
 /** A value the record cannot yet supply, shown as the design shows it. */
 export function DemoText({
   children,
-  source = 'Demo-Wert — im Datensatz noch nicht erfasst',
+  source = t('Demo-Wert — im Datensatz noch nicht erfasst'),
   className,
 }: {
   children: ReactNode
@@ -30,7 +32,7 @@ export function DemoText({
 }
 
 /** The hint every not-yet-connected panel carries in its header. */
-export const DEMO_HINT = 'Demo · noch nicht angebunden'
+export const DEMO_HINT = t('Demo · noch nicht angebunden')
 
 /** One labelled line of the Stammdaten block: 88px key, free-flowing value. */
 export function StammRow({

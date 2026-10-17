@@ -15,6 +15,8 @@
 // The choice is remembered per card, because a collapse that forgets itself
 // on reload is a collapse nobody uses twice.
 
+import { t } from '@/i18n'
+
 import type { ReactNode } from 'react'
 
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
@@ -74,7 +76,7 @@ export function ProcessCardPanel({
               {card.candidateId ? (
                 <a
                   href={`#kandidaten/${card.candidateId}`}
-                  title={`${card.candidateName} — Kandidatenakte öffnen`}
+                  title={t('{name} — Kandidatenakte öffnen', { name: card.candidateName })}
                   className="underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
                 >
                   {card.candidateName}
@@ -93,7 +95,7 @@ export function ProcessCardPanel({
               <button
                 type="button"
                 onClick={onMandateClick}
-                title="Mandat öffnen"
+                title={t('Mandat öffnen')}
                 className="text-cockpit-dim underline-offset-2 transition-colors hover:text-cockpit-text hover:underline"
               >
                 {card.mandateRef} · {card.client}
@@ -106,7 +108,7 @@ export function ProcessCardPanel({
             · {card.paceLabel}
             {card.pacePro === 'demo' && (
               <sup
-                title="Demo-Wert — keine Verweilzeiten im Reporting"
+                title={t('Demo-Wert — keine Verweilzeiten im Reporting')}
                 className="cursor-help"
               >
                 °
@@ -127,19 +129,19 @@ export function ProcessCardPanel({
           ) : (
             <span
               className="block text-[22px] text-cockpit-faint"
-              title="Kein Honorarmodell hinterlegt"
+              title={t('Kein Honorarmodell hinterlegt')}
             >
               —
             </span>
           )}
-          <span className="font-mono text-[12px] text-cockpit-faint">Fee-Potenzial</span>
+          <span className="font-mono text-[12px] text-cockpit-faint">{t('Fee-Potenzial')}</span>
         </div>
 
         <button
           type="button"
           onClick={() => setCollapsed((shut) => !shut)}
           aria-expanded={!collapsed}
-          title={collapsed ? 'Prozess ausklappen' : 'Prozess einklappen'}
+          title={collapsed ? t('Prozess ausklappen') : t('Prozess einklappen')}
           className="-mr-1 shrink-0 self-start rounded-lg border border-cockpit-line p-1.5 text-cockpit-faint transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
         >
           {collapsed ? (
@@ -148,7 +150,7 @@ export function ProcessCardPanel({
             <ChevronDown className="h-4 w-4" />
           )}
           <span className="sr-only">
-            {collapsed ? 'Prozess ausklappen' : 'Prozess einklappen'}
+            {collapsed ? t('Prozess ausklappen') : t('Prozess einklappen')}
           </span>
         </button>
       </div>

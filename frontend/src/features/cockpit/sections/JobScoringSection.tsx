@@ -1,5 +1,7 @@
 // "02 Jobscoring" — how fillable each mandate is, two columns of score rows.
 
+import { t } from '@/i18n'
+
 import { ScoreBar, scoreTone } from '../ui/ScoreBar'
 import { SectionHeader } from '../ui/primitives'
 import type { JobScore } from '../data/types'
@@ -20,10 +22,10 @@ export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: 
       <SectionHeader
         id="section-03"
         index="03"
-        title="Jobscoring"
+        title={t('Jobscoring')}
         hint={
           isLive
-            ? 'Besetzbarkeit aus dem Matching · Deal-Chance noch nicht gelernt'
+            ? t('Besetzbarkeit aus dem Matching · Deal-Chance noch nicht gelernt')
             : 'Besetzbarkeit & Deal-Chance · gelernt'
         }
       />
@@ -38,7 +40,7 @@ export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: 
         <span>
           <span className="text-coral-400">{critical}</span> kritisch
         </span>
-        <span>M = Deal-Chance beim Manager</span>
+        <span>{t('M = Deal-Chance beim Manager')}</span>
       </div>
 
       <div className="grid gap-x-12 gap-y-1 lg:grid-cols-2">

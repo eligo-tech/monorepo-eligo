@@ -1,3 +1,5 @@
+import { t } from '@/i18n'
+
 /** Small LinkedIn glyph shown next to sourced candidates.
  *  When an `href` is given it becomes a real link to the profile; the click is
  *  stopped from bubbling so it doesn't also trigger a surrounding row action. */
@@ -14,7 +16,7 @@ export function LinkedInMark({ href }: { href?: string }) {
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
-      title="LinkedIn-Profil öffnen"
+      title={t('LinkedIn-Profil öffnen')}
       className="inline-flex shrink-0 transition-opacity hover:opacity-80"
     >
       {glyph}

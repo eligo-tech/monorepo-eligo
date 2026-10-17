@@ -12,6 +12,10 @@
 // a recruiter's signature; confirming is a click, and that click is an
 // ordinary edit the receipt can honestly attribute to a person.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Download, FileText, Paperclip, Sparkles } from 'lucide-react'
 
@@ -29,10 +33,10 @@ import { Chip } from '../../ui/primitives'
 
 const KIND_LABEL: Record<DocumentKind, string> = {
   cv: 'CV',
-  transkript: 'Transkript',
-  zeugnis: 'Zeugnis',
-  zertifikat: 'Zertifikat',
-  sonstiges: 'Sonstiges',
+  transkript: t('Transkript'),
+  zeugnis: t('Zeugnis'),
+  zertifikat: t('Zertifikat'),
+  sonstiges: t('Sonstiges'),
 }
 
 const KIND_OPTIONS = (['zeugnis', 'zertifikat', 'cv', 'sonstiges'] as const).map(
@@ -72,7 +76,7 @@ function kb(bytes: number): string {
 }
 
 function dateDe(iso: string): string {
-  return new Date(iso).toLocaleDateString('de-DE', {
+  return new Date(iso).toLocaleDateString(locale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -112,7 +116,7 @@ export function AttachmentsPanel({
   const describe = (e: unknown) =>
     e instanceof ApiError
       ? `Fehlgeschlagen (HTTP ${e.status}).`
-      : 'Fehlgeschlagen — keine Antwort vom Server.'
+      : t('Fehlgeschlagen — keine Antwort vom Server.')
 
   async function attach(file: File) {
     setBusy(true)
@@ -196,7 +200,7 @@ export function AttachmentsPanel({
     <section className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <SelectInput
-          label="Art"
+          label={t('Art')}
           value={kind}
           onChange={(v) => setKind(v as DocumentKind)}
           options={KIND_OPTIONS}
@@ -236,7 +240,7 @@ export function AttachmentsPanel({
           disabled={busy}
           tone="primary"
           className="whitespace-nowrap"
-          title="Gesprächsnotiz auswerten — schlägt Felder vor, schreibt nichts"
+          title={t('Gesprächsnotiz auswerten — schlägt Felder vor, schreibt nichts')}
         >
           <Sparkles className="h-4 w-4" /> Transkript auswerten
         </Button>
@@ -251,8 +255,7 @@ export function AttachmentsPanel({
           </p>
           {proposals.fields.length === 0 ? (
             <p className="text-[13px] text-cockpit-dim">
-              Aus dem Transkript konnte nichts sicher gelesen werden — bitte die
-              Felder von Hand erfassen. Die Datei ist gespeichert.
+              {t('Aus dem Transkript konnte nichts sicher gelesen werden — bitte die Felder von Hand erfassen. Die Datei ist gespeichert.')}
             </p>
           ) : (
             <ul className="space-y-1.5">
@@ -289,12 +292,12 @@ export function AttachmentsPanel({
             </ul>
           )}
           <div className="flex items-center gap-2">
-            <Button onClick={() => setProposals(null)}>Verwerfen</Button>
+            <Button onClick={() => setProposals(null)}>{t('Verwerfen')}</Button>
             {proposals.fields.length > 0 && (
               <Button tone="primary" onClick={confirmChosen} disabled={busy}>
                 {chosen.size > 0
-                  ? `${chosen.size} übernehmen`
-                  : 'Nichts ausgewählt'}
+                  ? t('{n} übernehmen', { n: chosen.size })
+                  : t('Nichts ausgewählt')}
               </Button>
             )}
           </div>
@@ -302,10 +305,10 @@ export function AttachmentsPanel({
       )}
 
       {docs === null ? (
-        <p className="text-[13px] italic text-cockpit-faint">Dateien werden geladen…</p>
+        <p className="text-[13px] italic text-cockpit-faint">{t('Dateien werden geladen…')}</p>
       ) : docs.length === 0 ? (
         <p className="text-[13px] italic text-cockpit-faint">
-          Keine Dateien hinterlegt — Zeugnisse und Zertifikate gehören hierher.
+          {t('Keine Dateien hinterlegt — Zeugnisse und Zertifikate gehören hierher.')}
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -326,7 +329,7 @@ export function AttachmentsPanel({
                 href={api.documentUrl(doc.id)}
                 target="_blank"
                 rel="noreferrer"
-                title="Öffnen"
+                title={t('Öffnen')}
                 className="shrink-0 text-cockpit-faint transition-colors hover:text-mint-300"
               >
                 <Download className="h-4 w-4" />

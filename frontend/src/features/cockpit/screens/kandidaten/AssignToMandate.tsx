@@ -12,6 +12,8 @@
 // which one to present them on is the recruiter's job, not a limitation of
 // the form.
 
+import { t } from '@/i18n'
+
 import { useMemo, useState } from 'react'
 import { Check, Plus, Search, X } from 'lucide-react'
 
@@ -105,12 +107,12 @@ export function AssignToMandate({
     <div className="absolute right-6 top-20 z-50 w-[26rem] rounded-xl border border-cockpit-line bg-cockpit-surface p-3 shadow-panel">
       <div className="mb-2 flex items-center gap-2">
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-          Zu Mandat zuordnen
+          {t('Zu Mandat zuordnen')}
         </span>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          aria-label="Schließen"
+          aria-label={t('Schließen')}
           className="ml-auto text-cockpit-faint transition-colors hover:text-cockpit-text"
         >
           <X className="h-4 w-4" />
@@ -123,14 +125,14 @@ export function AssignToMandate({
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Mandat, Firma oder Ort — Tippfehler erlaubt"
+          placeholder={t('Mandat, Firma oder Ort — Tippfehler erlaubt')}
           className="w-full bg-transparent text-[13px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
         />
       </label>
 
       <div className="max-h-72 space-y-0.5 overflow-y-auto">
         {jobs.loading && (
-          <p className="px-2 py-3 font-mono text-[12px] text-cockpit-faint">lädt…</p>
+          <p className="px-2 py-3 font-mono text-[12px] text-cockpit-faint">{t('lädt…')}</p>
         )}
         {!jobs.loading && rows.length === 0 && (
           <p className="px-2 py-3 text-[13px] text-cockpit-faint">
@@ -166,7 +168,7 @@ export function AssignToMandate({
                 </span>
               ) : (
                 <span className="shrink-0 font-mono text-[11px] text-cockpit-faint">
-                  {busy === job.id ? 'ordnet zu…' : '+'}
+                  {busy === job.id ? t('ordnet zu…') : '+'}
                 </span>
               )}
             </button>

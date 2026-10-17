@@ -147,7 +147,30 @@ Conventions:
   Don't re-implement these inline.
 - Charts are hand-rolled SVG (`ui/Gauge.tsx`). No chart library.
 - Icons: `lucide-react` only.
-- Language: UI copy is German (the target market).
+- **Language: the UI is bilingual, German and English.** Every user-facing
+  string goes through `t()` from `src/i18n`, and the dictionary in
+  `src/i18n/en.ts` is keyed by the **German string itself** — `t('Suchprofil')`,
+  not `t('mandate.searchProfile')` — so a call site still reads as the sentence
+  it renders and a missing translation falls back to German rather than showing
+  a key. Add copy in German, wrap it in `t()`, add the English next to it;
+  `src/i18n/dictionary.test.ts` fails the build if you forget, and also fails on
+  a dictionary entry nothing asks for.
+  - Numbers and dates come from `src/i18n/format.ts` (`num` · `money` · `date` ·
+    `time` · `dateTime`), never from a hard-coded `'de-DE'`. English is en-GB,
+    day before month, so a date in a shared screenshot cannot be read two ways.
+  - **A string that is compared or stored is not copy.** `WHO[].value` in
+    `FeedbackPanel` becomes the `"Kunde: …"` prefix of a saved remark and stays
+    German in both languages; only its label is translated. The same goes for
+    anything in a `===`, a `case`, or a `localStorage` key.
+  - The switch **reloads the page** (`setLang`). A re-render would miss
+    module-level constants and the files that memoise — see the note in
+    `src/i18n/index.ts`.
+  - The landing page keeps its own `L(de, en)` pairs and its own toggle; it
+    reads and writes the same stored language, so a choice made there survives
+    into the cockpit.
+  - Parked surfaces (`features/{matching,pipeline,reporting}`, `components/
+    Sidebar`, `components/TopNav`) are deliberately **not** translated — they
+    are compiled but unrouted.
 
 ## Data: mock floor, live overlay
 

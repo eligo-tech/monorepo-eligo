@@ -6,6 +6,8 @@
 // market roles). Everything here is tagged `demo`, so the UI marks it as such.
 // useCockpitData overlays live values on top and flips those fields to `live`.
 
+import { t } from '@/i18n'
+
 import { demo, type CockpitData, type PeriodKey, type ProcessStep, type RevenuePanel } from './types'
 
 /** The nine process steps, in the order docs/process_design sets out. Single
@@ -15,22 +17,22 @@ import { demo, type CockpitData, type PeriodKey, type ProcessStep, type RevenueP
  *  someone for a meeting that did not exist yet; the backend's
  *  `pipeline/steps.py` is the same order. */
 export const PROCESS_STEPS: { key: ProcessStep['key']; label: string }[] = [
-  { key: 'vorgestellt', label: 'Vorgestellt' },
-  { key: 'feedback-1', label: 'Feedback' },
-  { key: 'interview', label: 'Interviewtermin' },
-  { key: 'vorbereitung', label: 'Interview-Vorb.' },
-  { key: 'feedback-2', label: 'Feedback' },
-  { key: 'finaltermin', label: 'Finaltermin' },
-  { key: 'final-vorb', label: 'Final-Vorb.' },
-  { key: 'offer', label: 'Offer & Zusage' },
-  { key: 'vertrag', label: 'Vertrag' },
+  { key: 'vorgestellt', label: t('Vorgestellt') },
+  { key: 'feedback-1', label: t('Feedback') },
+  { key: 'interview', label: t('Interviewtermin') },
+  { key: 'vorbereitung', label: t('Interview-Vorb.') },
+  { key: 'feedback-2', label: t('Feedback') },
+  { key: 'finaltermin', label: t('Finaltermin') },
+  { key: 'final-vorb', label: t('Final-Vorb.') },
+  { key: 'offer', label: t('Offer & Zusage') },
+  { key: 'vertrag', label: t('Vertrag') },
 ]
 
 /** Steps that carry two-party sub-chips in the mockups. */
 const STEP_CHIPS: Partial<Record<ProcessStep['key'], string[]>> = {
-  'feedback-1': ['Kand.', 'Kunde'],
-  'feedback-2': ['Kand.', 'Kunde'],
-  offer: ['Offer', 'Zusage'],
+  'feedback-1': [t('Kand.'), t('Kunde')],
+  'feedback-2': [t('Kand.'), t('Kunde')],
+  offer: ['Offer', t('Zusage')],
 }
 
 /**
@@ -72,19 +74,19 @@ const CLOSING = [
     candidateRef: '#K-0588',
     mandateRef: '#A-260',
     client: 'FinTech',
-    fee: demo(41000, 'Demo-Fee — kein Honorarmodell im Backend'),
-    timing: 'diesen Monat',
-    chance: demo(85, 'Gelernte Abschlusschance — noch kein Signal-Store'),
-    note: 'mündl. Zusage',
+    fee: demo(41000, t('Demo-Fee — kein Honorarmodell im Backend')),
+    timing: t('diesen Monat'),
+    chance: demo(85, t('Gelernte Abschlusschance — noch kein Signal-Store')),
+    note: t('mündl. Zusage'),
   },
   {
     id: 'cd-2',
     candidateRef: '#K-0731',
     mandateRef: '#A-231',
     client: 'Scale-up',
-    fee: demo(32000, 'Demo-Fee — kein Honorarmodell im Backend'),
-    timing: 'diesen Monat',
-    chance: demo(78, 'Gelernte Abschlusschance — noch kein Signal-Store'),
+    fee: demo(32000, t('Demo-Fee — kein Honorarmodell im Backend')),
+    timing: t('diesen Monat'),
+    chance: demo(78, t('Gelernte Abschlusschance — noch kein Signal-Store')),
   },
 ]
 
@@ -97,21 +99,21 @@ const revenuePanel = (
 ): RevenuePanel => ({
   key,
   caption,
-  actual: demo(actual, 'Kein Umsatzmodell im Backend'),
+  actual: demo(actual, t('Kein Umsatzmodell im Backend')),
   potential: demo(potential, 'Gewichtete Pipeline — Demo'),
   target: demo(target, 'Zielvorgabe — Demo'),
-  yearActual: demo(840000, 'Kein Umsatzmodell im Backend'),
+  yearActual: demo(840000, t('Kein Umsatzmodell im Backend')),
   yearTarget: demo(1200000, 'Zielvorgabe — Demo'),
   closing: CLOSING,
   pipelineTotal: demo(89000, 'Restpipeline — Demo'),
-  pipelineWeighted: demo(46200, 'Gewichtet mit Abschlusschance — Demo'),
+  pipelineWeighted: demo(46200, t('Gewichtet mit Abschlusschance — Demo')),
 })
 
 const REVENUE_PANELS: Record<PeriodKey, RevenuePanel> = {
   jahr: revenuePanel('jahr', '2026', 840000, 260000, 1200000),
   quartal: revenuePanel('quartal', 'Q3', 245000, 158000, 350000),
-  monat: revenuePanel('monat', 'JULI', 62000, 73000, 100000),
-  tag: revenuePanel('tag', 'HEUTE', 4200, 9800, 6500),
+  monat: revenuePanel('monat', t('JULI'), 62000, 73000, 100000),
+  tag: revenuePanel('tag', t('HEUTE'), 4200, 9800, 6500),
 }
 
 // ── The baseline ────────────────────────────────────────────────────────────
@@ -128,19 +130,19 @@ export const MOCK_COCKPIT: CockpitData = {
     {
       id: 'sig-1',
       kind: 'email',
-      label: 'E-Mail · vor 2 Std',
-      text: 'Manager (Scale-up) kündigt Offer für #K-0731 an — Stage „Offer" vorschlagen?',
+      label: t('E-Mail · vor 2 Std'),
+      text: t('Manager (Scale-up) kündigt Offer für #K-0731 an — Stage „Offer” vorschlagen?'),
       refs: ['#K-0731'],
-      action: 'Übernehmen',
+      action: t('Übernehmen'),
       provenance: 'demo',
     },
     {
       id: 'sig-2',
       kind: 'note',
-      label: 'Telefonnotiz',
-      text: 'Bei #A-238 Budget bestätigt. Gelernt: Manager braucht Ø 21 Tage bis Offer → Abschluss eher August.',
+      label: t('Telefonnotiz'),
+      text: t('Bei #A-238 Budget bestätigt. Gelernt: Manager braucht Ø 21 Tage bis Offer → Abschluss eher August.'),
       refs: ['#A-238'],
-      action: 'Prüfen',
+      action: t('Prüfen'),
       provenance: 'demo',
     },
   ],
@@ -148,7 +150,7 @@ export const MOCK_COCKPIT: CockpitData = {
   slides: [
     {
       id: 'slide-umsatz',
-      title: 'Umsatz & Potenzial',
+      title: t('Umsatz & Potenzial'),
       kind: 'revenue',
       panels: REVENUE_PANELS,
     },
@@ -157,21 +159,21 @@ export const MOCK_COCKPIT: CockpitData = {
     // the carousel picks it up with no component changes.
     {
       id: 'slide-besetzung',
-      title: 'Besetzungsquote',
+      title: t('Besetzungsquote'),
       kind: 'placeholder',
-      hint: 'Platzhalter — braucht Platzierungs-Historie pro Mandat.',
+      hint: t('Platzhalter — braucht Platzierungs-Historie pro Mandat.'),
     },
     {
       id: 'slide-tto',
-      title: 'Time-to-Offer',
+      title: t('Time-to-Offer'),
       kind: 'placeholder',
-      hint: 'Platzhalter — speist sich später aus den Verweilzeiten im Reporting.',
+      hint: t('Platzhalter — speist sich später aus den Verweilzeiten im Reporting.'),
     },
     {
       id: 'slide-bd',
-      title: 'BD-Signale',
+      title: t('BD-Signale'),
       kind: 'placeholder',
-      hint: 'Platzhalter — kommt mit dem Market-Map-Agenten.',
+      hint: t('Platzhalter — kommt mit dem Market-Map-Agenten.'),
     },
   ],
 
@@ -254,11 +256,11 @@ export const MOCK_COCKPIT: CockpitData = {
       role: 'DevOps Lead',
       mandateRef: '#A-260',
       client: 'FinTech',
-      paceLabel: 'Ø 9 T bis Offer',
+      paceLabel: t('Ø 9 T bis Offer'),
       pacePro: 'demo',
       progress: demo(92),
-      fee: demo(41000, 'Demo-Fee — kein Honorarmodell im Backend'),
-      statusNote: 'Mündl. Zusage · Vertrag ausstehend',
+      fee: demo(41000, t('Demo-Fee — kein Honorarmodell im Backend')),
+      statusNote: t('Mündl. Zusage · Vertrag ausstehend'),
       steps: buildSteps(7, 'current', {
         vorgestellt: '27.06',
         interview: '15.07 · 10:00',
@@ -272,10 +274,10 @@ export const MOCK_COCKPIT: CockpitData = {
       role: 'Cloud Architect',
       mandateRef: '#A-231',
       client: 'Scale-up',
-      paceLabel: 'Ø 11 T bis Offer',
+      paceLabel: t('Ø 11 T bis Offer'),
       pacePro: 'demo',
       progress: demo(83),
-      fee: demo(32000, 'Demo-Fee — kein Honorarmodell im Backend'),
+      fee: demo(32000, t('Demo-Fee — kein Honorarmodell im Backend')),
       // Offer raus, Zusage fehlt → der Schritt blockiert.
       steps: buildSteps(
         6,
@@ -295,10 +297,10 @@ export const MOCK_COCKPIT: CockpitData = {
       role: 'Lead Data Engineer',
       mandateRef: '#A-238',
       client: 'Nexval',
-      paceLabel: 'Ø 21 T bis Offer',
+      paceLabel: t('Ø 21 T bis Offer'),
       pacePro: 'demo',
       progress: demo(50),
-      fee: demo(28000, 'Demo-Fee — kein Honorarmodell im Backend'),
+      fee: demo(28000, t('Demo-Fee — kein Honorarmodell im Backend')),
       // Kandidatenfeedback da, Kundenfeedback fehlt → blockiert bei Feedback 2.
       steps: buildSteps(
         3,
@@ -317,35 +319,35 @@ export const MOCK_COCKPIT: CockpitData = {
     {
       id: 'na-1',
       title: 'M. Wagner (CTO · Nexval) anrufen',
-      detail: 'Migrationsprojekt Q3 erwähnt · letzter Kontakt vor 26 Tagen.',
+      detail: t('Migrationsprojekt Q3 erwähnt · letzter Kontakt vor 26 Tagen.'),
       category: 'business-dev',
       provenance: 'demo',
     },
     {
       id: 'na-2',
       title: '#K-0731 · Offer nachfassen',
-      detail: 'Kunde hat Offer angekündigt (aus E-Mail) · mündliche Zusage einholen.',
+      detail: t('Kunde hat Offer angekündigt (aus E-Mail) · mündliche Zusage einholen.'),
       category: 'abschluss',
       provenance: 'demo',
     },
     {
       id: 'na-3',
-      title: 'Anonyme Ansprache für #A-238 freigeben',
-      detail: '3 Entwürfe warten auf Prüfung, bevor sie rausgehen.',
+      title: t('Anonyme Ansprache für #A-238 freigeben'),
+      detail: t('3 Entwürfe warten auf Prüfung, bevor sie rausgehen.'),
       category: 'freigabe',
       provenance: 'demo',
     },
     {
       id: 'na-4',
-      title: '5 Kandidaten mit geändertem Jobtitel',
-      detail: 'Aus dem Datenlauf erkannt · Profile aktualisieren.',
+      title: t('5 Kandidaten mit geändertem Jobtitel'),
+      detail: t('Aus dem Datenlauf erkannt · Profile aktualisieren.'),
       category: 'datenlauf',
       provenance: 'demo',
     },
     {
       id: 'na-5',
-      title: 'Interview-Feedback Technoparc GmbH einpflegen',
-      detail: 'Schärft Briefing und Suchprofil.',
+      title: t('Interview-Feedback Technoparc GmbH einpflegen'),
+      detail: t('Schärft Briefing und Suchprofil.'),
       category: 'feedback',
       provenance: 'demo',
     },
