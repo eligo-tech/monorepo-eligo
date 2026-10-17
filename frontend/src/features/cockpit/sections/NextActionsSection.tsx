@@ -1,6 +1,8 @@
 // "Nächste beste Aktionen" — the queue the cockpit wants the recruiter to work
 // through, each tagged with what kind of work it is.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { MessageSquare, Flag, Phone, RefreshCw, ShieldCheck, Zap } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -12,10 +14,10 @@ const CATEGORY: Record<
   { label: string; tone: Tone; icon: React.ComponentType<{ className?: string }> }
 > = {
   'business-dev': { label: 'Business Dev.', tone: 'gold', icon: Phone },
-  abschluss: { label: 'Abschluss', tone: 'mint', icon: Flag },
-  freigabe: { label: 'Freigabe', tone: 'lav', icon: ShieldCheck },
-  datenlauf: { label: 'Datenlauf', tone: 'mint', icon: RefreshCw },
-  feedback: { label: 'Feedback', tone: 'coral', icon: MessageSquare },
+  abschluss: { label: t('Abschluss'), tone: 'mint', icon: Flag },
+  freigabe: { label: t('Freigabe'), tone: 'lav', icon: ShieldCheck },
+  datenlauf: { label: t('Datenlauf'), tone: 'mint', icon: RefreshCw },
+  feedback: { label: t('Feedback'), tone: 'coral', icon: MessageSquare },
 }
 
 const ICON_TONE: Record<Tone, string> = {
@@ -43,7 +45,7 @@ export function NextActionsSection({ actions }: { actions: NextAction[] }) {
     <section className="space-y-5">
       <SectionHeader
         id="section-aktionen"
-        title="Nächste beste Aktionen"
+        title={t('Nächste beste Aktionen')}
         tone="gold"
         icon={<Zap className="h-[15px] w-[15px]" />}
         hint={`${open} offen`}
@@ -67,7 +69,7 @@ export function NextActionsSection({ actions }: { actions: NextAction[] }) {
                 type="button"
                 onClick={() => toggle(action.id)}
                 aria-pressed={isDone}
-                aria-label={isDone ? 'Wieder öffnen' : 'Als erledigt markieren'}
+                aria-label={isDone ? t('Wieder öffnen') : t('Als erledigt markieren')}
                 className={cn(
                   'h-[22px] w-[22px] shrink-0 rounded-full border-2 transition-colors',
                   isDone

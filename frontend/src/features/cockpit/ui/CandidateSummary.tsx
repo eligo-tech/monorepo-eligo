@@ -21,6 +21,10 @@
 // it is reference, read when a question comes up, and nine labelled lines
 // above the stepper would push the process off the screen it belongs on.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 
@@ -37,7 +41,7 @@ const TONE_TEXT = {
 
 /** "92.000 €" — a figure a recruiter reads out, not a formatted cell. */
 const eur = (value: number, currency: string | null) =>
-  new Intl.NumberFormat('de-DE', {
+  new Intl.NumberFormat(locale(), {
     style: 'currency',
     currency: currency || 'EUR',
     maximumFractionDigits: 0,
@@ -73,18 +77,18 @@ function Fact({ label, value }: { label: string; value: string | null }) {
 /** The nine labelled lines of section B, in the document's own order. */
 function profileFacts(profile: CandidateProfile): { label: string; value: string | null }[] {
   return [
-    { label: 'Technisches Know-how', value: profile.technicalProfile },
-    { label: 'Kündigungsfrist / Verfügbarkeit', value: profile.noticePeriod ?? profile.availability },
-    { label: 'Gehaltsvorstellung', value: salaryLine(profile) },
-    { label: 'Wechselmotivation', value: profile.motivation },
-    { label: 'Höchster Abschluss', value: profile.education.join('\n') || null },
-    { label: 'Verfügbarkeit für Interviews', value: profile.interviewAvailability },
+    { label: t('Technisches Know-how'), value: profile.technicalProfile },
+    { label: t('Kündigungsfrist / Verfügbarkeit'), value: profile.noticePeriod ?? profile.availability },
+    { label: t('Gehaltsvorstellung'), value: salaryLine(profile) },
+    { label: t('Wechselmotivation'), value: profile.motivation },
+    { label: t('Höchster Abschluss'), value: profile.education.join('\n') || null },
+    { label: t('Verfügbarkeit für Interviews'), value: profile.interviewAvailability },
     {
-      label: 'Weitere relevante Punkte',
+      label: t('Weitere relevante Punkte'),
       value: profile.otherNotes,
     },
     {
-      label: 'Andere Prozesse',
+      label: t('Andere Prozesse'),
       value:
         profile.otherProcesses ??
         (profile.otherProcessCompanies.length > 0
@@ -119,7 +123,7 @@ export function CandidateSummary({
     return (
       <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-cockpit-line px-4 py-3">
         <p className="font-mono text-[12px] text-cockpit-faint">
-          Noch keine Zusammenfassung — nach dem Qualifikationsgespräch hier erfassen.
+          {t('Noch keine Zusammenfassung — nach dem Qualifikationsgespräch hier erfassen.')}
         </p>
         {onEdit && (
           <button
@@ -127,7 +131,7 @@ export function CandidateSummary({
             onClick={onEdit}
             className="font-mono text-[12px] text-mint-300 underline-offset-2 transition-colors hover:underline"
           >
-            Gespräch erfassen
+            {t('Gespräch erfassen')}
           </button>
         )}
       </div>
@@ -137,13 +141,13 @@ export function CandidateSummary({
   return (
     <div className="mt-5 rounded-xl border border-cockpit-line bg-cockpit-inset/60 px-5 py-4">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <Label>Zusammenfassung</Label>
+        <Label>{t('Zusammenfassung')}</Label>
         {score !== null && (
           <span className={cn('font-mono text-[18px] font-semibold', TONE_TEXT[tone])}>
             {score}
             <span className="text-[13px] text-cockpit-faint"> / 10</span>
             <span className="ml-2 font-sans text-[12px] font-normal text-cockpit-faint">
-              Passung zum Mandat
+              {t('Passung zum Mandat')}
             </span>
           </span>
         )}
@@ -154,7 +158,7 @@ export function CandidateSummary({
             className="ml-auto flex items-center gap-1.5 font-mono text-[12px] text-cockpit-faint transition-colors hover:text-mint-300"
           >
             <Pencil className="h-3.5 w-3.5" />
-            Bearbeiten
+            {t('Bearbeiten')}
           </button>
         )}
       </div>
@@ -170,7 +174,7 @@ export function CandidateSummary({
           {/* Said out loud, because it is the one thing on this card that is
               NOT about this mandate: edit it here and it changes on every
               process the person runs. */}
-          <Label>Zum Profil · gilt für alle Mandate</Label>
+          <Label>{t('Zum Profil · gilt für alle Mandate')}</Label>
           <p className="max-w-4xl whitespace-pre-wrap text-[14px] leading-relaxed text-cockpit-dim">
             {profile.summary}
           </p>
@@ -179,7 +183,7 @@ export function CandidateSummary({
 
       {(profile?.focusAreas.length ?? 0) > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          <Label className="mr-1">Schwerpunkte</Label>
+          <Label className="mr-1">{t('Schwerpunkte')}</Label>
           {profile?.focusAreas.map((area) => <Chip key={area}>{area}</Chip>)}
         </div>
       )}
@@ -198,7 +202,7 @@ export function CandidateSummary({
             )}
             Gesprächszusammenfassung
             <span className="normal-case tracking-normal">
-              · {facts.length} {facts.length === 1 ? 'Angabe' : 'Angaben'}
+              · {facts.length} {facts.length === 1 ? t('Angabe') : t('Angaben')}
             </span>
           </button>
           {open && (

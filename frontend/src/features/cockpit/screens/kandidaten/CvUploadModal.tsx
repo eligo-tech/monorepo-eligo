@@ -4,6 +4,8 @@
 // are marked and withheld, and the laufwise trace at the bottom shows each check as
 // a predicate over the real extraction result rather than model prose.
 
+import { t } from '@/i18n'
+
 import { useRef, useState } from 'react'
 import { AlertTriangle, Check, FileText, Loader2, UploadCloud } from 'lucide-react'
 import { api } from '@/api/client'
@@ -61,7 +63,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
       onCreated()
       onClose()
     } catch (e) {
-      setError((e as Error).message || 'Speichern fehlgeschlagen')
+      setError((e as Error).message || t('Speichern fehlgeschlagen'))
       setSaving(false)
     }
   }
@@ -75,10 +77,10 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
       <div className="flex items-start justify-between gap-4 border-b border-cockpit-line px-6 py-4">
         <div>
           <h2 className="text-[19px] font-semibold tracking-tight text-cockpit-text">
-            Kandidat aus CV
+            {t('Kandidat aus CV')}
           </h2>
           <p className="mt-0.5 text-[13px] text-cockpit-dim">
-            PDF hochladen — Felder werden extrahiert und geprüft.
+            {t('PDF hochladen — Felder werden extrahiert und geprüft.')}
           </p>
         </div>
         <CloseButton onClose={onClose} />
@@ -115,10 +117,10 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
             )}
             <div className="text-center">
               <div className="font-semibold text-cockpit-text">
-                {loading ? 'Wird extrahiert…' : 'PDF hierher ziehen oder klicken'}
+                {loading ? t('Wird extrahiert…') : t('PDF hierher ziehen oder klicken')}
               </div>
               <div className="mt-0.5 font-mono text-[12px] text-cockpit-faint">
-                Nur PDF · max. 10 MB
+                {t('Nur PDF · max. 10 MB')}
               </div>
             </div>
           </button>
@@ -155,7 +157,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
             {scanned && (
               <div className="mt-3 flex items-center gap-2 rounded-xl border border-gold-600 bg-gold-800/25 px-4 py-3 text-[13px] text-gold-300">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
-                Kein Text erkannt — vermutlich ein gescanntes/Bild-PDF. OCR nötig.
+                {t('Kein Text erkannt — vermutlich ein gescanntes/Bild-PDF. OCR nötig.')}
               </div>
             )}
 
@@ -182,14 +184,13 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
               ))}
               {result.fields.length === 0 && (
                 <div className="px-4 py-6 text-center text-[14px] text-cockpit-dim">
-                  Keine Felder erkannt.
+                  {t('Keine Felder erkannt.')}
                 </div>
               )}
             </div>
 
             <p className="mt-3 text-[12px] leading-relaxed text-cockpit-faint">
-              Felder unter der Konfidenzschwelle werden markiert und nicht automatisch übernommen —
-              sie gehen in die manuelle Prüfung.
+              {t('Felder unter der Konfidenzschwelle werden markiert und nicht automatisch übernommen — sie gehen in die manuelle Prüfung.')}
             </p>
 
             {/* laufwise verification trace — every check is a predicate over real
@@ -235,10 +236,10 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
             !result && 'invisible',
           )}
         >
-          Andere Datei
+          {t('Andere Datei')}
         </button>
         <div className="flex items-center gap-3">
-          <Button onClick={onClose}>Abbrechen</Button>
+          <Button onClick={onClose}>{t('Abbrechen')}</Button>
           <Button
             tone="primary"
             onClick={handleSave}

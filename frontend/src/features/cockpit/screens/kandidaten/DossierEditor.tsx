@@ -1,3 +1,5 @@
+import { t } from '@/i18n'
+
 import { useEffect, useRef, useState } from 'react'
 import { Trash2, Save, Ban, AlertCircle } from 'lucide-react'
 import { api } from '@/api/client'
@@ -61,25 +63,25 @@ interface Draft {
 }
 
 const WORK_PERMITS: { value: string; label: string }[] = [
-  { value: 'unknown', label: 'Unbekannt' },
-  { value: 'citizen', label: 'Staatsbürger' },
-  { value: 'permanent', label: 'Unbefristet' },
-  { value: 'work_visa', label: 'Arbeitsvisum' },
-  { value: 'requires_sponsorship', label: 'Sponsoring nötig' },
-  { value: 'none', label: 'Keine' },
+  { value: 'unknown', label: t('Unbekannt') },
+  { value: 'citizen', label: t('Staatsbürger') },
+  { value: 'permanent', label: t('Unbefristet') },
+  { value: 'work_visa', label: t('Arbeitsvisum') },
+  { value: 'requires_sponsorship', label: t('Sponsoring nötig') },
+  { value: 'none', label: t('Keine') },
 ]
 
 const EMPLOYMENT_FORMS = [
   { value: '', label: '—' },
-  { value: 'festanstellung', label: 'Festanstellung' },
+  { value: 'festanstellung', label: t('Festanstellung') },
   { value: 'freelance', label: 'Freelance' },
-  { value: 'beides', label: 'Beides' },
+  { value: 'beides', label: t('Beides') },
 ]
 
 const RELOCATE = [
   { value: '', label: '—' },
-  { value: 'Ja', label: 'Ja' },
-  { value: 'Nein', label: 'Nein' },
+  { value: t('Ja'), label: t('Ja') },
+  { value: t('Nein'), label: t('Nein') },
 ]
 
 const s = (v?: string | null) => v ?? ''
@@ -148,12 +150,12 @@ function toNum(v: string): number | null {
 }
 
 function validate(d: Draft): string | null {
-  if (!d.full_name.trim()) return 'Vollständiger Name darf nicht leer sein.'
-  if (d.email.trim() && !EMAIL_RE.test(d.email.trim())) return 'E-Mail-Adresse ist ungültig.'
+  if (!d.full_name.trim()) return t('Vollständiger Name darf nicht leer sein.')
+  if (d.email.trim() && !EMAIL_RE.test(d.email.trim())) return t('E-Mail-Adresse ist ungültig.')
   for (const [label, v] of [
-    ['Aktuelles Gehalt', d.current_salary],
-    ['Wunschgehalt', d.salary_expectation],
-    ['Mindestgehalt', d.salary_minimum],
+    [t('Aktuelles Gehalt'), d.current_salary],
+    [t('Wunschgehalt'), d.salary_expectation],
+    [t('Mindestgehalt'), d.salary_minimum],
   ] as const) {
     const t = v.trim()
     if (t !== '' && (!Number.isFinite(Number(t)) || Number(t) < 0)) {
@@ -165,7 +167,7 @@ function validate(d: Draft): string | null {
   const min = toNum(d.salary_minimum)
   const wish = toNum(d.salary_expectation)
   if (min !== null && wish !== null && min > wish) {
-    return 'Mindestgehalt liegt über dem Wunschgehalt.'
+    return t('Mindestgehalt liegt über dem Wunschgehalt.')
   }
   return null
 }
@@ -346,148 +348,148 @@ export function DossierEditor({
       const updated = await api.updateCandidate(dto.id, patch)
       onSaved(updated)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Speichern fehlgeschlagen.')
+      setErr(e instanceof Error ? e.message : t('Speichern fehlgeschlagen.'))
       setSaving(false)
     }
   }
 
   return (
     <div ref={root}>
-      <Group title="Persönliche Daten">
-        <TextInput label="Vollständiger Name" value={d.full_name} onChange={(v) => set('full_name', v)} name="full_name" />
-        <TextInput label="Vorname" value={d.first_name} onChange={(v) => set('first_name', v)} />
-        <TextInput label="Nachname" value={d.last_name} onChange={(v) => set('last_name', v)} />
-        <TextInput label="Geschlecht" value={d.sex} onChange={(v) => set('sex', v)} />
-        <TextInput label="Namenszusatz" value={d.name_prefix} onChange={(v) => set('name_prefix', v)} />
+      <Group title={t('Persönliche Daten')}>
+        <TextInput label={t('Vollständiger Name')} value={d.full_name} onChange={(v) => set('full_name', v)} name="full_name" />
+        <TextInput label={t('Vorname')} value={d.first_name} onChange={(v) => set('first_name', v)} />
+        <TextInput label={t('Nachname')} value={d.last_name} onChange={(v) => set('last_name', v)} />
+        <TextInput label={t('Geschlecht')} value={d.sex} onChange={(v) => set('sex', v)} />
+        <TextInput label={t('Namenszusatz')} value={d.name_prefix} onChange={(v) => set('name_prefix', v)} />
         <TextInput
-          label="Geburtsdatum"
+          label={t('Geburtsdatum')}
           value={d.date_of_birth}
           onChange={(v) => set('date_of_birth', v)}
-          placeholder="TT.MM.JJJJ"
+          placeholder={t('TT.MM.JJJJ')}
           name="date_of_birth"
         />
       </Group>
 
-      <Group title="Kontakt">
-        <TextInput label="E-Mail" value={d.email} onChange={(v) => set('email', v)} type="email" name="email" />
-        <TextInput label="Telefon" value={d.phone} onChange={(v) => set('phone', v)} name="phone" />
+      <Group title={t('Kontakt')}>
+        <TextInput label={t('E-Mail')} value={d.email} onChange={(v) => set('email', v)} type="email" name="email" />
+        <TextInput label={t('Telefon')} value={d.phone} onChange={(v) => set('phone', v)} name="phone" />
         <TextInput label="LinkedIn" value={d.linkedin_url} onChange={(v) => set('linkedin_url', v)} name="linkedin_url" />
         <TextInput label="Xing" value={d.xing_url} onChange={(v) => set('xing_url', v)} name="xing_url" />
-        <TextInput label="Straße" value={d.street} onChange={(v) => set('street', v)} name="street" />
-        <TextInput label="PLZ" value={d.postal_code} onChange={(v) => set('postal_code', v)} />
-        <TextInput label="Stadt" value={d.city} onChange={(v) => set('city', v)} />
-        <TextInput label="Land" value={d.country} onChange={(v) => set('country', v)} />
-        <TextInput label="Standort" value={d.location} onChange={(v) => set('location', v)} />
+        <TextInput label={t('Straße')} value={d.street} onChange={(v) => set('street', v)} name="street" />
+        <TextInput label={t('PLZ')} value={d.postal_code} onChange={(v) => set('postal_code', v)} />
+        <TextInput label={t('Stadt')} value={d.city} onChange={(v) => set('city', v)} />
+        <TextInput label={t('Land')} value={d.country} onChange={(v) => set('country', v)} />
+        <TextInput label={t('Standort')} value={d.location} onChange={(v) => set('location', v)} />
       </Group>
 
-      <Group title="Karriere">
-        <TextInput label="Job-Titel" value={d.current_title} onChange={(v) => set('current_title', v)} name="current_title" />
+      <Group title={t('Karriere')}>
+        <TextInput label={t('Job-Titel')} value={d.current_title} onChange={(v) => set('current_title', v)} name="current_title" />
         <TextInput
-          label="Aktuelles Unternehmen"
+          label={t('Aktuelles Unternehmen')}
           value={d.current_company}
           onChange={(v) => set('current_company', v)}
         />
         <SelectInput
-          label="Anstellungsform"
+          label={t('Anstellungsform')}
           value={d.employment_form}
           onChange={(v) => set('employment_form', v)}
           name="employment_form"
           options={EMPLOYMENT_FORMS}
         />
         <SelectInput
-          label="Umzugsbereit"
+          label={t('Umzugsbereit')}
           value={d.willing_to_relocate}
           onChange={(v) => set('willing_to_relocate', v)}
           options={RELOCATE}
         />
-        <TextInput label="Kündigungsfrist" value={d.notice_period} onChange={(v) => set('notice_period', v)} name="notice_period" />
-        <TextInput label="Verfügbarkeit" value={d.availability} onChange={(v) => set('availability', v)} name="availability" />
+        <TextInput label={t('Kündigungsfrist')} value={d.notice_period} onChange={(v) => set('notice_period', v)} name="notice_period" />
+        <TextInput label={t('Verfügbarkeit')} value={d.availability} onChange={(v) => set('availability', v)} name="availability" />
         <TextInput
-          label="Berufserfahrung (Jahre)"
+          label={t('Berufserfahrung (Jahre)')}
           value={d.total_years_experience}
           onChange={(v) => set('total_years_experience', v)}
         />
         <TextInput
-          label="Aktuelles Gehalt"
+          label={t('Aktuelles Gehalt')}
           value={d.current_salary}
           onChange={(v) => set('current_salary', v)}
           name="current_salary"
           type="number"
         />
         <TextInput
-          label="Mindestgehalt"
+          label={t('Mindestgehalt')}
           value={d.salary_minimum}
           onChange={(v) => set('salary_minimum', v)}
           name="salary_minimum"
           type="number"
         />
         <TextInput
-          label="Wunschgehalt"
+          label={t('Wunschgehalt')}
           value={d.salary_expectation}
           onChange={(v) => set('salary_expectation', v)}
           name="salary_expectation"
           type="number"
         />
-        <TextInput label="Währung" value={d.salary_currency} onChange={(v) => set('salary_currency', v)} />
+        <TextInput label={t('Währung')} value={d.salary_currency} onChange={(v) => set('salary_currency', v)} />
         <SelectInput
-          label="Arbeitserlaubnis"
+          label={t('Arbeitserlaubnis')}
           value={d.work_permit}
           onChange={(v) => set('work_permit', v)}
           options={WORK_PERMITS}
         />
-        <TextInput label="Quelle" value={d.source} onChange={(v) => set('source', v)} />
+        <TextInput label={t('Quelle')} value={d.source} onChange={(v) => set('source', v)} />
       </Group>
 
       {/* What only the Qualifikationsgespräch yields — no CV states these.
           See data/examples/metadata_quailfication.txt. */}
-      <Group title="Nach dem Qualifikationsgespräch">
+      <Group title={t('Nach dem Qualifikationsgespräch')}>
         <TextInput
-          label="Verfügbarkeit für Interviews"
+          label={t('Verfügbarkeit für Interviews')}
           value={d.interview_availability}
           onChange={(v) => set('interview_availability', v)}
-          placeholder="z. B. Mi/Do ab 11 Uhr"
+          placeholder={t('z. B. Mi/Do ab 11 Uhr')}
         />
       </Group>
 
       <section className="mt-7" data-field="other_process_companies">
-        <GroupLabel>Andere aktive Prozesse — bei wem</GroupLabel>
+        <GroupLabel>{t('Andere aktive Prozesse — bei wem')}</GroupLabel>
         {/* Names, not prose: the same company named by three candidates is a
             hiring need in this niche, and prose cannot be counted. */}
         <TagInput
           tags={d.other_process_companies}
           onChange={(v) => set('other_process_companies', v)}
-          placeholder="Firma hinzufügen…"
+          placeholder={t('Firma hinzufügen…')}
         />
         <div className="mt-3" data-field="other_processes">
           <TextArea
             value={d.other_processes}
             onChange={(v) => set('other_processes', v)}
-            placeholder="Notiz zum Stand der anderen Prozesse…"
+            placeholder={t('Notiz zum Stand der anderen Prozesse…')}
           />
         </div>
       </section>
 
       <section className="mt-7" data-field="industries">
-        <GroupLabel>Branchen</GroupLabel>
+        <GroupLabel>{t('Branchen')}</GroupLabel>
         <TagInput
           tags={d.industries}
           onChange={(v) => set('industries', v)}
-          placeholder="Branche hinzufügen…"
+          placeholder={t('Branche hinzufügen…')}
         />
       </section>
 
       <section className="mt-7">
-        <GroupLabel>Sprachen</GroupLabel>
-        <TagInput tags={d.languages} onChange={(v) => set('languages', v)} placeholder="Sprache hinzufügen…" />
+        <GroupLabel>{t('Sprachen')}</GroupLabel>
+        <TagInput tags={d.languages} onChange={(v) => set('languages', v)} placeholder={t('Sprache hinzufügen…')} />
       </section>
 
       <section className="mt-7" data-field="skills">
-        <GroupLabel>Skills</GroupLabel>
-        <TagInput tags={d.skills} onChange={(v) => set('skills', v)} placeholder="Skill hinzufügen…" />
+        <GroupLabel>{t('Skills')}</GroupLabel>
+        <TagInput tags={d.skills} onChange={(v) => set('skills', v)} placeholder={t('Skill hinzufügen…')} />
       </section>
 
       <section className="mt-7" data-field="work_history">
-        <GroupLabel>Berufserfahrung</GroupLabel>
+        <GroupLabel>{t('Berufserfahrung')}</GroupLabel>
         <div className="space-y-3">
           {d.work_history.map((role, i) => (
             <RoleCard
@@ -498,14 +500,14 @@ export function DossierEditor({
             />
           ))}
           <AddButton
-            label="+ Rolle hinzufügen"
+            label={t('+ Rolle hinzufügen')}
             onClick={() => set('work_history', [...d.work_history, { highlights: [] }])}
           />
         </div>
       </section>
 
       <section className="mt-7">
-        <GroupLabel>Ausbildung</GroupLabel>
+        <GroupLabel>{t('Ausbildung')}</GroupLabel>
         <div className="space-y-3">
           {d.education.map((edu, i) => (
             <EduCard
@@ -515,25 +517,25 @@ export function DossierEditor({
               onRemove={() => set('education', d.education.filter((_, j) => j !== i))}
             />
           ))}
-          <AddButton label="+ Ausbildung hinzufügen" onClick={() => set('education', [...d.education, {}])} />
+          <AddButton label={t('+ Ausbildung hinzufügen')} onClick={() => set('education', [...d.education, {}])} />
         </div>
       </section>
 
       <section className="mt-7" data-field="profile_summary">
-        <GroupLabel>Profil-Zusammenfassung</GroupLabel>
+        <GroupLabel>{t('Profil-Zusammenfassung')}</GroupLabel>
         <TextArea
           value={d.profile_summary}
           onChange={(v) => set('profile_summary', v)}
-          placeholder="Zusammenfassung des Profils aus dem Gespräch…"
+          placeholder={t('Zusammenfassung des Profils aus dem Gespräch…')}
         />
       </section>
 
       <section className="mt-7" data-field="focus_areas">
-        <GroupLabel>Schwerpunkte</GroupLabel>
+        <GroupLabel>{t('Schwerpunkte')}</GroupLabel>
         <TagInput
           tags={d.focus_areas}
           onChange={(v) => set('focus_areas', v)}
-          placeholder="Schwerpunkt hinzufügen…"
+          placeholder={t('Schwerpunkt hinzufügen…')}
         />
       </section>
 
@@ -542,20 +544,20 @@ export function DossierEditor({
           sentence shredded into it would put "MariaDB bekannt (persönlich
           nicht bevorzugt)" in front of a hard filter. */}
       <section className="mt-7" data-field="technical_profile">
-        <GroupLabel>Technisches Know-how</GroupLabel>
+        <GroupLabel>{t('Technisches Know-how')}</GroupLabel>
         <TextArea
           value={d.technical_profile}
           onChange={(v) => set('technical_profile', v)}
-          placeholder="Java (Experte), Jakarta EE, WildFly, JBoss; Hibernate, JPA …"
+          placeholder={t('Java (Experte), Jakarta EE, WildFly, JBoss; Hibernate, JPA …')}
         />
       </section>
 
       <section className="mt-7" data-field="motivation">
-        <GroupLabel>Wechselmotivation</GroupLabel>
+        <GroupLabel>{t('Wechselmotivation')}</GroupLabel>
         <TextArea
           value={d.motivation}
           onChange={(v) => set('motivation', v)}
-          placeholder="Warum will der Kandidat wechseln?"
+          placeholder={t('Warum will der Kandidat wechseln?')}
         />
       </section>
 
@@ -564,11 +566,11 @@ export function DossierEditor({
           writing it down after a call must not be stopped by a missing
           slot. */}
       <section className="mt-7" data-field="other_notes">
-        <GroupLabel>Weitere relevante Punkte</GroupLabel>
+        <GroupLabel>{t('Weitere relevante Punkte')}</GroupLabel>
         <TextArea
           value={d.other_notes}
           onChange={(v) => set('other_notes', v)}
-          placeholder={'Aktuelle Rolle / Arbeitgeber: …\nRelevante Projekterfahrung: …\nSprachkenntnisse: …'}
+          placeholder={t('Aktuelle Rolle / Arbeitgeber: …\nRelevante Projekterfahrung: …\nSprachkenntnisse: …')}
         />
       </section>
 
@@ -584,7 +586,7 @@ export function DossierEditor({
             <Ban className="h-4 w-4" /> Abbrechen
           </Button>
           <Button tone="primary" onClick={save} disabled={saving}>
-            <Save className="h-4 w-4" /> {saving ? 'Speichert…' : 'Speichern'}
+            <Save className="h-4 w-4" /> {saving ? t('Speichert…') : t('Speichern')}
           </Button>
         </div>
       </div>
@@ -628,16 +630,16 @@ function RoleCard({
   return (
     <div className="rounded-xl border border-cockpit-line bg-cockpit-raised p-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <MiniInput placeholder="Titel" value={role.title ?? ''} onChange={(v) => upd({ title: v })} span2 />
-        <MiniInput placeholder="Unternehmen" value={role.company ?? ''} onChange={(v) => upd({ company: v })} />
-        <MiniInput placeholder="Ort" value={role.location ?? ''} onChange={(v) => upd({ location: v })} />
+        <MiniInput placeholder={t('Titel')} value={role.title ?? ''} onChange={(v) => upd({ title: v })} span2 />
+        <MiniInput placeholder={t('Unternehmen')} value={role.company ?? ''} onChange={(v) => upd({ company: v })} />
+        <MiniInput placeholder={t('Ort')} value={role.location ?? ''} onChange={(v) => upd({ location: v })} />
         <MiniInput
-          placeholder="Von (z.B. 03/2021)"
+          placeholder={t('Von (z.B. 03/2021)')}
           value={role.start_date ?? ''}
           onChange={(v) => upd({ start_date: v })}
         />
         <MiniInput
-          placeholder="Bis (z.B. heute)"
+          placeholder={t('Bis (z.B. heute)')}
           value={role.end_date ?? ''}
           onChange={(v) => upd({ end_date: v })}
         />
@@ -646,7 +648,7 @@ function RoleCard({
         value={(role.highlights ?? []).join('\n')}
         onChange={(v) => upd({ highlights: v.split('\n') })}
         rows={2}
-        placeholder="Aufgaben / Erfolge — eine pro Zeile"
+        placeholder={t('Aufgaben / Erfolge — eine pro Zeile')}
         className="mt-2 text-[13px]"
       />
       <RemoveButton onClick={onRemove} />
@@ -667,15 +669,15 @@ function EduCard({
   return (
     <div className="rounded-xl border border-cockpit-line bg-cockpit-raised p-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <MiniInput placeholder="Abschluss" value={edu.degree ?? ''} onChange={(v) => upd({ degree: v })} span2 />
+        <MiniInput placeholder={t('Abschluss')} value={edu.degree ?? ''} onChange={(v) => upd({ degree: v })} span2 />
         <MiniInput
-          placeholder="Institution"
+          placeholder={t('Institution')}
           value={edu.institution ?? ''}
           onChange={(v) => upd({ institution: v })}
         />
-        <MiniInput placeholder="Ort" value={edu.location ?? ''} onChange={(v) => upd({ location: v })} />
-        <MiniInput placeholder="Von" value={edu.start_date ?? ''} onChange={(v) => upd({ start_date: v })} />
-        <MiniInput placeholder="Bis" value={edu.end_date ?? ''} onChange={(v) => upd({ end_date: v })} />
+        <MiniInput placeholder={t('Ort')} value={edu.location ?? ''} onChange={(v) => upd({ location: v })} />
+        <MiniInput placeholder={t('Von')} value={edu.start_date ?? ''} onChange={(v) => upd({ start_date: v })} />
+        <MiniInput placeholder={t('Bis')} value={edu.end_date ?? ''} onChange={(v) => upd({ end_date: v })} />
       </div>
       <RemoveButton onClick={onRemove} />
     </div>

@@ -5,6 +5,8 @@
 // slides come from the same data array (see MOCK_COCKPIT.slides), so adding one
 // is a data edit rather than a layout change.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import { Carousel, Slide } from '../ui/Carousel'
@@ -13,10 +15,10 @@ import { Chip, Figure, Label, Money, Panel, SectionHeader, SegmentedControl } fr
 import type { KpiSlide, PeriodKey, RevenuePanel } from '../data/types'
 
 const PERIODS: { key: PeriodKey; label: string }[] = [
-  { key: 'jahr', label: 'Jahr' },
-  { key: 'quartal', label: 'Quartal' },
-  { key: 'monat', label: 'Monat' },
-  { key: 'tag', label: 'Tag' },
+  { key: 'jahr', label: t('Jahr') },
+  { key: 'quartal', label: t('Quartal') },
+  { key: 'monat', label: t('Monat') },
+  { key: 'tag', label: t('Tag') },
 ]
 
 export function RevenueSection({
@@ -35,15 +37,15 @@ export function RevenueSection({
       <SectionHeader
         id="section-01"
         index="01"
-        title="Umsatz & Potenzial"
+        title={t('Umsatz & Potenzial')}
         hint={
           closingIsLive
-            ? 'Abschlüsse live · ‹ wischen · tippen ›'
-            : '‹ wischen · tippen ›'
+            ? t('Abschlüsse live · ‹ wischen · tippen ›')
+            : t('‹ wischen · tippen ›')
         }
       />
 
-      <Carousel count={slides.length} ariaLabel="Kennzahlen-Panels">
+      <Carousel count={slides.length} ariaLabel={t('Kennzahlen-Panels')}>
         {slides.map((slide) => (
           <Slide key={slide.id}>
             <Panel className="relative overflow-hidden p-7">
@@ -88,7 +90,7 @@ function RevenueBody({
       panel.actual.provenance === 'live' && panel.potential.provenance === 'live'
         ? ('live' as const)
         : ('demo' as const),
-    source: 'IST + gewichtetes Potenzial',
+    source: t('IST + gewichtetes Potenzial'),
   }
   const yearPct = panel.yearTarget.value
     ? Math.round((panel.yearActual.value / panel.yearTarget.value) * 100)
@@ -111,14 +113,14 @@ function RevenueBody({
         {/* IST + POTENZIAL = PROGNOSE */}
         <div className="grid grid-cols-1 items-center gap-4 rounded-2xl border border-cockpit-line bg-cockpit-inset px-6 py-5 sm:grid-cols-3">
           <div className="space-y-2">
-            <Label>Ist</Label>
+            <Label>{t('Ist')}</Label>
             <Money figure={panel.actual} className="block text-[26px] text-cockpit-text" />
           </div>
           <div className="relative space-y-2 sm:pl-8">
             <span className="absolute -left-1 top-8 hidden font-mono text-[18px] text-cockpit-faint sm:block">
               +
             </span>
-            <Label>Potenzial</Label>
+            <Label>{t('Potenzial')}</Label>
             <span className="block text-[26px] text-gold-400">
               + <Money figure={panel.potential} />
             </span>
@@ -127,7 +129,7 @@ function RevenueBody({
             <span className="absolute -left-1 top-8 hidden font-mono text-[18px] text-cockpit-faint sm:block">
               =
             </span>
-            <Label>Prognose</Label>
+            <Label>{t('Prognose')}</Label>
             <Money figure={forecast} className="block text-[26px] text-mint-400" />
           </div>
         </div>
@@ -135,7 +137,7 @@ function RevenueBody({
         {/* Year goal */}
         <div>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-[15px] text-cockpit-dim">Jahresziel</span>
+            <span className="text-[15px] text-cockpit-dim">{t('Jahresziel')}</span>
             <span className="font-mono text-[14px] text-cockpit-dim">
               <Money figure={panel.yearActual} className="text-cockpit-text" /> /{' '}
               <Money figure={panel.yearTarget} /> · {yearPct}%
@@ -152,11 +154,11 @@ function RevenueBody({
         {/* Kurz vor Abschluss */}
         <div>
           <div className="flex items-baseline gap-3">
-            <Label>Kurz vor Abschluss</Label>
+            <Label>{t('Kurz vor Abschluss')}</Label>
             <span className="text-[13px] text-cockpit-faint">
               {closingIsLive
-                ? 'Prozesse nach dem Finaltermin, ohne Vertrag'
-                : 'fließt in den Umsatz'}
+                ? t('Prozesse nach dem Finaltermin, ohne Vertrag')
+                : t('fließt in den Umsatz')}
             </span>
           </div>
 
@@ -171,7 +173,7 @@ function RevenueBody({
                     {deal.candidateId ? (
                       <a
                         href={`#kandidaten/${deal.candidateId}`}
-                        title={`${deal.candidateName ?? deal.candidateRef} — Kandidatenakte öffnen`}
+                        title={t('{name} — Kandidatenakte öffnen', { name: deal.candidateName ?? deal.candidateRef })}
                         className="underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
                       >
                         <span className="font-mono">{deal.candidateRef}</span>
@@ -185,7 +187,7 @@ function RevenueBody({
                     {deal.jobId ? (
                       <a
                         href={`#cockpit/${deal.jobId}`}
-                        title="Mandat im Cockpit öffnen"
+                        title={t('Mandat im Cockpit öffnen')}
                         className="font-mono underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
                       >
                         {deal.mandateRef}
@@ -211,7 +213,7 @@ function RevenueBody({
                   <Money figure={deal.fee} className="shrink-0 text-[17px] text-cockpit-text" />
                 ) : (
                   <span
-                    title="Kein Honorarmodell hinterlegt"
+                    title={t('Kein Honorarmodell hinterlegt')}
                     className="shrink-0 text-[17px] text-cockpit-faint"
                   >
                     —
@@ -237,7 +239,7 @@ function PlaceholderBody({ title, hint }: { title: string; hint?: string }) {
       <h3 className="text-[20px] font-semibold text-cockpit-dim">{title}</h3>
       <p className="max-w-sm text-[14px] text-cockpit-faint">{hint}</p>
       <span className="mt-2 rounded-md border border-cockpit-line px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-        noch keine Daten
+        {t('noch keine Daten')}
       </span>
     </div>
   )

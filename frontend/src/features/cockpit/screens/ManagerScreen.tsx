@@ -14,6 +14,10 @@
 // rather than a headcount: "how many people do I hold data on who have not been
 // told" is the question with a deadline attached.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useMemo, useState } from 'react'
 import {
   Building2,
@@ -36,14 +40,14 @@ import { FIELD } from '../ui/forms'
 
 const dateDe = (iso: string | null) =>
   iso
-    ? new Date(iso).toLocaleDateString('de-DE', {
+    ? new Date(iso).toLocaleDateString(locale(), {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
       })
     : '—'
 
-const de = (n: number) => n.toLocaleString('de-DE')
+const de = (n: number) => n.toLocaleString(locale())
 
 /**
  * Where a contact's data came from, in the recruiter's language.
@@ -54,9 +58,9 @@ const de = (n: number) => n.toLocaleString('de-DE')
 const SOURCE_LABEL: Record<string, { text: string; owes: boolean }> = {
   self_reported: { text: 'selbst genannt', owes: false },
   human_verified: { text: 'selbst erfasst', owes: false },
-  document_extraction: { text: 'aus Dokument', owes: false },
-  public_web: { text: 'öffentlich gefunden', owes: true },
-  third_party_source: { text: 'Dritte Quelle', owes: true },
+  document_extraction: { text: t('aus Dokument'), owes: false },
+  public_web: { text: t('öffentlich gefunden'), owes: true },
+  third_party_source: { text: t('Dritte Quelle'), owes: true },
 }
 
 /** One contact, expandable to their interaction history. */
@@ -121,13 +125,13 @@ function ManagerRow({
           {(manager.duplicate_count ?? 1) > 1 && (
             <span
               className="text-gold-400"
-              title="Dieselbe E-Mail-Adresse existiert mehrfach — in der Quelle doppelt angelegt"
+              title={t('Dieselbe E-Mail-Adresse existiert mehrfach — in der Quelle doppelt angelegt')}
             >
-              Dublette
+              {t('Dublette')}
             </span>
           )}
           {manager.last_contact_at && (
-            <span title="Letzter Kontakt laut Quelle">
+            <span title={t('Letzter Kontakt laut Quelle')}>
               {dateDe(manager.last_contact_at)}
             </span>
           )}
@@ -136,7 +140,7 @@ function ManagerRow({
           {manager.art14_outstanding ? (
             <span className="flex items-center gap-1 text-gold-400">
               <ShieldAlert className="h-3.5 w-3.5" />
-              Art. 14 offen
+              {t('Art. 14 offen')}
             </span>
           ) : (
             <span
@@ -222,21 +226,19 @@ export function ManagerScreen() {
           Manager
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
-          Die Ansprechpartner auf Kundenseite — die Person, zu der ein Mandat gehört.
-          Firmen stellen nicht ein, Menschen tun es. Diese Kontakte bleiben in diesem
-          Workspace und sind kein Teil des geteilten Markt-Korpus.
+          {t('Die Ansprechpartner auf Kundenseite — die Person, zu der ein Mandat gehört. Firmen stellen nicht ein, Menschen tun es. Diese Kontakte bleiben in diesem Workspace und sind kein Teil des geteilten Markt-Korpus.')}
         </p>
       </header>
 
       <section className="space-y-5">
         <SectionHeader
           index="01"
-          title="Kontakte"
+          title={t('Kontakte')}
           hint={
             managers.loading
-              ? 'lädt…'
+              ? t('lädt…')
               : term
-                ? `${de(rows.length)} von ${de(all.length)} · nach Relevanz`
+                ? t('{shown} von {total} · nach Relevanz', { shown: de(rows.length), total: de(all.length) })
                 : `${de(all.length)} Kontakte${
                     truncated ? ` von ${de(poolTotal)} geladen` : ''
                   }`
@@ -249,7 +251,7 @@ export function ManagerScreen() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cockpit-faint" />
               <input
                 className={cn(FIELD, 'pl-9')}
-                placeholder="Name, Rolle, Firma, Ort oder PLZ — Tippfehler erlaubt"
+                placeholder={t('Name, Rolle, Firma, Ort oder PLZ — Tippfehler erlaubt')}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -265,7 +267,7 @@ export function ManagerScreen() {
             {owing === 0 && !art14.loading && (
               <span className="flex items-center gap-1.5 text-[13px] text-cockpit-faint">
                 <Check className="h-4 w-4 text-mint-400" />
-                keine Art.-14-Information offen
+                {t('keine Art.-14-Information offen')}
               </span>
             )}
           </div>
@@ -274,7 +276,7 @@ export function ManagerScreen() {
         {managers.error && (
           <Panel className="p-5">
             <p className="text-[14px] text-coral-400">
-              Kontakte konnten nicht geladen werden.
+              {t('Kontakte konnten nicht geladen werden.')}
             </p>
           </Panel>
         )}
@@ -290,11 +292,11 @@ export function ManagerScreen() {
                     onClick={() => setQuery('')}
                     className="ml-2 font-mono text-[12px] text-mint-300 transition-colors hover:text-cockpit-text"
                   >
-                    Suche zurücksetzen
+                    {t('Suche zurücksetzen')}
                   </button>
                 </>
               ) : (
-                'Noch keine Ansprechpartner. Übernehmen Sie ein Unternehmen aus dem Markt oder importieren Sie Ihr bestehendes System.'
+                t('Noch keine Ansprechpartner. Übernehmen Sie ein Unternehmen aus dem Markt oder importieren Sie Ihr bestehendes System.')
               )}
             </p>
           </Panel>
@@ -329,7 +331,7 @@ export function ManagerScreen() {
         {rows.length === 200 && (
           <p className="flex items-center gap-1.5 font-mono text-[12px] text-cockpit-faint">
             <UserRound className="h-3.5 w-3.5" />
-            Es werden die ersten 200 Kontakte gezeigt — grenzen Sie die Suche ein.
+            {t('Es werden die ersten 200 Kontakte gezeigt — grenzen Sie die Suche ein.')}
           </p>
         )}
       </section>

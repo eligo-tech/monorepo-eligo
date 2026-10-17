@@ -9,6 +9,8 @@
 // on this mandate marked rather than hidden — "who is already on this?" is
 // the question you ask just before "who else?".
 
+import { t } from '@/i18n'
+
 import { useMemo, useState } from 'react'
 import { Check, Search, UserPlus, X } from 'lucide-react'
 
@@ -90,12 +92,12 @@ export function AssignCandidate({
       <div className="absolute right-0 top-0 z-50 w-[26rem] rounded-xl border border-cockpit-line bg-cockpit-surface p-3 shadow-panel">
         <div className="mb-2 flex items-center gap-2">
           <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-            Kandidat zuordnen
+            {t('Kandidat zuordnen')}
           </span>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            aria-label="Schließen"
+            aria-label={t('Schließen')}
             className="ml-auto text-cockpit-faint transition-colors hover:text-cockpit-text"
           >
             <X className="h-4 w-4" />
@@ -108,14 +110,14 @@ export function AssignCandidate({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Name, Titel, Skill oder Ort — Tippfehler erlaubt"
+            placeholder={t('Name, Titel, Skill oder Ort — Tippfehler erlaubt')}
             className="w-full bg-transparent text-[13px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
           />
         </label>
 
         <div className="max-h-72 space-y-0.5 overflow-y-auto">
           {pool.loading && (
-            <p className="px-2 py-3 font-mono text-[12px] text-cockpit-faint">lädt…</p>
+            <p className="px-2 py-3 font-mono text-[12px] text-cockpit-faint">{t('lädt…')}</p>
           )}
           {!pool.loading && rows.length === 0 && (
             <p className="px-2 py-3 text-[13px] text-cockpit-faint">
@@ -150,7 +152,7 @@ export function AssignCandidate({
                   </span>
                 ) : (
                   <span className="shrink-0 font-mono text-[11px] text-cockpit-faint">
-                    {busy === c.id ? 'ordnet zu…' : '+'}
+                    {busy === c.id ? t('ordnet zu…') : '+'}
                   </span>
                 )}
               </button>

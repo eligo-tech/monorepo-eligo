@@ -27,6 +27,8 @@
 // a PATCH: those columns have other sources (CV extraction, the ATS import)
 // and blanking one here because this form did not ask would lose it.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { ClipboardPaste, Save, X } from 'lucide-react'
 
@@ -178,32 +180,32 @@ export function AssessmentEditor({
         apply(value)
         filled.push(label)
       }
-      set(next.fit_score, (v) => setScore(String(v)), 'Passung')
-      set(next.verdict, setVerdict, 'Kurzfazit')
+      set(next.fit_score, (v) => setScore(String(v)), t('Passung'))
+      set(next.verdict, setVerdict, t('Kurzfazit'))
       set(next.strengths, (v) => setStrengths(v.join('\n')), 'Stärken')
       set(next.risks, (v) => setRisks(v.join('\n')), 'Risiken')
-      set(next.client_summary, setClientSummary, 'Kundentext')
-      set(next.technologies, (v) => setTechnologies(v.join(', ')), 'Technologien')
-      set(next.basis, setBasis, 'Grundlage')
-      set(prof.profile_summary, setSummary, 'Profil')
-      set(prof.focus_areas, (v) => setFocusAreas(v.join(', ')), 'Schwerpunkte')
-      set(prof.technical_profile, setTechnical, 'Know-how')
-      set(prof.notice_period, setNoticePeriod, 'Kündigungsfrist')
-      set(prof.salary_minimum, (v) => setSalaryMin(String(v)), 'Gehalt')
-      set(prof.salary_expectation, (v) => setSalaryWish(String(v)), 'Wunschgehalt')
-      set(prof.current_salary, (v) => setSalaryNow(String(v)), 'aktuelles Gehalt')
-      set(prof.motivation, setMotivation, 'Wechselmotivation')
+      set(next.client_summary, setClientSummary, t('Kundentext'))
+      set(next.technologies, (v) => setTechnologies(v.join(', ')), t('Technologien'))
+      set(next.basis, setBasis, t('Grundlage'))
+      set(prof.profile_summary, setSummary, t('Profil'))
+      set(prof.focus_areas, (v) => setFocusAreas(v.join(', ')), t('Schwerpunkte'))
+      set(prof.technical_profile, setTechnical, t('Know-how'))
+      set(prof.notice_period, setNoticePeriod, t('Kündigungsfrist'))
+      set(prof.salary_minimum, (v) => setSalaryMin(String(v)), t('Gehalt'))
+      set(prof.salary_expectation, (v) => setSalaryWish(String(v)), t('Wunschgehalt'))
+      set(prof.current_salary, (v) => setSalaryNow(String(v)), t('aktuelles Gehalt'))
+      set(prof.motivation, setMotivation, t('Wechselmotivation'))
       set(prof.education, (v) => setEducation(v.join('\n')), 'Abschluss')
-      set(prof.interview_availability, setInterviews, 'Interview-Verfügbarkeit')
+      set(prof.interview_availability, setInterviews, t('Interview-Verfügbarkeit'))
       set(prof.other_notes, setOtherNotes, 'weitere Punkte')
       setNote(
         filled.length > 0
-          ? `Übernommen: ${filled.join(', ')} — bitte prüfen und speichern.`
-          : 'Nichts erkannt — das Dokument folgt der Vorlage A/B/C/D nicht. Felder bleiben unverändert.',
+          ? t('Übernommen: {fields} — bitte prüfen und speichern.', { fields: filled.join(', ') })
+          : t('Nichts erkannt — das Dokument folgt der Vorlage A/B/C/D nicht. Felder bleiben unverändert.'),
       )
       if (filled.length > 0) setPasteOpen(false)
     } catch {
-      setError('Konnte nicht gelesen werden — bitte die Felder von Hand füllen.')
+      setError(t('Konnte nicht gelesen werden — bitte die Felder von Hand füllen.'))
     } finally {
       setBusy(false)
     }
@@ -244,7 +246,7 @@ export function AssessmentEditor({
   async function save() {
     const value = score.trim() === '' ? null : Number(score)
     if (value !== null && (Number.isNaN(value) || value < 0 || value > 10)) {
-      return setError('Die Passung ist eine Zahl von 0 bis 10.')
+      return setError(t('Die Passung ist eine Zahl von 0 bis 10.'))
     }
     setBusy(true)
     setError(null)
@@ -265,7 +267,7 @@ export function AssessmentEditor({
       onSaved?.()
       onClose()
     } catch {
-      setError('Nicht gespeichert — bitte erneut versuchen.')
+      setError(t('Nicht gespeichert — bitte erneut versuchen.'))
       setBusy(false)
     }
   }
@@ -282,27 +284,27 @@ export function AssessmentEditor({
           className="ml-auto flex items-center gap-1.5 font-mono text-[12px] text-cockpit-faint transition-colors hover:text-mint-300"
         >
           <ClipboardPaste className="h-3.5 w-3.5" />
-          {pasteOpen ? 'Einfügen schließen' : 'Dokument einfügen'}
+          {pasteOpen ? t('Einfügen schließen') : t('Dokument einfügen')}
         </button>
       </div>
 
       {pasteOpen && (
         <div className="space-y-2 rounded-xl border border-dashed border-cockpit-line p-4">
           <Field
-            label="Kandidatenauswertung einfügen"
-            hint="Abschnitte A/B/C/D — füllt die Felder, speichert nichts"
+            label={t('Kandidatenauswertung einfügen')}
+            hint={t('Abschnitte A/B/C/D — füllt die Felder, speichert nichts')}
           >
             <textarea
               value={paste}
               onChange={(e) => setPaste(e.target.value)}
               rows={6}
-              placeholder={'A. Passungsbewertung zur Position\nGesamtbewertung: 8 / 10\n…'}
+              placeholder={t('A. Passungsbewertung zur Position\nGesamtbewertung: 8 / 10\n…')}
               className={`${BOX} font-mono text-[12.5px]`}
             />
           </Field>
           <Button onClick={() => void readDocument()} disabled={busy || !paste.trim()}>
             <ClipboardPaste className="h-4 w-4" />
-            {busy ? 'Liest…' : 'Felder übernehmen'}
+            {busy ? t('Liest…') : t('Felder übernehmen')}
           </Button>
         </div>
       )}
@@ -311,13 +313,13 @@ export function AssessmentEditor({
 
       <Half
         tag="A · C · D"
-        title="Passung zu diesem Mandat"
-        note={`${card.mandateRef} · gilt nur für dieses Mandat`}
+        title={t('Passung zu diesem Mandat')}
+        note={t('{ref} · gilt nur für dieses Mandat', { ref: card.mandateRef })}
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-4">
             <div className="grid grid-cols-[6rem_1fr] gap-3">
-              <Field label="Passung" hint="0–10">
+              <Field label={t('Passung')} hint="0–10">
                 <input
                   value={score}
                   onChange={(e) => setScore(e.target.value)}
@@ -326,27 +328,27 @@ export function AssessmentEditor({
                   className={`${BOX} font-mono`}
                 />
               </Field>
-              <Field label="Grundlage" hint="worauf beruht das Urteil">
+              <Field label={t('Grundlage')} hint={t('worauf beruht das Urteil')}>
                 <input
                   value={basis}
                   onChange={(e) => setBasis(e.target.value)}
-                  placeholder="CV (Kurzversion) + Gesprächstranskript 18.09.2026"
+                  placeholder={t('CV (Kurzversion) + Gesprächstranskript 18.09.2026')}
                   className={BOX}
                 />
               </Field>
             </div>
 
-            <Field label="Kurzfazit" hint="erster Absatz ist das Fazit, weitere sind die Begründung">
+            <Field label={t('Kurzfazit')} hint={t('erster Absatz ist das Fazit, weitere sind die Begründung')}>
               <textarea
                 value={verdict}
                 onChange={(e) => setVerdict(e.target.value)}
                 rows={5}
-                placeholder="Sehr passgenauer Senior-Kandidat — deckt das Muss-Profil vollständig ab …"
+                placeholder={t('Sehr passgenauer Senior-Kandidat — deckt das Muss-Profil vollständig ab …')}
                 className={BOX}
               />
             </Field>
 
-            <Field label="Relevante Technologien" hint="mit Komma getrennt">
+            <Field label={t('Relevante Technologien')} hint={t('mit Komma getrennt')}>
               <input
                 value={technologies}
                 onChange={(e) => setTechnologies(e.target.value)}
@@ -357,33 +359,33 @@ export function AssessmentEditor({
           </div>
 
           <div className="space-y-4">
-            <Field label="Stärken" hint="eine pro Zeile">
+            <Field label={t('Stärken')} hint={t('eine pro Zeile')}>
               <textarea
                 value={strengths}
                 onChange={(e) => setStrengths(e.target.value)}
                 rows={5}
-                placeholder={'Deckt das Muss vollständig ab\nArchitektur-Verantwortung real gelebt'}
+                placeholder={t('Deckt das Muss vollständig ab\nArchitektur-Verantwortung real gelebt')}
                 className={BOX}
               />
             </Field>
-            <Field label="Lücken / Risiken" hint="eine pro Zeile">
+            <Field label={t('Lücken / Risiken')} hint={t('eine pro Zeile')}>
               <textarea
                 value={risks}
                 onChange={(e) => setRisks(e.target.value)}
                 rows={5}
-                placeholder={'Gehalt am oberen Rand\nKündigungsfrist 3 Monate'}
+                placeholder={t('Gehalt am oberen Rand\nKündigungsfrist 3 Monate')}
                 className={BOX}
               />
             </Field>
           </div>
         </div>
 
-        <Field label="Text für den Kunden" hint="geht so in die Vorstellung">
+        <Field label={t('Text für den Kunden')} hint={t('geht so in die Vorstellung')}>
           <textarea
             value={clientSummary}
             onChange={(e) => setClientSummary(e.target.value)}
             rows={4}
-            placeholder="Der Kandidat ist ein Senior Software Entwickler und Architekt mit …"
+            placeholder={t('Der Kandidat ist ein Senior Software Entwickler und Architekt mit …')}
             className={BOX}
           />
         </Field>
@@ -391,21 +393,21 @@ export function AssessmentEditor({
 
       <Half
         tag="B"
-        title="Gesprächszusammenfassung"
-        note="gilt für den Kandidaten — auf jedem Mandat dieselbe"
+        title={t('Gesprächszusammenfassung')}
+        note={t('gilt für den Kandidaten — auf jedem Mandat dieselbe')}
       >
-        <Field label="Zusammenfassung des Profils">
+        <Field label={t('Zusammenfassung des Profils')}>
           <textarea
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             rows={4}
-            placeholder="Senior Software Entwickler & Architekt mit über 20 Jahren Erfahrung …"
+            placeholder={t('Senior Software Entwickler & Architekt mit über 20 Jahren Erfahrung …')}
             className={BOX}
           />
         </Field>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Schwerpunkte" hint="mit Komma getrennt">
+          <Field label={t('Schwerpunkte')} hint={t('mit Komma getrennt')}>
             <input
               value={focusAreas}
               onChange={(e) => setFocusAreas(e.target.value)}
@@ -413,31 +415,31 @@ export function AssessmentEditor({
               className={BOX}
             />
           </Field>
-          <Field label="Kündigungsfrist / Verfügbarkeit">
+          <Field label={t('Kündigungsfrist / Verfügbarkeit')}>
             <input
               value={noticePeriod}
               onChange={(e) => setNoticePeriod(e.target.value)}
-              placeholder="3 Monate zum Monatsende → Start ~Jahresanfang"
+              placeholder={t('3 Monate zum Monatsende → Start ~Jahresanfang')}
               className={BOX}
             />
           </Field>
         </div>
 
         <Field
-          label="Technisches Know-how"
-          hint="Fließtext; die Muss-Kriterien werden aus den Skills gelesen, nicht hier"
+          label={t('Technisches Know-how')}
+          hint={t('Fließtext; die Muss-Kriterien werden aus den Skills gelesen, nicht hier')}
         >
           <textarea
             value={technical}
             onChange={(e) => setTechnical(e.target.value)}
             rows={3}
-            placeholder="Java (Experte), Jakarta EE, WildFly, JBoss; Hibernate, JPA …"
+            placeholder={t('Java (Experte), Jakarta EE, WildFly, JBoss; Hibernate, JPA …')}
             className={BOX}
           />
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Minimum" hint="€">
+          <Field label={t('Minimum')} hint="€">
             <input
               value={salaryMin}
               onChange={(e) => setSalaryMin(e.target.value)}
@@ -446,7 +448,7 @@ export function AssessmentEditor({
               className={`${BOX} font-mono`}
             />
           </Field>
-          <Field label="Wunsch" hint="€">
+          <Field label={t('Wunsch')} hint="€">
             <input
               value={salaryWish}
               onChange={(e) => setSalaryWish(e.target.value)}
@@ -455,7 +457,7 @@ export function AssessmentEditor({
               className={`${BOX} font-mono`}
             />
           </Field>
-          <Field label="Aktuell" hint="€">
+          <Field label={t('Aktuell')} hint="€">
             <input
               value={salaryNow}
               onChange={(e) => setSalaryNow(e.target.value)}
@@ -466,62 +468,62 @@ export function AssessmentEditor({
           </Field>
         </div>
 
-        <Field label="Wechselmotivation">
+        <Field label={t('Wechselmotivation')}>
           <textarea
             value={motivation}
             onChange={(e) => setMotivation(e.target.value)}
             rows={3}
-            placeholder="Sucht kurze Wege, Gestaltungsspielraum …"
+            placeholder={t('Sucht kurze Wege, Gestaltungsspielraum …')}
             className={BOX}
           />
         </Field>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Höchster Abschluss" hint="einer pro Zeile">
+          <Field label={t('Höchster Abschluss')} hint={t('einer pro Zeile')}>
             <textarea
               value={education}
               onChange={(e) => setEducation(e.target.value)}
               rows={2}
-              placeholder="Fachinformatiker Anwendungsentwicklung (IHK)"
+              placeholder={t('Fachinformatiker Anwendungsentwicklung (IHK)')}
               className={BOX}
             />
           </Field>
-          <Field label="Verfügbarkeit für Interviews">
+          <Field label={t('Verfügbarkeit für Interviews')}>
             <textarea
               value={interviews}
               onChange={(e) => setInterviews(e.target.value)}
               rows={2}
-              placeholder="Mittwoch/Donnerstag ab ca. 11–12 Uhr"
+              placeholder={t('Mittwoch/Donnerstag ab ca. 11–12 Uhr')}
               className={BOX}
             />
           </Field>
         </div>
 
-        <Field label="Weitere relevante Punkte" hint="eine pro Zeile, freier Text">
+        <Field label={t('Weitere relevante Punkte')} hint={t('eine pro Zeile, freier Text')}>
           <textarea
             value={otherNotes}
             onChange={(e) => setOtherNotes(e.target.value)}
             rows={5}
             placeholder={
-              'Aktuelle Rolle / Arbeitgeber: …\nRelevante Projekterfahrung: …\nSprachkenntnisse: …'
+              t('Aktuelle Rolle / Arbeitgeber: …\nRelevante Projekterfahrung: …\nSprachkenntnisse: …')
             }
             className={BOX}
           />
         </Field>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Andere Prozesse">
+          <Field label={t('Andere Prozesse')}>
             <textarea
               value={otherProcesses}
               onChange={(e) => setOtherProcesses(e.target.value)}
               rows={2}
-              placeholder="Führt parallel mehrere Prozesse / Freelance-Optionen"
+              placeholder={t('Führt parallel mehrere Prozesse / Freelance-Optionen')}
               className={BOX}
             />
           </Field>
           {/* Names, not prose: three candidates naming the same company is a
               lead, and a sentence cannot be counted across the pool. */}
-          <Field label="… bei welchen Firmen" hint="mit Komma getrennt">
+          <Field label={t('… bei welchen Firmen')} hint={t('mit Komma getrennt')}>
             <input
               value={otherCompanies}
               onChange={(e) => setOtherCompanies(e.target.value)}
@@ -536,7 +538,7 @@ export function AssessmentEditor({
 
       <div className="flex items-center gap-2">
         <Button tone="primary" onClick={() => void save()} disabled={busy}>
-          <Save className="h-4 w-4" /> {busy ? 'Speichert…' : 'Auswertung speichern'}
+          <Save className="h-4 w-4" /> {busy ? t('Speichert…') : t('Auswertung speichern')}
         </Button>
         <Button onClick={onClose}>
           <X className="h-4 w-4" /> Abbrechen

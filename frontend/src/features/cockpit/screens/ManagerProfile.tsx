@@ -16,6 +16,10 @@
 //     system this was imported from and nothing here, so it sits in the record
 //     panel where a cross-reference belongs, not beside the person's name.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
@@ -33,7 +37,7 @@ import { Chip } from '../ui/primitives'
 
 const dateDe = (iso: string | null | undefined) =>
   iso
-    ? new Date(iso).toLocaleDateString('de-DE', {
+    ? new Date(iso).toLocaleDateString(locale(), {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -41,7 +45,7 @@ const dateDe = (iso: string | null | undefined) =>
     : '—'
 
 const timeDe = (iso: string) =>
-  new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  new Date(iso).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
 
 function daysSince(iso: string | null | undefined): number | null {
   if (!iso) return null
@@ -218,12 +222,12 @@ export function ManagerProfile({
   const tabs = useMemo(
     () =>
       [
-        { key: 'notes' as const, label: 'Notizen', count: noteCount },
-        { key: 'jobs' as const, label: 'Mandate', count: manager.job_count ?? 0 },
-        { key: 'meetings' as const, label: 'Termine', count: 0 },
+        { key: 'notes' as const, label: t('Notizen'), count: noteCount },
+        { key: 'jobs' as const, label: t('Mandate'), count: manager.job_count ?? 0 },
+        { key: 'meetings' as const, label: t('Termine'), count: 0 },
         { key: 'deals' as const, label: 'Deals', count: 0 },
-        { key: 'files' as const, label: 'Anhänge', count: 0 },
-        { key: 'history' as const, label: 'Verlauf', count: 0 },
+        { key: 'files' as const, label: t('Anhänge'), count: 0 },
+        { key: 'history' as const, label: t('Verlauf'), count: 0 },
       ],
     [noteCount, manager.job_count],
   )
@@ -251,7 +255,7 @@ export function ManagerProfile({
               {manager.art14_outstanding && (
                 <>
                   <span>/</span>
-                  <span className="text-gold-400">Art. 14 offen</span>
+                  <span className="text-gold-400">{t('Art. 14 offen')}</span>
                 </>
               )}
               {(manager.duplicate_count ?? 1) > 1 && (
@@ -259,7 +263,7 @@ export function ManagerProfile({
                   <span>/</span>
                   <span
                     className="text-gold-400"
-                    title="Dieselbe E-Mail existiert mehrfach — in der Quelle doppelt angelegt"
+                    title={t('Dieselbe E-Mail existiert mehrfach — in der Quelle doppelt angelegt')}
                   >
                     {manager.duplicate_count} Datensätze
                   </span>
@@ -274,7 +278,7 @@ export function ManagerProfile({
               {manager.role_title && <span>{manager.role_title}</span>}
               {companyName && companyName !== '—' && (
                 <>
-                  <span className="text-cockpit-faint">bei</span>
+                  <span className="text-cockpit-faint">{t('bei')}</span>
                   <span className="text-mint-400">{companyName}</span>
                 </>
               )}
@@ -289,7 +293,7 @@ export function ManagerProfile({
                 className="flex items-center gap-1.5 rounded-lg border border-cockpit-line px-3 py-2 font-mono text-[12px] uppercase tracking-wide text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
               >
                 <Mail className="h-3.5 w-3.5" />
-                E-Mail
+                {t('E-Mail')}
               </a>
             )}
             {manager.phone && (
@@ -298,7 +302,7 @@ export function ManagerProfile({
                 className="flex items-center gap-1.5 rounded-lg border border-cockpit-line px-3 py-2 font-mono text-[12px] uppercase tracking-wide text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
               >
                 <Phone className="h-3.5 w-3.5" />
-                Anrufen
+                {t('Anrufen')}
               </a>
             )}
             {manager.art14_outstanding && (
@@ -318,7 +322,7 @@ export function ManagerProfile({
                 className="flex items-center gap-1.5 rounded-lg bg-gold-400/15 px-3 py-2 font-mono text-[12px] uppercase tracking-wide text-gold-400 transition-colors hover:bg-gold-400/25"
               >
                 <ShieldAlert className="h-3.5 w-3.5" />
-                {busy ? 'Speichert…' : 'Art. 14 erledigt'}
+                {busy ? t('Speichert…') : 'Art. 14 erledigt'}
               </button>
             )}
           </div>
@@ -327,26 +331,26 @@ export function ManagerProfile({
 
       <div className="flex border-b border-cockpit-line bg-cockpit-inset">
         <Stat
-          label="Letzter Kontakt"
+          label={t('Letzter Kontakt')}
           value={dateDe(manager.last_contact_at)}
           detail={
             since === null
-              ? 'kein Kontakt erfasst'
-              : `vor ${since} Tagen${overdue ? ' — überfällig' : ''}`
+              ? t('kein Kontakt erfasst')
+              : t('vor {n} Tagen', { n: since }) + (overdue ? t(' — überfällig') : '')
           }
           tone={overdue ? 'coral' : undefined}
         />
         <Stat
-          label="Mandate"
+          label={t('Mandate')}
           value={String(manager.open_job_count ?? 0)}
           detail={
             (manager.job_count ?? 0) > (manager.open_job_count ?? 0)
               ? `${manager.job_count} insgesamt`
-              : 'offen'
+              : t('offen')
           }
         />
-        <Stat label="Sucht" value={manager.looks_for || '—'} detail={manager.department} />
-        <Stat label="Notizen" value={String(noteCount)} />
+        <Stat label={t('Sucht')} value={manager.looks_for || '—'} detail={manager.department} />
+        <Stat label={t('Notizen')} value={String(noteCount)} />
       </div>
 
       {/* --- tabs: one place that says what exists on this record ---------- */}
@@ -375,13 +379,12 @@ export function ManagerProfile({
             <>
               {history === null && (
                 <p className="px-6 py-6 font-mono text-[13px] text-cockpit-faint">
-                  lädt…
+                  {t('lädt…')}
                 </p>
               )}
               {history?.length === 0 && (
                 <p className="px-6 py-6 text-[14px] text-cockpit-dim">
-                  Noch kein Verlauf. Anrufe, Mails und Termine erscheinen hier,
-                  sobald sie erfasst werden.
+                  {t('Noch kein Verlauf. Anrufe, Mails und Termine erscheinen hier, sobald sie erfasst werden.')}
                 </p>
               )}
               {history && history.length > 0 && (
@@ -405,15 +408,15 @@ export function ManagerProfile({
           {tab !== 'notes' && (
             <p className="px-6 py-6 text-[14px] leading-relaxed text-cockpit-dim">
               {tab === 'jobs'
-                ? 'Mandate dieser Person erscheinen hier, sobald sie einem Job zugeordnet sind.'
-                : 'Für diesen Bereich liegen noch keine Daten vor — er wird beim Import noch nicht befüllt.'}
+                ? t('Mandate dieser Person erscheinen hier, sobald sie einem Job zugeordnet sind.')
+                : t('Für diesen Bereich liegen noch keine Daten vor — er wird beim Import noch nicht befüllt.')}
             </p>
           )}
         </div>
 
         <aside className="w-full shrink-0 lg:w-[27rem]">
-          <RailSection title="Erreichbar">
-            <Line label="Mail">
+          <RailSection title={t('Erreichbar')}>
+            <Line label={t('Mail')}>
               {manager.email && (
                 <a
                   href={`mailto:${manager.email}`}
@@ -423,14 +426,14 @@ export function ManagerProfile({
                 </a>
               )}
             </Line>
-            <Line label="Telefon">
+            <Line label={t('Telefon')}>
               {manager.phone && (
                 <a href={`tel:${manager.phone}`} className="text-mint-400 hover:underline">
                   {manager.phone}
                 </a>
               )}
             </Line>
-            <Line label="Adresse">
+            <Line label={t('Adresse')}>
               {address ? (
                 <span className="flex gap-1.5">
                   <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cockpit-faint" />
@@ -438,7 +441,7 @@ export function ManagerProfile({
                 </span>
               ) : null}
             </Line>
-            <Line label="Profile">
+            <Line label={t('Profile')}>
               {socials.length ? (
                 <span className="flex flex-wrap gap-x-3 gap-y-1">
                   {socials.map((s) => (
@@ -459,7 +462,7 @@ export function ManagerProfile({
           </RailSection>
 
           {(manager.skills?.length || manager.tags?.length) ? (
-            <RailSection title="Profil">
+            <RailSection title={t('Profil')}>
               {manager.skills?.length ? (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {manager.skills.map((s) => (
@@ -480,7 +483,7 @@ export function ManagerProfile({
           ) : null}
 
           {companyName && companyName !== '—' && (
-            <RailSection title="Firma">
+            <RailSection title={t('Firma')}>
               <p className="flex items-center gap-1.5 text-[17px] font-semibold text-cockpit-text">
                 <Building2 className="h-4 w-4 shrink-0 text-cockpit-faint" />
                 {companyName}
@@ -488,21 +491,21 @@ export function ManagerProfile({
             </RailSection>
           )}
 
-          <RailSection title="Datensatz">
-            <Line label="Angelegt">{dateDe(manager.created_at)}</Line>
+          <RailSection title={t('Datensatz')}>
+            <Line label={t('Angelegt')}>{dateDe(manager.created_at)}</Line>
             <Line label="Art. 14">
               {manager.art14_outstanding ? (
-                <span className="text-gold-400">offen</span>
+                <span className="text-gold-400">{t('offen')}</span>
               ) : manager.art14_notified_at ? (
-                `informiert am ${dateDe(manager.art14_notified_at)}`
+                t('informiert am {when}', { when: dateDe(manager.art14_notified_at) })
               ) : (
-                <span className="text-cockpit-faint">nicht erforderlich</span>
+                <span className="text-cockpit-faint">{t('nicht erforderlich')}</span>
               )}
             </Line>
             {/* The id of the system this was imported FROM. Useful when someone
                 is looking at both, meaningless on its own — so it lives here
                 rather than next to the person's name. */}
-            <Line label="Quelle">
+            <Line label={t('Quelle')}>
               {manager.external_code ? (
                 <span className="font-mono text-[12px] text-cockpit-faint">
                   aiFind {manager.external_code}

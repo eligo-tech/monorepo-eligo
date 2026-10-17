@@ -5,6 +5,10 @@
 // thing as a market posting in the Markt corpus — that distinction is what
 // keeps scraped market noise out of the matcher (ARCHITECTURE.md, §1).
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useMemo, useState } from 'react'
 import {
   ArrowUpRight,
@@ -35,7 +39,7 @@ const COLUMNS = ['', 'Titel', 'Firma', 'Ort', 'Gehaltsband', 'Status', '']
 /** "85.000–95.000 €", or the honest gap. A mandate without a ceiling applies
  *  no salary filter at all, which is worth seeing at a glance. */
 function band(job: JobDTO): string | null {
-  const money = (v: number) => v.toLocaleString('de-DE')
+  const money = (v: number) => v.toLocaleString(locale())
   const symbol = (job.salary_currency || 'EUR') === 'EUR' ? '€' : job.salary_currency
   if (job.salary_min != null && job.salary_max != null) {
     return `${money(job.salary_min)}–${money(job.salary_max)} ${symbol}`
@@ -51,11 +55,11 @@ const STATUS_TONE: Record<string, 'mint' | 'gold' | undefined> = {
 }
 
 const STATUS_FILTERS = [
-  { value: '', label: 'Alle' },
-  { value: 'open', label: 'Offen' },
-  { value: 'on_hold', label: 'Pausiert' },
-  { value: 'filled', label: 'Besetzt' },
-  { value: 'cancelled', label: 'Abgesagt' },
+  { value: '', label: t('Alle') },
+  { value: 'open', label: t('Offen') },
+  { value: 'on_hold', label: t('Pausiert') },
+  { value: 'filled', label: t('Besetzt') },
+  { value: 'cancelled', label: t('Abgesagt') },
 ]
 
 const mandateRef = (id: string) => `#A-${id.slice(0, 4)}`
@@ -147,12 +151,10 @@ export function JobsScreen({
     <div className="space-y-8">
       <header id="section-jobs" className="scroll-mt-24">
         <h1 className="text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
-          Jobs
+          {t('Jobs')}
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
-          Die eigenen Mandate — Rollen, die ein Kunde besetzt haben möchte. Nicht zu
-          verwechseln mit den Marktanzeigen unter „Markt“: nur ein Mandat steuert die
-          harten Filter im Matching.
+          {t('Die eigenen Mandate — Rollen, die ein Kunde besetzt haben möchte. Nicht zu verwechseln mit den Marktanzeigen unter „Markt“: nur ein Mandat steuert die harten Filter im Matching.')}
         </p>
       </header>
 
@@ -161,11 +163,11 @@ export function JobsScreen({
           <SectionHeader
             id="section-mandate"
             index="01"
-            title="Mandate"
-            hint={jobs.error ? 'offline' : 'live aus dem Datensatz'}
+            title={t('Mandate')}
+            hint={jobs.error ? 'offline' : t('live aus dem Datensatz')}
           />
           <Button tone="primary" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" /> Neues Mandat
+            <Plus className="h-4 w-4" /> {t('Neues Mandat')}
           </Button>
         </div>
 
@@ -175,14 +177,14 @@ export function JobsScreen({
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Mandat, Firma, Ort oder #A-Nummer — Tippfehler erlaubt"
+              placeholder={t('Mandat, Firma, Ort oder #A-Nummer — Tippfehler erlaubt')}
               className="w-full bg-transparent py-2 text-[14px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
             />
             {filter && (
               <button
                 type="button"
                 onClick={() => setFilter('')}
-                aria-label="Suche leeren"
+                aria-label={t('Suche leeren')}
                 className="text-cockpit-faint transition-colors hover:text-cockpit-text"
               >
                 <X className="h-4 w-4" />
@@ -194,7 +196,7 @@ export function JobsScreen({
             type="button"
             onClick={() => setOnlyUnfiltered((v) => !v)}
             aria-pressed={onlyUnfiltered}
-            title="Mandate ohne Muss-Kriterien — das Matching filtert bei ihnen nicht, es sortiert nur"
+            title={t('Mandate ohne Muss-Kriterien — das Matching filtert bei ihnen nicht, es sortiert nur')}
             className={cn(
               'rounded-lg border px-2.5 py-1.5 font-mono text-[12px] transition-colors',
               onlyUnfiltered
@@ -202,7 +204,7 @@ export function JobsScreen({
                 : 'border-cockpit-line text-cockpit-faint hover:text-cockpit-dim',
             )}
           >
-            ohne Muss-Kriterien {withoutCriteria}
+            {t('ohne Muss-Kriterien')} {withoutCriteria}
           </button>
 
           <div className="flex flex-wrap gap-1.5">
@@ -228,12 +230,12 @@ export function JobsScreen({
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
           <span>
             <span className="text-cockpit-text">{rows.length}</span>
-            {rows.length === all.length ? ' Mandate' : ` von ${all.length} Mandaten`}
+            {rows.length === all.length ? t(' Mandate') : t(' von {n} Mandaten', { n: all.length })}
           </span>
           <span>
-            <span className="text-cockpit-text">{open}</span> offen
+            <span className="text-cockpit-text">{open}</span> {t('offen')}
           </span>
-          {term && rows.length > 1 && <span>nach Relevanz sortiert</span>}
+          {term && rows.length > 1 && <span>{t('nach Relevanz sortiert')}</span>}
           {query && (
             <span className="flex items-center gap-1.5 rounded-md border border-gold-600/45 px-2 py-0.5 text-gold-300">
               Suche oben: „{query}“
@@ -241,7 +243,7 @@ export function JobsScreen({
                 <button
                   type="button"
                   onClick={onClearQuery}
-                  aria-label="Suche oben leeren"
+                  aria-label={t('Suche oben leeren')}
                   className="transition-colors hover:text-cockpit-text"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -252,13 +254,13 @@ export function JobsScreen({
         </div>
 
         {jobs.loading && (
-          <p className="font-mono text-[13px] text-cockpit-faint">lädt…</p>
+          <p className="font-mono text-[13px] text-cockpit-faint">{t('lädt…')}</p>
         )}
 
         {jobs.error && (
           <Panel className="p-5">
             <p className="text-[14px] text-coral-400">
-              Mandate konnten nicht geladen werden — ist die Sitzung noch gültig?
+              {t('Mandate konnten nicht geladen werden — ist die Sitzung noch gültig?')}
             </p>
           </Panel>
         )}
@@ -267,14 +269,14 @@ export function JobsScreen({
           <Panel className="p-6">
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-[14px] text-cockpit-dim">
-                Kein Mandat passt zu dieser Suche.
+                {t('Kein Mandat passt zu dieser Suche.')}
               </p>
               <button
                 type="button"
                 onClick={reset}
                 className="font-mono text-[12px] text-mint-300 transition-colors hover:text-cockpit-text"
               >
-                Filter zurücksetzen
+                {t('Filter zurücksetzen')}
               </button>
             </div>
           </Panel>
@@ -287,7 +289,7 @@ export function JobsScreen({
                 <Briefcase className="h-5 w-5" />
               </span>
               <p className="text-[14px] leading-relaxed text-cockpit-dim">
-                Noch keine Mandate erfasst.
+                {t('Noch keine Mandate erfasst.')}
               </p>
             </div>
           </Panel>
@@ -316,7 +318,7 @@ export function JobsScreen({
                     )
                   }
                 />
-                {selected.size > 0 ? `${selected.size} ausgewählt` : 'Alle wählen'}
+                {selected.size > 0 ? t('{n} ausgewählt', { n: selected.size }) : t('Alle wählen')}
               </label>
 
               <Button
@@ -327,10 +329,10 @@ export function JobsScreen({
                 }}
                 title={
                   selected.size === 0
-                    ? 'Erst ein Mandat auswählen'
+                    ? t('Erst ein Mandat auswählen')
                     : selected.size === 1
-                      ? 'Dieses Mandat im Cockpit öffnen'
-                      : `${selected.size} Mandate im Cockpit öffnen`
+                      ? t('Dieses Mandat im Cockpit öffnen')
+                      : t('{n} Mandate im Cockpit öffnen', { n: selected.size })
                 }
               >
                 Im Cockpit öffnen <ArrowUpRight className="h-4 w-4" />
@@ -342,7 +344,7 @@ export function JobsScreen({
                   onClick={() => setSelected(new Set())}
                   className="font-mono text-[12px] text-cockpit-faint transition-colors hover:text-cockpit-text"
                 >
-                  Auswahl aufheben
+                  {t('Auswahl aufheben')}
                 </button>
               )}
             </div>
@@ -369,7 +371,7 @@ export function JobsScreen({
               >
                 <input
                   type="checkbox"
-                  aria-label={`${job.title} auswählen`}
+                  aria-label={t('{title} auswählen', { title: job.title })}
                   className="h-[15px] w-[15px] accent-[#a9d6b4]"
                   checked={selected.has(job.id)}
                   onChange={(e) =>
@@ -385,7 +387,7 @@ export function JobsScreen({
                     chrome, unlike a button repeated seventy-six times. */}
                 <a
                   href={`#cockpit/${job.id}`}
-                  title="Im Cockpit öffnen"
+                  title={t('Im Cockpit öffnen')}
                   className="truncate text-[15px] text-cockpit-text underline-offset-2 transition-colors hover:text-mint-300 hover:underline"
                 >
                   {job.title}
@@ -406,7 +408,7 @@ export function JobsScreen({
                       <span className="truncate">{band(job)}</span>
                     </>
                   ) : (
-                    <span className="truncate text-cockpit-faint">kein Band</span>
+                    <span className="truncate text-cockpit-faint">{t('kein Band')}</span>
                   )}
                 </span>
                 <span className="flex items-center gap-1.5">
@@ -416,17 +418,17 @@ export function JobsScreen({
                       like one that was. */}
                   {(job.must_have_skills ?? []).length === 0 && (
                     <span
-                      title="Keine Muss-Kriterien — das Matching sortiert nur, es filtert nicht"
+                      title={t('Keine Muss-Kriterien — das Matching sortiert nur, es filtert nicht')}
                       className="cursor-help font-mono text-[11px] text-gold-400"
                     >
-                      ungefiltert
+                      {t('ungefiltert')}
                     </span>
                   )}
                 </span>
                 <button
                   type="button"
                   onClick={() => setEditing(job)}
-                  title="Mandat bearbeiten"
+                  title={t('Mandat bearbeiten')}
                   aria-label={`${job.title} bearbeiten`}
                   className="justify-self-end p-1 text-cockpit-faint transition-colors hover:text-mint-300"
                 >

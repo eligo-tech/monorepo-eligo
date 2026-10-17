@@ -10,6 +10,10 @@
 // whole panel: what the client said about the last profiles should visibly
 // change what is searched for next.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { CheckCircle2, Plus } from 'lucide-react'
 
@@ -21,8 +25,8 @@ import { Chip, Panel } from '../../ui/primitives'
 import { DemoText, PanelHead } from './parts'
 import type { Mandate } from '../../data/types'
 
-const NICE_TO_HAVE = ['dbt', 'MLOps', 'Finanzbranche']
-const CULTURE = 'Hands-on · Ownership · Startup-Mentalität · flache Hierarchien'
+const NICE_TO_HAVE = ['dbt', 'MLOps', t('Finanzbranche')]
+const CULTURE = t('Hands-on · Ownership · Startup-Mentalität · flache Hierarchien')
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -81,7 +85,7 @@ function CriteriaSuggestions({
   return (
     <div className="mt-2 space-y-1.5">
       <p className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
-        Vorschläge aus dem Titel
+        {t('Vorschläge aus dem Titel')}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {open.map((s) => (
@@ -90,11 +94,11 @@ function CriteriaSuggestions({
             type="button"
             disabled={busy !== null}
             onClick={() => void accept(s.skill)}
-            title={`${s.evidence} · ${s.candidates} Kandidat(en) im Bestand führen ihn`}
+            title={t('{evidence} · {n} Kandidat(en) im Bestand führen ihn', { evidence: s.evidence, n: s.candidates })}
             className="flex items-center gap-1 rounded-md border border-dashed border-gold-600/50 px-2 py-0.5 text-[12px] text-gold-300 transition-colors hover:border-gold-500 hover:bg-gold-500/10 disabled:opacity-40"
           >
             <Plus className="h-3 w-3" />
-            {busy === s.skill ? 'fügt hinzu…' : s.skill}
+            {busy === s.skill ? t('fügt hinzu…') : s.skill}
             <span className="font-mono text-[11px] text-cockpit-faint">
               {s.candidates}
             </span>
@@ -102,8 +106,7 @@ function CriteriaSuggestions({
         ))}
       </div>
       <p className="text-[12px] leading-relaxed text-cockpit-faint">
-        Aus dem Mandatstitel und dem Vokabular des eigenen Bestands — ein Klick
-        macht daraus ein hartes Kriterium, das Kandidaten ausschließt.
+        {t('Aus dem Mandatstitel und dem Vokabular des eigenen Bestands — ein Klick macht daraus ein hartes Kriterium, das Kandidaten ausschließt.')}
       </p>
     </div>
   )
@@ -124,18 +127,18 @@ export function SuchprofilPanel({
   )
   const band =
     mandate.salaryMin !== null && mandate.salaryMax !== null
-      ? `${mandate.salaryMin.toLocaleString('de-DE')} – ${mandate.salaryMax.toLocaleString('de-DE')} €`
+      ? `${mandate.salaryMin.toLocaleString(locale())} – ${mandate.salaryMax.toLocaleString(locale())} €`
       : mandate.salaryMax !== null
-        ? `bis ${mandate.salaryMax.toLocaleString('de-DE')} €`
+        ? t('bis {cap} €', { cap: mandate.salaryMax.toLocaleString(locale()) })
         : null
 
   return (
     <Panel className="px-6 py-5">
       <PanelHead
-        tag="Suchprofil"
+        tag={t('Suchprofil')}
         tone="lav"
-        title="Ideales Kandidatenprofil"
-        note={`aus dem Mandat ${mandate.ref} · ${mandate.title}`}
+        title={t('Ideales Kandidatenprofil')}
+        note={t('aus dem Mandat {ref} · {title}', { ref: mandate.ref, title: mandate.title })}
         collapsed={collapsed}
         onToggle={() => setCollapsed((shut) => !shut)}
       />
@@ -145,9 +148,8 @@ export function SuchprofilPanel({
         <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-mint-700/50 bg-mint-800/20 px-4 py-2.5 text-[13px] text-cockpit-dim">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-mint-400" />
           <span>
-            <DemoText source="Kein Feedback-zu-Suchprofil-Lauf angebunden">
-              Manager-Feedback zu den letzten Profilen fließt hier ein und schärft die
-              Muss-Kriterien.
+            <DemoText source={t('Kein Feedback-zu-Suchprofil-Lauf angebunden')}>
+              {t('Manager-Feedback zu den letzten Profilen fließt hier ein und schärft die Muss-Kriterien.')}
             </DemoText>
           </span>
         </div>
@@ -156,7 +158,7 @@ export function SuchprofilPanel({
           <div className="space-y-4">
             <div className="space-y-2">
               <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
-                Musskriterien
+                {t('Musskriterien')}
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {mandate.mustHave.length > 0 ? (
@@ -167,7 +169,7 @@ export function SuchprofilPanel({
                   ))
                 ) : (
                   <span className="text-[13px] text-cockpit-faint">
-                    Keine hinterlegt — ohne sie filtert das Matching nicht.
+                    {t('Keine hinterlegt — ohne sie filtert das Matching nicht.')}
                   </span>
                 )}
               </div>
@@ -176,12 +178,12 @@ export function SuchprofilPanel({
 
             <div className="space-y-2">
               <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
-                Nice-to-have
+                {t('Nice-to-have')}
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {NICE_TO_HAVE.map((skill) => (
                   <Chip key={skill}>
-                    <DemoText source="Nice-to-have ist am Mandat noch kein Feld">
+                    <DemoText source={t('Nice-to-have ist am Mandat noch kein Feld')}>
                       {skill}
                     </DemoText>
                   </Chip>
@@ -192,29 +194,29 @@ export function SuchprofilPanel({
 
           <div className="space-y-2">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-cockpit-faint">
-              Kultur
+              {t('Kultur')}
             </span>
             <p className="text-[13px] text-cockpit-dim">
-              <DemoText source="Kultur ist am Mandat noch kein Feld">{CULTURE}</DemoText>
+              <DemoText source={t('Kultur ist am Mandat noch kein Feld')}>{CULTURE}</DemoText>
             </p>
             <div className="mt-3">
-              <Fact label="Seniorität">
-                <DemoText source="Seniorität ist am Mandat noch kein Feld">
-                  Lead / Head
+              <Fact label={t('Seniorität')}>
+                <DemoText source={t('Seniorität ist am Mandat noch kein Feld')}>
+                  {t('Lead / Head')}
                 </DemoText>
               </Fact>
-              <Fact label="Region">
+              <Fact label={t('Region')}>
                 {mandate.location ? (
                   mandate.location
                 ) : (
-                  <span className="text-cockpit-faint">nicht hinterlegt</span>
+                  <span className="text-cockpit-faint">{t('nicht hinterlegt')}</span>
                 )}
               </Fact>
-              <Fact label="Gehaltsrahmen">
-                {band ?? <span className="text-cockpit-faint">nicht hinterlegt</span>}
+              <Fact label={t('Gehaltsrahmen')}>
+                {band ?? <span className="text-cockpit-faint">{t('nicht hinterlegt')}</span>}
               </Fact>
-              <Fact label="Verfügbarkeit">
-                <DemoText source="Startdatum ist am Mandat noch kein Feld">ab Q3</DemoText>
+              <Fact label={t('Verfügbarkeit')}>
+                <DemoText source={t('Startdatum ist am Mandat noch kein Feld')}>{t('ab Q3')}</DemoText>
               </Fact>
             </div>
           </div>

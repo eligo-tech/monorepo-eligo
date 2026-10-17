@@ -1,3 +1,5 @@
+import { t } from '@/i18n'
+
 import type { ReactNode } from 'react'
 import {
   SignedIn,
@@ -29,7 +31,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return (
     <>
       <SignedOut>
-        <Screen title="Anmelden" subtitle="Melde dich an, um auf deinen Arbeitsbereich zuzugreifen.">
+        <Screen title={t('Anmelden')} subtitle={t('Melde dich an, um auf deinen Arbeitsbereich zuzugreifen.')}>
           <SignIn routing="virtual" />
         </Screen>
       </SignedOut>
@@ -42,12 +44,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
 function OrgGate({ children }: { children: ReactNode }) {
   const { organization, isLoaded } = useOrganization()
-  if (!isLoaded) return <Screen title="Lädt…" />
+  if (!isLoaded) return <Screen title={t('Lädt…')} />
   if (!organization) {
     return (
       <Screen
-        title="Organisation wählen"
-        subtitle="Kandidatendaten sind pro Organisation (Mandant) strikt isoliert. Wähle eine bestehende Organisation oder erstelle eine neue, um fortzufahren."
+        title={t('Organisation wählen')}
+        subtitle={t('Kandidatendaten sind pro Organisation (Mandant) strikt isoliert. Wähle eine bestehende Organisation oder erstelle eine neue, um fortzufahren.')}
       >
         <OrganizationList
           hidePersonal

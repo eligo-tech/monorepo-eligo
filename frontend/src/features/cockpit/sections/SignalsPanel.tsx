@@ -4,6 +4,8 @@
 // Nothing here has touched the record: this is the propose half of "agents
 // propose, verification commits". Übernehmen / Prüfen is the human gate.
 
+import { t } from '@/i18n'
+
 import { Sparkles } from 'lucide-react'
 import { Panel, WithRefs } from '../ui/primitives'
 import type { SignalItem } from '../data/types'
@@ -21,9 +23,9 @@ export function SignalsPanel({
     <Panel className="p-6">
       <div className="flex items-center gap-3">
         <Sparkles className="h-[18px] w-[18px] text-mint-400" />
-        <h3 className="text-[17px] font-semibold text-cockpit-text">Erkannte Signale</h3>
+        <h3 className="text-[17px] font-semibold text-cockpit-text">{t('Erkannte Signale')}</h3>
         <span className="ml-auto font-mono text-[13px] text-cockpit-faint">
-          CRM · E-Mail &amp; Notizen
+          {t('CRM · E-Mail & Notizen')}
         </span>
       </div>
 

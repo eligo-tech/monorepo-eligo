@@ -20,6 +20,8 @@
 //    it is keyboard-reachable and middle-clickable like the name on the card,
 //    rather than a div with an onClick.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 
 import { cn } from '@/lib/cn'
@@ -71,7 +73,7 @@ export function standing(card: ProcessCard): string {
   const current = card.steps.find((s) => s.state === 'current')
   if (current) return current.label
   const done = [...card.steps].reverse().find((s) => s.state === 'done')
-  return done ? `${done.label} ✓` : 'noch kein Schritt'
+  return done ? `${done.label} ✓` : t('noch kein Schritt')
 }
 
 /** Cut a label to fit its box. SVG does not wrap, and an ellipsis is more
@@ -109,7 +111,10 @@ export function MandateGraph({ mandate }: { mandate: Mandate }) {
         width="100%"
         style={{ minWidth: 560, maxHeight: height }}
         role="img"
-        aria-label={`${mandate.title}: ${cards.length} Kandidaten, nach Passung sortiert`}
+        aria-label={t('{title}: {n} Kandidaten, nach Passung sortiert', {
+          title: mandate.title,
+          n: cards.length,
+        })}
       >
         {/* Edges first, so a node always sits on top of its own line. */}
         {cards.map((card, i) => {
@@ -161,7 +166,7 @@ export function MandateGraph({ mandate }: { mandate: Mandate }) {
             className="fill-cockpit-dim font-mono text-[11px]"
           >
             {clip(mandate.client, 22)} · {cards.length}{' '}
-            {cards.length === 1 ? 'Kandidat' : 'Kandidaten'}
+            {cards.length === 1 ? t('Kandidat') : t('Kandidaten')}
           </text>
         </g>
 
@@ -211,7 +216,10 @@ export function MandateGraph({ mandate }: { mandate: Mandate }) {
               key={card.id}
               href={`#kandidaten/${card.candidateId}`}
               className="group cursor-pointer"
-              aria-label={`${card.candidateName}, Passung ${fit ?? 'nicht bewertet'} — Kandidatenakte öffnen`}
+              aria-label={t('{name}, Passung {fit} — Kandidatenakte öffnen', {
+                name: card.candidateName,
+                fit: fit ?? t('nicht bewertet'),
+              })}
             >
               {node}
             </a>
@@ -228,13 +236,13 @@ export function MandateGraph({ mandate }: { mandate: Mandate }) {
 export function MandateGraphLegend() {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-      <Label>Passung</Label>
+      <Label>{t('Passung')}</Label>
       {(
         [
-          ['mint', '7–10 · trägt'],
-          ['gold', '5–6 · mit Vorbehalt'],
+          ['mint', t('7–10 · trägt')],
+          ['gold', t('5–6 · mit Vorbehalt')],
           ['coral', '0–4 · kritisch'],
-          ['none', 'nicht bewertet'],
+          ['none', t('nicht bewertet')],
         ] as const
       ).map(([tone, label]) => (
         <span
@@ -333,8 +341,8 @@ export function mandateCaption(
   fit: number | null,
   { width = BOOK_MANDATE.w, fontPx = 11 }: { width?: number; fontPx?: number } = {},
 ): string {
-  const tail = ` · ${count} ${count === 1 ? 'Kandidat' : 'Kandidaten'}${
-    fit === null ? ' · ohne Bewertung' : ` · bester Fit ${fit}/10`
+  const tail = ` · ${count} ${count === 1 ? t('Kandidat') : t('Kandidaten')}${
+    fit === null ? t(' · ohne Bewertung') : t(' · bester Fit {fit}/10', { fit })
   }`
   const room = width - MANDATE_PAD - MANDATE_CONTROLS
   const budget = monoFit(room, fontPx) - tail.length
@@ -418,7 +426,10 @@ export function BookGraph({
         width="100%"
         style={{ minWidth: 720, maxHeight: height }}
         role="img"
-        aria-label={`${mandates.length} Mandate mit ${total} Kandidaten, nach bester Passung sortiert`}
+        aria-label={t('{m} Mandate mit {c} Kandidaten, nach bester Passung sortiert', {
+          m: mandates.length,
+          c: total,
+        })}
       >
         {rows.map((row) => {
           if (row.kind === 'mandate') {
@@ -465,13 +476,13 @@ export function BookGraph({
           strokeWidth={1}
         />
         <text x={BOOK_ROOT.x + 16} y={rootY + 26} className="fill-cockpit-faint font-mono text-[11px]">
-          Laufende Prozesse
+          {t('Laufende Prozesse')}
         </text>
         <text x={BOOK_ROOT.x + 16} y={rootY + 48} className="fill-cockpit-text text-[15px] font-semibold">
-          {mandates.length} {mandates.length === 1 ? 'Mandat' : 'Mandate'}
+          {mandates.length} {mandates.length === 1 ? t('Mandat') : t('Mandate')}
         </text>
         <text x={BOOK_ROOT.x + 16} y={rootY + 65} className="fill-cockpit-dim font-mono text-[11px]">
-          {total} {total === 1 ? 'Kandidat' : 'Kandidaten'}
+          {total} {total === 1 ? t('Kandidat') : t('Kandidaten')}
         </text>
 
         {rows.map((row) => {
@@ -528,7 +539,7 @@ export function BookGraph({
                     className="cursor-pointer"
                     onClick={() => onOpenMandate(mandate.id)}
                   >
-                    <title>Mandat öffnen</title>
+                    <title>{t('Mandat öffnen')}</title>
                     <rect
                       x={BOOK_MANDATE.x + BOOK_MANDATE.w - 26}
                       y={row.y + BOOK_MANDATE.h / 2 - 11}
@@ -600,7 +611,10 @@ export function BookGraph({
               key={card.id}
               href={`#kandidaten/${card.candidateId}`}
               className="group cursor-pointer"
-              aria-label={`${card.candidateName}, Passung ${fit ?? 'nicht bewertet'} — Kandidatenakte öffnen`}
+              aria-label={t('{name}, Passung {fit} — Kandidatenakte öffnen', {
+                name: card.candidateName,
+                fit: fit ?? t('nicht bewertet'),
+              })}
             >
               {node}
             </a>

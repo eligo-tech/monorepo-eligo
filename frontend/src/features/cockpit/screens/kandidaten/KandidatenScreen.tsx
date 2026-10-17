@@ -11,6 +11,8 @@
 // filled in, and `Beleg` is how much of it something actually checked against
 // a source we can name. An imported record is legitimately 0% belegt.
 
+import { t } from '@/i18n'
+
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDownUp, Check, Download, Search, SlidersHorizontal, Upload, X } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
@@ -28,9 +30,9 @@ import { CvUploadModal } from './CvUploadModal'
 
 type SortKey = 'created' | 'name' | 'verification'
 const SORT_LABELS: Record<SortKey, string> = {
-  created: 'Neueste zuerst',
-  name: 'Name (A–Z)',
-  verification: 'Beleg zuerst',
+  created: t('Neueste zuerst'),
+  name: t('Name (A–Z)'),
+  verification: t('Beleg zuerst'),
 }
 const SORT_ORDER: SortKey[] = ['created', 'name', 'verification']
 
@@ -47,7 +49,7 @@ const TONE_BAR = { mint: 'bg-mint-400', gold: 'bg-gold-400', coral: 'bg-coral-40
 /** Download the given candidates as a CSV file (client-side, no backend call). */
 function exportCsv(rows: Candidate[]): void {
   if (rows.length === 0) return
-  const headers = ['Name', 'E-Mail', 'Telefon', 'Titel', 'Unternehmen', 'Standort', 'Skills', 'LinkedIn']
+  const headers = [t('Name'), t('E-Mail'), t('Telefon'), t('Titel'), t('Unternehmen'), t('Standort'), t('Skills'), 'LinkedIn']
   const cell = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`
   const lines = [
     headers.join(','),
@@ -141,14 +143,14 @@ function SkillFilter({
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Technologie suchen…"
+                placeholder={t('Technologie suchen…')}
                 className="w-full bg-transparent text-[13px] text-cockpit-text outline-none placeholder:text-cockpit-faint"
               />
             </div>
 
             <div className="max-h-64 overflow-y-auto">
               {shown.length === 0 && (
-                <p className="px-2 py-3 text-center text-[13px] text-cockpit-faint">Keine Treffer</p>
+                <p className="px-2 py-3 text-center text-[13px] text-cockpit-faint">{t('Keine Treffer')}</p>
               )}
               {shown.map((s) => {
                 const active = selected.has(s.label)
@@ -194,13 +196,13 @@ function SkillFilter({
 
 const GRID = 'grid-cols-[1.7fr_0.5fr_1.5fr_1fr_1.4fr_1.1fr_0.7fr]'
 const COLUMNS = [
-  'Name',
+  t('Name'),
   'LI',
-  'E-Mail',
-  'Telefon',
-  'Erfahrung',
-  'Skills',
-  'Vollständig',
+  t('E-Mail'),
+  t('Telefon'),
+  t('Erfahrung'),
+  t('Skills'),
+  t('Vollständig'),
 ]
 
 export function KandidatenScreen({
@@ -333,11 +335,10 @@ export function KandidatenScreen({
     <div className="space-y-8">
       <header id="section-kandidaten" className="scroll-mt-24">
         <h1 className="text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
-          Kandidaten
+          {t('Kandidaten')}
         </h1>
         <p className="mt-2 max-w-xl text-[16px] leading-relaxed text-cockpit-dim">
-          Der eigene Bestand — jedes Profil aus einem echten Dokument extrahiert und gegen
-          seine Quelle geprüft.
+          {t('Der eigene Bestand — jedes Profil aus einem echten Dokument extrahiert und gegen seine Quelle geprüft.')}
         </p>
       </header>
 
@@ -345,15 +346,14 @@ export function KandidatenScreen({
         <SectionHeader
           id="section-liste"
           index="01"
-          title="Bestand"
-          hint={error ? 'nicht erreichbar' : 'live aus dem Datensatz'}
+          title={t('Bestand')}
+          hint={error ? t('nicht erreichbar') : t('live aus dem Datensatz')}
         />
 
         {error && (
           <Panel className="p-5">
             <p className="text-[14px] text-coral-400">
-              Kandidaten konnten nicht geladen werden — ist die Sitzung noch
-              gültig? (Die Liste bleibt leer, statt Beispieldaten zu zeigen.)
+              {t('Kandidaten konnten nicht geladen werden — ist die Sitzung noch gültig? (Die Liste bleibt leer, statt Beispieldaten zu zeigen.)')}
             </p>
           </Panel>
         )}
@@ -365,28 +365,29 @@ export function KandidatenScreen({
             {truncated && (
               <span
                 className="text-gold-300"
-                title="Suche und Filter laufen im Browser über die geladenen Zeilen — der Rest ist hier nicht auffindbar."
+                title={t('Suche und Filter laufen im Browser über die geladenen Zeilen — der Rest ist hier nicht auffindbar.')}
               >
                 {' '}
-                von {poolTotal} geladen
+                {t('von {n} geladen', { n: poolTotal })}
               </span>
             )}
           </span>
           <span>
-            <span className="text-cockpit-text">{rows.length}</span> angezeigt
-            {byRelevance && rows.length > 1 && ' · nach Relevanz'}
+            <span className="text-cockpit-text">{rows.length}</span> {t('angezeigt')}
+            {byRelevance && rows.length > 1 && t(' · nach Relevanz')}
           </span>
           <span>
-            <span className="text-cockpit-text">{skillOptions.length}</span> Technologien
+            <span className="text-cockpit-text">{skillOptions.length}</span>{' '}
+            {t('Technologien')}
           </span>
           <span>
-            Ø Vollständigkeit{' '}
+            {t('Ø Vollständigkeit')}{' '}
             <span className={TONE_TEXT[verificationTone(avgCompleteness)]}>
               {avgCompleteness}%
             </span>
           </span>
           <span
-            title="Profile, bei denen mindestens ein Feld gegen eine Quelle geprüft ist — heute kommt das aus dem CV-Import."
+            title={t('Profile, bei denen mindestens ein Feld gegen eine Quelle geprüft ist — heute kommt das aus dem CV-Import.')}
             className="cursor-help"
           >
             <span
@@ -396,7 +397,7 @@ export function KandidatenScreen({
             >
               {withEvidence}
             </span>{' '}
-            mit Beleg
+            {t('mit Beleg')}
           </span>
         </div>
 
@@ -407,14 +408,14 @@ export function KandidatenScreen({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Name, Titel, Skill oder Ort — Tippfehler erlaubt"
+              placeholder={t('Name, Titel, Skill oder Ort — Tippfehler erlaubt')}
               className={cn(FIELD, 'py-2.5 pl-11 pr-9 text-[15px]')}
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                aria-label="Suche zurücksetzen"
+                aria-label={t('Suche zurücksetzen')}
                 className="absolute right-3 text-cockpit-faint transition-colors hover:text-cockpit-text"
               >
                 <X className="h-4 w-4" />
@@ -424,7 +425,7 @@ export function KandidatenScreen({
 
           <Button onClick={cycleSort}>
             <ArrowDownUp className="h-4 w-4" />
-            <span className="text-cockpit-faint">Sortiert nach</span>
+            <span className="text-cockpit-faint">{t('Sortiert nach')}</span>
             <span className="font-mono text-cockpit-text">{SORT_LABELS[sort]}</span>
           </Button>
 
@@ -440,7 +441,7 @@ export function KandidatenScreen({
           </Button>
 
           <Button tone="primary" onClick={() => setUploadOpen(true)}>
-            <Upload className="h-4 w-4" /> Kandidat aus CV
+            <Upload className="h-4 w-4" /> {t('Kandidat aus CV')}
           </Button>
         </div>
 
@@ -453,21 +454,27 @@ export function KandidatenScreen({
               GRID,
             )}
           >
-            {COLUMNS.map((c) => (
-              <div key={c} className={c === 'Verif.' ? 'text-right' : undefined}>
+            {COLUMNS.map((c, i) => (
+              <div
+                key={c}
+                // The verified column is the last one and is right-aligned.
+                // Keyed off the POSITION, because the label it used to be
+                // keyed off is translated now and would not match.
+                className={i === COLUMNS.length - 1 ? 'text-right' : undefined}
+              >
                 {c}
               </div>
             ))}
           </div>
 
           {loading && rows.length === 0 && (
-            <p className="py-16 text-center font-mono text-[13px] text-cockpit-faint">Lädt…</p>
+            <p className="py-16 text-center font-mono text-[13px] text-cockpit-faint">{t('Lädt…')}</p>
           )}
 
           {!loading && !error && rows.length === 0 && (
             <p className="py-16 text-center text-[14px] text-cockpit-dim">
               Keine Kandidaten gefunden
-              {query ? ` für „${query}"` : ''}
+              {query ? t(' für „{query}”', { query }) : ''}
               {skillFilter.size > 0 ? ` mit ${[...skillFilter].join(', ')}` : ''}.
               {(query || skillFilter.size > 0) && (
                 <button
@@ -478,7 +485,7 @@ export function KandidatenScreen({
                   }}
                   className="ml-2 font-mono text-[12px] text-mint-300 transition-colors hover:text-cockpit-text"
                 >
-                  Filter zurücksetzen
+                  {t('Filter zurücksetzen')}
                 </button>
               )}
             </p>
@@ -562,17 +569,17 @@ export function KandidatenScreen({
                   </span>
                   {c.verification > 0 ? (
                     <span
-                      title={`${c.verification}% der Schlüsselfelder sind gegen eine Quelle geprüft`}
+                      title={t('{pct}% der Schlüsselfelder sind gegen eine Quelle geprüft', { pct: c.verification })}
                       className="w-[4.5rem] shrink-0 rounded border border-mint-700 bg-mint-800/40 px-1.5 text-center font-mono text-[11px] leading-5 text-mint-400"
                     >
                       {c.verification}% Beleg
                     </span>
                   ) : (
                     <span
-                      title="Kein Feld dieses Profils ist gegen eine Quelle geprüft — importiert, nicht verifiziert"
+                      title={t('Kein Feld dieses Profils ist gegen eine Quelle geprüft — importiert, nicht verifiziert')}
                       className="w-[4.5rem] shrink-0 text-center font-mono text-[11px] leading-5 text-cockpit-faint"
                     >
-                      ohne Beleg
+                      {t('ohne Beleg')}
                     </span>
                   )}
                 </div>

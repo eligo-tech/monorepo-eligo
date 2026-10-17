@@ -1,5 +1,7 @@
 // One row of "02 Jobscoring": mandate label, fill bar, score, delta, manager chance.
 
+import { t } from '@/i18n'
+
 import { cn } from '@/lib/cn'
 import type { JobScore } from '../data/types'
 import { Figure, ProvenanceMark } from './primitives'
@@ -40,7 +42,7 @@ export function ScoreBar({ row }: { row: JobScore }) {
       {/* Change since the last data run — "—" when nothing has learned it yet. */}
       <span className="w-9 shrink-0 text-right font-mono text-[13px] text-cockpit-faint">
         {row.delta === null ? (
-          <span title="Kein Signal-Store — Veränderung noch nicht gelernt">—</span>
+          <span title={t('Kein Signal-Store — Veränderung noch nicht gelernt')}>—</span>
         ) : (
           <>
             {row.delta.value > 0 ? '+' : ''}
@@ -52,7 +54,7 @@ export function ScoreBar({ row }: { row: JobScore }) {
 
       <span className="w-[70px] shrink-0 text-right font-mono text-[13px] text-cockpit-faint">
         {row.managerChance === null ? (
-          <span title="Deal-Chance beim Manager — noch nicht gelernt">M —</span>
+          <span title={t('Deal-Chance beim Manager — noch nicht gelernt')}>M —</span>
         ) : (
           <>
             M {row.managerChance.value}%

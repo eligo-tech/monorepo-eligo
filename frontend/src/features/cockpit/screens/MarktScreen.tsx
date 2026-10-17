@@ -18,6 +18,10 @@
 // nothing here can trigger a crawl (ARCHITECTURE.md RULE 1). Only "beobachten"
 // writes anything, and it writes to this workspace alone.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bookmark,
@@ -62,25 +66,25 @@ const IDENTITY: Record<
   HubEmployerHitDTO['resolution_basis'],
   { label: string; tone?: 'mint' | 'gold'; title: string }
 > = {
-  vat: { label: 'USt-IdNr', tone: 'mint', title: 'Identität über die USt-IdNr bestimmt' },
-  register: { label: 'HRB', tone: 'mint', title: 'Identität über das Handelsregister bestimmt' },
-  domain: { label: 'Domain', tone: 'gold', title: 'Identität über die Unternehmensdomain bestimmt' },
+  vat: { label: 'USt-IdNr', tone: 'mint', title: t('Identität über die USt-IdNr bestimmt') },
+  register: { label: 'HRB', tone: 'mint', title: t('Identität über das Handelsregister bestimmt') },
+  domain: { label: 'Domain', tone: 'gold', title: t('Identität über die Unternehmensdomain bestimmt') },
   name_place: {
     label: 'Name + Ort',
-    title: 'Angenommen aus Firmenname und Ort — nicht gegen ein Register geprüft',
+    title: t('Angenommen aus Firmenname und Ort — nicht gegen ein Register geprüft'),
   },
 }
 
 const dateDe = (iso: string | null) =>
   iso
-    ? new Date(iso).toLocaleDateString('de-DE', {
+    ? new Date(iso).toLocaleDateString(locale(), {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
       })
     : '—'
 
-const de = (n: number) => n.toLocaleString('de-DE')
+const de = (n: number) => n.toLocaleString(locale())
 
 /** Employers per page. Small enough to scan, large enough to be worth a click. */
 const PAGE_SIZE = 40
@@ -178,7 +182,7 @@ function FacetFilter({
         className="flex cursor-help items-center gap-1.5 rounded-xl border border-dashed border-cockpit-line px-4 py-2 text-[14px] text-cockpit-faint"
       >
         {label}
-        <span className="font-mono text-[11px]">keine Werte</span>
+        <span className="font-mono text-[11px]">{t('keine Werte')}</span>
       </span>
     )
   }
@@ -203,7 +207,7 @@ function FacetFilter({
               onClick={() => onChange([])}
               className="w-full border-b border-cockpit-line px-3 py-2 text-left font-mono text-[12px] text-cockpit-faint hover:text-coral-400"
             >
-              Auswahl aufheben
+              {t('Auswahl aufheben')}
             </button>
           )}
           {options.map((option) => (
@@ -235,7 +239,7 @@ function FacetFilter({
 }
 
 /** Suggestions, so an empty screen teaches what the box accepts. */
-const EXAMPLES = ['Embedded', 'SAP', 'Pflegefachkraft', 'Berlin', 'Netto']
+const EXAMPLES = ['Embedded', 'SAP', 'Pflegefachkraft', 'Berlin', t('Netto')]
 
 /**
  * Standing questions — the thing that makes this a daily tool.
@@ -263,7 +267,7 @@ function SavedSearches({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
-        Suchprofile
+        {t('Suchprofile')}
       </span>
       {searches.map((saved) => (
         <span
@@ -285,7 +289,7 @@ function SavedSearches({
           </button>
           <button
             type="button"
-            aria-label={`${saved.label} löschen`}
+            aria-label={t('{label} löschen', { label: saved.label })}
             onClick={async () => {
               await api.deleteSavedSearch(saved.id).catch(() => {})
               reload()
@@ -352,7 +356,7 @@ function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
           <span className="text-[14px] text-cockpit-text">{role.title}</span>
         )}
         {role.city && <Chip>{role.city}</Chip>}
-        {role.remote_possible && <Chip tone="lav">Homeoffice</Chip>}
+        {role.remote_possible && <Chip tone="lav">{t('Homeoffice')}</Chip>}
         <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
           <span>{dateDe(role.posted_at)}</span>
           {/* The employer's own ad when the source has one, otherwise the
@@ -366,11 +370,11 @@ function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
               className="flex items-center gap-1 transition-colors hover:text-mint-400"
               title={
                 role.source_url
-                  ? 'Original-Stellenanzeige beim Unternehmen öffnen'
-                  : 'Anzeige bei der Bundesagentur für Arbeit öffnen'
+                  ? t('Original-Stellenanzeige beim Unternehmen öffnen')
+                  : t('Anzeige bei der Bundesagentur für Arbeit öffnen')
               }
             >
-              {role.source_url ? 'Quelle' : 'Anzeige'}
+              {role.source_url ? t('Quelle') : t('Anzeige')}
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
@@ -438,8 +442,8 @@ function AdoptDialog({
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 409
-          ? 'Dieses Unternehmen gehört bereits zu diesem Workspace.'
-          : 'Übernahme fehlgeschlagen.',
+          ? t('Dieses Unternehmen gehört bereits zu diesem Workspace.')
+          : t('Übernahme fehlgeschlagen.'),
       )
     } finally {
       setBusy(false)
@@ -454,18 +458,17 @@ function AdoptDialog({
             {hit.name} übernehmen
           </h3>
           <p className="mt-1 text-[13px] text-cockpit-dim">
-            Legt das Unternehmen in diesem Workspace an. Der Vorgang wird
-            protokolliert.
+            {t('Legt das Unternehmen in diesem Workspace an. Der Vorgang wird protokolliert.')}
           </p>
         </div>
 
         <div className="space-y-2">
           <p className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
-            Ansprechpartner (optional)
+            {t('Ansprechpartner (optional)')}
           </p>
           <input
             className={FIELD}
-            placeholder="Name"
+            placeholder={t('Name')}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -473,13 +476,13 @@ function AdoptDialog({
             <>
               <input
                 className={FIELD}
-                placeholder="Rolle, z. B. Head of Engineering"
+                placeholder={t('Rolle, z. B. Head of Engineering')}
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
               />
               <input
                 className={FIELD}
-                placeholder="E-Mail"
+                placeholder={t('E-Mail')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -488,14 +491,13 @@ function AdoptDialog({
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
               >
-                <option value="self_reported">Quelle: selbst genannt</option>
-                <option value="public_web">Quelle: öffentlich gefunden</option>
-                <option value="third_party_source">Quelle: Dritte</option>
+                <option value="self_reported">{t('Quelle: selbst genannt')}</option>
+                <option value="public_web">{t('Quelle: öffentlich gefunden')}</option>
+                <option value="third_party_source">{t('Quelle: Dritte')}</option>
               </select>
               {source !== 'self_reported' && (
                 <p className="text-[12px] leading-relaxed text-gold-400">
-                  Nicht vom Betroffenen selbst erhalten — eine Information nach
-                  Art. 14 DSGVO wird fällig und vorgemerkt.
+                  {t('Nicht vom Betroffenen selbst erhalten — eine Information nach Art. 14 DSGVO wird fällig und vorgemerkt.')}
                 </p>
               )}
             </>
@@ -505,9 +507,9 @@ function AdoptDialog({
         {error && <p className="text-[13px] text-coral-400">{error}</p>}
 
         <div className="flex justify-end gap-2">
-          <Button onClick={onClose}>Abbrechen</Button>
+          <Button onClick={onClose}>{t('Abbrechen')}</Button>
           <Button tone="primary" onClick={submit} disabled={busy}>
-            {busy ? 'Übernimmt…' : 'Übernehmen'}
+            {busy ? t('Übernimmt…') : t('Übernehmen')}
           </Button>
         </div>
       </Panel>
@@ -557,40 +559,40 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
         {hit.suspected_natural_person && (
           <Chip tone="coral" className="cursor-help">
             <span
-              title="Der Firmenname sieht nach einer natürlichen Person aus (Einzelunternehmen). Damit stehen personenbezogene Daten im geteilten Korpus — automatisch erkannt, nicht geprüft."
+              title={t('Der Firmenname sieht nach einer natürlichen Person aus (Einzelunternehmen). Damit stehen personenbezogene Daten im geteilten Korpus — automatisch erkannt, nicht geprüft.')}
               className="flex items-center gap-1"
             >
               <UserRound className="h-3 w-3" />
-              mögl. Person
+              {t('mögl. Person')}
             </span>
           </Chip>
         )}
 
         <span className="ml-auto flex items-center gap-4 font-mono text-[13px] text-cockpit-faint">
           {hit.sites > 1 && (
-            <span title="Standorte im Korpus — dieselbe Firma, mehrfach erfasst">
+            <span title={t('Standorte im Korpus — dieselbe Firma, mehrfach erfasst')}>
               <span className="text-cockpit-text">{de(hit.sites)}</span> Standorte
             </span>
           )}
-          <span title="Treffer für diese Suche — nicht alle offenen Rollen des Unternehmens">
+          <span title={t('Treffer für diese Suche — nicht alle offenen Rollen des Unternehmens')}>
             <span className="text-[15px] text-cockpit-text">{de(hit.open_roles)}</span> Rollen
           </span>
           <Button onClick={toggle} disabled={saving || !anchorId} tone={tracked ? 'primary' : 'ghost'}>
             {tracked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-            {tracked ? 'Beobachtet' : 'Beobachten'}
+            {tracked ? t('Beobachtet') : t('Beobachten')}
           </Button>
           {/* Beobachten is interest and asserts nothing; this is the crossing
               into the workspace's own record, so it reads as a commitment and
               is confirmed in a dialog rather than fired by one click. */}
           {adopted ? (
-            <span className="flex items-center gap-1.5 text-mint-400" title="Als Kunde übernommen">
+            <span className="flex items-center gap-1.5 text-mint-400" title={t('Als Kunde übernommen')}>
               <Check className="h-4 w-4" />
-              Kunde
+              {t('Kunde')}
             </span>
           ) : (
             <Button onClick={() => setAdopting(true)} disabled={!anchorId}>
               <UserRound className="h-4 w-4" />
-              Übernehmen
+              {t('Übernehmen')}
             </Button>
           )}
         </span>
@@ -619,8 +621,7 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
       )}
       {art14 && (
         <p className="mt-1.5 text-[12px] leading-relaxed text-gold-400">
-          Ansprechpartner angelegt — Information nach Art. 14 DSGVO ist fällig
-          und vorgemerkt.
+          {t('Ansprechpartner angelegt — Information nach Art. 14 DSGVO ist fällig und vorgemerkt.')}
         </p>
       )}
 
@@ -657,13 +658,13 @@ function SearchError({ error }: { error: Error }) {
   // status at all — distinct from the server answering with a failure.
   const headline =
     status === null
-      ? 'Keine Antwort vom Server — Netzwerk, CORS oder Abbruch.'
+      ? t('Keine Antwort vom Server — Netzwerk, CORS oder Abbruch.')
       : status === 401 || status === 403
-        ? `Sitzung abgelaufen oder nicht berechtigt (HTTP ${status}) — bitte neu anmelden.`
+        ? t('Sitzung abgelaufen oder nicht berechtigt (HTTP {status}) — bitte neu anmelden.', { status })
         : status === 408 || status === 504 || status === 502 || status === 503
-          ? `Zeitüberschreitung (HTTP ${status}) — die Suche war zu langsam für den Server.`
+          ? t('Zeitüberschreitung (HTTP {status}) — die Suche war zu langsam für den Server.', { status })
           : status >= 500
-            ? `Serverfehler (HTTP ${status}) — die Abfrage wurde nicht zu Ende geführt.`
+            ? t('Serverfehler (HTTP {status}) — die Abfrage wurde nicht zu Ende geführt.', { status })
             : `Suche abgelehnt (HTTP ${status}).`
 
   // The body is the useful half for a 500 (Postgres names its own cancellation),
@@ -852,25 +853,23 @@ export function MarktScreen() {
     <div className="space-y-8">
       <header id="section-markt" className="scroll-mt-24">
         <h1 className="text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
-          Markt
+          {t('Markt')}
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
-          Wer gerade einstellt — durchsuchbar nach Rolle, Firma und Ort. Der Korpus ist
-          geteilt und wird nächtlich aktualisiert; was Sie beobachten, bleibt in diesem
-          Workspace.
+          {t('Wer gerade einstellt — durchsuchbar nach Rolle, Firma und Ort. Der Korpus ist geteilt und wird nächtlich aktualisiert; was Sie beobachten, bleibt in diesem Workspace.')}
         </p>
       </header>
 
       <section className="space-y-5">
         <SectionHeader
           index="01"
-          title="Suche"
+          title={t('Suche')}
           hint={
             s?.last_ingest_at
               ? `zuletzt aktualisiert ${dateDe(s.last_ingest_at)}`
               : stats.error
                 ? 'offline'
-                : 'live aus dem Korpus'
+                : t('live aus dem Korpus')
           }
         />
 
@@ -878,10 +877,10 @@ export function MarktScreen() {
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
           {s ? (
             <>
-              <span title="Unternehmen nach Zusammenfassung der Standorte">
+              <span title={t('Unternehmen nach Zusammenfassung der Standorte')}>
                 <span className="text-cockpit-text">{de(s.employers)}</span> Unternehmen
               </span>
-              <span title="Einzelne Korpus-Einträge — eine Firma kann mehrere Standorte haben">
+              <span title={t('Einzelne Korpus-Einträge — eine Firma kann mehrere Standorte haben')}>
                 <span className="text-cockpit-text">{de(s.companies)}</span> Standorte
               </span>
               <span>
@@ -890,19 +889,19 @@ export function MarktScreen() {
               <span>
                 <span className="text-cockpit-text">{de(s.cities)}</span> Orte
               </span>
-              <span title="Identität aus Name + Ort angenommen, nicht gegen ein Register geprüft">
+              <span title={t('Identität aus Name + Ort angenommen, nicht gegen ein Register geprüft')}>
                 <span className="text-cockpit-text">{de(s.unverified_identity)}</span> ohne
                 Registerprüfung
               </span>
               {s.suspected_personal_data > 0 && (
-                <span title="Firmennamen, die nach natürlichen Personen aussehen (Einzelunternehmen) — personenbezogene Daten im geteilten Korpus">
+                <span title={t('Firmennamen, die nach natürlichen Personen aussehen (Einzelunternehmen) — personenbezogene Daten im geteilten Korpus')}>
                   <span className="text-coral-400">{de(s.suspected_personal_data)}</span> mögl.
                   Personen
                 </span>
               )}
             </>
           ) : (
-            <span>{stats.error ? 'Korpus nicht erreichbar' : 'lädt Kennzahlen…'}</span>
+            <span>{stats.error ? t('Korpus nicht erreichbar') : t('lädt Kennzahlen…')}</span>
           )}
         </div>
 
@@ -913,14 +912,14 @@ export function MarktScreen() {
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Rolle, Firma oder Stichwort — Tippfehler und „ue“ statt „ü“ egal"
+              placeholder={t('Rolle, Firma oder Stichwort — Tippfehler und „ue“ statt „ü“ egal')}
               className={cn(FIELD, 'py-2.5 pl-11 pr-9 text-[15px]')}
             />
             {draft && (
               <button
                 type="button"
                 onClick={() => setDraft('')}
-                aria-label="Suche zurücksetzen"
+                aria-label={t('Suche zurücksetzen')}
                 className="absolute right-3 text-cockpit-faint transition-colors hover:text-cockpit-text"
               >
                 <X className="h-4 w-4" />
@@ -932,28 +931,28 @@ export function MarktScreen() {
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              placeholder="Ort"
+              placeholder={t('Ort')}
               className={cn(FIELD, 'py-2.5 pl-11 text-[15px]')}
             />
           </label>
           <FacetFilter
-            label="Bundesland"
+            label={t('Bundesland')}
             options={facets.data?.regions ?? []}
             selected={regions}
             onChange={setRegions}
             format={prettyRegion}
-            emptyHint="Das Bundesland wird beim Ingest aus der Adresse der Anzeige übernommen. Anzeigen, die vor Einführung des Feldes erfasst wurden, tragen es erst nach dem nächsten Lauf."
+            emptyHint={t('Das Bundesland wird beim Ingest aus der Adresse der Anzeige übernommen. Anzeigen, die vor Einführung des Feldes erfasst wurden, tragen es erst nach dem nächsten Lauf.')}
           />
           <FacetFilter
-            label="Berufsfeld"
+            label={t('Berufsfeld')}
             options={facets.data?.berufsfelder ?? []}
             selected={berufsfelder}
             onChange={setBerufsfelder}
-            emptyHint="Das Berufsfeld liefert die Quelle nicht pro Anzeige — es entsteht nur, wenn der nächtliche Lauf gezielt danach fragt. Werte erscheinen nach dem ersten berufsfeld-Durchlauf."
+            emptyHint={t('Das Berufsfeld liefert die Quelle nicht pro Anzeige — es entsteht nur, wenn der nächtliche Lauf gezielt danach fragt. Werte erscheinen nach dem ersten berufsfeld-Durchlauf.')}
           />
           <Button tone="primary" onClick={run} disabled={results.loading}>
             <Search className="h-4 w-4" />
-            {results.loading ? 'Sucht…' : 'Suchen'}
+            {results.loading ? t('Sucht…') : t('Suchen')}
           </Button>
           {/* Not a checkbox in a filter drawer: for a broad term this changes
               the answer more than any other control on the screen. */}
@@ -961,7 +960,7 @@ export function MarktScreen() {
             type="button"
             onClick={() => setTitlesOnly((v) => !v)}
             aria-pressed={titlesOnly}
-            title="Nur Rollen, deren Titel den Suchbegriff nennt — statt Anzeigen, die ihn nebenbei erwähnen"
+            title={t('Nur Rollen, deren Titel den Suchbegriff nennt — statt Anzeigen, die ihn nebenbei erwähnen')}
             className={cn(
               'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[13px] transition-colors',
               titlesOnly
@@ -975,12 +974,12 @@ export function MarktScreen() {
                 titlesOnly ? 'text-mint-400' : 'text-cockpit-faint',
               )}
             />
-            nur Titel-Treffer
+            {t('nur Titel-Treffer')}
           </button>
           {hasCriteria && !alreadySaved && (
             <Button
               onClick={saveCurrent}
-              title="Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen"
+              title={t('Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen')}
             >
               <Star className="h-4 w-4" /> Merken
             </Button>
@@ -1005,13 +1004,11 @@ export function MarktScreen() {
               <div className="space-y-3">
                 <p className="max-w-2xl text-[14px] leading-relaxed text-cockpit-dim">
                   {s && s.companies === 0
-                    ? 'Der Korpus ist noch leer. Er wird von einem nächtlichen Job befüllt — eine Suche löst nie eine Abfrage bei einer öffentlichen Quelle aus.'
-                    : 'Suchen Sie nach einer Rolle, einer Firma oder einem Ort. Die Liste aller Unternehmen wäre keine Antwort auf eine Frage, die jemand stellt.'}
+                    ? t('Der Korpus ist noch leer. Er wird von einem nächtlichen Job befüllt — eine Suche löst nie eine Abfrage bei einer öffentlichen Quelle aus.')
+                    : t('Suchen Sie nach einer Rolle, einer Firma oder einem Ort. Die Liste aller Unternehmen wäre keine Antwort auf eine Frage, die jemand stellt.')}
                 </p>
                 <p className="max-w-2xl text-[13px] leading-relaxed text-cockpit-faint">
-                  Wiederkehrende Suchen als Profil merken: der nächtliche Lauf fragt die
-                  Quelle gezielt danach ab — inklusive Anzeigentexten, die hier sonst nicht
-                  durchsuchbar sind.
+                  {t('Wiederkehrende Suchen als Profil merken: der nächtliche Lauf fragt die Quelle gezielt danach ab — inklusive Anzeigentexten, die hier sonst nicht durchsuchbar sind.')}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {EXAMPLES.map((example) => (
@@ -1039,7 +1036,7 @@ export function MarktScreen() {
         )}
 
         {query && results.loading && (
-          <p className="font-mono text-[13px] text-cockpit-faint">sucht im Korpus…</p>
+          <p className="font-mono text-[13px] text-cockpit-faint">{t('sucht im Korpus…')}</p>
         )}
 
         {query && results.error && <SearchError error={results.error} />}
@@ -1080,7 +1077,7 @@ export function MarktScreen() {
 
             {query.exact && hits.length > 0 && (
               <p className="font-mono text-[12px] text-cockpit-faint">
-                wörtlich gesucht — Schreibweise nicht korrigiert
+                {t('wörtlich gesucht — Schreibweise nicht korrigiert')}
               </p>
             )}
 
@@ -1088,7 +1085,7 @@ export function MarktScreen() {
               <Panel className="p-6">
                 <p className="text-[14px] text-cockpit-dim">
                   Nichts gefunden für „{query.q || query.city}“
-                  {query.exact && ' (wörtlich gesucht)'}. Der Korpus enthält heute nur
+                  {query.exact && t(' (wörtlich gesucht)')}. Der Korpus enthält heute nur
                   Titel und Berufsbezeichnungen — keine Anzeigentexte —, deshalb trifft eine
                   Suche nach Anforderungen noch nicht.
                 </p>
@@ -1105,7 +1102,7 @@ export function MarktScreen() {
                   <div className="flex justify-center pt-2">
                     <Button onClick={loadMore} disabled={loadingMore}>
                       {loadingMore
-                        ? 'Lädt…'
+                        ? t('Lädt…')
                         : `Weitere ${de(
                             Math.min(
                               PAGE_SIZE,

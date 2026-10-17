@@ -4,6 +4,10 @@
 // layer stable while the data source moves. Everything produced here is tagged
 // `live`; fields the backend has no concept of stay on the mock baseline.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import type {
   ApplicationDTO,
   CandidateDTO,
@@ -64,9 +68,9 @@ const feeFromJob = (job: JobDTO | undefined): Figure =>
   job?.salary_max
     ? demo(
         Math.round((job.salary_max * FEE_RATE) / 1000) * 1000,
-        `${Math.round(FEE_RATE * 100)} % von € ${job.salary_max.toLocaleString('de-DE')} (Annahme, kein Honorarmodell)`,
+        t('{pct} % von € {cap} (Annahme, kein Honorarmodell)', { pct: Math.round(FEE_RATE * 100), cap: job.salary_max.toLocaleString(locale()) }),
       )
-    : demo(0, 'Kein Gehaltsband am Mandat hinterlegt')
+    : demo(0, t('Kein Gehaltsband am Mandat hinterlegt'))
 
 /** Short mandate reference from a uuid — "#A-1f4c" reads like the mockup's ids. */
 const mandateRef = (jobId: string): string => `#A-${jobId.slice(0, 4)}`
@@ -83,9 +87,9 @@ export function paceLabel(dwell: DwellStageDTO[]): { label: string; provenance: 
   // query returns rows whose average is 0, and "Ø 0 T bis Offer" reads like a
   // claim that placements are instant.
   if (relevant.length === 0 || days === 0) {
-    return { label: 'Ø — T bis Offer', provenance: 'demo' }
+    return { label: t('Ø — T bis Offer'), provenance: 'demo' }
   }
-  return { label: `Ø ${days} T bis Offer`, provenance: 'live' }
+  return { label: t('Ø {days} T bis Offer', { days }), provenance: 'live' }
 }
 
 /** Progress ring: share of the nine steps that are done. */
@@ -128,13 +132,13 @@ export function toProcessCards(
         jobId: job?.id,
         candidateRef: candidateRef(app.candidate_id),
         candidateId: app.candidate_id,
-        candidateName: candidate?.full_name ?? 'Unbekannt',
+        candidateName: candidate?.full_name ?? t('Unbekannt'),
         role: job?.title ?? candidate?.current_title ?? '—',
         mandateRef: job ? mandateRef(job.id) : '#A-????',
         client: company?.name ?? job?.location ?? '—',
         paceLabel: pace.label,
         pacePro: pace.provenance,
-        progress: live(progressFor(reached), 'Aus der Pipeline-Stage abgeleitet'),
+        progress: live(progressFor(reached), t('Aus der Pipeline-Stage abgeleitet')),
         fee: feeFromJob(job),
         steps: buildSteps(reached, marker),
       } satisfies ProcessCard
@@ -222,13 +226,13 @@ export function processCardsFromSteps(
         pacePro: pace.provenance,
         progress: live(
           Math.round(((reached + 1) / steps.length) * 100),
-          'Aus den abgehakten Prozess-Schritten',
+          t('Aus den abgehakten Prozess-Schritten'),
         ),
-        fee: demo(0, 'Kein Honorarmodell hinterlegt'),
+        fee: demo(0, t('Kein Honorarmodell hinterlegt')),
         statusNote: out
           ? `Abgesagt · ${out.label}`
           : person.next_appointment
-            ? `Nächster Termin ${dateTimeDe(person.next_appointment)}`
+            ? t('Nächster Termin {when}', { when: dateTimeDe(person.next_appointment) })
             : undefined,
         steps,
         editable: true,
@@ -266,18 +270,18 @@ function stepChips(
   row: ProcessStepDTO | undefined,
 ): ProcessStep['chips'] {
   const passed = row?.outcome === 'pass'
-  if (key === 'feedback-1') return [{ label: 'Kunde', done: passed }]
+  if (key === 'feedback-1') return [{ label: t('Kunde'), done: passed }]
   if (key === 'feedback-2') {
     return [
-      { label: 'Kand.', done: false },
-      { label: 'Kunde', done: passed },
+      { label: t('Kand.'), done: false },
+      { label: t('Kunde'), done: passed },
     ]
   }
   if (key === 'offer') {
     const done = passed || !!row?.done_at
     return [
       { label: 'Offer', done },
-      { label: 'Zusage', done },
+      { label: t('Zusage'), done },
     ]
   }
   return undefined
@@ -373,7 +377,7 @@ export function closingDealsFromCards(cards: ProcessCard[]): ClosingDeal[] {
       timing: card.statusNote ?? nextStepLabel(card),
       chance: demo(
         card.progress.value,
-        'Aus den abgehakten Schritten abgeleitet — keine gelernte Abschlusschance',
+        t('Aus den abgehakten Schritten abgeleitet — keine gelernte Abschlusschance'),
       ),
     }))
 }
@@ -381,7 +385,7 @@ export function closingDealsFromCards(cards: ProcessCard[]): ClosingDeal[] {
 /** "Wartet auf Offer & Zusage" — the step actually in play. */
 function nextStepLabel(card: ProcessCard): string {
   const next = card.steps.find((s) => s.state === 'current' || s.state === 'pending')
-  return next ? `wartet auf ${next.label}` : 'offen'
+  return next ? t('wartet auf {step}', { step: next.label }) : t('offen')
 }
 
 export function mandatesFromCards(
@@ -463,12 +467,12 @@ const TZ = 'Europe/Berlin'
  *  how a date-only cell ("25.08.") arrives. */
 function dateTimeDe(iso: string): string {
   const when = new Date(iso)
-  const date = when.toLocaleDateString('de-DE', {
+  const date = when.toLocaleDateString(locale(), {
     day: '2-digit',
     month: '2-digit',
     timeZone: TZ,
   })
-  const time = when.toLocaleTimeString('de-DE', {
+  const time = when.toLocaleTimeString(locale(), {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: TZ,
@@ -508,9 +512,9 @@ export function toJobScores(jobs: JobDTO[], matches: (MatchResultDTO[] | null)[]
         passing.length > 0
           ? live(
               Math.round((passing.reduce((s, m) => s + m.score, 0) / passing.length) * 100),
-              `Ø der ${passing.length} besten Matches, die alle harten Kriterien erfüllen`,
+              t('Ø der {n} besten Matches, die alle harten Kriterien erfüllen', { n: passing.length }),
             )
-          : live(0, 'Kein Kandidat erfüllt die harten Kriterien')
+          : live(0, t('Kein Kandidat erfüllt die harten Kriterien'))
 
       return {
         id: job.id,

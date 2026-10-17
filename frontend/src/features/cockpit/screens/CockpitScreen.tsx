@@ -6,6 +6,8 @@
 // URL hash — `#cockpit/<jobId>` — so a per-job view can be sent to a
 // colleague instead of described to them.
 
+import { t } from '@/i18n'
+
 import { CompetitionSection } from '../sections/CompetitionSection'
 import { JobScoringSection } from '../sections/JobScoringSection'
 import { NextActionsSection } from '../sections/NextActionsSection'
@@ -138,7 +140,7 @@ export function CockpitScreen({
               onClick={() => onSelectMandate?.(null)}
               className="ml-auto font-mono text-[12px] text-cockpit-faint transition-colors hover:text-cockpit-text"
             >
-              Auswahl aufheben
+              {t('Auswahl aufheben')}
             </button>
           </header>
 
@@ -162,8 +164,7 @@ export function CockpitScreen({
         {newMandate}
       {drawer}
         <p className="mx-auto min-w-0 max-w-[1560px] flex-1 px-6 text-[15px] text-cockpit-dim">
-          Dieses Mandat gibt es in diesem Workspace nicht (mehr) — links eines
-          auswählen.
+          {t('Dieses Mandat gibt es in diesem Workspace nicht (mehr) — links eines auswählen.')}
         </p>
       </div>
     )
@@ -196,14 +197,13 @@ export function CockpitScreen({
       <div className="mx-auto min-w-0 max-w-[1560px] flex-1 space-y-10 px-6">
         <header id="section-signals" className="scroll-mt-24">
           <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-mint-400">
-            Kommandozentrale
+            {t('Kommandozentrale')}
           </span>
           <h1 className="mt-1.5 text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
-            Cockpit
+            {t('Cockpit')}
           </h1>
           <p className="mt-2 max-w-xl text-[16px] leading-relaxed text-cockpit-dim">
-            Ein lebendiges System: es liest mit, hält jeden Prozess aktuell und erkennt, wo
-            Umsatz entsteht.
+            {t('Ein lebendiges System: es liest mit, hält jeden Prozess aktuell und erkennt, wo Umsatz entsteht.')}
           </p>
         </header>
 

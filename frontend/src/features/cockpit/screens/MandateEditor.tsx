@@ -8,6 +8,8 @@
 // validated before it is sent, and why every change leaves a receipt on the
 // way in.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { AlertCircle, X } from 'lucide-react'
 
@@ -17,15 +19,15 @@ import { Button, SelectInput, TagInput, TextInput } from '../ui/forms'
 import { Panel } from '../ui/primitives'
 
 const STATUS_OPTIONS = [
-  { value: 'open', label: 'Offen' },
-  { value: 'on_hold', label: 'Pausiert' },
-  { value: 'filled', label: 'Besetzt' },
-  { value: 'cancelled', label: 'Abgesagt' },
+  { value: 'open', label: t('Offen') },
+  { value: 'on_hold', label: t('Pausiert') },
+  { value: 'filled', label: t('Besetzt') },
+  { value: 'cancelled', label: t('Abgesagt') },
 ]
 
 const RELOCATE_PERMIT = [
-  { value: 'true', label: 'Erforderlich' },
-  { value: 'false', label: 'Nicht erforderlich' },
+  { value: 'true', label: t('Erforderlich') },
+  { value: 'false', label: t('Nicht erforderlich') },
 ]
 
 interface Draft {
@@ -95,14 +97,14 @@ export function MandateEditor({
   ]
 
   async function save() {
-    if (!d.title.trim()) return setError('Titel darf nicht leer sein.')
+    if (!d.title.trim()) return setError(t('Titel darf nicht leer sein.'))
     for (const [label, raw] of [
-      ['Gehalt von', d.salary_min],
-      ['Gehalt bis', d.salary_max],
-      ['Umkreis', d.location_radius_km],
+      [t('Gehalt von'), d.salary_min],
+      [t('Gehalt bis'), d.salary_max],
+      [t('Umkreis'), d.location_radius_km],
     ] as const) {
       if (raw.trim() !== '' && toNum(raw) === null) {
-        return setError(`${label} muss eine positive Zahl sein.`)
+        return setError(t('{label} muss eine positive Zahl sein.', { label }))
       }
     }
     const min = toNum(d.salary_min)
@@ -110,7 +112,7 @@ export function MandateEditor({
     // Checked here as well as on the server: an inverted band is a typo, and
     // a 422 after the dialog closes is a worse way to learn about it.
     if (min !== null && max !== null && min > max) {
-      return setError('Gehalt von liegt über Gehalt bis.')
+      return setError(t('Gehalt von liegt über Gehalt bis.'))
     }
 
     setBusy(true)
@@ -136,10 +138,10 @@ export function MandateEditor({
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 422
-          ? 'Abgelehnt — bitte Gehaltsband und Status prüfen.'
+          ? t('Abgelehnt — bitte Gehaltsband und Status prüfen.')
           : e instanceof ApiError
-            ? `Konnte nicht gespeichert werden (HTTP ${e.status}).`
-            : 'Konnte nicht gespeichert werden — keine Antwort vom Server.',
+            ? t('Konnte nicht gespeichert werden (HTTP {status}).', { status: e.status })
+            : t('Konnte nicht gespeichert werden — keine Antwort vom Server.'),
       )
       setBusy(false)
     }
@@ -156,16 +158,16 @@ export function MandateEditor({
           <div className="flex items-start gap-3">
             <div>
               <h3 className="text-[18px] font-semibold text-cockpit-text">
-                Mandat bearbeiten
+                {t('Mandat bearbeiten')}
               </h3>
               <p className="mt-0.5 font-mono text-[12px] text-cockpit-faint">
-                Suchprofil · steuert die harten Filter im Matching
+                {t('Suchprofil · steuert die harten Filter im Matching')}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Schließen"
+              aria-label={t('Schließen')}
               className="ml-auto text-cockpit-faint transition-colors hover:text-cockpit-text"
             >
               <X className="h-4 w-4" />
@@ -173,51 +175,51 @@ export function MandateEditor({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextInput label="Titel" value={d.title} onChange={(v) => set('title', v)} />
+            <TextInput label={t('Titel')} value={d.title} onChange={(v) => set('title', v)} />
             <SelectInput
-              label="Kunde"
+              label={t('Kunde')}
               value={d.client_company_id}
               onChange={(v) => set('client_company_id', v)}
               options={companyOptions}
             />
             <TextInput
-              label="Ort"
+              label={t('Ort')}
               value={d.location}
               onChange={(v) => set('location', v)}
-              placeholder="z. B. München"
+              placeholder={t('z. B. München')}
             />
             <TextInput
-              label="Umkreis (km)"
+              label={t('Umkreis (km)')}
               value={d.location_radius_km}
               onChange={(v) => set('location_radius_km', v)}
               type="number"
-              placeholder="leer = kein Radius-Filter"
+              placeholder={t('leer = kein Radius-Filter')}
             />
             <TextInput
-              label="Gehalt von"
+              label={t('Gehalt von')}
               value={d.salary_min}
               onChange={(v) => set('salary_min', v)}
               type="number"
             />
             <TextInput
-              label="Gehalt bis (Obergrenze)"
+              label={t('Gehalt bis (Obergrenze)')}
               value={d.salary_max}
               onChange={(v) => set('salary_max', v)}
               type="number"
             />
             <TextInput
-              label="Währung"
+              label={t('Währung')}
               value={d.salary_currency}
               onChange={(v) => set('salary_currency', v)}
             />
             <SelectInput
-              label="Status"
+              label={t('Status')}
               value={d.status}
               onChange={(v) => set('status', v)}
               options={STATUS_OPTIONS}
             />
             <SelectInput
-              label="Arbeitserlaubnis"
+              label={t('Arbeitserlaubnis')}
               value={d.requires_work_permit}
               onChange={(v) => set('requires_work_permit', v)}
               options={RELOCATE_PERMIT}
@@ -226,30 +228,28 @@ export function MandateEditor({
 
           <div className="space-y-2">
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
-              Muss-Kriterien
+              {t('Muss-Kriterien')}
             </span>
             <TagInput
               tags={d.must_have_skills}
               onChange={(v) => set('must_have_skills', v)}
-              placeholder="Skill hinzufügen…"
+              placeholder={t('Skill hinzufügen…')}
             />
           </div>
 
           <div className="space-y-2">
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
-              Erforderliche Zertifikate
+              {t('Erforderliche Zertifikate')}
             </span>
             <TagInput
               tags={d.required_certifications}
               onChange={(v) => set('required_certifications', v)}
-              placeholder="Zertifikat hinzufügen…"
+              placeholder={t('Zertifikat hinzufügen…')}
             />
           </div>
 
           <p className="text-[12px] leading-relaxed text-cockpit-faint">
-            Obergrenze, Umkreis und Zertifikate sind harte Filter: ein Kandidat, der
-            sie reißt, wird ausgeschlossen — nicht nur schlechter bewertet. Jede
-            Änderung wird mit Beleg protokolliert.
+            {t('Obergrenze, Umkreis und Zertifikate sind harte Filter: ein Kandidat, der sie reißt, wird ausgeschlossen — nicht nur schlechter bewertet. Jede Änderung wird mit Beleg protokolliert.')}
           </p>
 
           {error && (
@@ -259,9 +259,9 @@ export function MandateEditor({
           )}
 
           <div className="flex justify-end gap-2">
-            <Button onClick={onClose}>Abbrechen</Button>
+            <Button onClick={onClose}>{t('Abbrechen')}</Button>
             <Button tone="primary" onClick={save} disabled={busy}>
-              {busy ? 'Speichert…' : 'Speichern'}
+              {busy ? t('Speichert…') : t('Speichern')}
             </Button>
           </div>
         </Panel>

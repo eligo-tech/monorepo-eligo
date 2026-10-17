@@ -8,6 +8,10 @@
 // so the input shows and returns that wall clock whatever zone the viewer's
 // laptop is in — a Munich interview must not read 09:30 in London.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useRef, useState } from 'react'
 import { Trash2, X } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
@@ -20,7 +24,7 @@ const TZ = 'Europe/Berlin'
 /** How far the Berlin wall clock is from UTC at that instant (DST included). */
 function berlinOffsetMs(at: Date): number {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-GB', {
+    new Intl.DateTimeFormat(locale(), {
       timeZone: TZ,
       hour12: false,
       year: 'numeric',
@@ -83,7 +87,7 @@ const OUTCOMES: {
 }[] = [
   {
     value: 'open',
-    label: 'offen',
+    label: t('offen'),
     tone: 'border-cockpit-line text-cockpit-dim',
   },
   {
@@ -122,12 +126,12 @@ export function StepEditor({
     // in Chrome. Sending that would leave the field unchanged and close the
     // dialog, which reads exactly like "it did not save" — so ask first.
     if (terminRef.current?.validity.badInput) {
-      setError('Termin unvollständig — bitte Datum und Uhrzeit angeben.')
+      setError(t('Termin unvollständig — bitte Datum und Uhrzeit angeben.'))
       return
     }
     const scheduledIso = scheduled ? fromBerlinInput(scheduled) : null
     if (scheduled && !scheduledIso) {
-      setError('Termin nicht lesbar — bitte Datum und Uhrzeit angeben.')
+      setError(t('Termin nicht lesbar — bitte Datum und Uhrzeit angeben.'))
       return
     }
     const doneIso = doneOn ? fromBerlinInput(`${doneOn}T00:00`) : null
@@ -160,7 +164,7 @@ export function StepEditor({
       const sameMoment = (a: string | null, b: string | null) =>
         a === b || (!!a && !!b && new Date(a).getTime() === new Date(b).getTime())
       if (!sameMoment(saved.scheduled_at ?? null, scheduledIso ?? null)) {
-        setError('Der Termin wurde nicht übernommen — bitte erneut versuchen.')
+        setError(t('Der Termin wurde nicht übernommen — bitte erneut versuchen.'))
         setBusy(false)
         return
       }
@@ -169,10 +173,10 @@ export function StepEditor({
     } catch (e) {
       setError(
         e instanceof ApiError && (e.status === 401 || e.status === 403)
-          ? 'Sitzung abgelaufen — bitte neu anmelden.'
+          ? t('Sitzung abgelaufen — bitte neu anmelden.')
           : e instanceof ApiError
             ? `Konnte nicht gespeichert werden (HTTP ${e.status}).`
-            : 'Konnte nicht gespeichert werden — keine Antwort vom Server.',
+            : t('Konnte nicht gespeichert werden — keine Antwort vom Server.'),
       )
       setBusy(false)
     }
@@ -197,7 +201,7 @@ export function StepEditor({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Schließen"
+              aria-label={t('Schließen')}
               className="ml-auto text-cockpit-faint transition-colors hover:text-cockpit-text"
             >
               <X className="h-4 w-4" />
@@ -206,7 +210,7 @@ export function StepEditor({
 
           <label className="block space-y-1">
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
-              Termin (Ortszeit Deutschland)
+              {t('Termin (Ortszeit Deutschland)')}
             </span>
             <div className="flex items-center gap-2">
               <input
@@ -220,8 +224,8 @@ export function StepEditor({
                 <button
                   type="button"
                   onClick={() => setScheduled('')}
-                  aria-label="Termin entfernen"
-                  title="Termin entfernen"
+                  aria-label={t('Termin entfernen')}
+                  title={t('Termin entfernen')}
                   className="text-cockpit-faint transition-colors hover:text-coral-400"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -232,7 +236,7 @@ export function StepEditor({
 
           <label className="block space-y-1">
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
-              Erledigt am
+              {t('Erledigt am')}
             </span>
             <input
               type="date"
@@ -244,7 +248,7 @@ export function StepEditor({
 
           <div className="space-y-1">
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
-              Ergebnis
+              {t('Ergebnis')}
             </span>
             <div className="flex gap-2">
               {OUTCOMES.map((option) => (
@@ -265,20 +269,19 @@ export function StepEditor({
             </div>
             {outcome === 'out' && (
               <p className="text-[12px] leading-relaxed text-coral-400">
-                Abgesagt beendet den Prozess — der Kandidat verschwindet aus den
-                offenen Schritten.
+                {t('Abgesagt beendet den Prozess — der Kandidat verschwindet aus den offenen Schritten.')}
               </p>
             )}
           </div>
 
           <label className="block space-y-1">
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
-              Notiz
+              {t('Notiz')}
             </span>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="z. B. vor Ort"
+              placeholder={t('z. B. vor Ort')}
               className={cn(FIELD, 'w-full')}
             />
           </label>
@@ -286,9 +289,9 @@ export function StepEditor({
           {error && <p className="text-[13px] text-coral-400">{error}</p>}
 
           <div className="flex justify-end gap-2">
-            <Button onClick={onClose}>Abbrechen</Button>
+            <Button onClick={onClose}>{t('Abbrechen')}</Button>
             <Button tone='primary' onClick={save} disabled={busy}>
-              {busy ? 'Speichert…' : 'Speichern'}
+              {busy ? t('Speichert…') : t('Speichern')}
             </Button>
           </div>
         </Panel>

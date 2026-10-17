@@ -10,6 +10,8 @@
 // named it, and the candidates who did are listed, because the recruiter's
 // next move is to ask one of them what the role was.
 
+import { t } from '@/i18n'
+
 import { Building2 } from 'lucide-react'
 
 import { useAsync } from '@/hooks/useAsync'
@@ -28,9 +30,9 @@ export function CompetitionSection() {
       <SectionHeader
         id="section-wettbewerb"
         index="04"
-        title="Wer sucht dieselben Profile"
+        title={t('Wer sucht dieselben Profile')}
         tone="gold"
-        hint="Aus den Qualifikationsgesprächen · mögliche Neukunden"
+        hint={t('Aus den Qualifikationsgesprächen · mögliche Neukunden')}
       />
       <Panel className="px-7 py-5">
         <ul className="divide-y divide-cockpit-line">
@@ -43,7 +45,7 @@ export function CompetitionSection() {
               <span className="text-[15px] text-cockpit-text">{row.company}</span>
               <span className="font-mono text-[12px] text-gold-300">
                 {row.candidate_count}{' '}
-                {row.candidate_count === 1 ? 'Kandidat' : 'Kandidaten'}
+                {row.candidate_count === 1 ? t('Kandidat') : t('Kandidaten')}
               </span>
               <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-cockpit-faint">
                 {row.candidates.join(' · ')}

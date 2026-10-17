@@ -8,6 +8,8 @@
 // missing wiring, so the controls are drawn and disabled with the reason on
 // hover rather than left to look broken.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { Search, Sparkles } from 'lucide-react'
 
@@ -27,7 +29,7 @@ const SOURCES = [
 ]
 
 const CRAWL_REASON =
-  'Portalsuche ist ein ausgehender Abruf — die laufen als geplanter Job, nie aus einem Klick (ARCHITECTURE.md Regel 1).'
+  t('Portalsuche ist ein ausgehender Abruf — die laufen als geplanter Job, nie aus einem Klick (ARCHITECTURE.md Regel 1).')
 
 export function SourcingPanel({ mandate }: { mandate: Mandate }) {
   // Two panels, two flags: somebody who folds the message draft away is
@@ -48,20 +50,23 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
     )
 
-  const greeting = form === 'Sie' ? 'Sehr geehrte(r) [Name]' : 'Hallo [Vorname]'
-  const verb = form === 'Sie' ? 'Ihr Profil' : 'dein Profil'
+  // English has one second person, so both halves of the Sie/Du switch
+  // translate to the same thing. The switch itself stays — it is about the
+  // German draft, which is what gets sent in a German-speaking market.
+  const greeting = form === 'Sie' ? t('Sehr geehrte(r) [Name]') : t('Hallo [Vorname]')
+  const verb = form === 'Sie' ? t('Ihr Profil') : t('dein Profil')
   const closing =
     form === 'Sie'
-      ? 'Hätten Sie Interesse an einem kurzen Austausch?'
-      : 'Hast du Lust auf einen kurzen Austausch?'
+      ? t('Hätten Sie Interesse an einem kurzen Austausch?')
+      : t('Hast du Lust auf einen kurzen Austausch?')
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <Panel className="px-6 py-5">
         <PanelHead
-          tag="Zentrale Suche"
+          tag={t('Zentrale Suche')}
           tone="lav"
-          title="Datenbank & Portale"
+          title={t('Datenbank & Portale')}
           note={DEMO_HINT}
           collapsed={searchShut}
           onToggle={() => setSearchShut((shut) => !shut)}
@@ -73,7 +78,7 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
             <Search className="h-[15px] w-[15px] shrink-0 text-cockpit-faint" />
             <input
               disabled
-              placeholder="Intelligente Suche über alle Quellen …"
+              placeholder={t('Intelligente Suche über alle Quellen …')}
               className="flex-1 bg-transparent py-2.5 text-[13px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
             />
           </div>
@@ -105,10 +110,10 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <label className="flex items-center gap-2 text-[12.5px] text-cockpit-dim">
               <input type="checkbox" className="h-[15px] w-[15px] accent-[#e0897a]" />
-              Nur eigene Datenbank
+              {t('Nur eigene Datenbank')}
             </label>
             <Button tone="primary" disabled title={CRAWL_REASON}>
-              Kandidaten suchen →
+              {t('Kandidaten suchen →')}
             </Button>
           </div>
 
@@ -121,9 +126,9 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
 
       <Panel className="px-6 py-5">
         <PanelHead
-          tag="Ansprache"
+          tag={t('Ansprache')}
           tone="gold"
-          title="Nachricht an Kandidaten"
+          title={t('Nachricht an Kandidaten')}
           note={`${form}-Form · ${DEMO_HINT}`}
           collapsed={reachShut}
           onToggle={() => setReachShut((shut) => !shut)}
@@ -159,8 +164,7 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
 
           <p className="mt-3 flex items-center gap-2 text-[12px] text-cockpit-faint">
             <Sparkles className="h-3.5 w-3.5 text-gold-400" />
-            Entwurf aus dem Mandat zusammengesetzt — der Outreach-Agent (Phase 5)
-            schreibt und lernt ihn später, und verschickt nie ohne Freigabe.
+            {t('Entwurf aus dem Mandat zusammengesetzt — der Outreach-Agent (Phase 5) schreibt und lernt ihn später, und verschickt nie ohne Freigabe.')}
           </p>
           </>
         )}

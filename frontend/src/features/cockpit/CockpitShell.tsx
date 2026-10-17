@@ -7,6 +7,8 @@
 // The arrow-cluster Navigator this used to carry is gone: paging blindly through
 // screens to reach one you wanted is worse than choosing it from a list.
 
+import { t } from '@/i18n'
+
 import { useCallback, useEffect, useState } from 'react'
 import { cn } from '@/lib/cn'
 import { CommandBar } from './CommandBar'
@@ -35,13 +37,13 @@ export type ScreenKey =
 // draws on, then the part of it this workspace watches — the funnel from
 // "who is hiring" to "who do I call" — then the people and mandates inside it.
 export const SCREENS: SectionOption<ScreenKey>[] = [
-  { key: 'cockpit', label: 'Cockpit' },
-  { key: 'markt', label: 'Markt' },
-  { key: 'projekte', label: 'Projekte' },
+  { key: 'cockpit', label: t('Cockpit') },
+  { key: 'markt', label: t('Markt') },
+  { key: 'projekte', label: t('Projekte') },
   { key: 'managers', label: 'Manager', placeholder: true },
-  { key: 'jobs', label: 'Jobs' },
-  { key: 'kandidaten', label: 'Kandidaten' },
-  { key: 'einstellungen', label: 'Einstellungen' },
+  { key: 'jobs', label: t('Jobs') },
+  { key: 'kandidaten', label: t('Kandidaten') },
+  { key: 'einstellungen', label: t('Einstellungen') },
 ]
 
 export const isScreenKey = (v: string): v is ScreenKey =>
@@ -117,7 +119,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         query={query}
         onQueryChange={setQuery}
         searchHint={
-          screen === 'jobs' ? 'Mandate filtern: Firma, Titel, Ort …' : undefined
+          screen === 'jobs' ? t('Mandate filtern: Firma, Titel, Ort …') : undefined
         }
         typeface={typeface}
         onTypefaceChange={setTypeface}

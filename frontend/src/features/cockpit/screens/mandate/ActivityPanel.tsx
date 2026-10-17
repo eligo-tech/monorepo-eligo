@@ -10,6 +10,8 @@
 // its mark. The "noch nicht probiert" row is the useful half even as a demo:
 // it names the channels nobody has tried for this search.
 
+import { t } from '@/i18n'
+
 import { useRemembered } from '@/hooks/useRemembered'
 import { Panel } from '../../ui/primitives'
 import { DEMO_HINT, DemoText, PanelHead } from './parts'
@@ -19,9 +21,9 @@ const CHANNELS = [
   { name: 'LinkedIn', sent: 48, resp: 14, pos: 5 },
   { name: 'Xing', sent: 22, resp: 6, pos: 2 },
   { name: 'Eigene Datenbank', sent: 9, resp: 6, pos: 4 },
-  { name: 'Mail', sent: 5, resp: 2, pos: 1 },
+  { name: t('Mail'), sent: 5, resp: 2, pos: 1 },
 ]
-const UNTRIED = ['Telefon', 'Arbeitsagentur', 'Stepstone']
+const UNTRIED = [t('Telefon'), 'Arbeitsagentur', 'Stepstone']
 
 function Step({
   value,
@@ -35,7 +37,7 @@ function Step({
   return (
     <div className="min-w-[104px] rounded-xl border border-cockpit-line bg-cockpit-inset px-4 py-2.5 text-center">
       <div className="font-mono text-[22px] text-cockpit-text">
-        {demo ? <DemoText source="Kein Outreach-Log — Zähler folgen aus Phase 5">{value}</DemoText> : value}
+        {demo ? <DemoText source={t('Kein Outreach-Log — Zähler folgen aus Phase 5')}>{value}</DemoText> : value}
       </div>
       <div className="mt-0.5 text-[11.5px] text-cockpit-faint">{label}</div>
     </div>
@@ -57,9 +59,9 @@ export function ActivityPanel({ mandate }: { mandate: Mandate }) {
   return (
     <Panel className="px-6 py-5">
       <PanelHead
-        tag="Aktivität"
+        tag={t('Aktivität')}
         tone="lav"
-        title="Was haben wir für diesen Job getan?"
+        title={t('Was haben wir für diesen Job getan?')}
         note={DEMO_HINT}
         collapsed={collapsed}
         onToggle={() => setCollapsed((shut) => !shut)}
@@ -68,17 +70,17 @@ export function ActivityPanel({ mandate }: { mandate: Mandate }) {
       {collapsed ? null : (
         <>
         <div className="flex flex-wrap items-center gap-2">
-          <Step value={String(sent)} label="Angesprochen" demo />
+          <Step value={String(sent)} label={t('Angesprochen')} demo />
           <span className="text-cockpit-faint">›</span>
           <Step
             value={`${answered} · ${Math.round((answered / sent) * 100)}%`}
-            label="Antworten"
+            label={t('Antworten')}
             demo
           />
           <span className="text-cockpit-faint">›</span>
-          <Step value={String(interested)} label="Interessiert" demo />
+          <Step value={String(interested)} label={t('Interessiert')} demo />
           <span className="text-cockpit-faint">›</span>
-          <Step value={String(presented)} label="Vorgestellt" />
+          <Step value={String(presented)} label={t('Vorgestellt')} />
         </div>
 
         <div className="mt-5 space-y-2">
@@ -111,7 +113,7 @@ export function ActivityPanel({ mandate }: { mandate: Mandate }) {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px]">
-          <span className="text-cockpit-faint">Noch nicht probiert:</span>
+          <span className="text-cockpit-faint">{t('Noch nicht probiert:')}</span>
           {UNTRIED.map((channel) => (
             <span
               key={channel}

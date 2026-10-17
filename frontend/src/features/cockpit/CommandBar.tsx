@@ -4,6 +4,8 @@
 // which the cockpit replaces — dropping them would take organisation switching
 // and sign-out with it.
 
+import { t } from '@/i18n'
+
 import { Search } from 'lucide-react'
 import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react'
 import { authEnabled } from '@/auth/config'
@@ -14,6 +16,14 @@ import { cn } from '@/lib/cn'
 import type { MeDTO } from '@/api/types'
 import type { CockpitStatus } from './data/types'
 import type { Typeface } from './useTypeface'
+import { getLang, setLang, type Lang } from '@/i18n'
+
+//: Both labels are two letters and language-neutral, so the control reads
+//: the same whichever language you are currently stuck in.
+const LANGUAGES: { key: Lang; label: string }[] = [
+  { key: 'de', label: 'DE' },
+  { key: 'en', label: 'EN' },
+]
 
 const TYPEFACES: { key: Typeface; label: string }[] = [
   { key: 'jet', label: 'Jet' },
@@ -69,7 +79,7 @@ export function CommandBar({
           <span className="text-[19px] font-semibold tracking-[0.12em] text-cockpit-text">
             COCKPIT
           </span>
-          <span className="font-mono text-[13px] text-cockpit-faint">· Personalberatung</span>
+          <span className="font-mono text-[13px] text-cockpit-faint">{t('· Personalberatung')}</span>
         </div>
 
         {/* Global search */}
@@ -78,7 +88,7 @@ export function CommandBar({
           <input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder={searchHint ?? 'Kandidat, Mandat oder Firma suchen …'}
+            placeholder={searchHint ?? t('Kandidat, Mandat oder Firma suchen …')}
             className="w-full rounded-xl border border-cockpit-line bg-cockpit-inset py-2.5 pl-11 pr-4 text-[15px] text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
           />
         </label>
@@ -90,12 +100,13 @@ export function CommandBar({
         <div className="flex shrink-0 items-center gap-2">
           <span className="flex items-center gap-2 rounded-xl border border-gold-600/45 bg-gold-800/25 px-3 py-1.5 text-[13px] text-gold-300">
             <span className="h-[7px] w-[7px] rounded-full bg-gold-400" />
-            Datenlauf fällig · <Figure figure={status.pendingChanges} /> Änderungen
+            {t('Datenlauf fällig ·')} <Figure figure={status.pendingChanges} />{' '}
+            {t('Änderungen')}
           </span>
           {status.humanInTheLoop && (
             <span className="flex items-center gap-2 rounded-xl border border-mint-600/45 bg-mint-800/25 px-3 py-1.5 text-[13px] text-mint-300">
               <span className="h-[7px] w-[7px] rounded-full bg-mint-400" />
-              Human-in-the-Loop aktiv
+              {t('Human-in-the-Loop aktiv')}
             </span>
           )}
         </div>
@@ -116,7 +127,8 @@ export function CommandBar({
             <span className="font-mono text-[13px] text-cockpit-dim">{status.initials}</span>
           )}
           <span className="font-mono text-[13px] text-cockpit-dim">
-            · Ansprache: <span className="text-cockpit-text">{status.address}</span>
+            {t('· Ansprache:')}{' '}
+            <span className="text-cockpit-text">{status.address}</span>
           </span>
           {/* What the server thinks you are. Shown rather than assumed: if a
               Clerk token arrives without a role claim everyone is treated as
@@ -126,8 +138,8 @@ export function CommandBar({
             <span
               title={
                 me.role_known
-                  ? `Angemeldet als ${me.name}`
-                  : 'Das Token enthält keine Rolle — als Recruiter behandelt.'
+                  ? t('Angemeldet als {name}', { name: me.name })
+                  : t('Das Token enthält keine Rolle — als Recruiter behandelt.')
               }
               className={cn(
                 'rounded-md border px-2 py-0.5 font-mono text-[11.5px]',
@@ -141,6 +153,17 @@ export function CommandBar({
             </span>
           )}
         </div>
+
+        {/* `setLang` reloads the page, so there is no state to hold here —
+            see the note in src/i18n/index.ts for why a reload and not a
+            re-render. */}
+        <SegmentedControl
+          options={LANGUAGES}
+          value={getLang()}
+          onChange={setLang}
+          size="sm"
+          className="shrink-0"
+        />
 
         <SegmentedControl
           options={TYPEFACES}

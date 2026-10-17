@@ -16,6 +16,8 @@
 // while 76 mandate titles were truncated inside 248 pixels — the width was
 // being spent on the margin instead of on the names.
 
+import { t } from '@/i18n'
+
 import { useMemo, useState } from 'react'
 import { PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react'
 
@@ -101,11 +103,11 @@ export function MandateDrawer({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="Mandate einblenden"
+        title={t('Mandate einblenden')}
         className="sticky top-20 ml-0 flex h-fit shrink-0 items-center gap-2 rounded-r-lg border-y border-r border-cockpit-line py-3 pl-1.5 pr-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
       >
         <PanelLeftOpen className="h-4 w-4" />
-        <span className="[writing-mode:vertical-rl]">Mandate</span>
+        <span className="[writing-mode:vertical-rl]">{t('Mandate')}</span>
       </button>
     )
   }
@@ -114,7 +116,7 @@ export function MandateDrawer({
     <aside className="sticky top-20 flex h-[calc(100vh-6rem)] w-[270px] shrink-0 flex-col rounded-r-xl border-y border-r border-cockpit-line bg-cockpit-inset lg:w-[300px] xl:w-[340px]">
       <div className="flex items-center gap-2 border-b border-cockpit-line pl-4 pr-3 py-2">
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-          Mandate
+          {t('Mandate')}
         </span>
         <span className="font-mono text-[11px] text-cockpit-faint">
           {mandates.length}
@@ -125,16 +127,16 @@ export function MandateDrawer({
           <button
             type="button"
             onClick={onCreate}
-            title="Neues Mandat anlegen"
+            title={t('Neues Mandat anlegen')}
             className="ml-auto flex items-center gap-1 font-mono text-[11px] text-mint-300 transition-colors hover:text-mint-200"
           >
-            <Plus className="h-3.5 w-3.5" /> Neu
+            <Plus className="h-3.5 w-3.5" /> {t('Neu')}
           </button>
         )}
         <button
           type="button"
           onClick={() => setOpen(false)}
-          title="Mandate ausblenden"
+          title={t('Mandate ausblenden')}
           className={cn(
             'text-cockpit-faint transition-colors hover:text-cockpit-text',
             !onCreate && 'ml-auto',
@@ -149,7 +151,7 @@ export function MandateDrawer({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Mandat oder Firma…"
+          placeholder={t('Mandat oder Firma…')}
           className="w-full bg-transparent text-[12.5px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
         />
       </label>
@@ -166,9 +168,9 @@ export function MandateDrawer({
               : 'text-cockpit-dim hover:bg-white/[0.03] hover:text-cockpit-text',
           )}
         >
-          Gesamt
+          {t('Gesamt')}
           <span className="block text-[11.5px] text-cockpit-faint">
-            Alle laufenden Prozesse
+            {t('Alle laufenden Prozesse')}
           </span>
         </button>
 

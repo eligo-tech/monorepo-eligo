@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+import { setLang } from '@/i18n'
 
 import { fitMono, mandateCaption } from './MandateGraph'
 
@@ -17,6 +19,11 @@ import { PROCESS_STEPS } from '../data/mock'
  *
  *  Mono is a fixed advance, so these are exact widths: the caption must fit
  *  the box minus the padding and the controls on the right. */
+// These assert German copy, so they say so. Without this the suite reads
+// whatever language the runner's `navigator` implies, which is not a thing
+// a test should depend on.
+beforeEach(() => setLang('de'))
+
 const WIDTH = 392
 const FITS = (caption: string) => caption.length * 11 * 0.6 <= WIDTH - 16 - 58
 
@@ -91,5 +98,31 @@ describe('the candidate line', () => {
 
   it('keeps at least two characters, however little room there is', () => {
     expect(fitMono('Vorgestellt', 4, 11).length).toBe(2)
+  })
+})
+
+
+/** The same caption through the dictionary. Proof that the pipeline works
+ *  end to end — a wrapped call site, a key that matches it exactly, and an
+ *  English string out — rather than proof that `t()` can return a string. */
+describe('mandateCaption, in English', () => {
+  beforeEach(() => setLang('en'))
+
+  it('says the same thing', () => {
+    expect(mandateCaption('Linde + Wiemann', 3, 8)).toBe(
+      'Linde + Wiemann · 3 Candidates · best fit 8/10',
+    )
+  })
+
+  it('counts one candidate in the singular', () => {
+    expect(mandateCaption('KVB', 1, null)).toBe('KVB · 1 Candidate · not assessed')
+  })
+
+  it('still fits the box — English is not shorter by default', () => {
+    for (const client of ['Computacenter', 'GE Software', 'Linde + Wiemann']) {
+      for (const fit of [null, 10] as const) {
+        expect(FITS(mandateCaption(client, 12, fit))).toBe(true)
+      }
+    }
   })
 })

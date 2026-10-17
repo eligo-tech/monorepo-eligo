@@ -1,6 +1,10 @@
 // Small cockpit primitives: surfaces, section chrome, chips, and figures.
 // Larger widgets (Gauge, ProcessStepper, ScoreBar, Carousel) have their own files.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 import type { Figure as FigureModel, Provenance } from '../data/types'
@@ -154,16 +158,16 @@ export function ProvenanceMark({
   if (provenance === 'live') return null
   return (
     <sup
-      title={source ?? 'Demo-Wert — nicht gegen eine Quelle geprüft'}
+      title={source ?? t('Demo-Wert — nicht gegen eine Quelle geprüft')}
       className="ml-0.5 cursor-help select-none align-super font-mono text-[0.7em] text-cockpit-faint"
-      aria-label="Demo-Wert, nicht verifiziert"
+      aria-label={t('Demo-Wert, nicht verifiziert')}
     >
       °
     </sup>
   )
 }
 
-const de = (n: number) => n.toLocaleString('de-DE')
+const de = (n: number) => n.toLocaleString(locale())
 
 /** Formats a Figure and appends its provenance mark. */
 export function Figure({

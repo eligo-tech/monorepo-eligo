@@ -11,6 +11,8 @@
 // antippen" since the mockup. Only cards backed by real process rows are
 // editable; a demo card has nothing to write to.
 
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 
 import { api } from '@/api/client'
@@ -33,7 +35,7 @@ function bestStand(cards: ProcessCard[]): string {
   )
   if (furthest.steps.some((s) => s.state === 'out')) return 'abgesagt'
   const open = furthest.steps.find((s) => s.state !== 'done')
-  return open ? open.label : 'Vertrag'
+  return open ? open.label : t('Vertrag')
 }
 
 function MandateHead({ mandate }: { mandate: Mandate }) {
@@ -54,7 +56,7 @@ function MandateHead({ mandate }: { mandate: Mandate }) {
         <span className="block text-[11.5px] text-cockpit-dim">{mandate.client}</span>
       </div>
       <div className="ml-auto text-right font-mono text-[11px] text-cockpit-faint">
-        {count} {count === 1 ? 'Kandidat' : 'Kandidaten'} · bester Stand:{' '}
+        {count} {count === 1 ? t('Kandidat') : t('Kandidaten')} · bester Stand:{' '}
         <span className="text-cockpit-text">{bestStand(mandate.cards)}</span>
         {fee && (
           <>
@@ -96,9 +98,9 @@ export function ProcessSection({
       <SectionHeader
         id="section-02"
         index="02"
-        title="Laufende Prozesse"
+        title={t('Laufende Prozesse')}
         tone="coral"
-        hint="Schritte antippen · Mandat öffnen"
+        hint={t('Schritte antippen · Mandat öffnen')}
       />
 
       {/* The book as one picture, before the column of cards. A flat fan of
@@ -109,12 +111,12 @@ export function ProcessSection({
       {total > 0 && (
         <Panel className="px-6 py-5">
           <PanelHead
-            tag="Überblick"
+            tag={t('Überblick')}
             tone="mint"
-            title="Mandate und ihre Kandidaten"
+            title={t('Mandate und ihre Kandidaten')}
             note={`${mandates.length} ${
-              mandates.length === 1 ? 'Mandat' : 'Mandate'
-            } · ${total} ${total === 1 ? 'Kandidat' : 'Kandidaten'} · nach bester Passung`}
+              mandates.length === 1 ? t('Mandat') : t('Mandate')
+            } · ${total} ${total === 1 ? t('Kandidat') : t('Kandidaten')} · nach bester Passung`}
             collapsed={graphShut}
             onToggle={() => setGraphShut((shut) => !shut)}
           />
@@ -129,8 +131,7 @@ export function ProcessSection({
 
       {total === 0 ? (
         <Panel className="px-6 py-10 text-center text-[15px] text-cockpit-dim">
-          Kein Kandidat ist derzeit vorgestellt — sobald ein Profil beim Kunden liegt,
-          erscheint der Prozess hier.
+          {t('Kein Kandidat ist derzeit vorgestellt — sobald ein Profil beim Kunden liegt, erscheint der Prozess hier.')}
         </Panel>
       ) : (
         <div className="space-y-5">
@@ -140,7 +141,7 @@ export function ProcessSection({
                 type="button"
                 onClick={() => onOpenMandate?.(mandate.id)}
                 disabled={!onOpenMandate}
-                title={onOpenMandate ? 'Mandat öffnen' : undefined}
+                title={onOpenMandate ? t('Mandat öffnen') : undefined}
                 className="block w-full text-left transition-opacity enabled:hover:opacity-90"
               >
                 <MandateHead mandate={mandate} />

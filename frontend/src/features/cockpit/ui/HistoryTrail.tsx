@@ -9,6 +9,10 @@
 // agent's work is attributed to the agent, a person's to the name the token
 // gave — never to "unknown" by accident.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useEffect, useState } from 'react'
 import { History } from 'lucide-react'
 
@@ -18,15 +22,15 @@ import { cn } from '@/lib/cn'
 
 /** "human_verified" → a person stood behind it; anything else is a machine. */
 const SOURCE_LABEL: Record<string, string> = {
-  human_verified: 'Mensch',
-  llm_extraction: 'KI-Extraktion',
-  third_party: 'Drittquelle',
-  public_web: 'Öffentliche Quelle',
-  self_reported: 'Selbstauskunft',
+  human_verified: t('Mensch'),
+  llm_extraction: t('KI-Extraktion'),
+  third_party: t('Drittquelle'),
+  public_web: t('Öffentliche Quelle'),
+  self_reported: t('Selbstauskunft'),
 }
 
 function when(iso: string): string {
-  return new Date(iso).toLocaleString('de-DE', {
+  return new Date(iso).toLocaleString(locale(), {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -79,8 +83,7 @@ export function HistoryTrail({
 
       {entries.length === 0 ? (
         <p className="text-[13px] italic text-cockpit-faint">
-          Noch keine protokollierte Änderung. Jede verifizierte Änderung
-          erscheint hier mit Zeitpunkt und Urheber.
+          {t('Noch keine protokollierte Änderung. Jede verifizierte Änderung erscheint hier mit Zeitpunkt und Urheber.')}
         </p>
       ) : (
         <>
@@ -118,7 +121,7 @@ export function HistoryTrail({
             >
               {expanded
                 ? 'weniger zeigen'
-                : `alle ${entries.length} Einträge zeigen`}
+                : t('alle {n} Einträge zeigen', { n: entries.length })}
             </button>
           )}
         </>

@@ -1,6 +1,8 @@
 // Adapters: backend DTOs → the view models the components already render.
 // This keeps the presentation layer stable while the data source moves from
 // mock fixtures to the live API.
+import { t } from '@/i18n'
+
 import type {
   Candidate,
   CandidateProfile,
@@ -153,7 +155,7 @@ export function toCandidate(dto: CandidateDTO): Candidate {
     stats: { avgTenure: fmtYears(avg), current: fmtYears(current), total: fmtYears(total) },
     experience: toRoles(dto.work_history).map((r) => ({
       company: r.company || '—',
-      title: r.title || (dto.current_title ?? 'Rolle'),
+      title: r.title || (dto.current_title ?? t('Rolle')),
       period: r.period ?? '',
       location: r.location ?? dto.location ?? '—',
     })),
@@ -214,10 +216,10 @@ function toProfile(dto: CandidateDTO): CandidateProfile {
 /** A short German summary synthesised from structured fields (placeholder for the
  *  LLM-authored KI-Zusammenfassung the backend will provide later). */
 function synthSummary(dto: CandidateDTO): string {
-  const role = dto.current_title ?? 'Fachkraft'
+  const role = dto.current_title ?? t('Fachkraft')
   const company = dto.current_company ? ` bei ${dto.current_company}` : ''
   const yrs = tenureYears(dto)
-  const exp = yrs > 0 ? ` mit ${yrs} Jahr(en) Erfahrung` : ''
+  const exp = yrs > 0 ? t(' mit {yrs} Jahr(en) Erfahrung', { yrs }) : ''
   const skills = dto.skills.slice(0, 4).map(cap).join(', ')
   const focus = skills ? ` Schwerpunkte: ${skills}.` : ''
   return `${role}${company}${dto.location ? ` in ${dto.location}` : ''}${exp}.${focus}`
@@ -263,7 +265,7 @@ export function toPipelineColumns(
     dotColor: STAGE_DOTS[col.stage] ?? 'bg-slate-400',
     cards: col.applications.map((app): PipelineCard => {
       const c = candidatesById.get(app.candidate_id)
-      const name = c?.full_name ?? 'Unbekannt'
+      const name = c?.full_name ?? t('Unbekannt')
       return {
         id: app.id,
         name,

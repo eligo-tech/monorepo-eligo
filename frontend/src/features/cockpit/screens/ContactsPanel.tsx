@@ -7,6 +7,10 @@
 // line it was read from, because the parser is a regex and a recruiter should
 // see in one glance whether it read the ad right.
 
+import { locale } from '@/i18n/format'
+
+import { t } from '@/i18n'
+
 import { useState } from 'react'
 import { Check, ChevronDown, ExternalLink, Mail, Phone, UserPlus } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
@@ -18,14 +22,14 @@ import { Button } from '../ui/forms'
 
 export const dateDe = (iso: string | null) =>
   iso
-    ? new Date(iso).toLocaleDateString('de-DE', {
+    ? new Date(iso).toLocaleDateString(locale(), {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
       })
     : '—'
 
-export const de = (n: number) => n.toLocaleString('de-DE')
+export const de = (n: number) => n.toLocaleString(locale())
 
 /** Where a contact came from, as recorded on the manager row. Public web owes
  *  an Art. 14 notice; the backend derives that from this value. */
@@ -92,7 +96,7 @@ function ContactRow({
     try {
       await onSave(contact)
     } catch {
-      setError('Übernahme fehlgeschlagen.')
+      setError(t('Übernahme fehlgeschlagen.'))
     } finally {
       setSaving(false)
     }
@@ -133,10 +137,10 @@ function ContactRow({
             type="button"
             onClick={() => setOpen((o) => !o)}
             className="flex items-center gap-1 text-cockpit-faint transition-colors hover:text-cockpit-text"
-            title="Die Anzeigen, die diese Person nennen"
+            title={t('Die Anzeigen, die diese Person nennen')}
           >
             <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
-            in {de(contact.mention_count)} {contact.mention_count === 1 ? 'Anzeige' : 'Anzeigen'}
+            in {de(contact.mention_count)} {contact.mention_count === 1 ? t('Anzeige') : t('Anzeigen')}
           </button>
         </div>
 
@@ -146,12 +150,12 @@ function ContactRow({
           {held ? (
             <span className="flex items-center gap-1.5 px-2 font-mono text-[12px] text-mint-400">
               <Check className="h-4 w-4" />
-              im Workspace
+              {t('im Workspace')}
             </span>
           ) : (
             <Button tone="primary" onClick={save} disabled={saving}>
               <UserPlus className="h-4 w-4" />
-              {saving ? 'Übernimmt…' : 'Übernehmen'}
+              {saving ? t('Übernimmt…') : t('Übernehmen')}
             </Button>
           )}
         </div>
@@ -170,7 +174,7 @@ function ContactRow({
             >
               <div className="flex flex-wrap items-baseline gap-x-3 font-mono text-[12px] text-cockpit-faint">
                 <span className="font-sans text-[13px] text-cockpit-dim">{e.posting_title}</span>
-                {!e.is_active && <Chip>geschlossen</Chip>}
+                {!e.is_active && <Chip>{t('geschlossen')}</Chip>}
                 <span className="ml-auto">{dateDe(e.posted_at)}</span>
                 {/* Same words as Markt: "Anzeige" is the BA text, "Quelle" the
                     partner-board page the nightly job read. */}
@@ -182,11 +186,11 @@ function ContactRow({
                     className="flex items-center gap-1 hover:text-mint-400"
                     title={
                       e.origin === 'quelle'
-                        ? 'Genannt auf der Partnerseite der Anzeige'
-                        : 'Genannt im Anzeigentext der Bundesagentur'
+                        ? t('Genannt auf der Partnerseite der Anzeige')
+                        : t('Genannt im Anzeigentext der Bundesagentur')
                     }
                   >
-                    {e.origin === 'quelle' ? 'Quelle' : 'Anzeige'}{' '}
+                    {e.origin === 'quelle' ? t('Quelle') : t('Anzeige')}{' '}
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
@@ -269,7 +273,7 @@ export function ContactsPanel({
   }
 
   if (result.loading && !result.data) {
-    return <p className="font-mono text-[13px] text-cockpit-faint">liest die Anzeigentexte…</p>
+    return <p className="font-mono text-[13px] text-cockpit-faint">{t('liest die Anzeigentexte…')}</p>
   }
   if (result.error) {
     return (
@@ -287,14 +291,14 @@ export function ContactsPanel({
         <span className="text-cockpit-text">{de(data.postings_with_text)}</span> von{' '}
         {de(data.postings_scanned)} Anzeigen mit Text gelesen ·{' '}
         <span className="text-cockpit-text">{de(data.contacts.length)}</span>{' '}
-        {data.contacts.length === 1 ? 'Person' : 'Personen'} namentlich genannt
+        {data.contacts.length === 1 ? t('Person') : t('Personen')} namentlich genannt
       </p>
 
       {data.contacts.length === 0 ? (
         <p className="max-w-2xl text-[13px] leading-relaxed text-cockpit-dim">
           {data.postings_with_text === 0
-            ? 'Für dieses Unternehmen liegen noch keine Anzeigentexte vor. Der nächtliche Lauf lädt sie nach; danach erscheinen hier die genannten Ansprechpartner.'
-            : 'Keine der Anzeigen nennt eine Person — nur Firmenpostfächer. Das ist bei großen Arbeitgebern mit zentralem Recruiting häufig.'}
+            ? t('Für dieses Unternehmen liegen noch keine Anzeigentexte vor. Der nächtliche Lauf lädt sie nach; danach erscheinen hier die genannten Ansprechpartner.')
+            : t('Keine der Anzeigen nennt eine Person — nur Firmenpostfächer. Das ist bei großen Arbeitgebern mit zentralem Recruiting häufig.')}
         </p>
       ) : (
         <ul>
@@ -312,7 +316,7 @@ export function ContactsPanel({
       {data.mailboxes.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-t border-cockpit-line/60 pt-2.5">
           <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
-            Firmenpostfächer
+            {t('Firmenpostfächer')}
           </span>
           {data.mailboxes.slice(0, 6).map((m) => (
             <a
@@ -328,8 +332,7 @@ export function ContactsPanel({
 
       {art14 && (
         <p className="text-[12px] leading-relaxed text-gold-400">
-          Kontakt übernommen. Er stammt aus einer öffentlichen Anzeige — eine
-          Information nach Art. 14 DSGVO ist fällig und unter „Manager“ vorgemerkt.
+          {t('Kontakt übernommen. Er stammt aus einer öffentlichen Anzeige — eine Information nach Art. 14 DSGVO ist fällig und unter „Manager“ vorgemerkt.')}
         </p>
       )}
     </div>
