@@ -130,7 +130,7 @@ export function CockpitScreen({
         <div className="mx-auto min-w-0 max-w-[1560px] flex-1 space-y-10 px-6">
           <header className="flex flex-wrap items-center gap-3">
             <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-cockpit-text">
-              {selection.length} Mandate
+              {selection.length} {t('Mandate')}
             </h1>
             <span className="font-mono text-[12px] text-cockpit-faint">
               {selection.map((m) => m.title).join(' · ')}
@@ -236,9 +236,9 @@ export function CockpitScreen({
 function WorldStrip({ onGo }: { onGo?: (screen: ScreenKey) => void }) {
   if (!onGo) return null
   const WORLDS: { screen: ScreenKey; dir: string; label: string; dot: string }[] = [
-    { screen: 'kandidaten', dir: '→', label: 'Kandidatenwelt', dot: 'bg-coral-400' },
-    { screen: 'markt', dir: '←', label: 'Business Development', dot: 'bg-gold-400' },
-    { screen: 'jobs', dir: '↑', label: 'Mandat & Kandidatensuche', dot: 'bg-lav-400' },
+    { screen: 'kandidaten', dir: '→', label: t('Kandidatenwelt'), dot: 'bg-coral-400' },
+    { screen: 'markt', dir: '←', label: t('Business Development'), dot: 'bg-gold-400' },
+    { screen: 'jobs', dir: '↑', label: t('Mandat & Kandidatensuche'), dot: 'bg-lav-400' },
   ]
   return (
     <div className="flex flex-wrap gap-2.5 border-t border-cockpit-line pt-5">

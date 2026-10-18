@@ -56,8 +56,8 @@ const de = (n: number) => n.toLocaleString(locale())
  * shown as an opaque enum value is a compliance fact nobody reads.
  */
 const SOURCE_LABEL: Record<string, { text: string; owes: boolean }> = {
-  self_reported: { text: 'selbst genannt', owes: false },
-  human_verified: { text: 'selbst erfasst', owes: false },
+  self_reported: { text: t('selbst genannt'), owes: false },
+  human_verified: { text: t('selbst erfasst'), owes: false },
   document_extraction: { text: t('aus Dokument'), owes: false },
   public_web: { text: t('öffentlich gefunden'), owes: true },
   third_party_source: { text: t('Dritte Quelle'), owes: true },
@@ -144,9 +144,9 @@ function ManagerRow({
             </span>
           ) : (
             <span
-              title={`Herkunft: ${source.text}${
+              title={`${t('Herkunft')}: ${source.text}${
                 manager.art14_notified_at
-                  ? ` · informiert am ${dateDe(manager.art14_notified_at)}`
+                  ? ` · ${t('informiert am {when}', { when: dateDe(manager.art14_notified_at) })}`
                   : ''
               }`}
               className={cn(source.owes ? 'text-mint-400' : 'text-cockpit-faint')}
@@ -223,7 +223,7 @@ export function ManagerScreen() {
     <div className="space-y-8">
       <header id="section-manager" className="scroll-mt-24">
         <h1 className="text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
-          Manager
+          {t('Manager')}
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
           {t('Die Ansprechpartner auf Kundenseite — die Person, zu der ein Mandat gehört. Firmen stellen nicht ein, Menschen tun es. Diese Kontakte bleiben in diesem Workspace und sind kein Teil des geteilten Markt-Korpus.')}
@@ -239,8 +239,8 @@ export function ManagerScreen() {
               ? t('lädt…')
               : term
                 ? t('{shown} von {total} · nach Relevanz', { shown: de(rows.length), total: de(all.length) })
-                : `${de(all.length)} Kontakte${
-                    truncated ? ` von ${de(poolTotal)} geladen` : ''
+                : `${t('{n} Kontakte', { n: de(all.length) })}${
+                    truncated ? ` ${t('von {n} geladen', { n: de(poolTotal) })}` : ''
                   }`
           }
         />
@@ -261,7 +261,7 @@ export function ManagerScreen() {
             {owing > 0 && (
               <span className="flex items-center gap-1.5 rounded-lg border border-gold-400/40 bg-gold-400/10 px-3 py-2 text-[13px] text-gold-400">
                 <ShieldAlert className="h-4 w-4" />
-                {de(owing)} × Art.-14-Information offen
+                {t('{n} × Art.-14-Information offen', { n: de(owing) })}
               </span>
             )}
             {owing === 0 && !art14.loading && (
@@ -286,7 +286,7 @@ export function ManagerScreen() {
             <p className="text-[14px] text-cockpit-dim">
               {term ? (
                 <>
-                  Kein Kontakt passt zu „{term}“.
+                  {t('Kein Kontakt passt zu „{term}“.', { term })}
                   <button
                     type="button"
                     onClick={() => setQuery('')}

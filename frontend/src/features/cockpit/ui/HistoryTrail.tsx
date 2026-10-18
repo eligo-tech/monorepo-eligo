@@ -78,7 +78,7 @@ export function HistoryTrail({
   return (
     <section className={cn('space-y-2', className)}>
       <h2 className="mb-3 flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.12em] text-mint-400">
-        <History className="h-4 w-4" /> Änderungsverlauf
+        <History className="h-4 w-4" /> {t('Änderungsverlauf')}
       </h2>
 
       {entries.length === 0 ? (

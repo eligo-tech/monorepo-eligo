@@ -361,7 +361,7 @@ export function KandidatenScreen({
         {/* Stats strip */}
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
           <span>
-            <span className="text-cockpit-text">{all.length}</span> Kandidaten
+            <span className="text-cockpit-text">{all.length}</span> {t('Kandidaten')}
             {truncated && (
               <span
                 className="text-gold-300"
@@ -473,9 +473,11 @@ export function KandidatenScreen({
 
           {!loading && !error && rows.length === 0 && (
             <p className="py-16 text-center text-[14px] text-cockpit-dim">
-              Keine Kandidaten gefunden
+              {t('Keine Kandidaten gefunden')}
               {query ? t(' für „{query}”', { query }) : ''}
-              {skillFilter.size > 0 ? ` mit ${[...skillFilter].join(', ')}` : ''}.
+              {skillFilter.size > 0
+                ? t(' mit {skills}', { skills: [...skillFilter].join(', ') })
+                : ''}.
               {(query || skillFilter.size > 0) && (
                 <button
                   type="button"
@@ -572,7 +574,7 @@ export function KandidatenScreen({
                       title={t('{pct}% der Schlüsselfelder sind gegen eine Quelle geprüft', { pct: c.verification })}
                       className="w-[4.5rem] shrink-0 rounded border border-mint-700 bg-mint-800/40 px-1.5 text-center font-mono text-[11px] leading-5 text-mint-400"
                     >
-                      {c.verification}% Beleg
+                      {c.verification}% {t('Beleg')}
                     </span>
                   ) : (
                     <span

@@ -21,10 +21,10 @@ import { DEMO_HINT, PanelHead } from './parts'
 import type { Mandate } from '../../data/types'
 
 const SOURCES = [
-  { key: 'db', label: 'Eigene Datenbank', tone: 'bg-lav-400' },
+  { key: 'db', label: t('Eigene Datenbank'), tone: 'bg-lav-400' },
   { key: 'li', label: 'LinkedIn', tone: 'bg-coral-400' },
   { key: 'xing', label: 'Xing', tone: 'bg-mint-400' },
-  { key: 'aa', label: 'Arbeitsagentur', tone: 'bg-gold-400' },
+  { key: 'aa', label: t('Arbeitsagentur'), tone: 'bg-gold-400' },
   { key: 'step', label: 'Stepstone', tone: 'bg-lav-400' },
 ]
 
@@ -129,7 +129,7 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
           tag={t('Ansprache')}
           tone="gold"
           title={t('Nachricht an Kandidaten')}
-          note={`${form}-Form · ${DEMO_HINT}`}
+          note={`${t('{form}-Form', { form })} · ${DEMO_HINT}`}
           collapsed={reachShut}
           onToggle={() => setReachShut((shut) => !shut)}
         />
@@ -156,10 +156,10 @@ export function SourcingPanel({ mandate }: { mandate: Mandate }) {
           </div>
 
           <p className="mt-3 rounded-xl border border-cockpit-line bg-cockpit-inset px-4 py-3 text-[13.5px] leading-relaxed text-cockpit-dim">
-            {greeting}, ich bin auf {verb} aufmerksam geworden — für eine spannende Rolle
-            als <span className="text-cockpit-text">{mandate.title}</span>
-            {mandate.location ? ` (${mandate.location})` : ''} suche ich jemanden mit Ihrem
-            Hintergrund. {closing}
+            {greeting}, {t('ich bin auf {profile} aufmerksam geworden — für eine spannende Rolle als', { profile: verb })}{' '}
+            <span className="text-cockpit-text">{mandate.title}</span>
+            {mandate.location ? ` (${mandate.location})` : ''}{' '}
+            {t('suche ich jemanden mit Ihrem Hintergrund.')} {closing}
           </p>
 
           <p className="mt-3 flex items-center gap-2 text-[12px] text-cockpit-faint">

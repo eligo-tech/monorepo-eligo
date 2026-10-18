@@ -202,7 +202,7 @@ function ContactRow({
           ))}
           {contact.mention_count > contact.evidence.length && (
             <li className="font-mono text-[12px] text-cockpit-faint">
-              +{de(contact.mention_count - contact.evidence.length)} weitere Anzeigen
+              +{de(contact.mention_count - contact.evidence.length)} {t('weitere Anzeigen')}
             </li>
           )}
         </ul>
@@ -278,7 +278,8 @@ export function ContactsPanel({
   if (result.error) {
     return (
       <p className="text-[13px] text-coral-400">
-        Ansprechpartner konnten nicht geladen werden — {result.error.message.slice(0, 200)}
+        {t('Ansprechpartner konnten nicht geladen werden —')}{' '}
+        {result.error.message.slice(0, 200)}
       </p>
     )
   }
@@ -289,9 +290,9 @@ export function ContactsPanel({
     <div className="space-y-3">
       <p className="font-mono text-[12px] text-cockpit-faint">
         <span className="text-cockpit-text">{de(data.postings_with_text)}</span> von{' '}
-        {de(data.postings_scanned)} Anzeigen mit Text gelesen ·{' '}
+        {de(data.postings_scanned)} {t('Anzeigen mit Text gelesen')} ·{' '}
         <span className="text-cockpit-text">{de(data.contacts.length)}</span>{' '}
-        {data.contacts.length === 1 ? t('Person') : t('Personen')} namentlich genannt
+        {data.contacts.length === 1 ? t('Person') : t('Personen')} {t('namentlich genannt')}
       </p>
 
       {data.contacts.length === 0 ? (

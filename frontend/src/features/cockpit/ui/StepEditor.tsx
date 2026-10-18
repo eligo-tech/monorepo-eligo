@@ -136,7 +136,7 @@ export function StepEditor({
     }
     const doneIso = doneOn ? fromBerlinInput(`${doneOn}T00:00`) : null
     if (doneOn && !doneIso) {
-      setError('Datum „erledigt am" nicht lesbar.')
+      setError(t('Datum „erledigt am“ nicht lesbar.'))
       return
     }
 
@@ -175,7 +175,7 @@ export function StepEditor({
         e instanceof ApiError && (e.status === 401 || e.status === 403)
           ? t('Sitzung abgelaufen — bitte neu anmelden.')
           : e instanceof ApiError
-            ? `Konnte nicht gespeichert werden (HTTP ${e.status}).`
+            ? t('Konnte nicht gespeichert werden (HTTP {status}).', { status: e.status })
             : t('Konnte nicht gespeichert werden — keine Antwort vom Server.'),
       )
       setBusy(false)

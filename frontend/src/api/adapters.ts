@@ -217,12 +217,12 @@ function toProfile(dto: CandidateDTO): CandidateProfile {
  *  LLM-authored KI-Zusammenfassung the backend will provide later). */
 function synthSummary(dto: CandidateDTO): string {
   const role = dto.current_title ?? t('Fachkraft')
-  const company = dto.current_company ? ` bei ${dto.current_company}` : ''
+  const company = dto.current_company ? ` ${t('bei {company}', { company: dto.current_company })}` : ''
   const yrs = tenureYears(dto)
   const exp = yrs > 0 ? t(' mit {yrs} Jahr(en) Erfahrung', { yrs }) : ''
   const skills = dto.skills.slice(0, 4).map(cap).join(', ')
-  const focus = skills ? ` Schwerpunkte: ${skills}.` : ''
-  return `${role}${company}${dto.location ? ` in ${dto.location}` : ''}${exp}.${focus}`
+  const focus = skills ? ` ${t('Schwerpunkte')}: ${skills}.` : ''
+  return `${role}${company}${dto.location ? ` ${t('in {place}', { place: dto.location })}` : ''}${exp}.${focus}`
 }
 
 export function toMatchReasons(reasons: MatchReasonDTO[]): MatchReason[] {

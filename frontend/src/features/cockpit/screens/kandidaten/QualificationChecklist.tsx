@@ -67,12 +67,12 @@ function groups(c: Candidate, p: CandidateProfile | undefined): [string, Row[]][
         { label: t('Anstellungsform'), value: text(p?.employmentForm), field: 'employment_form' },
         {
           label: t('Werdegang'),
-          value: p?.roles?.length ? `${p.roles.length} Stationen` : null,
+          value: p?.roles?.length ? t('{n} Stationen', { n: p.roles.length }) : null,
           field: 'work_history',
         },
         {
           label: t('Skills'),
-          value: p?.allSkills?.length ? `${p.allSkills.length} erfasst` : null,
+          value: p?.allSkills?.length ? t('{n} erfasst', { n: p.allSkills.length }) : null,
           field: 'skills',
         },
         {
@@ -119,7 +119,7 @@ function groups(c: Candidate, p: CandidateProfile | undefined): [string, Row[]][
         },
         {
           label: t('Höchster Abschluss'),
-          value: p?.education?.length ? `${p.education.length} erfasst` : null,
+          value: p?.education?.length ? t('{n} erfasst', { n: p.education.length }) : null,
           field: 'education',
         },
         {
@@ -171,7 +171,7 @@ export function QualificationChecklist({
           title={t('Öffnet das Formular beim ersten fehlenden Feld')}
           className="ml-auto flex items-center gap-1.5 rounded-lg border border-cockpit-line px-2.5 py-1 text-[12px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
         >
-          <Pencil className="h-3.5 w-3.5" /> Erfassen
+          <Pencil className="h-3.5 w-3.5" /> {t('Erfassen')}
         </button>
       </div>
 
@@ -203,7 +203,7 @@ export function QualificationChecklist({
                       : 'text-gold-400/80 underline decoration-dotted underline-offset-4',
                   )}
                 >
-                  {row.value ?? 'fehlt'}
+                  {row.value ?? t('fehlt')}
                 </span>
               </button>
             ))}

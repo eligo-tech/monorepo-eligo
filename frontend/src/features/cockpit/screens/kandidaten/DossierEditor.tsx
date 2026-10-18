@@ -157,9 +157,11 @@ function validate(d: Draft): string | null {
     [t('Wunschgehalt'), d.salary_expectation],
     [t('Mindestgehalt'), d.salary_minimum],
   ] as const) {
-    const t = v.trim()
-    if (t !== '' && (!Number.isFinite(Number(t)) || Number(t) < 0)) {
-      return `${label} muss eine positive Zahl sein.`
+    // Not `t`: that is the translate function this file imports, and
+    // shadowing it here would make the message below untranslatable.
+    const raw = v.trim()
+    if (raw !== '' && (!Number.isFinite(Number(raw)) || Number(raw) < 0)) {
+      return t('{label} muss eine positive Zahl sein.', { label })
     }
   }
   // A floor above the wish is a typo every time, and it would silently break
@@ -583,7 +585,7 @@ export function DossierEditor({
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <Button onClick={onCancel} disabled={saving}>
-            <Ban className="h-4 w-4" /> Abbrechen
+            <Ban className="h-4 w-4" /> {t('Abbrechen')}
           </Button>
           <Button tone="primary" onClick={save} disabled={saving}>
             <Save className="h-4 w-4" /> {saving ? t('Speichert…') : t('Speichern')}

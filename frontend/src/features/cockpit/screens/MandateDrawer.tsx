@@ -177,7 +177,7 @@ export function MandateDrawer({
         {running.length > 0 && (
           <>
             <p className="px-2.5 pb-1 pt-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-cockpit-faint">
-              Im Prozess · {running.length}
+              {t('Im Prozess')} · {running.length}
             </p>
             {running.map((mandate) => (
               <Row
@@ -193,7 +193,7 @@ export function MandateDrawer({
         {rest.length > 0 && (
           <>
             <p className="px-2.5 pb-1 pt-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-cockpit-faint">
-              Ohne Prozess · {rest.length}
+              {t('Ohne Prozess')} · {rest.length}
             </p>
             {rest.map((mandate) => (
               <Row
@@ -208,7 +208,7 @@ export function MandateDrawer({
 
         {running.length === 0 && rest.length === 0 && (
           <p className="px-2.5 py-6 text-center text-[12.5px] text-cockpit-faint">
-            Kein Mandat passt zu „{query}".
+            {t('Kein Mandat passt zu „{query}“.', { query })}
           </p>
         )}
       </div>

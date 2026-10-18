@@ -155,6 +155,23 @@ Conventions:
   a key. Add copy in German, wrap it in `t()`, add the English next to it;
   `src/i18n/dictionary.test.ts` fails the build if you forget, and also fails on
   a dictionary entry nothing asks for.
+  - **`src/i18n/coverage.test.ts` is the one that catches the copy you never
+    wrapped.** The dictionary test only sees `t()` calls; it cannot see a
+    string that never became one, and that is how the first bilingual pass
+    shipped ~110 German strings with a green suite. The codemod matched JSX
+    text with `[^<>{}\n]*?` — single line, no embedded expressions — so copy
+    broken across lines, interrupted by `{count}`, or inside a template
+    literal was invisible to it. The coverage test enumerates the positions
+    that are user-facing by construction (JSX text runs, the props and object
+    keys that render, the static chunks of template literals) and requires
+    each to be a `t()` call or listed in its `ALLOWED` set. It does not try
+    to detect German: "Eigene Datenbank" has no umlaut and no function word,
+    and a detector that misses it is worse than none.
+  - Dictionary **values** are compared by nothing, so an escape that breaks
+    in them is invisible to the suite. `'\u00d8 9 d to offer'` once became
+    `'\\u00d8 9 d to offer'` in a rewrite and shipped as six literal
+    characters next to a fee; `dictionary.test.ts` now rejects a backslash in
+    any value.
   - Numbers and dates come from `src/i18n/format.ts` (`num` · `money` · `date` ·
     `time` · `dateTime`), never from a hard-coded `'de-DE'`. English is en-GB,
     day before month, so a date in a shared screenshot cannot be read two ways.

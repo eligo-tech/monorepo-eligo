@@ -178,7 +178,7 @@ export function CandidateDrawer({
               className="flex max-w-[15rem] items-center gap-1.5 rounded-xl border border-cockpit-line px-3.5 py-2 text-[13px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
             >
               <Briefcase className="h-4 w-4 shrink-0" />
-              <span className="truncate">Im Prozess: {run.client ?? run.title}</span>
+              <span className="truncate">{t('Im Prozess')}: {run.client ?? run.title}</span>
             </a>
           ))}
           <a
@@ -249,7 +249,7 @@ export function CandidateDrawer({
                   className="whitespace-nowrap px-2.5 py-1 text-[12px]"
                   title={t('Felder bearbeiten')}
                 >
-                  <Pencil className="h-3.5 w-3.5" /> Bearbeiten
+                  <Pencil className="h-3.5 w-3.5" /> {t('Bearbeiten')}
                 </Button>
                 <Button
                   onClick={() => setExpanded((e) => !e)}
@@ -258,7 +258,7 @@ export function CandidateDrawer({
                 >
                   {expanded ? (
                     <>
-                      <ChevronsLeft className="h-4 w-4" /> Kompakt
+                      <ChevronsLeft className="h-4 w-4" /> {t('Kompakt')}
                     </>
                   ) : (
                     <>

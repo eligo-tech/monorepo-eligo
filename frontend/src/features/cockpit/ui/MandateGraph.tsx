@@ -69,7 +69,7 @@ export function toneOf(card: ProcessCard): Tone {
 /** Where the process stands — the same line the collapsed card shows. */
 export function standing(card: ProcessCard): string {
   const out = card.steps.find((s) => s.state === 'out')
-  if (out) return `abgesagt · ${out.label}`
+  if (out) return `${t('abgesagt')} · ${out.label}`
   const current = card.steps.find((s) => s.state === 'current')
   if (current) return current.label
   const done = [...card.steps].reverse().find((s) => s.state === 'done')
@@ -241,7 +241,7 @@ export function MandateGraphLegend() {
         [
           ['mint', t('7–10 · trägt')],
           ['gold', t('5–6 · mit Vorbehalt')],
-          ['coral', '0–4 · kritisch'],
+          ['coral', t('0–4 · kritisch')],
           ['none', t('nicht bewertet')],
         ] as const
       ).map(([tone, label]) => (

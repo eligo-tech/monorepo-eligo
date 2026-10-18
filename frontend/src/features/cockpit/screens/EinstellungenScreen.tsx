@@ -252,7 +252,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
                   value={secret}
                   onChange={setSecret}
                   type="password"
-                  placeholder={source?.has_secret ? '•••••••• gespeichert' : ''}
+                  placeholder={source?.has_secret ? t('•••••••• gespeichert') : ''}
                 />
               </div>
 
@@ -271,7 +271,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
                 )}
                 {source && (
                   <Button onClick={disconnect} disabled={busy} className="ml-auto">
-                    <Trash2 className="h-4 w-4" /> Trennen
+                    <Trash2 className="h-4 w-4" /> {t('Trennen')}
                   </Button>
                 )}
               </div>
@@ -291,14 +291,14 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
               {source.import_requested_at && (
                 <div className="flex items-center gap-2 text-gold-300">
                   <Loader2 className="h-3.5 w-3.5" />
-                  Import angefordert {dateTimeDe(source.import_requested_at)} — wartet
-                  auf den nächsten Datenlauf.
+                  {t('Import angefordert')} {dateTimeDe(source.import_requested_at)}{' '}
+                  {t('— wartet auf den nächsten Datenlauf.')}
                 </div>
               )}
               {source.last_run_at && !source.last_error && (
                 <div className="flex items-center gap-2 text-mint-300">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Zuletzt {dateTimeDe(source.last_run_at)}
+                  {t('Zuletzt')} {dateTimeDe(source.last_run_at)}
                   {summaryLine(source.last_result)
                     ? ` · ${summaryLine(source.last_result)}`
                     : ''}
@@ -306,8 +306,9 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
               )}
               {source.last_error && (
                 <div className="text-coral-400">
-                  Letzter Lauf {source.last_run_at ? dateTimeDe(source.last_run_at) : ''}{' '}
-                  fehlgeschlagen: {source.last_error}
+                  {t('Letzter Lauf')}{' '}
+                  {source.last_run_at ? dateTimeDe(source.last_run_at) : ''}{' '}
+                  {t('fehlgeschlagen:')} {source.last_error}
                 </div>
               )}
             </dl>

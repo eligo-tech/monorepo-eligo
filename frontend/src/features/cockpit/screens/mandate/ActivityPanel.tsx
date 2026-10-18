@@ -20,7 +20,7 @@ import type { Mandate } from '../../data/types'
 const CHANNELS = [
   { name: 'LinkedIn', sent: 48, resp: 14, pos: 5 },
   { name: 'Xing', sent: 22, resp: 6, pos: 2 },
-  { name: 'Eigene Datenbank', sent: 9, resp: 6, pos: 4 },
+  { name: t('Eigene Datenbank'), sent: 9, resp: 6, pos: 4 },
   { name: t('Mail'), sent: 5, resp: 2, pos: 1 },
 ]
 const UNTRIED = [t('Telefon'), 'Arbeitsagentur', 'Stepstone']
@@ -119,7 +119,7 @@ export function ActivityPanel({ mandate }: { mandate: Mandate }) {
               key={channel}
               className="rounded-md border border-gold-600/45 px-2.5 py-1 font-mono text-[11.5px] text-gold-300"
             >
-              {channel} · starten
+              {channel} · {t('starten')}
             </span>
           ))}
         </div>

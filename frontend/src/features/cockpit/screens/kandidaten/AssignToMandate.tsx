@@ -98,7 +98,7 @@ export function AssignToMandate({
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 rounded-xl border border-cockpit-line px-3.5 py-2 text-[13px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
       >
-        <Plus className="h-4 w-4" /> Zu Mandat zuordnen
+        <Plus className="h-4 w-4" /> {t('Zu Mandat zuordnen')}
       </button>
     )
   }
@@ -136,7 +136,7 @@ export function AssignToMandate({
         )}
         {!jobs.loading && rows.length === 0 && (
           <p className="px-2 py-3 text-[13px] text-cockpit-faint">
-            Kein Mandat passt zu „{query}“.
+            {t('Kein Mandat passt zu „{query}“.', { query })}
           </p>
         )}
         {rows.map((job) => {

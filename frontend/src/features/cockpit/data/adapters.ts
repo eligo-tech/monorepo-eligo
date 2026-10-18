@@ -230,7 +230,7 @@ export function processCardsFromSteps(
         ),
         fee: demo(0, t('Kein Honorarmodell hinterlegt')),
         statusNote: out
-          ? `Abgesagt · ${out.label}`
+          ? `${t('Abgesagt')} · ${out.label}`
           : person.next_appointment
             ? t('Nächster Termin {when}', { when: dateTimeDe(person.next_appointment) })
             : undefined,

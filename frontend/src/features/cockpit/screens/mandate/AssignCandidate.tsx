@@ -82,7 +82,7 @@ export function AssignCandidate({
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 rounded-lg border border-cockpit-line px-2.5 py-1.5 font-mono text-[12px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-mint-300"
       >
-        <UserPlus className="h-3.5 w-3.5" /> Kandidat zuordnen
+        <UserPlus className="h-3.5 w-3.5" /> {t('Kandidat zuordnen')}
       </button>
     )
   }
@@ -121,7 +121,7 @@ export function AssignCandidate({
           )}
           {!pool.loading && rows.length === 0 && (
             <p className="px-2 py-3 text-[13px] text-cockpit-faint">
-              Kein Kandidat passt zu „{query}“.
+              {t('Kein Kandidat passt zu „{query}“.', { query })}
             </p>
           )}
           {rows.map((c) => {
@@ -148,7 +148,7 @@ export function AssignCandidate({
                 </span>
                 {already ? (
                   <span className="flex shrink-0 items-center gap-1 font-mono text-[11px] text-mint-400">
-                    <Check className="h-3.5 w-3.5" /> im Prozess
+                    <Check className="h-3.5 w-3.5" /> {t('im Prozess')}
                   </span>
                 ) : (
                   <span className="shrink-0 font-mono text-[11px] text-cockpit-faint">
