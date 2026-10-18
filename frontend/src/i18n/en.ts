@@ -364,6 +364,7 @@ export const EN: Record<string, string> = {
   'Interview-Verfügbarkeit': 'Interview availability',
   'Interview-Vorb.': 'Interview prep',
   'Interviewtermin': 'Interview',
+  'Interviewtermin {n}': 'Interview {n}',
   'Ist': 'Actual',
   'IST + gewichtetes Potenzial': 'Actual + weighted potential',
   'Ja': 'Yes',
