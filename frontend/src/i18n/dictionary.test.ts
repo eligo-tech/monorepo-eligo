@@ -32,6 +32,7 @@ const SAME_IN_BOTH = new Set([
   'Skills',
   'optional',
   'max. 20 MB',
+  'Minimum {amount}',
   'Name',
   'Manager',
   'Manager via LinkedIn',

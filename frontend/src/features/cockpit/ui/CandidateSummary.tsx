@@ -56,9 +56,9 @@ function salaryLine(profile: CandidateProfile): string | null {
   const { salaryMinimum: min, salaryExpectation: wish, currentSalary: now } = profile
   const c = profile.salaryCurrency
   const parts: string[] = []
-  if (min !== null) parts.push(`Minimum ${eur(min, c)}`)
-  if (wish !== null) parts.push(`Wunsch ${eur(wish, c)}`)
-  if (now !== null) parts.push(`aktuell ${eur(now, c)}`)
+  if (min !== null) parts.push(t('Minimum {amount}', { amount: eur(min, c) }))
+  if (wish !== null) parts.push(t('Wunsch {amount}', { amount: eur(wish, c) }))
+  if (now !== null) parts.push(t('aktuell {amount}', { amount: eur(now, c) }))
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
@@ -200,7 +200,7 @@ export function CandidateSummary({
             ) : (
               <ChevronRight className="h-3.5 w-3.5" />
             )}
-            Gesprächszusammenfassung
+            {t('Gesprächszusammenfassung')}
             <span className="normal-case tracking-normal">
               · {facts.length} {facts.length === 1 ? t('Angabe') : t('Angaben')}
             </span>

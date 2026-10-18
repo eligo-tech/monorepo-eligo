@@ -1104,12 +1104,14 @@ export function MarktScreen() {
                     <Button onClick={loadMore} disabled={loadingMore}>
                       {loadingMore
                         ? t('Lädt…')
-                        : `Weitere ${de(
-                            Math.min(
-                              PAGE_SIZE,
-                              Math.max((results.data?.total ?? 0) - hits.length, 0),
+                        : t('Weitere {n} laden', {
+                            n: de(
+                              Math.min(
+                                PAGE_SIZE,
+                                Math.max((results.data?.total ?? 0) - hits.length, 0),
+                              ),
                             ),
-                          )} laden`}
+                          })}
                     </Button>
                   </div>
                 )}

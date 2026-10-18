@@ -614,7 +614,7 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="mt-2 flex items-center gap-1 font-mono text-[12px] text-cockpit-faint transition-colors hover:text-coral-400"
     >
-      <Trash2 className="h-3.5 w-3.5" /> Entfernen
+      <Trash2 className="h-3.5 w-3.5" /> {t('Entfernen')}
     </button>
   )
 }

@@ -787,6 +787,6 @@ const PERMIT_LABELS: Record<string, string> = {
 const permitLabel = (v?: string) => (v ? (PERMIT_LABELS[v] ?? v) : undefined)
 
 function yearsLabel(candidate: Candidate, total?: string): string | undefined {
-  if (total && total.trim() && total.trim() !== '0') return `${total} Jahre`
+  if (total && total.trim() && total.trim() !== '0') return t('{n} Jahre', { n: total })
   return candidate.stats.total !== '—' ? candidate.stats.total : undefined
 }

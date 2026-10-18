@@ -34,11 +34,16 @@ const ATTR_EXPR = new RegExp(
   'g',
 )
 const PROP = new RegExp(`\\b(${KEYS})\\s*:\\s*(['"\`])((?:[^\\\\\\n]|\\\\.)*?)\\2`, 'g')
-/** A JSX text run: after a closing `>` or a `}`, up to the next `<` or `{`.
- *  Newlines are allowed on purpose — copy broken across lines is the case
- *  the original codemod could not see. `=>` and `->` are excluded so an
- *  arrow body is not read as text. */
-const JSX_TEXT = /(?<![=\-])>([^<>{}]+)[<{]/g
+/** A JSX text run: after a closing `>` OR a closing `}`, up to the next `<`
+ *  or `{`. Newlines are allowed on purpose — copy broken across lines is the
+ *  case the original codemod could not see. `=>` and `->` are excluded so an
+ *  arrow body is not read as text.
+ *
+ *  The `}` alternative is not optional. Without it, text that FOLLOWS an
+ *  expression is invisible, and `{de(company.open_roles)} Rollen` shipped
+ *  twice on Projekte for exactly that reason — the German sat between a `}`
+ *  and a `<`, which this regex did not look at. */
+const JSX_TEXT = /(?<![=\-])[>}]([^<>{}]+)[<{]/g
 /** A template literal, captured whole so its static chunks can be split out
  *  of it. Nested backticks are not supported and do not occur here. */
 const TEMPLATE = /`((?:[^`\\]|\\.)*)`/g
@@ -77,6 +82,11 @@ const ALLOWED = new Set([
   'Filter',
   'Section',
   'Freelance',
+  'Domain',
+  // An HTTP auth scheme, not a word anyone reads.
+  'Bearer',
+  // Same in both, and the product's own term for its cut.
+  '· Fee',
   // `name` on an Error, not copy.
   'ApiError',
   // Demo job titles in the mock floor — the names of roles, which a
@@ -131,7 +141,11 @@ function isCopy(raw: string): boolean {
   // dot or a slash in it. `eligo.processCard.` and `cockpit/` are not copy.
   if (!/\s/.test(s) && /^[A-Za-z0-9_./-]+$/.test(s) && /[./]/.test(s)) return false
   if (/^[A-Z0-9_]+$/.test(s)) return false // CONSTANTS
-  if (/^[A-Z][A-Za-z0-9]*$/.test(s)) return false // bare identifier
+  // NO "single capitalised word is an identifier" rule. German capitalises
+  // every noun, so that rule silently excluded every one-word label in the
+  // product — "Rollen", "Standorte", "Firmen" — and two of them shipped.
+  // Genuine identifiers are listed in ALLOWED instead, where a reader can
+  // see the decision.
   if (/^[,;)\]]\s/.test(s) || /[=;{}`$]|&&|\|\|/.test(s)) return false
   // Parentheses are NOT a code smell on their own — "CSV (auch mit Umlauten)"
   // is copy, and rejecting it for the brackets is how that sentence shipped
@@ -177,8 +191,17 @@ function scan(): Finding[] {
       }
     }
     if (path.endsWith('.tsx')) {
+      // Blank every string literal first. JSX text is never quoted, so this
+      // loses nothing — and without it the `}` delimiter reads the tail of
+      // `t('{n} Mandate im Cockpit öffnen', { n })` as text, because the `}`
+      // of the placeholder opens a run that the `{` of the vars object
+      // closes. Twenty-seven of those drowned the two real findings.
+      const unquoted = clean
+        .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+        .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+        .replace(/`(?:[^`\\]|\\.)*`/g, (m) => '`' + '\n'.repeat((m.match(/\n/g) ?? []).length) + '`')
       JSX_TEXT.lastIndex = 0
-      for (const m of clean.matchAll(JSX_TEXT)) add('jsx', m[1])
+      for (const m of unquoted.matchAll(JSX_TEXT)) add('jsx', m[1])
     }
 
     // Template literals. A `${...}` cannot be part of a dictionary key, so

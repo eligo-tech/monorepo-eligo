@@ -279,7 +279,7 @@ function AddCompanies({
                 />
                 <span className="truncate text-[14px]">{candidate.name}</span>
                 <span className="ml-auto shrink-0 font-mono text-[12px] text-cockpit-faint">
-                  {candidate.cities.join(' · ')} · {de(candidate.open_roles)} Rollen
+                  {candidate.cities.join(' · ')} · {de(candidate.open_roles)} {t('Rollen')}
                 </span>
               </button>
             </li>
@@ -650,7 +650,7 @@ function UnassignedWatched({ reloadKey }: { reloadKey: number }) {
           <li key={company.hub_company_id} className="text-[13px] text-cockpit-dim">
             {company.name}
             <span className="ml-1.5 font-mono text-[12px] text-cockpit-faint">
-              {de(company.open_roles)} Rollen
+              {de(company.open_roles)} {t('Rollen')}
             </span>
           </li>
         ))}
