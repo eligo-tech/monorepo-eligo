@@ -27,7 +27,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { setLang } from '@/i18n'
 import type { ProcessJobDTO, ProcessStepDTO } from '@/api/types'
 
-import { processCardsFromSteps } from './adapters'
+import { processCardsFromSteps, stepLabel } from './adapters'
 import { PROCESS_STEPS } from './mock'
 
 const step = (step_key: string, label: string): ProcessStepDTO => ({
@@ -110,6 +110,43 @@ describe('processCardsFromSteps — step labels', () => {
 
     it('falls back to the key when the server sent no label at all', () => {
       expect(labels(process([], ['custom_unbekannt']))).toEqual(['custom_unbekannt'])
+    })
+  })
+
+  describe('on the withdrawn note, not just the stepper', () => {
+    beforeEach(() => setLang('en'))
+
+    // The first fix touched the steps and missed `statusNote`, so a
+    // withdrawn process still read "Withdrawn · Feedback Kunde" while the
+    // stepper beside it read "Feedback". One rule, two call sites, one of
+    // them updated — which is why `stepLabel` is now a function.
+    const withdrawnAt = (key: string, label: string) => {
+      const dto = process(
+        [{ ...step(key, label), outcome: 'out' }],
+        [key],
+      )
+      return processCardsFromSteps(dto, [])[0].statusNote
+    }
+
+    it('translates a canonical step in the note', () => {
+      expect(withdrawnAt('feedback-1', 'Feedback Kunde')).toBe('Withdrawn · Feedback')
+    })
+
+    it('keeps a custom step in the note untranslated', () => {
+      expect(withdrawnAt('custom_probearbeitstag', 'Probearbeitstag')).toBe(
+        'Withdrawn · Probearbeitstag',
+      )
+    })
+  })
+
+  describe('stepLabel', () => {
+    it('is the single rule both call sites use', () => {
+      expect(stepLabel('vertrag', 'Vertrag')).toBe(
+        PROCESS_STEPS.find((s) => s.key === 'vertrag')!.label,
+      )
+      expect(stepLabel('custom_x', 'Probearbeitstag')).toBe('Probearbeitstag')
+      expect(stepLabel('custom_x', null)).toBe('custom_x')
+      expect(stepLabel('custom_x', '')).toBe('custom_x')
     })
   })
 
