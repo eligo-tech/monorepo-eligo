@@ -123,7 +123,7 @@ export function AssessmentPanel({ assessment }: { assessment: CandidateAssessmen
             ) : (
               <ChevronRight className="h-3.5 w-3.5" />
             )}
-            Begründung & Kundentext
+            {t('Begründung & Kundentext')}
           </button>
           {showClientText && (
             <div className="max-w-4xl space-y-4">

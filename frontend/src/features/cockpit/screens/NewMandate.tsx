@@ -204,7 +204,7 @@ function Picker<T extends { id: string }>({
               className="flex w-full items-center gap-2 border-t border-cockpit-line px-3 py-2 text-left text-[13px] text-gold-300 transition-colors hover:bg-gold-800/20"
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
-              „{query.trim()}" neu anlegen
+              {t('„{name}“ neu anlegen', { name: query.trim() })}
             </button>
           )}
         </div>

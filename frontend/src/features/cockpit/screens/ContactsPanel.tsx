@@ -60,7 +60,7 @@ function NetworkLink({ href, label, className }: { href: string; label: string; 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Auf ${label} suchen`}
+      title={t('Auf {site} suchen', { site: label })}
       className="flex items-center gap-1.5 rounded-lg border border-cockpit-line px-2.5 py-1.5 text-[12px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
     >
       <span
