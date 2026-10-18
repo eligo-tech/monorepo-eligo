@@ -29,6 +29,9 @@ import { Chip, Panel, SectionHeader } from '../ui/primitives'
 /** Fallback label for a connector the server lists but does not name. The
  *  UI deliberately knows no system by name: the registry does. */
 const kindLabel = (kind: string, sources?: { key: string; label: string }[]) =>
+  // The connector registry labels and describes itself in German
+  // (backend `atsimport/connectors/`). Translate what we know, show what
+  // the server sent for a connector this build has never heard of.
   sources?.find((s) => s.key === kind)?.label ?? kind
 
 function dateTimeDe(iso: string): string {
@@ -172,8 +175,8 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
           <SectionHeader
             id="section-import"
             index="01"
-            title={t('Daten übernehmen · {source}', { source: fileSources[0].label })}
-            hint={fileSources[0].hint}
+            title={t('Daten übernehmen · {source}', { source: t(fileSources[0].label) })}
+            hint={t(fileSources[0].hint)}
           />
           <FileImportPanel canCommit={admin} />
         </section>
@@ -186,7 +189,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
           title={t('Verbundene Systeme')}
           hint={
             pullSources.length > 0
-              ? pullSources.map((s) => s.label).join(' · ')
+              ? pullSources.map((s) => t(s.label)).join(' · ')
               : t('Noch keine Anbindung verfügbar')
           }
         />
@@ -209,7 +212,7 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
                       and must not look like something to connect. */}
                   {pullSources.map((s) => (
                     <option key={s.key} value={s.key}>
-                      {s.label}
+                      {t(s.label)}
                     </option>
                   ))}
                 </select>

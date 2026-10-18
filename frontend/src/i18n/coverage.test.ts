@@ -119,7 +119,7 @@ const EXCLUDED = [
 const TAILWIND =
   /(^|\s)(bg|text|border|flex|grid|rounded|p|px|py|pt|pb|pl|pr|m|mt|mb|ml|mr|mx|my|gap|w|h|min|max|absolute|relative|fixed|sticky|font|tracking|leading|shadow|hover|focus|group|space|items|justify|inline|overflow|whitespace|truncate|cursor|opacity|transition|ring|outline|z|top|left|right|bottom|sm|md|lg|xl|2xl|aspect|col|row|order|self|place)-/
 const CODE =
-  /\b(const|let|var|function|export|import|interface|type|return|Record|Promise|Set|Map|Array|void|null|undefined|string|number|boolean|readonly|extends|implements|keyof|typeof|React|JSX|useState|useMemo|useEffect)\b/
+  /\b(const|let|var|function|export|import|interface|type|return|Record|Promise|Set|Map|Array|void|null|undefined|string|number|boolean|readonly|extends|implements|keyof|typeof|React|JSX|useState|useMemo|useEffect|if|else|for|while|switch|case|try|catch|throw|new|await|async)\b/
 
 function isCopy(raw: string): boolean {
   const s = raw.split(/\s+/).join(' ').trim()
@@ -132,7 +132,13 @@ function isCopy(raw: string): boolean {
   if (!/\s/.test(s) && /^[A-Za-z0-9_./-]+$/.test(s) && /[./]/.test(s)) return false
   if (/^[A-Z0-9_]+$/.test(s)) return false // CONSTANTS
   if (/^[A-Z][A-Za-z0-9]*$/.test(s)) return false // bare identifier
-  if (/^[,;)\]]\s/.test(s) || /[=;(){}`$]|&&|\|\|/.test(s)) return false
+  if (/^[,;)\]]\s/.test(s) || /[=;{}`$]|&&|\|\|/.test(s)) return false
+  // Parentheses are NOT a code smell on their own — "CSV (auch mit Umlauten)"
+  // is copy, and rejecting it for the brackets is how that sentence shipped
+  // in German. Unbalanced ones are a fragment, and `name(` is a call.
+  const opens = (s.match(/\(/g) ?? []).length
+  const closes = (s.match(/\)/g) ?? []).length
+  if (opens !== closes || /\w\(/.test(s)) return false
   if (/^[[\]\s]*[a-zA-Z]+\s*:/.test(s)) return false // object / type fragment
   return true
 }

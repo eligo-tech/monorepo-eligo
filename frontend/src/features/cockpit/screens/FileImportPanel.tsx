@@ -121,7 +121,7 @@ export function FileImportPanel({
     { value: '', label: t('— nicht importieren') },
     ...(spec?.fields ?? []).map((f) => ({
       value: f.name,
-      label: f.required ? `${f.label} *` : f.label,
+      label: f.required ? `${t(f.label)} *` : t(f.label),
     })),
   ]
 
@@ -136,7 +136,7 @@ export function FileImportPanel({
             {t('Datei importieren')}
           </h3>
           <p className="text-[13px] text-cockpit-dim">
-            {spec?.hint ??
+            {(spec?.hint && t(spec.hint)) ??
               t('CSV oder Excel aus Ihrem bisherigen System — Spalten werden erkannt.')}
           </p>
         </div>
@@ -152,7 +152,7 @@ export function FileImportPanel({
             setResult(null)
             if (file) void run(file, v)
           }}
-          options={entities.map((e) => ({ value: e.key, label: e.label }))}
+          options={entities.map((e) => ({ value: e.key, label: t(e.label) }))}
         />
         <input
           ref={fileRef}
@@ -315,9 +315,8 @@ export function FileImportPanel({
 
       {!preview && !result && (
         <p className="mt-4 text-[12px] leading-relaxed text-cockpit-faint">
-          CSV (auch mit Semikolon und Umlauten) oder .xlsx. Die Spalten werden
-          erkannt und vor dem Import angezeigt — geschrieben wird erst, wenn Sie
-          bestätigen. <Chip>{t('max. 20 MB')}</Chip>
+          {t('CSV (auch mit Semikolon und Umlauten) oder .xlsx. Die Spalten werden erkannt und vor dem Import angezeigt — geschrieben wird erst, wenn Sie bestätigen.')}{' '}
+          <Chip>{t('max. 20 MB')}</Chip>
         </p>
       )}
     </Panel>
