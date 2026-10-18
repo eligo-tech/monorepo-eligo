@@ -25,6 +25,35 @@ import { buildSteps, PROCESS_STEPS } from './mock'
 /** Mirrors `EXTRA_ROUND_PREFIX` in the backend's `pipeline/steps.py`: a
  *  second or third interview round arrives as "interviewtermin_3". */
 const EXTRA_ROUND_PREFIX = 'interviewtermin_'
+
+/** The label to SHOW for a step key.
+ *
+ *  Our table first, the server's text only for a step it invented. The
+ *  backend's nine labels are the canonical German ones (`pipeline/steps.py`),
+ *  so taking `row.label` quietly undid the translation: the demo tracker read
+ *  "Feedback · Interview · Contract" while a live one read "Feedback Kunde ·
+ *  Interviewtermin · Vertrag" in the same English session. Nothing static can
+ *  catch that — the literal IS wrapped in `t()`, the wrong string just wins at
+ *  runtime, and only against live data.
+ *
+ *  A key we do not know is a step the backend made up, and those divide: an
+ *  extra interview round is generated and gets translated with its number
+ *  kept, while a custom step is the word the recruiter typed
+ *  ("Probearbeitstag") and is their text, not our copy — it survives
+ *  untranslated.
+ *
+ *  This lives in one function because it first shipped as two: the tracker's
+ *  own steps were fixed and `statusNote` was not, so a withdrawn process read
+ *  "Withdrawn · Feedback Kunde" for one more deploy.
+ */
+export function stepLabel(key: string, serverLabel?: string | null): string {
+  const known = PROCESS_STEPS.find((s) => s.key === key)?.label
+  if (known) return known
+  if (key.startsWith(EXTRA_ROUND_PREFIX)) {
+    return t('Interviewtermin {n}', { n: key.slice(EXTRA_ROUND_PREFIX.length) })
+  }
+  return serverLabel || key
+}
 import {
   demo,
   live,
@@ -189,24 +218,7 @@ export function processCardsFromSteps(
       let reached = -1
       const steps: ProcessStep[] = keys.map((key, i) => {
         const row = byKey.get(key)
-        // OUR table first, the server's label only for a step it invented.
-        //
-        // The backend's `PROCESS_STEPS` labels are the canonical GERMAN ones
-        // (`pipeline/steps.py`), so preferring `row.label` quietly undid the
-        // translation: the demo tracker read "Feedback · Interview · Contract"
-        // while a live one read "Feedback Kunde · Interviewtermin · Vertrag"
-        // in the same English session. Nothing static can catch that — the
-        // literal IS wrapped, the wrong string just wins at runtime.
-        //
-        // A key we do not know is a step the backend made up: an extra
-        // interview round, or a custom step the recruiter named themselves
-        // ("Probearbeitstag"). The latter is their text, not our copy, and
-        // must survive untranslated.
-        const round = key.startsWith(EXTRA_ROUND_PREFIX)
-          ? t('Interviewtermin {n}', { n: key.slice(EXTRA_ROUND_PREFIX.length) })
-          : undefined
-        const label =
-          PROCESS_STEPS.find((s) => s.key === key)?.label ?? round ?? row?.label ?? key
+        const label = stepLabel(key, row?.label)
         const done = !!row && (row.done_at !== null || row.outcome === 'pass')
         if (done) reached = i
         const state: ProcessStep['state'] =
@@ -250,7 +262,7 @@ export function processCardsFromSteps(
         ),
         fee: demo(0, t('Kein Honorarmodell hinterlegt')),
         statusNote: out
-          ? `${t('Abgesagt')} · ${out.label}`
+          ? `${t('Abgesagt')} · ${stepLabel(out.step_key, out.label)}`
           : person.next_appointment
             ? t('Nächster Termin {when}', { when: dateTimeDe(person.next_appointment) })
             : undefined,
