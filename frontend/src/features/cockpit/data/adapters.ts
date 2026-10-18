@@ -21,6 +21,10 @@ import type {
   ProcessStepDTO,
 } from '@/api/types'
 import { buildSteps, PROCESS_STEPS } from './mock'
+
+/** Mirrors `EXTRA_ROUND_PREFIX` in the backend's `pipeline/steps.py`: a
+ *  second or third interview round arrives as "interviewtermin_3". */
+const EXTRA_ROUND_PREFIX = 'interviewtermin_'
 import {
   demo,
   live,
@@ -185,8 +189,24 @@ export function processCardsFromSteps(
       let reached = -1
       const steps: ProcessStep[] = keys.map((key, i) => {
         const row = byKey.get(key)
+        // OUR table first, the server's label only for a step it invented.
+        //
+        // The backend's `PROCESS_STEPS` labels are the canonical GERMAN ones
+        // (`pipeline/steps.py`), so preferring `row.label` quietly undid the
+        // translation: the demo tracker read "Feedback · Interview · Contract"
+        // while a live one read "Feedback Kunde · Interviewtermin · Vertrag"
+        // in the same English session. Nothing static can catch that — the
+        // literal IS wrapped, the wrong string just wins at runtime.
+        //
+        // A key we do not know is a step the backend made up: an extra
+        // interview round, or a custom step the recruiter named themselves
+        // ("Probearbeitstag"). The latter is their text, not our copy, and
+        // must survive untranslated.
+        const round = key.startsWith(EXTRA_ROUND_PREFIX)
+          ? t('Interviewtermin {n}', { n: key.slice(EXTRA_ROUND_PREFIX.length) })
+          : undefined
         const label =
-          row?.label ?? PROCESS_STEPS.find((s) => s.key === key)?.label ?? key
+          PROCESS_STEPS.find((s) => s.key === key)?.label ?? round ?? row?.label ?? key
         const done = !!row && (row.done_at !== null || row.outcome === 'pass')
         if (done) reached = i
         const state: ProcessStep['state'] =
