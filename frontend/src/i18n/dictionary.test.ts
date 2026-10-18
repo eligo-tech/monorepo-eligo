@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { EN } from './en'
+import { serverCopyValues } from './serverCopy.support'
 import { preferredLang, setLang, STORAGE_KEY, t } from './index'
 
 /** Every `t('…')` in the app, read from SOURCE rather than at runtime.
@@ -11,9 +12,11 @@ import { preferredLang, setLang, STORAGE_KEY, t } from './index'
  *  screen, which looks like a decision rather than a bug. Comparing the two
  *  sides at the same level of escaping is the only way to see that. */
 const SAME_IN_BOTH = new Set([
+  'aiFind (ATS)',
   'Arbeitsagentur',
   'Briefing',
   'Business Development',
+  'CSV / Excel',
   'Cockpit',
   'Demo',
   'Feedback',
@@ -32,8 +35,11 @@ const SAME_IN_BOTH = new Set([
   'Name',
   'Manager',
   'Manager via LinkedIn',
+  'LinkedIn',
+  'Position',
   'Region',
   'Status',
+  'Xing',
   'in {place}',
 ])
 
@@ -84,7 +90,13 @@ describe('the English dictionary', () => {
   })
 
   it('has no entry nothing asks for', () => {
-    const orphans = [...dictionaryKeys].filter((k) => !callsites.has(k))
+    // A string the BACKEND sends reaches `t()` as a variable — `t(f.label)`
+    // — so it has no literal call site and would look unused. It is not:
+    // `backend-copy.test.ts` requires an entry for every one of them.
+    const dynamic = serverCopyValues()
+    const orphans = [...dictionaryKeys].filter(
+      (k) => !callsites.has(k) && !dynamic.has(k),
+    )
     expect(orphans).toEqual([])
   })
 
