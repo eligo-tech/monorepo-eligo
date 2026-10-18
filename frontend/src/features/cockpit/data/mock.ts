@@ -318,14 +318,14 @@ export const MOCK_COCKPIT: CockpitData = {
   actions: [
     {
       id: 'na-1',
-      title: 'M. Wagner (CTO · Nexval) anrufen',
+      title: t('M. Wagner (CTO · Nexval) anrufen'),
       detail: t('Migrationsprojekt Q3 erwähnt · letzter Kontakt vor 26 Tagen.'),
       category: 'business-dev',
       provenance: 'demo',
     },
     {
       id: 'na-2',
-      title: '#K-0731 · Offer nachfassen',
+      title: t('#K-0731 · Offer nachfassen'),
       detail: t('Kunde hat Offer angekündigt (aus E-Mail) · mündliche Zusage einholen.'),
       category: 'abschluss',
       provenance: 'demo',

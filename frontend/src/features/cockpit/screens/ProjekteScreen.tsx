@@ -128,14 +128,14 @@ function ProjectCard({
 
         <span className="ml-auto flex items-center gap-4 font-mono text-[13px] text-cockpit-faint">
           <span>
-            <span className="text-cockpit-text">{de(project.company_count)}</span> Firmen
+            <span className="text-cockpit-text">{de(project.company_count)}</span> {t('Firmen')}
           </span>
           <span title={t('Firmen mit mindestens einem Ansprechpartner in diesem Workspace')}>
-            <span className="text-cockpit-text">{de(project.companies_with_contact)}</span> mit
-            Kontakt
+            <span className="text-cockpit-text">{de(project.companies_with_contact)}</span>{' '}
+            {t('mit Kontakt')}
           </span>
           <span>
-            <span className="text-cockpit-text">{de(project.open_roles)}</span> Rollen
+            <span className="text-cockpit-text">{de(project.open_roles)}</span> {t('Rollen')}
           </span>
           <span title={t('Angelegt')}>{dateDe(project.created_at)}</span>
           <Button onClick={onOpen}>{t('Öffnen')}</Button>
@@ -220,10 +220,10 @@ function AddCompanies({
     <Panel tone="inset" className="w-full space-y-2 p-3">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-mono text-[12px] uppercase tracking-[0.12em] text-cockpit-faint">
-          Beobachtete Firmen
+          {t('Beobachtete Firmen')}
           {query && (
             <span className="ml-2 normal-case tracking-normal">
-              {de(list.length)} von {de(watched.length)}
+              {t('{shown} von {total}', { shown: de(list.length), total: de(watched.length) })}
             </span>
           )}
         </span>
@@ -251,7 +251,7 @@ function AddCompanies({
       )}
       {!candidates.loading && watched.length > 0 && list.length === 0 && (
         <p className="text-[13px] text-cockpit-dim">
-          Keine beobachtete Firma passt zu „{query}“.
+          {t('Keine beobachtete Firma passt zu „{query}“.', { query })}
         </p>
       )}
 
@@ -445,7 +445,7 @@ function CompanyRow({
         )}
         {company.contact_count > 0 ? (
           <Chip tone="mint">
-            {de(company.contact_count)} Ansprechpartner
+            {t('{n} Ansprechpartner', { n: de(company.contact_count) })}
           </Chip>
         ) : (
           <Chip tone="gold">
@@ -458,11 +458,11 @@ function CompanyRow({
         <span className="ml-auto flex items-center gap-4 font-mono text-[13px] text-cockpit-faint">
           {company.sites > 1 && (
             <span>
-              <span className="text-cockpit-text">{de(company.sites)}</span> Standorte
+              <span className="text-cockpit-text">{de(company.sites)}</span> {t('Standorte')}
             </span>
           )}
           <span>
-            <span className="text-[15px] text-cockpit-text">{de(company.open_roles)}</span> Rollen
+            <span className="text-[15px] text-cockpit-text">{de(company.open_roles)}</span> {t('Rollen')}
           </span>
           <span title={t('Jüngste offene Anzeige')}>{dateDe(company.last_posted_at)}</span>
           {/* Enrichment from the company's own ads: the contact the employer
@@ -554,7 +554,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
     return (
       <Panel className="p-5">
         <p className="text-[14px] text-coral-400">
-          Projekt konnte nicht geladen werden
+          {t('Projekt konnte nicht geladen werden')}
           {loaded.error ? ` — ${loaded.error.message.slice(0, 200)}` : ''}
         </p>
       </Panel>
@@ -570,14 +570,15 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
         </Button>
         <h2 className="text-[22px] font-semibold text-cockpit-text">{detail.name}</h2>
         <span className="font-mono text-[13px] text-cockpit-faint">
-          {de(detail.company_count)} Firmen · {de(detail.companies_with_contact)} mit Kontakt
+          {de(detail.company_count)} {t('Firmen')} · {de(detail.companies_with_contact)}{' '}
+          {t('mit Kontakt')}
           {detail.company_count > detail.companies_with_contact && (
             <span className="text-gold-400">
               {' '}
-              · {de(detail.company_count - detail.companies_with_contact)} offen
+              · {de(detail.company_count - detail.companies_with_contact)} {t('offen')}
             </span>
           )}{' '}
-          · {de(detail.open_roles)} offene Rollen
+          · {de(detail.open_roles)} {t('offene Rollen')}
         </span>
         <span className="ml-auto flex items-center gap-3">
           <ListSearch
@@ -593,7 +594,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
       {companies.length === 0 && detail.companies.length > 0 ? (
         <Panel className="p-5">
           <p className="text-[14px] text-cockpit-dim">
-            Keine Firma in diesem Projekt passt zu „{query}“.
+            {t('Keine Firma in diesem Projekt passt zu „{query}“.', { query })}
           </p>
         </Panel>
       ) : detail.companies.length === 0 ? (
@@ -642,7 +643,7 @@ function UnassignedWatched({ reloadKey }: { reloadKey: number }) {
   return (
     <Panel tone="inset" className="space-y-2 p-4">
       <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
-        Beobachtet, noch in keinem Projekt · {de(list.length)}
+        {t('Beobachtet, noch in keinem Projekt')} · {de(list.length)}
       </p>
       <ul className="flex flex-wrap gap-x-4 gap-y-1">
         {list.slice(0, 24).map((company) => (
@@ -756,7 +757,7 @@ export function ProjekteScreen() {
               hint={
                 projects.data
                   ? query
-                    ? `${de(list.length)} von ${de(all.length)}`
+                    ? t('{shown} von {total}', { shown: de(list.length), total: de(all.length) })
                     : `${de(all.length)} ${all.length === 1 ? t('Projekt') : t('Projekte')}`
                   : projects.error
                     ? 'offline'
@@ -777,7 +778,8 @@ export function ProjekteScreen() {
             {projects.error && (
               <Panel className="p-5">
                 <p className="text-[14px] text-coral-400">
-                  Projekte konnten nicht geladen werden — {projects.error.message.slice(0, 200)}
+                  {t('Projekte konnten nicht geladen werden —')}{' '}
+                  {projects.error.message.slice(0, 200)}
                 </p>
               </Panel>
             )}
@@ -785,7 +787,7 @@ export function ProjekteScreen() {
             {projects.data && all.length > 0 && list.length === 0 && (
               <Panel className="p-5">
                 <p className="text-[14px] text-cockpit-dim">
-                  Kein Projekt passt zu „{query}“.
+                  {t('Kein Projekt passt zu „{query}“.', { query })}
                 </p>
               </Panel>
             )}

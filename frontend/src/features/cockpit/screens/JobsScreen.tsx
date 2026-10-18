@@ -34,7 +34,7 @@ import { MandateEditor } from './MandateEditor'
 
 const GRID =
   'grid-cols-[1.5rem_minmax(0,2.5fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_7rem_2rem]'
-const COLUMNS = ['', 'Titel', 'Firma', 'Ort', 'Gehaltsband', 'Status', '']
+const COLUMNS = ['', t('Titel'), t('Firma'), t('Ort'), t('Gehaltsband'), t('Status'), '']
 
 /** "85.000–95.000 €", or the honest gap. A mandate without a ceiling applies
  *  no salary filter at all, which is worth seeing at a glance. */
@@ -238,7 +238,7 @@ export function JobsScreen({
           {term && rows.length > 1 && <span>{t('nach Relevanz sortiert')}</span>}
           {query && (
             <span className="flex items-center gap-1.5 rounded-md border border-gold-600/45 px-2 py-0.5 text-gold-300">
-              Suche oben: „{query}“
+              {t('Suche oben: „{query}“', { query })}
               {onClearQuery && (
                 <button
                   type="button"
@@ -335,7 +335,7 @@ export function JobsScreen({
                       : t('{n} Mandate im Cockpit öffnen', { n: selected.size })
                 }
               >
-                Im Cockpit öffnen <ArrowUpRight className="h-4 w-4" />
+                {t('Im Cockpit öffnen')} <ArrowUpRight className="h-4 w-4" />
               </Button>
 
               {selected.size > 0 && (

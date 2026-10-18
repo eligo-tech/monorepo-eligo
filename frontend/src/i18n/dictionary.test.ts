@@ -11,7 +11,9 @@ import { preferredLang, setLang, STORAGE_KEY, t } from './index'
  *  screen, which looks like a decision rather than a bug. Comparing the two
  *  sides at the same level of escaping is the only way to see that. */
 const SAME_IN_BOTH = new Set([
+  'Arbeitsagentur',
   'Briefing',
+  'Business Development',
   'Cockpit',
   'Demo',
   'Feedback',
@@ -28,8 +30,11 @@ const SAME_IN_BOTH = new Set([
   'optional',
   'max. 20 MB',
   'Name',
+  'Manager',
+  'Manager via LinkedIn',
   'Region',
   'Status',
+  'in {place}',
 ])
 
 const CALL = /\bt\(\s*'((?:[^'\\]|\\.)*)'/g
@@ -91,6 +96,18 @@ describe('the English dictionary', () => {
       .filter(([de]) => !SAME_IN_BOTH.has(de))
       .map(([de]) => de)
     expect(untouched).toEqual([])
+  })
+
+  it('renders its escapes as characters, not as the escape text', () => {
+    // A rewrite of this file once turned `\u00d8 9 d to offer` into
+    // `\\u00d8 9 d to offer`, and "Ø 9 d to offer" shipped as the literal
+    // six characters next to a fee. Nothing compares dictionary VALUES, so
+    // only a browser saw it. A lone backslash in a value is almost always
+    // this mistake.
+    const suspect = Object.entries(EN)
+      .filter(([, en]) => /\\/.test(en))
+      .map(([de, en]) => `${de}  →  ${en}`)
+    expect(suspect).toEqual([])
   })
 
   it('keeps every {placeholder} the German had', () => {

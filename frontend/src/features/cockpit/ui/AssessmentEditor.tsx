@@ -182,8 +182,8 @@ export function AssessmentEditor({
       }
       set(next.fit_score, (v) => setScore(String(v)), t('Passung'))
       set(next.verdict, setVerdict, t('Kurzfazit'))
-      set(next.strengths, (v) => setStrengths(v.join('\n')), 'Stärken')
-      set(next.risks, (v) => setRisks(v.join('\n')), 'Risiken')
+      set(next.strengths, (v) => setStrengths(v.join('\n')), t('Stärken'))
+      set(next.risks, (v) => setRisks(v.join('\n')), t('Risiken'))
       set(next.client_summary, setClientSummary, t('Kundentext'))
       set(next.technologies, (v) => setTechnologies(v.join(', ')), t('Technologien'))
       set(next.basis, setBasis, t('Grundlage'))
@@ -276,7 +276,7 @@ export function AssessmentEditor({
     <div className="mt-6 space-y-5 border-t border-cockpit-line pt-5">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
-          Kandidatenauswertung · {card.candidateName}
+          {t('Kandidatenauswertung')} · {card.candidateName}
         </span>
         <button
           type="button"
@@ -411,7 +411,7 @@ export function AssessmentEditor({
             <input
               value={focusAreas}
               onChange={(e) => setFocusAreas(e.target.value)}
-              placeholder="Java-Enterprise-Architektur, WildFly/JBoss, Legacy-Modernisierung"
+              placeholder={t('Java-Enterprise-Architektur, WildFly/JBoss, Legacy-Modernisierung')}
               className={BOX}
             />
           </Field>
@@ -541,7 +541,7 @@ export function AssessmentEditor({
           <Save className="h-4 w-4" /> {busy ? t('Speichert…') : t('Auswertung speichern')}
         </Button>
         <Button onClick={onClose}>
-          <X className="h-4 w-4" /> Abbrechen
+          <X className="h-4 w-4" /> {t('Abbrechen')}
         </Button>
       </div>
     </div>

@@ -120,8 +120,8 @@ export function MandateView({
         </p>
         <p className="mt-3 font-mono text-[13px] text-cockpit-faint">
           {mandate.ref} · {mandate.client} · {mandate.cards.length}{' '}
-          {mandate.cards.length === 1 ? t('Kandidat') : t('Kandidaten')} im Prozess
-          {assessed > 0 && ` · ${assessed} bewertet`}
+          {mandate.cards.length === 1 ? t('Kandidat') : t('Kandidaten')} {t('im Prozess')}
+          {assessed > 0 && ` · ${t('{n} bewertet', { n: assessed })}`}
         </p>
       </header>
 
@@ -143,7 +143,7 @@ export function MandateView({
           <div className="min-w-0 flex-1">
             <SectionHeader
               id="section-prozesse"
-              title={`Laufende Prozesse · ${mandate.ref} · ${mandate.title}`}
+              title={`${t('Laufende Prozesse')} · ${mandate.ref} · ${mandate.title}`}
               tone="coral"
               hint={t('Schritte antippen · Bewertung je Mandat')}
             />
@@ -174,7 +174,7 @@ export function MandateView({
               title={t('Mandat und seine Kandidaten')}
               note={`${mandate.cards.length} ${
                 mandate.cards.length === 1 ? t('Kandidat') : t('Kandidaten')
-              } · nach Passung`}
+              } · ${t('nach Passung')}`}
               collapsed={graphShut}
               onToggle={() => setGraphShut((shut) => !shut)}
             />

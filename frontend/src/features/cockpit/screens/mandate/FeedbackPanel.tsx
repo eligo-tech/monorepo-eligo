@@ -40,9 +40,13 @@ import type { Mandate } from '../../data/types'
 // language; only the label is translated. Translating the value would make
 // an English session write rows a German session cannot parse.
 const WHO = [
-  { value: t('Kunde'), label: t('Kunde') },
+  { value: 'Kunde', label: t('Kunde') },
   { value: 'Kandidat', label: t('Kandidat') },
 ]
+
+/** The speakers `split` recognises — the German values above, never their
+ *  labels. Derived from WHO so the two cannot drift apart. */
+const SPEAKERS = WHO.map((w) => w.value)
 
 interface Entry {
   who: string
@@ -62,9 +66,9 @@ const dateDe = (iso: string) =>
 /** "Kunde: fachlich überzeugend" → who + what, without inventing a column. */
 function split(text: string): { who: string; text: string } {
   const [prefix, ...rest] = text.split(':')
-  return rest.length > 0 && [t('Kunde'), 'Kandidat'].includes(prefix.trim())
+  return rest.length > 0 && SPEAKERS.includes(prefix.trim())
     ? { who: prefix.trim(), text: rest.join(':').trim() }
-    : { who: t('Notiz'), text }
+    : { who: 'Notiz', text }
 }
 
 /** Notes left on this mandate's steps, from before feedback had its own
@@ -91,7 +95,7 @@ export function FeedbackPanel({
   mandate: Mandate
   onChanged?: () => void
 }) {
-  const [who, setWho] = useState(t('Kunde'))
+  const [who, setWho] = useState('Kunde')
   const [about, setAbout] = useState(mandate.cards[0]?.id ?? '')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)

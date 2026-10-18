@@ -69,10 +69,10 @@ export function StammdatenPanel({
         sub={
           <>
             <DemoText source={t('Handelsregister — noch keine Quelle angebunden')}>
-              HRB — · USt-ID —
+              {t('HRB — · USt-ID —')}
             </DemoText>
-            {company?.location && ` · Standort: ${company.location}`}
-            {company?.industry && ` · Branche: ${company.industry}`}
+            {company?.location && ` · ${t('Standort')}: ${company.location}`}
+            {company?.industry && ` · ${t('Branche')}: ${company.industry}`}
           </>
         }
       >
@@ -115,7 +115,7 @@ export function StammdatenPanel({
         ) : mandate.jobId ? (
           <>
             <span className="text-cockpit-faint">
-              Kein Ansprechpartner hinterlegt.{' '}
+              {t('Kein Ansprechpartner hinterlegt.')}{' '}
             </span>
             <SetContact
               jobId={mandate.jobId}
@@ -142,25 +142,25 @@ export function StammdatenPanel({
       </StammRow>
 
       <StammRow label={t('Briefing')}>
-        Vollständigkeit{' '}
+        {t('Vollständigkeit')}{' '}
         <b className={complete >= 70 ? 'text-mint-300' : 'text-gold-300'}>{complete}%</b>
         <span className="ml-2 text-cockpit-faint">
-          — aus Titel, Kunde, Muss-Kriterien, Ort, Band und Ansprechpartner
+          {t('— aus Titel, Kunde, Muss-Kriterien, Ort, Band und Ansprechpartner')}
         </span>
       </StammRow>
 
       <StammRow label={t('Konditionen')} tone="lav">
         <DemoText source={t('Kein Vertragsmodell im Datensatz — Rahmenvertrag folgt')}>
-          25 % vom Bruttojahresgehalt · Basis — · 14 Tage netto · 6 Monate Garantie
+          {t('25 % vom Bruttojahresgehalt · Basis — · 14 Tage netto · 6 Monate Garantie')}
         </DemoText>
       </StammRow>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Button disabled title={t('Firmendaten-Anreicherung ist noch nicht angebunden')}>
-          <Globe className="h-4 w-4" /> Firma aus Internet
+          <Globe className="h-4 w-4" /> {t('Firma aus Internet')}
         </Button>
         <Button disabled title={t('LinkedIn-Anreicherung ist noch nicht angebunden')}>
-          <ExternalLink className="h-4 w-4" /> Manager via LinkedIn
+          <ExternalLink className="h-4 w-4" /> {t('Manager via LinkedIn')}
         </Button>
       </div>
     </Panel>

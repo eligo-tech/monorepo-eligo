@@ -221,7 +221,7 @@ export function AttachmentsPanel({
           disabled={busy}
           className="whitespace-nowrap"
         >
-          <Paperclip className="h-4 w-4" /> Datei anhängen
+          <Paperclip className="h-4 w-4" /> {t('Datei anhängen')}
         </Button>
 
         <input
@@ -242,7 +242,7 @@ export function AttachmentsPanel({
           className="whitespace-nowrap"
           title={t('Gesprächsnotiz auswerten — schlägt Felder vor, schreibt nichts')}
         >
-          <Sparkles className="h-4 w-4" /> Transkript auswerten
+          <Sparkles className="h-4 w-4" /> {t('Transkript auswerten')}
         </Button>
       </div>
 
@@ -251,7 +251,7 @@ export function AttachmentsPanel({
       {proposals && (
         <div className="space-y-3 rounded-xl border border-lav-600/50 bg-lav-800/25 p-4">
           <p className="font-mono text-[12px] uppercase tracking-[0.08em] text-lav-400">
-            Vorschläge aus {proposals.document_name} — nichts gespeichert
+            {t('Vorschläge aus {document} — nichts gespeichert', { document: proposals.document_name })}
           </p>
           {proposals.fields.length === 0 ? (
             <p className="text-[13px] text-cockpit-dim">

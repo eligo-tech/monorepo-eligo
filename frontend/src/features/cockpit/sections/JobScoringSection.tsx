@@ -26,7 +26,7 @@ export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: 
         hint={
           isLive
             ? t('Besetzbarkeit aus dem Matching · Deal-Chance noch nicht gelernt')
-            : 'Besetzbarkeit & Deal-Chance · gelernt'
+            : t('Besetzbarkeit & Deal-Chance · gelernt')
         }
       />
 
@@ -35,10 +35,10 @@ export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: 
           Ø <span className="text-cockpit-text">{average}</span>
         </span>
         <span>
-          <span className="text-cockpit-text">{strong}</span> über 70
+          <span className="text-cockpit-text">{strong}</span> {t('über 70')}
         </span>
         <span>
-          <span className="text-coral-400">{critical}</span> kritisch
+          <span className="text-coral-400">{critical}</span> {t('kritisch')}
         </span>
         <span>{t('M = Deal-Chance beim Manager')}</span>
       </div>

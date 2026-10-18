@@ -33,7 +33,7 @@ function bestStand(cards: ProcessCard[]): string {
   const furthest = cards.reduce((best, card) =>
     card.progress.value > best.progress.value ? card : best,
   )
-  if (furthest.steps.some((s) => s.state === 'out')) return 'abgesagt'
+  if (furthest.steps.some((s) => s.state === 'out')) return t('abgesagt')
   const open = furthest.steps.find((s) => s.state !== 'done')
   return open ? open.label : t('Vertrag')
 }
@@ -56,7 +56,7 @@ function MandateHead({ mandate }: { mandate: Mandate }) {
         <span className="block text-[11.5px] text-cockpit-dim">{mandate.client}</span>
       </div>
       <div className="ml-auto text-right font-mono text-[11px] text-cockpit-faint">
-        {count} {count === 1 ? t('Kandidat') : t('Kandidaten')} · bester Stand:{' '}
+        {count} {count === 1 ? t('Kandidat') : t('Kandidaten')} · {t('bester Stand:')}{' '}
         <span className="text-cockpit-text">{bestStand(mandate.cards)}</span>
         {fee && (
           <>
@@ -116,7 +116,7 @@ export function ProcessSection({
             title={t('Mandate und ihre Kandidaten')}
             note={`${mandates.length} ${
               mandates.length === 1 ? t('Mandat') : t('Mandate')
-            } · ${total} ${total === 1 ? t('Kandidat') : t('Kandidaten')} · nach bester Passung`}
+            } · ${total} ${total === 1 ? t('Kandidat') : t('Kandidaten')} · ${t('nach bester Passung')}`}
             collapsed={graphShut}
             onToggle={() => setGraphShut((shut) => !shut)}
           />
@@ -190,8 +190,7 @@ export function ProcessSection({
 
       {!isLive && total > 0 && (
         <p className="font-mono text-[12px] text-cockpit-faint">
-          ° Demo-Prozesse — sobald Bewerbungen den Status „vorgestellt" erreichen, kommen
-          die Karten aus der Pipeline.
+          {t('° Demo-Prozesse — sobald Bewerbungen den Status „vorgestellt“ erreichen, kommen die Karten aus der Pipeline.')}
         </p>
       )}
 

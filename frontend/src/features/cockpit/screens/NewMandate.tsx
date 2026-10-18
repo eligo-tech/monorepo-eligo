@@ -289,7 +289,9 @@ export function NewMandate({
             // and a contact with no recorded origin cannot be assessed for
             // it afterwards.
             source: 'self_reported',
-            source_detail: `beim Anlegen des Mandats „${title.trim()}" erfasst`,
+            source_detail: t('beim Anlegen des Mandats „{title}“ erfasst', {
+              title: title.trim(),
+            }),
           })
         ).id
       }
@@ -307,7 +309,9 @@ export function NewMandate({
     } catch (e) {
       setError(
         e instanceof ApiError
-          ? `Nicht angelegt (HTTP ${e.status}). ${e.status === 422 ? t('Bitte Eingaben prüfen.') : ''}`
+          ? `${t('Nicht angelegt (HTTP {status}).', { status: e.status })} ${
+              e.status === 422 ? t('Bitte Eingaben prüfen.') : ''
+            }`
           : t('Nicht angelegt — bitte erneut versuchen.'),
       )
       setBusy(false)
@@ -432,11 +436,11 @@ export function NewMandate({
             {busy ? t('Legt an…') : t('Mandat anlegen')}
           </Button>
           <Button onClick={onClose}>
-            <X className="h-4 w-4" /> Abbrechen
+            <X className="h-4 w-4" /> {t('Abbrechen')}
           </Button>
           {missing.length > 0 && !busy && (
             <span className="ml-auto font-mono text-[11px] text-cockpit-faint">
-              Es fehlt noch {missing.join(t(' und '))}
+              {t('Es fehlt noch')} {missing.join(t(' und '))}
             </span>
           )}
         </div>

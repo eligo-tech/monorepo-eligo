@@ -115,7 +115,7 @@ export function ProcessCardPanel({
               </sup>
             )}
             {collapsed && current && (
-              <span className="text-cockpit-dim"> · bei „{current.label}“</span>
+              <span className="text-cockpit-dim"> · {t('bei „{step}“', { step: current.label })}</span>
             )}
           </p>
         </div>

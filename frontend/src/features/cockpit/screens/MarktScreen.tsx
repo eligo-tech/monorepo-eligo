@@ -66,11 +66,11 @@ const IDENTITY: Record<
   HubEmployerHitDTO['resolution_basis'],
   { label: string; tone?: 'mint' | 'gold'; title: string }
 > = {
-  vat: { label: 'USt-IdNr', tone: 'mint', title: t('Identität über die USt-IdNr bestimmt') },
+  vat: { label: t('USt-IdNr'), tone: 'mint', title: t('Identität über die USt-IdNr bestimmt') },
   register: { label: 'HRB', tone: 'mint', title: t('Identität über das Handelsregister bestimmt') },
   domain: { label: 'Domain', tone: 'gold', title: t('Identität über die Unternehmensdomain bestimmt') },
   name_place: {
-    label: 'Name + Ort',
+    label: t('Name + Ort'),
     title: t('Angenommen aus Firmenname und Ort — nicht gegen ein Register geprüft'),
   },
 }
@@ -455,7 +455,7 @@ function AdoptDialog({
       <Panel className="w-full max-w-md space-y-4 p-5">
         <div>
           <h3 className="text-[16px] font-semibold text-cockpit-text">
-            {hit.name} übernehmen
+            {t('{name} übernehmen', { name: hit.name })}
           </h3>
           <p className="mt-1 text-[13px] text-cockpit-dim">
             {t('Legt das Unternehmen in diesem Workspace an. Der Vorgang wird protokolliert.')}
@@ -571,11 +571,11 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
         <span className="ml-auto flex items-center gap-4 font-mono text-[13px] text-cockpit-faint">
           {hit.sites > 1 && (
             <span title={t('Standorte im Korpus — dieselbe Firma, mehrfach erfasst')}>
-              <span className="text-cockpit-text">{de(hit.sites)}</span> Standorte
+              <span className="text-cockpit-text">{de(hit.sites)}</span> {t('Standorte')}
             </span>
           )}
           <span title={t('Treffer für diese Suche — nicht alle offenen Rollen des Unternehmens')}>
-            <span className="text-[15px] text-cockpit-text">{de(hit.open_roles)}</span> Rollen
+            <span className="text-[15px] text-cockpit-text">{de(hit.open_roles)}</span> {t('Rollen')}
           </span>
           <Button onClick={toggle} disabled={saving || !anchorId} tone={tracked ? 'primary' : 'ghost'}>
             {tracked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
@@ -632,7 +632,7 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
           ))}
           {hit.open_roles > hit.matching_roles.length && (
             <li className="px-0 pt-1 font-mono text-[12px] text-cockpit-faint">
-              +{de(hit.open_roles - hit.matching_roles.length)} weitere Treffer
+              +{de(hit.open_roles - hit.matching_roles.length)} {t('weitere Treffer')}
             </li>
           )}
         </ul>
@@ -665,7 +665,7 @@ function SearchError({ error }: { error: Error }) {
           ? t('Zeitüberschreitung (HTTP {status}) — die Suche war zu langsam für den Server.', { status })
           : status >= 500
             ? t('Serverfehler (HTTP {status}) — die Abfrage wurde nicht zu Ende geführt.', { status })
-            : `Suche abgelehnt (HTTP ${status}).`
+            : t('Suche abgelehnt (HTTP {status}).', { status })
 
   // The body is the useful half for a 500 (Postgres names its own cancellation),
   // but it can be a long HTML error page, so it is capped.
@@ -673,7 +673,7 @@ function SearchError({ error }: { error: Error }) {
 
   return (
     <Panel className="space-y-2 p-5">
-      <p className="text-[14px] text-coral-400">Die Suche ist fehlgeschlagen — {headline}</p>
+      <p className="text-[14px] text-coral-400">{t('Die Suche ist fehlgeschlagen —')} {headline}</p>
       {detail && (
         <p className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-cockpit-faint">
           {detail}
@@ -866,7 +866,7 @@ export function MarktScreen() {
           title={t('Suche')}
           hint={
             s?.last_ingest_at
-              ? `zuletzt aktualisiert ${dateDe(s.last_ingest_at)}`
+              ? t('zuletzt aktualisiert {when}', { when: dateDe(s.last_ingest_at) })
               : stats.error
                 ? 'offline'
                 : t('live aus dem Korpus')
@@ -878,25 +878,25 @@ export function MarktScreen() {
           {s ? (
             <>
               <span title={t('Unternehmen nach Zusammenfassung der Standorte')}>
-                <span className="text-cockpit-text">{de(s.employers)}</span> Unternehmen
+                <span className="text-cockpit-text">{de(s.employers)}</span> {t('Unternehmen')}
               </span>
               <span title={t('Einzelne Korpus-Einträge — eine Firma kann mehrere Standorte haben')}>
-                <span className="text-cockpit-text">{de(s.companies)}</span> Standorte
+                <span className="text-cockpit-text">{de(s.companies)}</span> {t('Standorte')}
               </span>
               <span>
-                <span className="text-cockpit-text">{de(s.open_postings)}</span> offene Rollen
+                <span className="text-cockpit-text">{de(s.open_postings)}</span> {t('offene Rollen')}
               </span>
               <span>
-                <span className="text-cockpit-text">{de(s.cities)}</span> Orte
+                <span className="text-cockpit-text">{de(s.cities)}</span> {t('Orte')}
               </span>
               <span title={t('Identität aus Name + Ort angenommen, nicht gegen ein Register geprüft')}>
-                <span className="text-cockpit-text">{de(s.unverified_identity)}</span> ohne
-                Registerprüfung
+                <span className="text-cockpit-text">{de(s.unverified_identity)}</span>{' '}
+                {t('ohne Registerprüfung')}
               </span>
               {s.suspected_personal_data > 0 && (
                 <span title={t('Firmennamen, die nach natürlichen Personen aussehen (Einzelunternehmen) — personenbezogene Daten im geteilten Korpus')}>
-                  <span className="text-coral-400">{de(s.suspected_personal_data)}</span> mögl.
-                  Personen
+                  <span className="text-coral-400">{de(s.suspected_personal_data)}</span>{' '}
+                  {t('mögl. Personen')}
                 </span>
               )}
             </>
@@ -981,7 +981,7 @@ export function MarktScreen() {
               onClick={saveCurrent}
               title={t('Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen')}
             >
-              <Star className="h-4 w-4" /> Merken
+              <Star className="h-4 w-4" /> {t('Merken')}
             </Button>
           )}
         </div>
@@ -1044,15 +1044,15 @@ export function MarktScreen() {
         {query && !results.loading && !results.error && (
           <>
             <p className="font-mono text-[13px] text-cockpit-faint">
-              <span className="text-cockpit-text">{de(hits.length)}</span> Unternehmen ·{' '}
-              <span className="text-cockpit-text">{de(totalRoles)}</span> offene Rollen
+              <span className="text-cockpit-text">{de(hits.length)}</span> {t('Unternehmen')} ·{' '}
+              <span className="text-cockpit-text">{de(totalRoles)}</span> {t('offene Rollen')}
               {/* The corpus total, not the page total. "nur die stärksten 40"
                   said neither how many exist nor what they were strongest of. */}
               {(results.data?.total ?? 0) > hits.length && (
                 <span>
                   {' '}
-                  · von <span className="text-cockpit-text">{de(results.data?.total ?? 0)}</span>{' '}
-                  Treffern, stärkste zuerst
+                  · {t('von')} <span className="text-cockpit-text">{de(results.data?.total ?? 0)}</span>{' '}
+                  {t('Treffern, stärkste zuerst')}
                 </span>
               )}
             </p>
@@ -1060,16 +1060,18 @@ export function MarktScreen() {
             {corrections.length > 0 && (
               <Panel className="border-gold-600/40 px-4 py-3">
                 <p className="text-[13.5px] leading-relaxed text-cockpit-dim">
-                  Ergebnisse für{' '}
+                  {t('Ergebnisse für')}{' '}
                   <span className="font-medium text-cockpit-text">„{searchedQ}“</span> —{' '}
                   {corrections.map((c) => `„${c.from}“`).join(', ')}{' '}
-                  {corrections.length > 1 ? 'fanden' : 'fand'} im Korpus fast nichts.{' '}
+                  {corrections.length > 1
+                    ? t('fanden im Korpus fast nichts.')
+                    : t('fand im Korpus fast nichts.')}{' '}
                   <button
                     type="button"
                     onClick={() => setQuery({ ...query, exact: true })}
                     className="text-gold-300 underline-offset-2 hover:underline"
                   >
-                    Trotzdem nach „{query.q}“ suchen
+                    {t('Trotzdem nach „{q}“ suchen', { q: query.q })}
                   </button>
                 </p>
               </Panel>
@@ -1084,10 +1086,9 @@ export function MarktScreen() {
             {hits.length === 0 ? (
               <Panel className="p-6">
                 <p className="text-[14px] text-cockpit-dim">
-                  Nichts gefunden für „{query.q || query.city}“
-                  {query.exact && t(' (wörtlich gesucht)')}. Der Korpus enthält heute nur
-                  Titel und Berufsbezeichnungen — keine Anzeigentexte —, deshalb trifft eine
-                  Suche nach Anforderungen noch nicht.
+                  {t('Nichts gefunden für „{q}“', { q: query.q || query.city })}
+                  {query.exact && t(' (wörtlich gesucht)')}
+                  {t('. Der Korpus enthält heute nur Titel und Berufsbezeichnungen — keine Anzeigentexte —, deshalb trifft eine Suche nach Anforderungen noch nicht.')}
                 </p>
               </Panel>
             ) : (

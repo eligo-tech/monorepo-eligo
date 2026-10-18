@@ -116,7 +116,7 @@ export function SetContact({
           {candidates.length > 0 ? (
             <div className="space-y-1.5">
               <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-cockpit-faint">
-                Kontakte bei {companyName}
+                {t('Kontakte bei {company}', { company: companyName })}
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {candidates.map((m) => (
@@ -138,15 +138,15 @@ export function SetContact({
             </div>
           ) : (
             <p className="text-[12.5px] text-cockpit-dim">
-              Für {companyName} ist noch kein Kontakt erfasst.
+              {t('Für {company} ist noch kein Kontakt erfasst.', { company: companyName })}
             </p>
           )}
           <div className="flex items-center gap-2">
             <Button onClick={() => setAdding(true)}>
-              <Plus className="h-4 w-4" /> Neuer Kontakt
+              <Plus className="h-4 w-4" /> {t('Neuer Kontakt')}
             </Button>
             <Button onClick={() => setOpen(false)}>
-              <X className="h-4 w-4" /> Abbrechen
+              <X className="h-4 w-4" /> {t('Abbrechen')}
             </Button>
           </div>
         </>
@@ -164,7 +164,7 @@ export function SetContact({
               <Check className="h-4 w-4" /> {busy ? t('Speichert…') : t('Anlegen & zuordnen')}
             </Button>
             <Button onClick={() => setAdding(false)}>
-              <X className="h-4 w-4" /> Zurück
+              <X className="h-4 w-4" /> {t('Zurück')}
             </Button>
           </div>
           <p className="font-mono text-[11px] text-cockpit-faint">

@@ -90,7 +90,7 @@ export function MandateEditor({
     setD((prev) => ({ ...prev, [key]: value }))
 
   const companyOptions = [
-    { value: '', label: '— kein Kunde zugeordnet' },
+    { value: '', label: t('— kein Kunde zugeordnet') },
     ...companies
       .map((c) => ({ value: c.id, label: c.name }))
       .sort((a, b) => a.label.localeCompare(b.label)),

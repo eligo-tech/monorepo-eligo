@@ -158,7 +158,7 @@ function Note({ entry }: { entry: ManagerInteractionDTO }) {
             onClick={() => setOpen((v) => !v)}
             className="mt-1.5 font-mono text-[12px] text-mint-400 transition-colors hover:text-mint-300"
           >
-            {open ? 'weniger' : 'mehr'}
+            {open ? t('weniger') : t('mehr')}
           </button>
         )}
       </div>
@@ -250,7 +250,7 @@ export function ManagerProfile({
                 className="flex items-center gap-1 transition-colors hover:text-cockpit-text"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
-                Manager
+                {t('Manager')}
               </button>
               {manager.art14_outstanding && (
                 <>
@@ -265,7 +265,7 @@ export function ManagerProfile({
                     className="text-gold-400"
                     title={t('Dieselbe E-Mail existiert mehrfach — in der Quelle doppelt angelegt')}
                   >
-                    {manager.duplicate_count} Datensätze
+                    {manager.duplicate_count} {t('Datensätze')}
                   </span>
                 </>
               )}
@@ -395,7 +395,7 @@ export function ManagerProfile({
                     ))}
                   </ul>
                   <p className="px-6 py-3 font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
-                    {history.length} Notizen · neueste zuerst
+                    {history.length} {t('Notizen · neueste zuerst')}
                   </p>
                 </>
               )}

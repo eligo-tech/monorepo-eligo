@@ -201,7 +201,7 @@ function RevenueBody({
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     <Chip tone="mint">{deal.timing}</Chip>
                     <span className="font-mono text-[13px] text-cockpit-faint">
-                      Chance <Figure figure={deal.chance} suffix="%" />
+                      {t('Chance')} <Figure figure={deal.chance} suffix="%" />
                     </span>
                     {deal.note && <Chip tone="mint">{deal.note}</Chip>}
                   </div>
@@ -224,7 +224,8 @@ function RevenueBody({
           </div>
 
           <p className="mt-3 text-[14px] text-cockpit-dim">
-            Weitere Pipeline +<Money figure={panel.pipelineTotal} /> möglich · gewichtet{' '}
+            {t('Weitere Pipeline')} +<Money figure={panel.pipelineTotal} />{' '}
+            {t('möglich · gewichtet')}{' '}
             <Money figure={panel.pipelineWeighted} className="text-cockpit-text" />
           </p>
         </div>

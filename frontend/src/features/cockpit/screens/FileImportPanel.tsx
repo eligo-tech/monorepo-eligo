@@ -65,7 +65,7 @@ export function FileImportPanel({
         // which is more useful than anything this layer could invent.
         e.status === 422 || e.status === 400
         ? stripDetail(e.message)
-        : `Fehlgeschlagen (HTTP ${e.status}).`
+        : t('Fehlgeschlagen (HTTP {status}).', { status: e.status })
       : t('Fehlgeschlagen — keine Antwort vom Server.')
 
   const run = useCallback(
@@ -118,7 +118,7 @@ export function FileImportPanel({
   }
 
   const fieldOptions = [
-    { value: '', label: '— nicht importieren' },
+    { value: '', label: t('— nicht importieren') },
     ...(spec?.fields ?? []).map((f) => ({
       value: f.name,
       label: f.required ? `${f.label} *` : f.label,
@@ -180,8 +180,8 @@ export function FileImportPanel({
 
       {result && (
         <div className="mt-4 rounded-xl border border-mint-600/50 bg-mint-800/20 px-4 py-3 text-[13px] text-mint-300">
-          {result.created} neu angelegt · {result.updated} aktualisiert ·{' '}
-          {result.skipped} übersprungen.
+          {result.created} {t('neu angelegt')} · {result.updated} {t('aktualisiert')} ·{' '}
+          {result.skipped} {t('übersprungen.')}
           {result.problems.length > 0 && (
             <span className="block text-cockpit-dim">{result.problems.join(' ')}</span>
           )}
@@ -193,11 +193,11 @@ export function FileImportPanel({
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 font-mono text-[12px] text-cockpit-faint">
             <span>{preview.note}</span>
             <span>
-              <span className="text-cockpit-text">{preview.row_count}</span> Zeilen
+              <span className="text-cockpit-text">{preview.row_count}</span> {t('Zeilen')}
             </span>
-            <span className="text-mint-300">{preview.counts.create} neu</span>
-            <span className="text-gold-300">{preview.counts.update} aktualisiert</span>
-            <span>{preview.counts.skip} übersprungen</span>
+            <span className="text-mint-300">{preview.counts.create} {t('neu')}</span>
+            <span className="text-gold-300">{preview.counts.update} {t('aktualisiert')}</span>
+            <span>{preview.counts.skip} {t('übersprungen')}</span>
           </div>
 
           {preview.problems.map((problem) => (
@@ -265,7 +265,7 @@ export function FileImportPanel({
                 .slice(0, 5)
                 .map((r) => (
                   <li key={r.line}>
-                    Zeile {r.line} übersprungen — {r.reason}
+                    {t('Zeile {line} übersprungen —', { line: r.line })} {r.reason}
                   </li>
                 ))}
             </ul>
@@ -282,20 +282,21 @@ export function FileImportPanel({
               }
               title={canCommit ? undefined : t('Nur Administratoren können importieren')}
             >
-              {preview.counts.create + preview.counts.update} Zeilen importieren
+              {t('{n} Zeilen importieren', {
+                n: preview.counts.create + preview.counts.update,
+              })}
               <ArrowRight className="h-4 w-4" />
             </Button>
             <span className="font-mono text-[11.5px] text-cockpit-faint">
               {!canCommit && t('Nur Administratoren können importieren. ')}
-              Noch wurde nichts geschrieben. Dieselbe Datei erneut zu importieren
-              aktualisiert die Datensätze, statt sie zu verdoppeln.
+              {t('Noch wurde nichts geschrieben. Dieselbe Datei erneut zu importieren aktualisiert die Datensätze, statt sie zu verdoppeln.')}
             </span>
           </div>
 
           {preview.sample.length > 0 && (
             <details className="text-[12px] text-cockpit-faint">
               <summary className="cursor-pointer">
-                Erste {preview.sample.length} Zeilen, wie sie landen würden
+                {t('Erste {n} Zeilen, wie sie landen würden', { n: preview.sample.length })}
               </summary>
               <ul className="mt-2 space-y-1">
                 {preview.sample.map((row) => (

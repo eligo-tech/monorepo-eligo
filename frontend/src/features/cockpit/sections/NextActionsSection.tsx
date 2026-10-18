@@ -48,7 +48,7 @@ export function NextActionsSection({ actions }: { actions: NextAction[] }) {
         title={t('Nächste beste Aktionen')}
         tone="gold"
         icon={<Zap className="h-[15px] w-[15px]" />}
-        hint={`${open} offen`}
+        hint={t('{open} offen', { open })}
       />
 
       <div className="space-y-3">

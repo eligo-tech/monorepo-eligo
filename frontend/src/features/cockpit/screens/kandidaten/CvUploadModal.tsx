@@ -150,7 +150,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
               <FileText className="h-4 w-4 shrink-0 text-cockpit-faint" />
               <span className="font-medium text-cockpit-text">{result.document_name}</span>
               <span className="font-mono text-[13px] text-cockpit-faint">
-                · {accepted} von {result.fields.length} Feldern übernommen
+                · {t('{n} von {total} Feldern übernommen', { n: accepted, total: result.fields.length })}
               </span>
             </div>
 
@@ -173,11 +173,11 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
                   <ConfidenceBar value={f.confidence} review={f.needs_review} />
                   {f.needs_review ? (
                     <span className="flex w-28 items-center gap-1 font-mono text-[12px] text-gold-400">
-                      <AlertTriangle className="h-3.5 w-3.5" /> Prüfen
+                      <AlertTriangle className="h-3.5 w-3.5" /> {t('Prüfen')}
                     </span>
                   ) : (
                     <span className="flex w-28 items-center gap-1 font-mono text-[12px] text-mint-400">
-                      <Check className="h-3.5 w-3.5" /> Übernommen
+                      <Check className="h-3.5 w-3.5" /> {t('Übernommen')}
                     </span>
                   )}
                 </div>
@@ -198,7 +198,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
             {result.notes.length > 0 && (
               <details className="mt-4 rounded-2xl border border-cockpit-line">
                 <summary className="cursor-pointer px-4 py-2.5 text-[13px] font-semibold text-cockpit-text">
-                  Prüf-Protokoll{' '}
+                  {t('Prüf-Protokoll')}{' '}
                   <span className="font-mono font-normal text-cockpit-faint">
                     (laufwise · {result.notes.length})
                   </span>
@@ -246,7 +246,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
             disabled={!result || saving || result.fields.length === 0}
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Als Kandidat speichern
+            {t('Als Kandidat speichern')}
           </Button>
         </div>
       </div>
