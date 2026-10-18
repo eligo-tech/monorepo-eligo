@@ -32,6 +32,24 @@ const ACTION_LABEL: Record<string, string> = {
   skip: t('übersprungen'),
 }
 
+/** An entity's name for the picker: "Candidates", "Companies", "Mandates".
+ *
+ *  The dictionary is keyed by the German string, so one German word can only
+ *  take one English one — and "Firmen" is already spoken for by the count on
+ *  Projekte ("3 companies"), which wants it lowercase. German capitalises
+ *  every noun, so the German side never noticed; the picker read
+ *  "Candidates · companies · Contacts · Mandates".
+ *
+ *  Capitalising here is the smaller fix than inventing a second key for a
+ *  word that is genuinely the same word: this position is a NAME, and a name
+ *  starts with a capital in both languages. A label already capitalised is
+ *  unchanged, so this holds for entities the backend adds later.
+ */
+function entityLabel(german: string): string {
+  const en = t(german)
+  return en.charAt(0).toUpperCase() + en.slice(1)
+}
+
 export function FileImportPanel({
   canCommit = true,
   onImported,
@@ -152,7 +170,7 @@ export function FileImportPanel({
             setResult(null)
             if (file) void run(file, v)
           }}
-          options={entities.map((e) => ({ value: e.key, label: t(e.label) }))}
+          options={entities.map((e) => ({ value: e.key, label: entityLabel(e.label) }))}
         />
         <input
           ref={fileRef}

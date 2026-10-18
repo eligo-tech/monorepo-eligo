@@ -13,8 +13,13 @@
 //    not. The names would be worse than the sentences anyway.
 //
 // The cost is that two German strings that happen to be identical cannot
-// take different English words. `tests/dictionary.test.ts` lists the ones
-// where that would bite, and so far it is none.
+// take different English words. That has bitten exactly once: "Firmen" is a
+// count noun on Projekte ("3 companies") and an entity name in the import
+// picker ("Companies"), and German capitalises both the same way, so only
+// the English looked wrong. `FileImportPanel.entityLabel` fixes the case at
+// the one site that needs a name rather than inventing a second key. If a
+// pair ever needs genuinely different WORDS, give the contexts different
+// German keys — that is the escape hatch, and it is cheaper than it looks.
 
 import { EN } from './en'
 
