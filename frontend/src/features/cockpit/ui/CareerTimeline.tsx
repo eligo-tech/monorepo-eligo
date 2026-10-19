@@ -117,8 +117,8 @@ export function CareerTimeline({
             {tl.undated > 0 && (
               <span className="text-gold-300">
                 {tl.undated === 1
-                  ? t('Eine Station ohne Datum, nicht abgebildet')
-                  : t('{n} Stationen ohne Datum, nicht abgebildet', { n: tl.undated })}
+                  ? t('Eine Station ohne verwertbare Daten, nicht abgebildet')
+                  : t('{n} Stationen ohne verwertbare Daten, nicht abgebildet', { n: tl.undated })}
               </span>
             )}
           </span>
