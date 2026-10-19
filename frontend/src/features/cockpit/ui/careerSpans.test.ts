@@ -150,6 +150,35 @@ describe('buildTimeline', () => {
     expect(tl.undated).toBe(1)
   })
 
+  it('takes the end out of a start field that holds the whole range', () => {
+    // "gate5 AG, 2003-2004, ''" is how the extractor writes a one-line CV
+    // entry. Reading only the end FIELD leaves it empty, which means open,
+    // which drew IRS GmbH 1991 as thirty-five unbroken years.
+    const tl = buildTimeline([role('2008-01', '2010-01'), role('1991-1998')], NOW)!
+    expect(tl.spans).toHaveLength(2)
+    expect(tl.spans[1].open).toBe(false)
+    expect(tl.spans[1].from).toBe(1991 * 12)
+    expect(tl.spans[1].to).toBe(1999 * 12)
+  })
+
+  it('will not run a role to today when a later one exists', () => {
+    // A 1999 station with no end, followed by three more. The CV did not
+    // write the end down; it did not say "still there" either.
+    const tl = buildTimeline(
+      [role('2010-01', '2014-01'), role('2005-01', '2009-01'), role('1999')],
+      NOW,
+    )!
+    expect(tl.spans).toHaveLength(2)
+    expect(tl.undated).toBe(1)
+    expect(tl.openEnded).toBe(false)
+  })
+
+  it('still runs the newest role to today', () => {
+    const tl = buildTimeline([role('2024-03'), role('2019-01', '2024-02'), role('2015')], NOW)!
+    expect(tl.spans[0].open).toBe(true)
+    expect(tl.undated).toBe(1)
+  })
+
   it('draws nothing from a single dated role', () => {
     expect(buildTimeline([role('2020-01', '2022-01'), role()], NOW)).toBe(null)
     expect(buildTimeline([], NOW)).toBe(null)

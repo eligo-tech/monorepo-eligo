@@ -92,13 +92,25 @@ const YEAR = /\b(?:19|20)\d{2}\b/
  *  A hyphen is also the ISO separator, so the split only counts when two
  *  halves each carry a date of their own: "2019-03" stays one stamp. */
 function side(s: string, edge: 'start' | 'end'): string {
-  const parts = s
-    .split(/\s*(?:–|—|-|\bbis\b|\bto\b|\buntil\b|(?<=\d{4})\s*\/\s*(?=\d{4}))\s*/)
-    .map((p) => p.trim())
-    .filter((p) => YEAR.test(p) || PRESENT.test(p))
+  const parts = halves(s)
   if (parts.length < 2) return s
   return edge === 'start' ? parts[0] : parts[parts.length - 1]
 }
+
+const halves = (s: string): string[] =>
+  s
+    .split(/\s*(?:–|—|-|\bbis\b|\bto\b|\buntil\b|(?<=\d{4})\s*\/\s*(?=\d{4}))\s*/)
+    .map((p) => p.trim())
+    .filter((p) => YEAR.test(p) || PRESENT.test(p))
+
+/** True when ONE field already holds both ends. The extractor writes these
+ *  into `start_date` and leaves `end_date` empty — "2003-2004" with nothing
+ *  after it — so the end has to be read back out of the start, or the role
+ *  runs to today. Four of the longest-serving stations on the first
+ *  twenty-four-role CV in the pool did exactly that: IRS GmbH, 1991 to
+ *  1998, was drawn as thirty-five unbroken years. */
+export const isRange = (raw: string | undefined | null): boolean =>
+  halves((raw ?? '').toLowerCase().replace(/\./g, ' ').trim()).length >= 2
 
 /** A month number the source may have got wrong. 13 is not a month, and
  *  guessing which digit was meant would be an invention. */
@@ -154,25 +166,40 @@ export function buildTimeline(roles: RoleEntry[], now: Date = new Date()): Timel
   const spans: Span[] = []
   let undated = 0
 
+  /** The newest start in the set. A role with no end can only mean "still
+   *  there" if nothing began after it; a 1999 station followed by five more
+   *  has an end the CV simply did not write down, and running it to today
+   *  would be the chart's own invention. */
+  const newest = Math.max(
+    ...roles.map((r) => {
+      const s = parseStamp(r.start, 'start')
+      return s && s !== OPEN ? s.months : -Infinity
+    }),
+  )
+
   for (const role of roles) {
     const start = parseStamp(role.start, 'start')
-    // An unreadable start cannot be placed at all; an unreadable END still
-    // leaves a known start, and "began here, no end recorded" is exactly
-    // what an open bar says.
     if (start === null || start === OPEN) {
       undated += 1
       continue
     }
-    const end = parseStamp(role.end, 'end')
-    const open = end === null || end === OPEN
-    const to = open ? today : (end as Stamp).months + 1
-    if (!open && to <= start.months) {
-      // Ends before it starts. Contradictory, so it is not drawn — but it is
-      // counted, and the row stays in the list below where it can be fixed.
+    // A range in the start field carries the end with it.
+    const endRaw = role.end?.trim() ? role.end : isRange(role.start) ? role.start : role.end
+    const end = parseStamp(endRaw, 'end')
+    const unbounded = end === null || end === OPEN
+    if (unbounded && start.months < newest) {
       undated += 1
       continue
     }
-    spans.push({ role, from: start.months, to, open })
+    const to = unbounded ? today : (end as Stamp).months + 1
+    if (!unbounded && to <= start.months) {
+      // Ends before it starts — October 2021 to May 2021 is on a real CV in
+      // the pool. Contradictory, so it is not drawn; it is counted, and the
+      // row stays in the list below where it can be fixed.
+      undated += 1
+      continue
+    }
+    spans.push({ role, from: start.months, to, open: unbounded })
   }
 
   if (spans.length < MIN_SPANS) return null
