@@ -69,6 +69,54 @@ describe('parseStamp', () => {
   })
 })
 
+describe('the shapes the live extractor actually produces', () => {
+  // Taken from the 370 distinct date strings on the 47 candidates in the
+  // production pool that carry a work history. Written down because the
+  // first version of this parser was built from what a CV date looks like
+  // in the abstract, and the real set has ranges in a single field,
+  // "SEPT, 2019", a stray double space and four spellings of today.
+  const CASES: [string, 'start' | 'end', number | null | typeof OPEN][] = [
+    ['03/2019', 'start', 2019 * 12 + 2],
+    ['2019-03', 'start', 2019 * 12 + 2],
+    ['2019.03', 'start', 2019 * 12 + 2],
+    ['03.2019', 'start', 2019 * 12 + 2],
+    ['August 2019', 'start', 2019 * 12 + 7],
+    ['Oktober 2019', 'start', 2019 * 12 + 9],
+    ['OCT, 2019', 'start', 2019 * 12 + 9],
+    ['SEPT, 2019', 'start', 2019 * 12 + 8],
+    ['Feb  2019', 'start', 2019 * 12 + 1],
+    ['2019', 'start', 2019 * 12],
+    ['Present', 'end', OPEN],
+    ['PRESENT', 'end', OPEN],
+    ['today', 'end', OPEN],
+    ['now', 'end', OPEN],
+    ['Now', 'end', OPEN],
+    ['current', 'end', OPEN],
+    ['ongoing', 'end', OPEN],
+    ['', 'end', OPEN],
+    // A whole range in one field. Reading it as a single date is what makes
+    // a role that ended in 2021 run to today.
+    ['2019-2021', 'start', 2019 * 12],
+    ['2019-2021', 'end', 2021 * 12 + 11],
+    ['2019/2021', 'end', 2021 * 12 + 11],
+    ['Mar 2019 - Jun 2021', 'start', 2019 * 12 + 2],
+    ['Mar 2019 - Jun 2021', 'end', 2021 * 12 + 5],
+    ['Mar 2019 - Present', 'start', 2019 * 12 + 2],
+    ['Mar 2019 - Present', 'end', OPEN],
+    // Two-digit year, 01.03.19. Nothing here can tell it from a day-month
+    // pair, so it is not placed — and the caption says one station was not.
+    ['01.03.19', 'start', null],
+  ]
+
+  it('reads each of them, or refuses', () => {
+    for (const [raw, edge, expected] of CASES) {
+      const got = parseStamp(raw, edge)
+      const value = got === null || got === OPEN ? got : got.months
+      expect(value, `${raw} (${edge})`).toEqual(expected)
+    }
+  })
+})
+
 describe('buildTimeline', () => {
   it('ends a role AFTER its last month — March to March is one month, not zero', () => {
     const tl = buildTimeline([role('2019-03', '2019-03'), role('2020-01', '2020-06')], NOW)!
