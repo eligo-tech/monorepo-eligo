@@ -17,10 +17,10 @@ import type { RoleEntry } from '@/data/types'
 import { cn } from '@/lib/cn'
 import { BENIGN_GAP_MONTHS, buildTimeline, pct } from './careerSpans'
 
-/** Row pitch and bar thickness, in px. The bar is thin on purpose: the chart
- *  is a reading aid above the list, not the section's centrepiece. */
-const ROW = 20
-const BAR = 8
+/** Row pitch and bar thickness, in px. A row carries its own name now, so
+ *  it needs the height of a line of text. */
+const ROW = 24
+const BAR = 9
 
 /** A one-month tenure on a thirty-year axis is 0.28% — a hairline nobody
  *  sees. The floor is a rendering minimum, not a claim about duration; it
@@ -43,60 +43,84 @@ export function CareerTimeline({
 
   return (
     <figure className={cn('select-none', className)}>
-      <div className="relative mb-1.5 h-3">
-        {tl.ticks.map((year) => (
-          <span
-            key={year}
-            className="absolute top-0 font-mono text-[10px] tabular-nums text-cockpit-faint"
-            style={{ left: `${x(year * 12)}%`, transform: shift(x(year * 12)) }}
-          >
-            {year}
-          </span>
-        ))}
+      <div className="flex gap-3">
+        {/* Which bar is which. Twenty-three unlabelled rectangles are a
+            shape, not a career — the first version shipped without this
+            column, 740px wide on the deployed site, and could not be read
+            at all. */}
+        <div className="w-[36%] min-w-[110px] max-w-[260px] shrink-0">
+          <div className="mb-1.5 h-3" />
+          {tl.spans.map((span, i) => (
+            <div key={i} className="flex items-center" style={{ height: ROW }}>
+              <span className="block truncate text-[12px] leading-none" title={label(span.role)}>
+                <span className={span.open ? 'text-cockpit-text' : 'text-cockpit-dim'}>
+                  {span.role.title || t('Rolle')}
+                </span>
+                {span.role.company && (
+                  <span className="text-cockpit-faint"> · {span.role.company}</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="relative mb-1.5 h-3">
+            {tl.ticks.map((year) => (
+              <span
+                key={year}
+                className="absolute top-0 font-mono text-[10px] tabular-nums text-cockpit-faint"
+                style={{ left: `${x(year * 12)}%`, transform: shift(x(year * 12)) }}
+              >
+                {year}
+              </span>
+            ))}
+          </div>
+
+          <svg width="100%" height={height} aria-hidden>
+            {tl.ticks.map((year) => (
+              <rect
+                key={year}
+                x={`${x(year * 12)}%`}
+                y={0}
+                width={1}
+                height={height}
+                className="fill-cockpit-line"
+              />
+            ))}
+
+            {tl.gaps.map((gap) => (
+              <rect
+                key={gap.from}
+                x={`${x(gap.from)}%`}
+                y={0}
+                width={`${x(gap.to) - x(gap.from)}%`}
+                height={height}
+                opacity={0.55}
+                className="fill-coral-800"
+              >
+                <title>{t('Lücke: {n} Monate', { n: gap.months })}</title>
+              </rect>
+            ))}
+
+            {tl.spans.map((span, i) => (
+              <rect
+                key={i}
+                x={`${x(span.from)}%`}
+                y={i * ROW + (ROW - BAR) / 2}
+                width={`${Math.max(MIN_WIDTH, x(span.to) - x(span.from))}%`}
+                height={BAR}
+                rx={2}
+                // Mint 500 is the cockpit's "live" tone; a finished station is
+                // the same hue stepped back, so the current job reads first.
+                className={span.open ? 'fill-mint-500' : 'fill-mint-700'}
+              >
+                <title>{label(span.role)}</title>
+              </rect>
+            ))}
+          </svg>
+        </div>
       </div>
-
-      <svg width="100%" height={height} aria-hidden>
-        {tl.ticks.map((year) => (
-          <rect
-            key={year}
-            x={`${x(year * 12)}%`}
-            y={0}
-            width={1}
-            height={height}
-            className="fill-cockpit-line"
-          />
-        ))}
-
-        {tl.gaps.map((gap) => (
-          <rect
-            key={gap.from}
-            x={`${x(gap.from)}%`}
-            y={0}
-            width={`${x(gap.to) - x(gap.from)}%`}
-            height={height}
-            opacity={0.55}
-            className="fill-coral-800"
-          >
-            <title>{t('Lücke: {n} Monate', { n: gap.months })}</title>
-          </rect>
-        ))}
-
-        {tl.spans.map((span, i) => (
-          <rect
-            key={i}
-            x={`${x(span.from)}%`}
-            y={i * ROW + (ROW - BAR) / 2}
-            width={`${Math.max(MIN_WIDTH, x(span.to) - x(span.from))}%`}
-            height={BAR}
-            rx={2}
-            // Mint 500 is the cockpit's "live" tone; a finished station is
-            // the same hue stepped back, so the current job reads first.
-            className={span.open ? 'fill-mint-500' : 'fill-mint-700'}
-          >
-            <title>{label(span.role)}</title>
-          </rect>
-        ))}
-      </svg>
 
       <figcaption className="mt-2 font-mono text-[11px] text-cockpit-faint">
         <span>{t('{n} Stationen', { n: tl.spans.length })}</span>

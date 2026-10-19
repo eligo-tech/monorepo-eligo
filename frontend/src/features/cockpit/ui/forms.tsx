@@ -280,7 +280,10 @@ export function Drawer({
       <div
         className={cn(
           'relative flex h-full w-full flex-col border-l border-cockpit-line bg-cockpit-bg transition-[max-width] duration-300',
-          wide ? 'max-w-[1600px]' : 'max-w-[1180px]',
+          // Wide means the whole window. It used to mean 1600px, which on a
+          // 1920 screen still left a strip of the list behind it and made
+          // the expanded dossier look like it had refused to expand.
+          wide ? 'max-w-none' : 'max-w-[1180px]',
         )}
       >
         {children}
