@@ -62,22 +62,42 @@ export function parseStamp(
   raw: string | undefined | null,
   edge: 'start' | 'end',
 ): Stamp | typeof OPEN | null {
-  const s = (raw ?? '').toLowerCase().replace(/\./g, ' ').trim()
-  if (!s) return edge === 'end' ? OPEN : null
+  const whole = (raw ?? '').toLowerCase().replace(/\./g, ' ').trim()
+  if (!whole) return edge === 'end' ? OPEN : null
+  const s = side(whole, edge)
   if (PRESENT.test(s)) return OPEN
 
-  // ISO-ish, year first: 2019-03, 2019/3, 2019-03-15.
-  const iso = s.match(/(\d{4})\s*[-/]\s*(\d{1,2})\b/)
+  // ISO-ish, year first: 2019-03, 2019/3, 2019-03-15, and 2019.03 — which
+  // arrives here as "2019 03", the dots already flattened.
+  const iso = s.match(/(\d{4})\s*[-/ ]\s*(\d{1,2})\b/)
   if (iso) return stamp(+iso[1], month(+iso[2]), edge)
 
   // Month first: 03/2019, 3-2019, 03 2019.
   const num = s.match(/\b(\d{1,2})\s*[-/ ]\s*(\d{4})\b/)
   if (num) return stamp(+num[2], month(+num[1]), edge)
 
-  const year = s.match(/\b(19|20)(\d{2})\b/)
+  const year = s.match(YEAR)
   if (!year) return null
   const named = MONTH_WORDS.find(([rx]) => rx.test(s))
-  return stamp(+(year[1] + year[2]), named ? named[1] : null, edge)
+  return stamp(+year[0], named ? named[1] : null, edge)
+}
+
+const YEAR = /\b(?:19|20)\d{2}\b/
+
+/** One field that holds the WHOLE range — "2019 - 2021", "2019/2021",
+ *  "Mar 2019 - Present". 73 of the live records write a single date per
+ *  field, but some write the line as the CV had it, and reading "2019-2021"
+ *  as one date makes a role that ended in 2021 run to today instead.
+ *
+ *  A hyphen is also the ISO separator, so the split only counts when two
+ *  halves each carry a date of their own: "2019-03" stays one stamp. */
+function side(s: string, edge: 'start' | 'end'): string {
+  const parts = s
+    .split(/\s*(?:–|—|-|\bbis\b|\bto\b|\buntil\b|(?<=\d{4})\s*\/\s*(?=\d{4}))\s*/)
+    .map((p) => p.trim())
+    .filter((p) => YEAR.test(p) || PRESENT.test(p))
+  if (parts.length < 2) return s
+  return edge === 'start' ? parts[0] : parts[parts.length - 1]
 }
 
 /** A month number the source may have got wrong. 13 is not a month, and
