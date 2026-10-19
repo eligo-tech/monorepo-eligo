@@ -23,7 +23,9 @@ export interface Stamp {
   precision: Precision
 }
 
-/** A date the source left open: "heute", or simply nothing. */
+/** A date the source states is still running: "heute", "ongoing",
+ *  "current". NOT the same as an empty field, which states nothing — see
+ *  `buildTimeline`, where only one of the two may reach today. */
 export const OPEN = 'open'
 
 const PRESENT =
@@ -54,16 +56,17 @@ const stamp = (year: number, month: number | null, edge: 'start' | 'end'): Stamp
       { months: year * 12 + (edge === 'start' ? 0 : 11), precision: 'year' }
     : { months: year * 12 + month - 1, precision: 'month' }
 
-/** Read one end of a role's span. `null` means unreadable, `OPEN` means the
- *  source named no end — which is the current job, but also a CV that just
- *  left the field blank. The component draws those two the same way, because
- *  nothing here can tell them apart. */
+/** Read one end of a role's span. `OPEN` is the source SAYING it still runs;
+ *  `null` is the source saying nothing readable, empty field included. The
+ *  difference decides whether a bar may reach today, so the two must not be
+ *  collapsed here — a board seat marked "ongoing" is a fact about the
+ *  person, an empty end field is a fact about the CV. */
 export function parseStamp(
   raw: string | undefined | null,
   edge: 'start' | 'end',
 ): Stamp | typeof OPEN | null {
   const whole = (raw ?? '').toLowerCase().replace(/\./g, ' ').trim()
-  if (!whole) return edge === 'end' ? OPEN : null
+  if (!whole) return null
   const s = side(whole, edge)
   if (PRESENT.test(s)) return OPEN
 
@@ -166,10 +169,12 @@ export function buildTimeline(roles: RoleEntry[], now: Date = new Date()): Timel
   const spans: Span[] = []
   let undated = 0
 
-  /** The newest start in the set. A role with no end can only mean "still
-   *  there" if nothing began after it; a 1999 station followed by five more
-   *  has an end the CV simply did not write down, and running it to today
-   *  would be the chart's own invention. */
+  /** The newest start in the set. An EMPTY end can only mean "still there"
+   *  if nothing began after it; a 1999 station followed by five more has an
+   *  end the CV simply did not write down, and running it to today would be
+   *  the chart's own invention. A station the CV marks "ongoing" is not
+   *  affected — that one says it outright, and a board seat held beside a
+   *  day job is exactly the case. */
   const newest = Math.max(
     ...roles.map((r) => {
       const s = parseStamp(r.start, 'start')
@@ -187,7 +192,7 @@ export function buildTimeline(roles: RoleEntry[], now: Date = new Date()): Timel
     const endRaw = role.end?.trim() ? role.end : isRange(role.start) ? role.start : role.end
     const end = parseStamp(endRaw, 'end')
     const unbounded = end === null || end === OPEN
-    if (unbounded && start.months < newest) {
+    if (end === null && start.months < newest) {
       undated += 1
       continue
     }

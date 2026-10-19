@@ -52,9 +52,12 @@ describe('parseStamp', () => {
       expect(parseStamp(s, 'end'), s).toBe(OPEN)
   })
 
-  it('treats a missing end as open and a missing start as unreadable', () => {
-    expect(parseStamp('', 'end')).toBe(OPEN)
-    expect(parseStamp(undefined, 'end')).toBe(OPEN)
+  it('separates "still running" from "nothing written down"', () => {
+    // Both end up as a bar with no right edge, but only the first may run
+    // to today while later roles exist — see buildTimeline.
+    expect(parseStamp('ongoing', 'end')).toBe(OPEN)
+    expect(parseStamp('', 'end')).toBe(null)
+    expect(parseStamp(undefined, 'end')).toBe(null)
     expect(parseStamp('', 'start')).toBe(null)
   })
 
@@ -93,7 +96,7 @@ describe('the shapes the live extractor actually produces', () => {
     ['Now', 'end', OPEN],
     ['current', 'end', OPEN],
     ['ongoing', 'end', OPEN],
-    ['', 'end', OPEN],
+    ['', 'end', null],
     // A whole range in one field. Reading it as a single date is what makes
     // a role that ended in 2021 run to today.
     ['2019-2021', 'start', 2019 * 12],
@@ -177,6 +180,19 @@ describe('buildTimeline', () => {
     const tl = buildTimeline([role('2024-03'), role('2019-01', '2024-02'), role('2015')], NOW)!
     expect(tl.spans[0].open).toBe(true)
     expect(tl.undated).toBe(1)
+  })
+
+  it('keeps a station the CV says is ongoing, whatever started after it', () => {
+    // A board seat beside a day job: "January 2024 – ongoing" began before
+    // the current employment and runs alongside it. The empty-end rule must
+    // not reach it — the CV did not leave this one blank, it said so.
+    const tl = buildTimeline(
+      [role('2024-08', 'current'), role('2024-01', 'ongoing'), role('2019-01', '2024-02')],
+      NOW,
+    )!
+    expect(tl.spans).toHaveLength(3)
+    expect(tl.spans[1].open).toBe(true)
+    expect(tl.undated).toBe(0)
   })
 
   it('draws nothing from a single dated role', () => {

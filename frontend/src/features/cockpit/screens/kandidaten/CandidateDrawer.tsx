@@ -35,6 +35,7 @@ import type { Candidate, CandidateProfile } from '@/data/types'
 import type { CandidateDTO } from '@/api/types'
 import { api } from '@/api/client'
 import { useAsync } from '@/hooks/useAsync'
+import { useRemembered } from '@/hooks/useRemembered'
 import { Avatar } from '@/components/ui/Avatar'
 import { LinkedInMark } from '@/components/ui/LinkedInMark'
 import { CareerTimeline } from '../../ui/CareerTimeline'
@@ -63,7 +64,8 @@ export function CandidateDrawer({
 }) {
   const [cvUrl, setCvUrl] = useState<string | null>(null)
   const [cvState, setCvState] = useState<'loading' | 'ready' | 'missing'>('loading')
-  const [expanded, setExpanded] = useState(false)
+  // Whoever works full-screen works full-screen on the next CV too.
+  const [expanded, setExpanded] = useRemembered('eligo.dossier.wide', false)
   const [editing, setEditing] = useState(false)
   // Which box the reader asked for, when they came from a "fehlt" row.
   const [focusField, setFocusField] = useState<string | undefined>(undefined)
