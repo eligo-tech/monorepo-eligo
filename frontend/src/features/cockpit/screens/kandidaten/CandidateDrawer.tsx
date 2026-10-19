@@ -37,6 +37,7 @@ import { api } from '@/api/client'
 import { useAsync } from '@/hooks/useAsync'
 import { Avatar } from '@/components/ui/Avatar'
 import { LinkedInMark } from '@/components/ui/LinkedInMark'
+import { CareerTimeline } from '../../ui/CareerTimeline'
 import { cn } from '@/lib/cn'
 import { Chip } from '../../ui/primitives'
 import { Button, CloseButton, Drawer } from '../../ui/forms'
@@ -422,6 +423,8 @@ export function CandidateDrawer({
 
                 <CvSection icon={Briefcase} title={t('Berufserfahrung')}>
                   {roles ? (
+                    <>
+                    <CareerTimeline roles={roles} className="mb-6" />
                     <ol className="relative space-y-5 border-l border-cockpit-line pl-5">
                       {roles.map((r, i) => (
                         <li key={i} className="relative">
@@ -457,6 +460,7 @@ export function CandidateDrawer({
                         </li>
                       ))}
                     </ol>
+                    </>
                   ) : (
                     <Empty>{t('Keine Berufserfahrung erfasst')}</Empty>
                   )}

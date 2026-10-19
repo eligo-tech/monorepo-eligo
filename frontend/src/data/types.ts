@@ -21,7 +21,14 @@ export interface RoleEntry {
   title: string
   company: string
   location?: string
+  /** Joined for reading: "Mar 2019 – Jun 2021". */
   period?: string
+  /** The source's own date strings, kept beside the joined `period` because
+   *  the chart has to measure them and `period` cannot be taken apart again
+   *  — "2019 – 2021" and "Jan 2019 – Dez 2021" join to one dash either way,
+   *  and the chart needs to know which precision it was given. */
+  start?: string
+  end?: string
   highlights: string[]
 }
 
