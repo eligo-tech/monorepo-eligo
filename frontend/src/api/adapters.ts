@@ -94,6 +94,8 @@ function toRoles(history: WorkRoleDTO[]): RoleEntry[] {
       company: (w.company ?? '').trim(),
       location: w.location?.trim() || undefined,
       period: period(w.start_date, w.end_date) ?? (w.years ? `${w.years} J` : undefined),
+      start: w.start_date?.trim() || undefined,
+      end: w.end_date?.trim() || undefined,
       highlights: (w.highlights ?? []).map((h) => h.trim()).filter(Boolean),
     }))
     .filter((r) => r.title || r.company)

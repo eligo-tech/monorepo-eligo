@@ -145,7 +145,17 @@ Conventions:
   ≥50 gold / else coral thresholds; `STAGE_TO_STEP` (data/adapters.ts) owns the
   pipeline-stage → process-step mapping; `FEE_RATE` is the single fee assumption.
   Don't re-implement these inline.
-- Charts are hand-rolled SVG (`ui/Gauge.tsx`). No chart library.
+- Charts are hand-rolled SVG (`ui/Gauge.tsx`, `ui/MandateGraph.tsx`,
+  `ui/CareerTimeline.tsx`). No chart library.
+- **A chart about a person may only draw what the record supports.** The
+  career timeline measures free-text CV dates — `2019`, `03/2019`,
+  `seit Jan. 2021`, `heute`, `` — in `ui/careerSpans.ts`. It reads a bare
+  year charitably (January for a start, December for an end) so `… – 2019`
+  followed by `2020 – …` is not a phantom gap; it refuses to flag a gap two
+  year-only dates cannot resolve; it ignores a gap of three months, which is
+  a Kündigungsfrist; and it renders nothing at all below two readable
+  stations. What it cannot place is counted and printed under the chart,
+  never dropped.
 - Icons: `lucide-react` only.
 - **Language: the UI is bilingual, German and English.** Every user-facing
   string goes through `t()` from `src/i18n`, and the dictionary in
