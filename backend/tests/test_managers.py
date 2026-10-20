@@ -161,6 +161,89 @@ async def test_interactions_record_who_was_discussed(company) -> None:
     assert [r.interaction_type for r in rows] == ["email", "call"]
 
 
+async def test_logging_a_call_moves_the_last_contact_date(company) -> None:
+    """The profile headlines "letzter Kontakt" and flags >90 days as overdue.
+
+    Before the compose button existed the field was only ever written by the
+    ATS import, so a call logged by hand left the record reading "overdue"
+    about a conversation that had just happened.
+    """
+    async with SessionLocal() as s:
+        m = await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(company_id=company, full_name="Petra Vogel"),
+        )
+        assert m.last_contact_at is None
+        await service.log_interaction(
+            s,
+            tenant_id=TENANT,
+            manager_id=m.id,
+            payload=ManagerInteractionCreate(
+                interaction_type=InteractionType.CALL,
+                summary="Rang durch, sucht jemanden fuer die OT",
+                occurred_at=dt.datetime(2026, 10, 2, tzinfo=dt.UTC),
+            ),
+        )
+        after = await service.get_manager(s, tenant_id=TENANT, manager_id=m.id)
+        assert after is not None
+        assert _utc(after.last_contact_at) == dt.datetime(2026, 10, 2, tzinfo=dt.UTC)
+
+
+async def test_a_note_filed_late_does_not_rewind_the_contact_date(company) -> None:
+    """Write order is not event order: Tuesday's call gets typed up on Friday."""
+    async with SessionLocal() as s:
+        m = await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(company_id=company, full_name="Petra Vogel"),
+        )
+        for day in (10, 2):
+            await service.log_interaction(
+                s,
+                tenant_id=TENANT,
+                manager_id=m.id,
+                payload=ManagerInteractionCreate(
+                    interaction_type=InteractionType.CALL,
+                    summary=f"Call on the {day}th",
+                    occurred_at=dt.datetime(2026, 10, day, tzinfo=dt.UTC),
+                ),
+            )
+        after = await service.get_manager(s, tenant_id=TENANT, manager_id=m.id)
+        assert after is not None
+        assert _utc(after.last_contact_at) == dt.datetime(2026, 10, 10, tzinfo=dt.UTC)
+
+
+async def test_a_note_to_self_is_not_a_contact(company) -> None:
+    """Otherwise the overdue flag is cleared by the recruiter talking to nobody."""
+    async with SessionLocal() as s:
+        m = await service.create_manager(
+            s,
+            tenant_id=TENANT,
+            payload=ManagerCreate(company_id=company, full_name="Petra Vogel"),
+        )
+        await service.log_interaction(
+            s,
+            tenant_id=TENANT,
+            manager_id=m.id,
+            payload=ManagerInteractionCreate(
+                interaction_type=InteractionType.NOTE,
+                summary="Nochmal nachfassen wegen Rahmenvertrag",
+                occurred_at=dt.datetime(2026, 10, 2, tzinfo=dt.UTC),
+            ),
+        )
+        after = await service.get_manager(s, tenant_id=TENANT, manager_id=m.id)
+        assert after is not None
+        assert after.last_contact_at is None
+
+
+def _utc(value: dt.datetime | None) -> dt.datetime | None:
+    """SQLite hands back a naive datetime even for a tz-aware column."""
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.replace(tzinfo=dt.UTC)
+
+
 async def test_update_does_not_touch_the_art14_timestamp(company) -> None:
     """Editing a phone number must not be able to discharge a legal obligation."""
     async with SessionLocal() as s:

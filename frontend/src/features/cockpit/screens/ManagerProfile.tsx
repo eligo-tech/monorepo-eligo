@@ -28,12 +28,14 @@ import {
   Mail,
   MapPin,
   Phone,
+  Plus,
   ShieldAlert,
 } from 'lucide-react'
 import { api } from '@/api/client'
 import type { ManagerDTO, ManagerInteractionDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
+import { InteractionComposer } from '../ui/InteractionComposer'
 
 const dateDe = (iso: string | null | undefined) =>
   iso
@@ -166,7 +168,12 @@ function Note({ entry }: { entry: ManagerInteractionDTO }) {
   )
 }
 
-type TabKey = 'notes' | 'jobs' | 'meetings' | 'deals' | 'files' | 'history'
+// `files` and `history` were here and are gone. Both were declared because
+// the record has those dimensions, both rendered "nothing imported yet", and
+// neither ever will be filled from this screen: attachments live on the
+// candidate, and the history IS the notes list two tabs to the left. A tab
+// that only ever says "empty" teaches people the tab bar is decorative.
+type TabKey = 'notes' | 'jobs' | 'meetings' | 'deals'
 
 export function ManagerProfile({
   manager: initial,
@@ -182,6 +189,7 @@ export function ManagerProfile({
   const [manager, setManager] = useState(initial)
   const [history, setHistory] = useState<ManagerInteractionDTO[] | null>(null)
   const [tab, setTab] = useState<TabKey>('notes')
+  const [composing, setComposing] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -189,6 +197,7 @@ export function ManagerProfile({
     setManager(initial)
     setHistory(null)
     setTab('notes')
+    setComposing(false)
     api.manager(initial.id).then((m) => alive && setManager(m)).catch(() => {})
     api
       .managerInteractions(initial.id)
@@ -226,8 +235,6 @@ export function ManagerProfile({
         { key: 'jobs' as const, label: t('Mandate'), count: manager.job_count ?? 0 },
         { key: 'meetings' as const, label: t('Termine'), count: 0 },
         { key: 'deals' as const, label: 'Deals', count: 0 },
-        { key: 'files' as const, label: t('Anhänge'), count: 0 },
-        { key: 'history' as const, label: t('Verlauf'), count: 0 },
       ],
     [noteCount, manager.job_count],
   )
@@ -349,12 +356,16 @@ export function ManagerProfile({
               : t('offen')
           }
         />
-        <Stat label={t('Sucht')} value={manager.looks_for || '—'} detail={manager.department} />
+        <Stat
+          label={t('Gesuchte Skills')}
+          value={manager.looks_for || '—'}
+          detail={manager.department}
+        />
         <Stat label={t('Notizen')} value={String(noteCount)} />
       </div>
 
       {/* --- tabs: one place that says what exists on this record ---------- */}
-      <nav className="flex gap-1 overflow-x-auto border-b border-cockpit-line px-6">
+      <nav className="flex items-center gap-1 overflow-x-auto border-b border-cockpit-line px-6">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -371,20 +382,67 @@ export function ManagerProfile({
             <sup className="ml-0.5 text-[10px] text-cockpit-faint">{t.count}</sup>
           </button>
         ))}
+
+        {/* The bar said what exists and gave no way to add to it. The button
+            lives here rather than in the header because this is the strip
+            that is about the conversation; the header is about the person. */}
+        <button
+          type="button"
+          onClick={() => {
+            setTab('notes')
+            setComposing((open) => !open)
+          }}
+          aria-expanded={composing}
+          className={cn(
+            'ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 font-mono text-[12px] uppercase tracking-wide transition-colors',
+            composing
+              ? 'border-mint-600 bg-mint-800/40 text-mint-300'
+              : 'border-cockpit-line text-cockpit-dim hover:border-cockpit-edge hover:text-cockpit-text',
+          )}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {t('Ereignis')}
+        </button>
       </nav>
 
       <div className="flex flex-col lg:flex-row">
         <div className="min-w-0 flex-1 border-r border-cockpit-line">
           {tab === 'notes' && (
             <>
+              {composing && (
+                <InteractionComposer
+                  onCancel={() => setComposing(false)}
+                  onSave={async (entry) => {
+                    const row = await api.logManagerInteraction(manager.id, entry)
+                    // Prepend rather than refetch: the list is sorted by when
+                    // the event happened, and a note filed for last Tuesday
+                    // would otherwise appear to vanish.
+                    setHistory((rows) =>
+                      [row, ...(rows ?? [])].sort((a, b) =>
+                        b.occurred_at.localeCompare(a.occurred_at),
+                      ),
+                    )
+                    setManager((m) => ({
+                      ...m,
+                      note_count: (m.note_count ?? 0) + 1,
+                      last_contact_at:
+                        entry.interaction_type !== 'note' &&
+                        (!m.last_contact_at || entry.occurred_at > m.last_contact_at)
+                          ? entry.occurred_at
+                          : m.last_contact_at,
+                    }))
+                    setComposing(false)
+                  }}
+                />
+              )}
               {history === null && (
                 <p className="px-6 py-6 font-mono text-[13px] text-cockpit-faint">
                   {t('lädt…')}
                 </p>
               )}
-              {history?.length === 0 && (
+              {history?.length === 0 && !composing && (
                 <p className="px-6 py-6 text-[14px] text-cockpit-dim">
-                  {t('Noch kein Verlauf. Anrufe, Mails und Termine erscheinen hier, sobald sie erfasst werden.')}
+                  {t('Noch nichts notiert. Importierte Gespräche erscheinen hier — oder legen Sie über „Ereignis“ selbst eines an.')}
                 </p>
               )}
               {history && history.length > 0 && (
@@ -402,9 +460,9 @@ export function ManagerProfile({
             </>
           )}
 
-          {/* The other tabs are named because the record has those dimensions,
-              and empty because nothing has been imported into them yet. Saying
-              so beats a tab that silently shows nothing. */}
+          {/* Termine and Deals are named because the record has those
+              dimensions and empty because nothing fills them yet. Saying so
+              beats a tab that silently shows nothing. */}
           {tab !== 'notes' && (
             <p className="px-6 py-6 text-[14px] leading-relaxed text-cockpit-dim">
               {tab === 'jobs'

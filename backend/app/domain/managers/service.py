@@ -268,6 +268,39 @@ async def managers_owing_art14(
     return [m for m in rows if m.art14_outstanding]
 
 
+#: Kinds that mean somebody was actually spoken to, so the profile's "letzter
+#: Kontakt" may move. NOTE is excluded on purpose: a recruiter writing
+#: themselves a reminder has not contacted anyone, and counting it would clear
+#: the overdue flag on a relationship nobody has touched in a year — which is
+#: precisely the flag's job to show. FEEDBACK is excluded because it is as
+#: often the candidate speaking as the client.
+CONTACT_KINDS = frozenset(
+    {
+        InteractionType.CALL,
+        InteractionType.EMAIL,
+        InteractionType.MEETING,
+        InteractionType.MESSAGE,
+        InteractionType.BRIEFING,
+    }
+)
+
+
+def _advance_last_contact(manager: Manager, occurred_at: dt.datetime) -> None:
+    """Move the contact date forward, never back.
+
+    Notes get filed late and out of order — somebody writes up Tuesday's call
+    on Friday, after Thursday's mail is already in. Taking the newest WRITE
+    rather than the newest EVENT would then rewind the date and make a fresh
+    relationship look stale.
+    """
+    current = manager.last_contact_at
+    if current is not None and current.tzinfo is None:
+        # SQLite hands back a naive datetime even for a tz-aware column.
+        current = current.replace(tzinfo=dt.UTC)
+    if current is None or occurred_at > current:
+        manager.last_contact_at = occurred_at
+
+
 async def log_interaction(
     session: AsyncSession,
     *,
@@ -281,6 +314,7 @@ async def log_interaction(
     happens before the contact is in the record, and refusing the note until
     somebody creates a `managers` row means the note is never written.
     """
+    manager = None
     if manager_id is not None:
         manager = await session.scalar(
             select(Manager).where(
@@ -289,15 +323,18 @@ async def log_interaction(
         )
         if manager is None:
             return None
+    occurred_at = payload.occurred_at or dt.datetime.now(dt.UTC)
     interaction = ManagerInteraction(
         tenant_id=tenant_id,
         manager_id=manager_id,
         candidate_id=payload.candidate_id,
         job_id=payload.job_id,
         interaction_type=payload.interaction_type.value,
-        occurred_at=payload.occurred_at or dt.datetime.now(dt.UTC),
+        occurred_at=occurred_at,
         summary=payload.summary,
     )
+    if manager is not None and payload.interaction_type in CONTACT_KINDS:
+        _advance_last_contact(manager, occurred_at)
     session.add(interaction)
     await session.commit()
     await session.refresh(interaction)
