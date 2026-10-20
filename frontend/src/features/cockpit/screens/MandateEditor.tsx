@@ -16,14 +16,13 @@ import { AlertCircle, X } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { CompanyDTO, JobDTO } from '@/api/types'
 import { Button, SelectInput, TagInput, TextInput } from '../ui/forms'
+import { JOB_STATUSES, jobStatusLabel } from '../ui/jobStatus'
 import { Panel } from '../ui/primitives'
 
-const STATUS_OPTIONS = [
-  { value: 'open', label: t('Offen') },
-  { value: 'on_hold', label: t('Pausiert') },
-  { value: 'filled', label: t('Besetzt') },
-  { value: 'cancelled', label: t('Abgesagt') },
-]
+const STATUS_OPTIONS = JOB_STATUSES.map((value) => ({
+  value,
+  label: jobStatusLabel(value),
+}))
 
 const RELOCATE_PERMIT = [
   { value: 'true', label: t('Erforderlich') },

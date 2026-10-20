@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.domain.common.enums import ConfidenceSource
+from app.domain.common.enums import ConfidenceSource, JobStatus
 from app.domain.candidates.models import Candidate
 from app.domain.jobs import criteria
 from app.domain.jobs.models import Job
@@ -115,8 +115,10 @@ _NON_NULLABLE = frozenset(
 )
 
 #: Allowed mandate states. Free text here would make the Jobs list's status
-#: chips — and the cockpit's "open mandates" count — mean nothing.
-JOB_STATUSES = ("open", "on_hold", "filled", "cancelled")
+#: chips — and the cockpit's "open mandates" count — mean nothing. The set
+#: itself lives in `common.enums.JobStatus`, which explains why it is these
+#: three.
+JOB_STATUSES = tuple(s.value for s in JobStatus)
 
 
 def _as_text(value: object) -> str | None:

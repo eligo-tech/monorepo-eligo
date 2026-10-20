@@ -10,7 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.domain.common.enums import InteractionType
+from app.domain.common.enums import InteractionType, LIVE_JOB_STATUSES
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
@@ -165,7 +165,7 @@ async def get_manager(
             select(func.count(Job.id)).where(
                 Job.tenant_id == tenant_id,
                 Job.manager_id == manager_id,
-                Job.status == "open",
+                Job.status.in_(LIVE_JOB_STATUSES),
             )
         )
     ) or 0
