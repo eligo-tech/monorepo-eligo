@@ -114,7 +114,7 @@ async def seed() -> None:
                 tenant_id=TENANT, title="Staff Frontend Engineer",
                 client_company_id=companies["helio"].id, location="Remote",
                 must_have_skills=["typescript", "react"], requires_work_permit=False,
-                salary_min=85000, salary_max=115000, status="filled",
+                salary_min=85000, salary_max=115000, status="closed",
             ),
         }
         session.add_all(jobs.values())

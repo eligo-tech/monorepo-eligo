@@ -28,6 +28,7 @@ import { searchScore } from '@/lib/search'
 import { Button } from '../ui/forms'
 import { NewMandate } from './NewMandate'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
+import { JOB_STATUSES, JOB_STATUS_TONE, jobStatusLabel } from '../ui/jobStatus'
 import { MandateEditor } from './MandateEditor'
 
 
@@ -49,18 +50,66 @@ function band(job: JobDTO): string | null {
   return null
 }
 
-const STATUS_TONE: Record<string, 'mint' | 'gold' | undefined> = {
-  open: 'mint',
-  on_hold: 'gold',
-}
+/** The status chip, but you can change it.
+ *
+ *  The state was settable in exactly one place — four clicks deep in the
+ *  Suchprofil editor, next to the salary band — which is the wrong depth for
+ *  the thing you change while reading down the list. Here it is one click on
+ *  the chip you were already looking at.
+ *
+ *  It writes through `PATCH /jobs/{id}`, which routes the change through the
+ *  verification gate and leaves a receipt — the same path as editing the
+ *  salary band, because this is the field that decides whether the mandate
+ *  counts as live business.
+ */
+function StatusPicker({
+  job,
+  onChanged,
+}: {
+  job: JobDTO
+  onChanged: (updated: JobDTO) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
 
-const STATUS_FILTERS = [
-  { value: '', label: t('Alle') },
-  { value: 'open', label: t('Offen') },
-  { value: 'on_hold', label: t('Pausiert') },
-  { value: 'filled', label: t('Besetzt') },
-  { value: 'cancelled', label: t('Abgesagt') },
-]
+  return (
+    <Chip
+      tone={JOB_STATUS_TONE[job.status]}
+      className={cn('px-1.5 py-0', busy && 'opacity-60', failed && 'border-coral-600')}
+    >
+      <select
+        value={job.status}
+        disabled={busy}
+        aria-label={`${job.title} — ${t('Status')}`}
+        title={failed ? t('Nicht gespeichert — bitte erneut versuchen.') : undefined}
+        onChange={async (e) => {
+          const next = e.target.value
+          if (next === job.status) return
+          setBusy(true)
+          setFailed(false)
+          try {
+            onChanged(await api.updateJob(job.id, { status: next }))
+          } catch {
+            // The select is driven by `job.status`, so a failed write simply
+            // leaves the old value on screen. The ring says the click did not
+            // take, instead of the list quietly disagreeing with the database
+            // until the next reload.
+            setFailed(true)
+          } finally {
+            setBusy(false)
+          }
+        }}
+        className="cursor-pointer appearance-none bg-transparent pr-3 font-mono text-[12px] text-inherit focus:outline-none"
+      >
+        {JOB_STATUSES.map((value) => (
+          <option key={value} value={value} className="bg-cockpit-surface text-cockpit-text">
+            {jobStatusLabel(value)}
+          </option>
+        ))}
+      </select>
+    </Chip>
+  )
+}
 
 const mandateRef = (id: string) => `#A-${id.slice(0, 4)}`
 
@@ -136,7 +185,11 @@ export function JobsScreen({
 
   // Counted over the filtered list: "2 von 10 Mandaten · 6 offen" would read
   // as if the filter had kept six of them.
-  const open = rows.filter((j) => j.status === 'open').length
+  //
+  // "Running" rather than "open", because a mandate being actively worked is
+  // the most open thing in the book and would otherwise fall out of the one
+  // number on the screen that says how much business is live.
+  const running = rows.filter((j) => j.status !== 'closed').length
   const withoutCriteria = all.filter(
     (j) => (j.must_have_skills ?? []).length === 0,
   ).length
@@ -208,7 +261,7 @@ export function JobsScreen({
           </button>
 
           <div className="flex flex-wrap gap-1.5">
-            {STATUS_FILTERS.map((option) => (
+            {[{ value: '', label: t('Alle') }, ...JOB_STATUSES.map((v) => ({ value: v, label: jobStatusLabel(v) }))].map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -233,7 +286,7 @@ export function JobsScreen({
             {rows.length === all.length ? t(' Mandate') : t(' von {n} Mandaten', { n: all.length })}
           </span>
           <span>
-            <span className="text-cockpit-text">{open}</span> {t('offen')}
+            <span className="text-cockpit-text">{running}</span> {t('laufend')}
           </span>
           {term && rows.length > 1 && <span>{t('nach Relevanz sortiert')}</span>}
           {query && (
@@ -412,7 +465,12 @@ export function JobsScreen({
                   )}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Chip tone={STATUS_TONE[job.status]}>{job.status}</Chip>
+                  <StatusPicker
+                    job={job}
+                    onChanged={(updated) =>
+                      setSaved((prev) => ({ ...prev, [updated.id]: updated }))
+                    }
+                  />
                   {/* The matcher cannot filter on what is not recorded, and
                       a ranked list that was never filtered looks exactly
                       like one that was. */}

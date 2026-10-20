@@ -333,6 +333,7 @@ async def test_the_profile_carries_its_own_counts(company) -> None:
         s.add_all(
             [
                 Job(tenant_id=TENANT, title="Head of R&D", manager_id=m.id, status="open"),
+                Job(tenant_id=TENANT, title="OT-Admin", manager_id=m.id, status="active"),
                 Job(tenant_id=TENANT, title="Alt", manager_id=m.id, status="closed"),
             ]
         )
@@ -351,9 +352,11 @@ async def test_the_profile_carries_its_own_counts(company) -> None:
     async with SessionLocal() as s:
         profile = await service.get_manager(s, tenant_id=TENANT, manager_id=m.id)
 
-    assert profile.job_count == 2
-    # the strip shows OPEN mandates: a closed one is not work waiting to be done
-    assert profile.open_job_count == 1
+    assert profile.job_count == 3
+    # The strip shows what is still running. A mandate somebody is ACTIVELY
+    # working has to be in that number — it was not, while the vocabulary had
+    # one live value and the count tested for it by name.
+    assert profile.open_job_count == 2
     assert profile.note_count == 1
 
 

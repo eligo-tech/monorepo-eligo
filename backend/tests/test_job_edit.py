@@ -104,6 +104,33 @@ async def test_an_unknown_status_is_refused(job) -> None:
             )
 
 
+async def test_every_status_the_database_already_holds_is_settable(job) -> None:
+    """The regression this replaces: 18 live mandates were "closed", and
+    "closed" was not in the allowed set. Setting a row to the value it already
+    had came back "unknown status", and no filter on the Jobs screen could
+    show those rows at all.
+    """
+    async with SessionLocal() as s:
+        for value in ("active", "closed", "open"):
+            updated = await service.update_job(
+                s, tenant_id=TENANT, job_id=job, patch=JobUpdate(status=value)
+            )
+            assert updated is not None
+            assert updated.status == value
+
+
+async def test_the_retired_statuses_are_refused(job) -> None:
+    """on_hold / filled / cancelled had no rows in any workspace. Leaving them
+    settable would let the Jobs list grow states nothing counts.
+    """
+    async with SessionLocal() as s:
+        for value in ("on_hold", "filled", "cancelled"):
+            with pytest.raises(service.InvalidBand):
+                await service.update_job(
+                    s, tenant_id=TENANT, job_id=job, patch=JobUpdate(status=value)
+                )
+
+
 async def test_a_mandate_of_another_tenant_is_invisible(job) -> None:
     async with SessionLocal() as s:
         assert (

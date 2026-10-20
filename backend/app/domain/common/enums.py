@@ -201,3 +201,36 @@ class EmploymentForm(str, enum.Enum):
     FESTANSTELLUNG = "festanstellung"
     FREELANCE = "freelance"
     BEIDES = "beides"
+
+
+class JobStatus(str, enum.Enum):
+    """Where a mandate stands. Three values, because the business has three.
+
+    `OPEN` is on the books — the role exists and nobody is pushing it today.
+    `ACTIVE` is being worked right now. `CLOSED` is finished, whether it was
+    filled or dropped.
+
+    The vocabulary used to be ("open", "on_hold", "filled", "cancelled"), and
+    three of those four had no rows anywhere while "closed" — which 18 live
+    mandates actually carry, written by the aiFind importer from its `is_open`
+    boolean — was not in the list at all. So the Jobs screen offered four
+    filters that between them could not show those 18, and a PATCH setting the
+    status a row already had came back "unknown status 'closed'". Naming what
+    is in the database is the fix; nothing migrates.
+
+    Why filled and cancelled are not here: both are *reasons* a mandate closed,
+    not states it sits in, and the one place the difference matters —
+    "this job was filled, create the next one" — reads it off the pipeline,
+    where the placement actually happened.
+    """
+
+    OPEN = "open"
+    ACTIVE = "active"
+    CLOSED = "closed"
+
+
+#: Mandates that still count as business: everything that is not finished.
+#: The cockpit's mandate figure and a manager's `open_job_count` are both
+#: "how much is running", and an ACTIVE mandate vanishing from a count called
+#: "offen" is the kind of wrong number nobody reports because it looks right.
+LIVE_JOB_STATUSES = frozenset({JobStatus.OPEN.value, JobStatus.ACTIVE.value})

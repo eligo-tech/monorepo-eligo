@@ -13,7 +13,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.candidates.models import Candidate
-from app.domain.common.enums import ApplicationStatus, PipelineStage
+from app.domain.common.enums import (
+    LIVE_JOB_STATUSES,
+    ApplicationStatus,
+    PipelineStage,
+)
 from app.domain.jobs.models import Job
 from app.domain.pipeline.models import Application
 from app.domain.reporting.schemas import (
@@ -139,10 +143,12 @@ async def summary(session: AsyncSession, *, tenant_id: uuid.UUID) -> ReportingSu
     total_candidates = await _scalar(
         session, select(func.count()).select_from(Candidate).where(Candidate.tenant_id == tenant_id)
     )
+    # Everything not finished, not only the ones still spelled "open":
+    # a mandate somebody is actively working is the most open thing there is.
     open_jobs = await _scalar(
         session,
         select(func.count()).select_from(Job).where(
-            Job.tenant_id == tenant_id, Job.status == "open"
+            Job.tenant_id == tenant_id, Job.status.in_(LIVE_JOB_STATUSES)
         ),
     )
     total_applications = await _scalar(

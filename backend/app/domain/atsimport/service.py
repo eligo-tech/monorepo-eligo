@@ -29,7 +29,7 @@ from app.domain.atsimport.connectors.base import AtsExport
 from app.domain.candidates.employment import normalize_employment_form
 from app.domain.candidates import service as candidates_service
 from app.domain.candidates.models import Candidate
-from app.domain.common.enums import ConfidenceSource
+from app.domain.common.enums import ConfidenceSource, JobStatus
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
@@ -274,7 +274,11 @@ async def import_export(
         summary.jobs_without_manager += int(manager is None)
 
         row = existing_jobs.get(record.external_id)
-        status = "open" if record.is_open else "closed"
+        # aiFind has one boolean, so the import can only ever say open or
+        # closed. ACTIVE is a recruiter's judgement about their own week and
+        # is never imported — an import that reset it would overwrite the one
+        # thing on this row a human put there.
+        status = JobStatus.OPEN.value if record.is_open else JobStatus.CLOSED.value
         if row is None:
             session.add(
                 Job(
