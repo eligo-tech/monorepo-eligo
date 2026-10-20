@@ -289,6 +289,23 @@ export const api = {
   managerInteractions: (id: string) =>
     request<ManagerInteractionDTO[]>(`/managers/${id}/interactions`),
 
+  /** File one touch on this manager by hand — the call that just happened,
+   *  rather than the one an import will bring tomorrow. */
+  logManagerInteraction: (
+    id: string,
+    body: {
+      interaction_type: string
+      summary: string
+      occurred_at?: string
+      candidate_id?: string | null
+      job_id?: string | null
+    },
+  ) =>
+    request<ManagerInteractionDTO>(`/managers/${id}/interactions`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   /** Records that the subject has been informed. Its own call, not a PATCH
    *  field: it asserts something happened in the world. */
   markManagerArt14Notified: (id: string) =>

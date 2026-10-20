@@ -26,6 +26,7 @@ const SAME_IN_BOTH = new Set([
   'Jobs',
   'Know-how',
   'Mail',
+  'Meeting',
   'Minimum',
   'Name (A–Z)',
   'Workspace',
