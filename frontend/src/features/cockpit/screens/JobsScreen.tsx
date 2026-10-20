@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react'
 import {
   ArrowUpRight,
   Briefcase,
+  ChevronDown,
   MapPin,
   Pencil,
   Plus,
@@ -34,7 +35,7 @@ import { MandateEditor } from './MandateEditor'
 
 
 const GRID =
-  'grid-cols-[1.5rem_minmax(0,2.5fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_7rem_2rem]'
+  'grid-cols-[1.5rem_minmax(0,2.5fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_11rem_2rem]'
 const COLUMNS = ['', t('Titel'), t('Firma'), t('Ort'), t('Gehaltsband'), t('Status'), '']
 
 /** "85.000–95.000 €", or the honest gap. A mandate without a ceiling applies
@@ -75,7 +76,11 @@ function StatusPicker({
   return (
     <Chip
       tone={JOB_STATUS_TONE[job.status]}
-      className={cn('px-1.5 py-0', busy && 'opacity-60', failed && 'border-coral-600')}
+      className={cn(
+        'relative inline-flex items-center px-1.5 py-0',
+        busy && 'opacity-60',
+        failed && 'border-coral-600',
+      )}
     >
       <select
         value={job.status}
@@ -99,7 +104,7 @@ function StatusPicker({
             setBusy(false)
           }
         }}
-        className="cursor-pointer appearance-none bg-transparent pr-3 font-mono text-[12px] text-inherit focus:outline-none"
+        className="cursor-pointer appearance-none bg-transparent pr-4 font-mono text-[12px] text-inherit focus:outline-none"
       >
         {JOB_STATUSES.map((value) => (
           <option key={value} value={value} className="bg-cockpit-surface text-cockpit-text">
@@ -107,6 +112,12 @@ function StatusPicker({
           </option>
         ))}
       </select>
+      {/* `appearance-none` takes the native arrow with it, which left a chip
+          that reads exactly like the seventy read-only chips elsewhere in the
+          cockpit. The caret is the only thing saying this one does something.
+          Absolutely placed and click-through, so the whole chip stays one
+          target. */}
+      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 opacity-70" />
     </Chip>
   )
 }
