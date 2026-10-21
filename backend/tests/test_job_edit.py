@@ -109,19 +109,33 @@ async def test_every_status_the_database_already_holds_is_settable(job) -> None:
     "closed" was not in the allowed set. Setting a row to the value it already
     had came back "unknown status", and no filter on the Jobs screen could
     show those rows at all.
+
+    ELI-7's second half narrowed the vocabulary to two words, which could have
+    reintroduced exactly that bug — so the legacy spellings are still accepted
+    and land on the word that replaced them. `open` is sent last because it
+    normalises to `active`, and the way back from `inactive` is a copy, not a
+    PATCH (`test_job_status.py`).
     """
     async with SessionLocal() as s:
-        for value in ("active", "closed", "open"):
+        for sent, stored in (
+            ("active", "active"),
+            ("closed", "inactive"),
+            ("inactive", "inactive"),
+        ):
             updated = await service.update_job(
-                s, tenant_id=TENANT, job_id=job, patch=JobUpdate(status=value)
+                s, tenant_id=TENANT, job_id=job, patch=JobUpdate(status=sent)
             )
             assert updated is not None
-            assert updated.status == value
+            assert updated.status == stored
 
 
 async def test_the_retired_statuses_are_refused(job) -> None:
-    """on_hold / filled / cancelled had no rows in any workspace. Leaving them
-    settable would let the Jobs list grow states nothing counts.
+    """on_hold / filled / cancelled had no rows in any workspace.
+
+    Which is the whole reason they are refused rather than folded like
+    "open" and "closed": there is nothing to heal, and quietly storing
+    `filled` as `inactive` would discard the one thing the sender said that
+    the record cannot hold.
     """
     async with SessionLocal() as s:
         for value in ("on_hold", "filled", "cancelled"):
@@ -189,5 +203,5 @@ async def test_routes(job) -> None:
         )
         assert bad.status_code == 422
 
-        missing = await client.patch(f"{API}/{uuid.uuid4()}", json={"status": "open"})
+        missing = await client.patch(f"{API}/{uuid.uuid4()}", json={"status": "active"})
         assert missing.status_code == 404

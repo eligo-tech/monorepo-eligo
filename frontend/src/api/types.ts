@@ -166,7 +166,12 @@ export interface JobDTO {
   salary_min: number | null
   salary_max: number | null
   salary_currency: string
+  /** `active` or `inactive` (ELI-7). Inactive is final — see `ui/jobStatus`.
+   *  A backend that has not deployed yet may still say `open`/`closed`, which
+   *  is why nothing compares this against a literal. */
   status: string
+  /** Set when this mandate was created as a copy of another one. */
+  copied_from_job_id?: string | null
   created_at: string
   updated_at: string
 }

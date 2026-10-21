@@ -16,18 +16,13 @@ import { AlertCircle, X } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { CompanyDTO, JobDTO } from '@/api/types'
 import { Button, SelectInput, TagInput, TextInput } from '../ui/forms'
-import { JOB_STATUSES, jobStatusLabel } from '../ui/jobStatus'
+import { JOB_STATUSES, isLive, jobStatus, jobStatusLabel } from '../ui/jobStatus'
 import { Panel } from '../ui/primitives'
 
-const STATUS_OPTIONS = JOB_STATUSES.map((value) => ({
-  value,
-  label: jobStatusLabel(value),
-}))
-
-const RELOCATE_PERMIT = [
-  { value: 'true', label: t('Erforderlich') },
-  { value: 'false', label: t('Nicht erforderlich') },
-]
+// Both option lists are built INSIDE the component on purpose. A `t()` call
+// at module scope runs once, on import, and freezes whichever language the
+// page was opened in — the switch reloads the page but the module is already
+// evaluated by then (see src/i18n/index.ts).
 
 interface Draft {
   title: string
@@ -54,7 +49,9 @@ function seed(job: JobDTO): Draft {
     salary_min: num(job.salary_min),
     salary_max: num(job.salary_max),
     salary_currency: job.salary_currency || 'EUR',
-    status: job.status || 'open',
+    // Canonical, never the raw column: a backend that has not deployed yet
+    // still serves "open", and the editor sends `status` back on every save.
+    status: jobStatus(job.status),
     requires_work_permit: String(job.requires_work_permit ?? true),
     must_have_skills: [...(job.must_have_skills ?? [])],
     required_certifications: [...(job.required_certifications ?? [])],
@@ -87,6 +84,18 @@ export function MandateEditor({
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setD((prev) => ({ ...prev, [key]: value }))
+
+  // An inactive mandate cannot be reactivated (ELI-7) — the backend answers
+  // 409 — so the option is not offered. Leaving it in the list would be a
+  // control whose only job is to fail.
+  const statusOptions = (isLive(job.status) ? JOB_STATUSES : (['inactive'] as const)).map(
+    (value) => ({ value, label: jobStatusLabel(value) }),
+  )
+
+  const permitOptions = [
+    { value: 'true', label: t('Erforderlich') },
+    { value: 'false', label: t('Nicht erforderlich') },
+  ]
 
   const companyOptions = [
     { value: '', label: t('— kein Kunde zugeordnet') },
@@ -136,11 +145,17 @@ export function MandateEditor({
       onClose()
     } catch (e) {
       setError(
-        e instanceof ApiError && e.status === 422
-          ? t('Abgelehnt — bitte Gehaltsband und Status prüfen.')
-          : e instanceof ApiError
-            ? t('Konnte nicht gespeichert werden (HTTP {status}).', { status: e.status })
-            : t('Konnte nicht gespeichert werden — keine Antwort vom Server.'),
+        e instanceof ApiError && e.status === 409
+          ? // Only reachable from a tab that was already open when somebody
+            // else set the mandate inactive: the option is gone above.
+            t('Dieses Mandat ist inzwischen inaktiv und kann nicht wieder aktiviert werden. Legen Sie es als Kopie neu an.')
+          : e instanceof ApiError && e.status === 422
+            ? t('Abgelehnt — bitte Gehaltsband und Status prüfen.')
+            : e instanceof ApiError
+              ? t('Konnte nicht gespeichert werden (HTTP {status}).', {
+                  status: e.status,
+                })
+              : t('Konnte nicht gespeichert werden — keine Antwort vom Server.'),
       )
       setBusy(false)
     }
@@ -211,17 +226,24 @@ export function MandateEditor({
               value={d.salary_currency}
               onChange={(v) => set('salary_currency', v)}
             />
-            <SelectInput
-              label={t('Status')}
-              value={d.status}
-              onChange={(v) => set('status', v)}
-              options={STATUS_OPTIONS}
-            />
+            <div className="min-w-0">
+              <SelectInput
+                label={t('Status')}
+                value={d.status}
+                onChange={(v) => set('status', v)}
+                options={statusOptions}
+              />
+              {!isLive(job.status) && (
+                <p className="mt-1 font-mono text-[11px] text-cockpit-faint">
+                  {t('Inaktiv ist endgültig. Für eine neue Suche das Mandat kopieren.')}
+                </p>
+              )}
+            </div>
             <SelectInput
               label={t('Arbeitserlaubnis')}
               value={d.requires_work_permit}
               onChange={(v) => set('requires_work_permit', v)}
-              options={RELOCATE_PERMIT}
+              options={permitOptions}
             />
           </div>
 
