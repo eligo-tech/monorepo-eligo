@@ -37,17 +37,25 @@ class ApplicationRead(BaseModel):
 
 
 class StatusTransition(BaseModel):
-    """Request to move an application to a new status (validated state machine)."""
+    """Request to move an application to a new status (validated state machine).
+
+    No `actor` field, deliberately. It used to carry one — a free string the
+    client chose, defaulting to "recruiter" — which went straight into the
+    application's history. Asking the browser who it is has no trustworthy
+    answer; the identity now comes from the verified token, like everywhere
+    else (`core/auth.Actor`).
+    """
 
     to_status: ApplicationStatus
-    actor: str = "recruiter"
 
 
 class StageMove(BaseModel):
-    """Request to move an application to a new Kanban stage."""
+    """Request to move an application to a new Kanban stage.
+
+    See `StatusTransition` on why there is no `actor` here either.
+    """
 
     to_stage: PipelineStage
-    actor: str = "recruiter"
 
 
 class BoardColumn(BaseModel):
@@ -114,7 +122,6 @@ class ProcessStepUpdate(BaseModel):
     clear: list[Literal["scheduled_at", "done_at", "note"]] = Field(
         default_factory=list
     )
-    actor: str = "recruiter"
 
 
 class AssessmentRead(BaseModel):

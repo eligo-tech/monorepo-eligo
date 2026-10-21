@@ -203,6 +203,54 @@ def _actor_name(claims: dict) -> str:
     return str(claims.get("email") or claims.get("sub") or "unbekannt")
 
 
+async def _admitted_tenant(db: AsyncSession, *, org_id: str, org_name: str | None):
+    """The workspace for this organization — or 403, because nobody admitted it.
+
+    Signing in is not admission. This used to be `get_or_create` on the request
+    path, which meant any organization that presented itself received a
+    workspace in the production database. No data leaked — RLS keeps a new
+    tenant empty and separate — but the refusal was accidental: a stranger saw
+    nothing because their own workspace was blank, not because anything turned
+    them away. With Clerk's "create organization" on the sign-in screen, that
+    was a self-service route in.
+
+    So the request path only *reads* the mapping. Admitting an organization is
+    an operator action (`python -m scripts.provision_tenant`), and the org id
+    is logged here so provisioning is a copy-paste rather than a hunt.
+
+    `ELIGO_AUTO_PROVISION_TENANTS=true` restores the old behaviour for an
+    onboarding session, and says so in the log every time it mints one.
+    """
+    tenant = await tenants_service.get(db, clerk_org_id=org_id)
+    if tenant is not None:
+        return await tenants_service.rename(db, tenant=tenant, name=org_name)
+
+    if settings.auto_provision_tenants:
+        logger.warning(
+            "AUTO-PROVISIONING a workspace for org %s (%s) — "
+            "ELIGO_AUTO_PROVISION_TENANTS is on, so any organization that signs "
+            "in is admitted. Turn it off once onboarding is done.",
+            org_id,
+            org_name or "unnamed",
+        )
+        return await tenants_service.get_or_create(
+            db, clerk_org_id=org_id, name=org_name
+        )
+
+    logger.warning(
+        "refused org %s (%s): no workspace. Admit it with "
+        "`python -m scripts.provision_tenant %s`",
+        org_id,
+        org_name or "unnamed",
+        org_id,
+    )
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Für diese Organisation ist kein Arbeitsbereich eingerichtet. "
+        "Bitte wenden Sie sich an eligo-tech, um freigeschaltet zu werden.",
+    )
+
+
 async def get_current_actor(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
@@ -211,8 +259,9 @@ async def get_current_actor(
 
     auth disabled → the default tenant as an admin, so the local demo and the
     tests are not locked out of their own settings. auth enabled → verify the
-    Clerk JWT, require an active organization, map org → tenant (created on
-    first sight), and read the role from the same token.
+    Clerk JWT, require an active organization, map org → an **already admitted**
+    tenant (403 otherwise — see `_admitted_tenant`), and read the role from the
+    same token.
     """
     if not settings.auth_enabled:
         current_tenant_var.set(str(settings.default_tenant_id))
@@ -239,9 +288,8 @@ async def get_current_actor(
             "no active organization — select an organization to continue",
         )
 
-    tenant = await tenants_service.get_or_create(
-        db, clerk_org_id=org_id, name=claims.get("org_slug") or (claims.get("o") or {}).get("slg")
-    )
+    org_name = claims.get("org_slug") or (claims.get("o") or {}).get("slg")
+    tenant = await _admitted_tenant(db, org_id=org_id, org_name=org_name)
     current_tenant_var.set(str(tenant.id))
     await _set_tenant_guc(db, tenant.id)  # pin the in-flight transaction too
 

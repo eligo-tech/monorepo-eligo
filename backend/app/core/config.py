@@ -121,6 +121,22 @@ class Settings(BaseSettings):
     #: authentication off. Only ever right for a local Postgres you own.
     allow_insecure_no_auth: bool = False
 
+    #: May an organization the record has never seen mint itself a workspace?
+    #:
+    #: It used to, unconditionally: ``tenants.get_or_create`` ran on the request
+    #: path, so presenting a token with any ``org_id`` created a tenant. Nothing
+    #: leaked — RLS kept the new workspace empty and separate — but nobody
+    #: *admitted* anyone either, and "they saw nothing" was true only because
+    #: there was nothing there yet. Sign-up plus "create organization" was a
+    #: self-service route into the production database.
+    #:
+    #: Closed by default. Provisioning is an operator action:
+    #: ``python -m scripts.provision_tenant org_xxx "Name"``. Every organization
+    #: already using the product has a row, so closing this refuses only the
+    #: ones that were never admitted. Set true to re-open it for an onboarding
+    #: session; each mint is then logged with the org id.
+    auto_provision_tenants: bool = False
+
     #: Fernet key for secrets the record must be able to replay — today only a
     #: tenant's ATS password. Unset means credentials cannot be stored at all,
     #: which is the safe default (see `app/core/secrets.py`).

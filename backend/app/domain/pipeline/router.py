@@ -62,17 +62,21 @@ async def create_application(
 async def transition_status(
     application_id: uuid.UUID,
     payload: StatusTransition,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> ApplicationRead:
     app = await service.get_application(
-        db, tenant_id=tenant_id, application_id=application_id
+        db, tenant_id=actor.tenant_id, application_id=application_id
     )
     if app is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "application not found")
     try:
         app = await service.transition_status(
-            db, app=app, to_status=payload.to_status, actor=payload.actor
+            db,
+            app=app,
+            to_status=payload.to_status,
+            actor=actor.name,
+            actor_user_id=actor.user_id,
         )
     except InvalidTransition as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
@@ -83,16 +87,20 @@ async def transition_status(
 async def move_stage(
     application_id: uuid.UUID,
     payload: StageMove,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> ApplicationRead:
     app = await service.get_application(
-        db, tenant_id=tenant_id, application_id=application_id
+        db, tenant_id=actor.tenant_id, application_id=application_id
     )
     if app is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "application not found")
     app = await service.move_stage(
-        db, app=app, to_stage=payload.to_stage, actor=payload.actor
+        db,
+        app=app,
+        to_stage=payload.to_stage,
+        actor=actor.name,
+        actor_user_id=actor.user_id,
     )
     return ApplicationRead.model_validate(app)
 

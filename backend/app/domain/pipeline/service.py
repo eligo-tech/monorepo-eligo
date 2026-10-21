@@ -131,27 +131,48 @@ def _append_history(app: Application, entry: dict) -> None:
     app.history = [*app.history, entry]
 
 
+def _who(actor: str, actor_user_id: str | None) -> dict:
+    """The two halves of an identity, and why both are written.
+
+    `actor` is what a human should read — the name on the token. It is not an
+    identifier: two people share a name, and a rename silently rewrites every
+    line of history that holds the old one. `actor_user_id` is the Clerk `sub`,
+    which is stable and is the one to match on when somebody asks who moved a
+    candidate. Older entries have only the name; readers must tolerate that.
+    """
+    return {"actor": actor, "actor_user_id": actor_user_id}
+
+
 async def transition_status(
     session: AsyncSession,
     *,
     app: Application,
     to_status: ApplicationStatus,
     actor: str,
+    actor_user_id: str | None = None,
 ) -> Application:
     """Move the application to ``to_status`` if the transition is allowed."""
-    allowed = ApplicationStatus.transitions()[app.status]
+    # Coerced, not assumed. The column is a plain `String(20)` annotated as the
+    # enum, so a row LOADED from the database hands back `str` — only a row
+    # still in the identity map from its own insert is an enum. Both endpoints
+    # here read `app.status.value` directly and therefore raised
+    # `AttributeError` on every real call; nothing noticed, because the cockpit
+    # drives the pipeline through `/steps` and never calls these. Line 353 in
+    # this same file already does it this way.
+    current = ApplicationStatus(app.status)
+    allowed = ApplicationStatus.transitions()[current]
     if to_status not in allowed:
         raise InvalidTransition(
-            f"cannot move from {app.status.value} to {to_status.value}"
+            f"cannot move from {current.value} to {to_status.value}"
         )
     _append_history(
         app,
         {
             "at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "event": "status",
-            "from": app.status.value,
+            "from": current.value,
             "to": to_status.value,
-            "actor": actor,
+            **_who(actor, actor_user_id),
         },
     )
     app.status = to_status
@@ -166,6 +187,7 @@ async def move_stage(
     app: Application,
     to_stage: PipelineStage,
     actor: str,
+    actor_user_id: str | None = None,
 ) -> Application:
     """Move the application to a new Kanban stage."""
     _append_history(
@@ -173,9 +195,9 @@ async def move_stage(
         {
             "at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "event": "stage",
-            "from": app.stage.value,
+            "from": PipelineStage(app.stage).value,  # see `transition_status`
             "to": to_stage.value,
-            "actor": actor,
+            **_who(actor, actor_user_id),
         },
     )
     app.stage = to_stage
