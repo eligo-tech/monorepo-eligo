@@ -27,14 +27,39 @@ import sys
 from sqlalchemy import text
 
 from app.core.config import settings
-from app.core.database import admin_engine, current_tenant_var
+from app.core.database import Base, admin_engine, current_tenant_var
 from app.domain import registry  # noqa: F401 — register all models
+from app.domain.common.mixins import TenantMixin
 
-# Every table carrying a tenant_id.
-TABLES = [
-    "candidates", "jobs", "companies", "applications",
-    "receipts", "enrichment_records", "candidate_documents", "match_receipts",
-]
+
+def tenant_tables() -> list[str]:
+    """Every table carrying a `tenant_id`, read off the models.
+
+    This was a hand-written list of eight. The models had grown to nineteen,
+    so eleven tables — `managers`, `manager_interactions`, `projects`,
+    `interviews` and the rest — were named nowhere in it. Deployed databases
+    were covered anyway, because each table's own migration installs its
+    policy and the Dockerfile runs `alembic upgrade head` every deploy. The
+    gap was the *other* documented path: a fresh database bootstrapped by
+    `create_all` and then hardened with this script, which is how a second
+    customer's own database comes up. Those eleven would have had no policy
+    at all, and nothing would have said so.
+
+    A list that must be edited whenever a domain is added is a list that will
+    be wrong, and the failure is silent in the direction that matters. So it
+    is derived. `tests/test_rls_coverage.py` additionally refuses a
+    `TenantMixin` table whose migration forgot its policy.
+    """
+    return sorted(
+        {
+            mapper.class_.__tablename__
+            for mapper in Base.registry.mappers
+            if issubclass(mapper.class_, TenantMixin)
+        }
+    )
+
+
+TABLES = tenant_tables()
 PREDICATE = "tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid"
 
 

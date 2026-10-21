@@ -1,6 +1,7 @@
 # ADR 0002 — Who may see what: membership, roles and per-user scope
 
-- **Status:** Proposed
+- **Status:** Accepted. Phase 1 code shipped 2026-10-21; its two configuration
+  steps (§7.1, §7.2) are open and are the operator's. Phase 2 not started.
 - **Date:** 2026-10-21
 - **Deciders:** Dmitry Fadeev
 - **Decision:** Keep **one tenant per Clerk organization** and keep isolation in the
@@ -50,7 +51,7 @@ rows** rather than all of them. The deployment connects as `eligo_app`, a
 cannot bypass RLS, so an un-pinned query returns nothing even if application code
 forgets its `WHERE`.
 
-**All 17 tenant-scoped tables carry a policy** — I checked each migration rather
+**All 19 tenant-scoped tables carry a policy** — I checked each migration rather
 than trusting the one list in the repo:
 
 | migration | tables given `tenant_isolation` |
@@ -66,12 +67,12 @@ than trusting the one list in the repo:
 | 0031 | `tenant_sources` |
 | 0037 | `tenant_feature_consents` `interviews` |
 
-**But `scripts/apply_rls.py` lists only 8 of those 17.** Deployed databases are
+**But `scripts/apply_rls.py` lists only 8 of those 19.** Deployed databases are
 safe because the Dockerfile runs `alembic upgrade head` on every deploy. A database
 brought up the *other* documented way — `create_all` on startup, then
-`python -m scripts.apply_rls` — gets tables with no policy for the nine tables the
-script does not name, including `managers`, `manager_interactions` and
-`candidate_documents`'s siblings. That is the path a second customer's own database
+`python -m scripts.apply_rls` — gets tables with no policy for the eleven tables the
+script does not name, including `managers`, `manager_interactions`, `projects`
+and `interviews`. That is the path a second customer's own database
 would take. The list is hardcoded where it could be derived from the model
 registry.
 
@@ -177,7 +178,7 @@ grow it into the authorization store.
 Pass the member's scope into every service function and add it to every query.
 
 Correct where it is applied and absent where it is forgotten, with no backstop.
-There are ~17 tenant tables and dozens of query sites; the first missed one is a
+There are 19 tenant tables and dozens of query sites; the first missed one is a
 silent disclosure of personal data that no test would notice. This is precisely
 the design RLS exists to replace.
 
@@ -362,44 +363,66 @@ member's `areas` exclude so the product does not show doors that will not open.
 
 **Phase 1 — close the door. Small, and none of it needs the new tables.**
 
+Steps 3–6 shipped in PR #154; each is marked below with what landed. Steps 1 and
+2 are Clerk dashboard settings and remain **open** — and they are the two that
+matter most, because 3 only refuses organizations that were never admitted,
+while 1 and 2 govern who can become a member of one that was.
+
 1. **Move Clerk to a production instance** (`pk_live_…`). The backend derives JWKS
    and issuer from the publishable key, so this is environment variables on Vercel
    and Railway plus a re-verification of sign-in. *(G1)*
 2. **Set the Clerk organization rules, and record them here once chosen:**
    members **may not** create organizations; verified-domain **automatic enrollment
    off**; joining by invitation only. *(G3)*
-3. **Stop auto-provisioning tenants.** `tenants.get_or_create` becomes
-   `tenants.get` on the request path: an organization with no tenant row is
-   **403 "workspace not provisioned"**. Provisioning becomes an explicit operator
-   action. *(G2 — this is the direct answer to "unapproved users see nothing")*
-4. **Remove the client-supplied `actor`** from `StatusTransition` and `StageMove`;
-   take it from `get_current_actor` like every other router already does. Persist
-   `clerk_user_id` alongside the display name wherever an actor is recorded. *(G4)*
-5. **Derive `apply_rls.TABLES` from the model registry** instead of hardcoding, and
-   add a test asserting every `TenantMixin` table is covered. *(§1.1)*
-6. **Write the isolation test that does not exist.** `tests/test_tenant_isolation.py`:
-   two tenants, each with a candidate, job, manager and application; then drive
-   every GET and LIST route from the router table with tenant B's identity and
-   assert tenant A's ids never appear — table-driven, so a new domain is covered
-   the day it is added. Plus a Postgres-only pair: the GUC unset returns zero rows,
-   and `eligo_app` cannot `SET ROLE` out of itself.
-7. Optionally verify `azp` against the known frontend origins.
+3. **Stop auto-provisioning tenants.** ✅ The request path now calls
+   `tenants.get`; an organization with no workspace is **403**, and the refusal
+   logs the org id with the command that admits it. `scripts/provision_tenant.py`
+   is that command. `ELIGO_AUTO_PROVISION_TENANTS` (default **false**) restores
+   the old behaviour for an onboarding session and logs every mint. Closing this
+   refuses only organizations that were never admitted — every org already using
+   the product has a row. *(G2)*
+4. **Remove the client-supplied `actor`.** ✅ Gone from `StatusTransition` and
+   `StageMove`, and from `ProcessStepUpdate`, where it was dead weight the router
+   already ignored — a field that looks like it sets the actor and silently does
+   not is worse than either. History entries now carry `actor_user_id` (the Clerk
+   `sub`) beside the display name; readers must tolerate older entries that have
+   only the name. *(G4)*
+5. **Derive `apply_rls.TABLES` from the model registry.** ✅ Plus
+   `tests/test_rls_coverage.py`, which also refuses a `TenantMixin` table whose
+   migration forgot its policy. *(§1.1)*
+6. **Write the isolation test that does not exist.** ✅
+   `tests/test_tenant_isolation.py` admits two organizations, gives one a row in
+   every tenant-scoped table with an HTTP surface, and sweeps every listing the
+   app exposes — derived from the router table, so a new domain is covered the
+   day it is included — searching each response for the other workspace's ids.
+   It also pins that a `tenant_id` in a request body cannot choose the workspace
+   a write lands in. Verified by mutation: removing the `WHERE` from
+   `list_candidates` turns it red.
+   **Still owed, and only runnable against a real Postgres:** the GUC unset
+   returns zero rows, and `eligo_app` cannot `SET ROLE` out of itself. CI is
+   SQLite, so the suite proves the query layer; RLS itself is proved by
+   `python -m scripts.apply_rls --status` against the deployment.
+7. Optionally verify `azp` against the known frontend origins. **Open.**
+8. **A frontend screen for the 403.** **Open.** A refused member currently gets
+   the cockpit shell with failing sections rather than a sentence explaining
+   that their workspace has not been set up. Nobody is in that state today;
+   whoever turns on self-serve sign-up puts somebody there.
 
 **Phase 2 — the scope axis. Build when a real member must see less.**
 
-8. Migration: `workspace_members`, `member_company_scopes`, both with
+9. Migration: `workspace_members`, `member_company_scopes`, both with
    `tenant_isolation`. Backfill one `active` admin row per existing tenant.
-9. `get_current_actor` resolves the member row, sets `app.current_member`, and
-   carries `areas`/`scope_mode` on `Actor`. No row ⇒ 403.
-10. Extend the policies in §4.3. One migration per table group, each with a test
+10. `get_current_actor` resolves the member row, sets `app.current_member`, and
+    carries `areas`/`scope_mode` on `Actor`. No row ⇒ 403.
+11. Extend the policies in §4.3. One migration per table group, each with a test
     that a scoped member sees exactly the granted companies and that a null scope
     key is invisible.
-11. `require_area` on the routers; member management under `require_admin`; a
+12. `require_area` on the routers; member management under `require_admin`; a
     receipt on every membership and scope change.
-12. Settings screen: members, their role, their areas, their companies — and
+13. Settings screen: members, their role, their areas, their companies — and
     "grant every company in project X" expanding to explicit rows.
 
-**Order matters.** Steps 1–3 remove a live exposure and take hours. Steps 8–12 are
+**Order matters.** Steps 1–3 remove a live exposure and take hours. Steps 9–13 are
 a feature and should wait for the user who needs it.
 
 ---
@@ -423,7 +446,7 @@ Read on 2026-10-21 at `685b5e0`.
 |---|---|
 | Tenant GUC, fail-closed predicate, `FORCE` | `backend/app/core/auth.py:_set_tenant_guc`, `backend/scripts/apply_rls.py:PREDICATE` |
 | App role is `NOBYPASSRLS` login-mode | `backend/.env` (`ELIGO_DB_APP_ROLE=eligo_app`, password set, URL user `eligo_app.…`) |
-| 17 tenant tables, all with policies in migrations | §1.1 table; `grep TenantMixin backend/app/domain/*/models.py` |
+| 19 tenant tables, all with policies in migrations | §1.1 table; `scripts.apply_rls.tenant_tables()` |
 | `apply_rls.TABLES` names 8 | `backend/scripts/apply_rls.py:TABLES` |
 | Tenant minted on first sight of an org | `backend/app/domain/tenants/service.py:get_or_create` |
 | Anyone signed in may create an organization | `frontend/src/auth/AuthGate.tsx:OrgGate` |
@@ -432,3 +455,16 @@ Read on 2026-10-21 at `685b5e0`.
 | Client-supplied actor | `backend/app/domain/pipeline/schemas.py:43,50`, `router.py:75,95` |
 | Only user column in the record | `backend/app/domain/features/models.py:29` |
 | No cross-tenant isolation test | `ls backend/tests | grep -iE 'rls|tenant|isolation'` → config tests only |
+
+---
+
+## 10. Corrections
+
+**2026-10-21 — "17 tenant tables" was wrong; there are 19.** The first draft said
+17 in three places while the table in §1.1 listed 19 rows, so the arithmetic
+contradicted the evidence directly above it. `managers`, `manager_interactions`,
+`projects` and `interviews` are among the eleven — not nine — that
+`scripts/apply_rls.py` did not name. The miscount was made by hand, from the same
+kind of list the script held, which is the argument for deriving it:
+`scripts.apply_rls.tenant_tables()` now reads the number off the models and
+`tests/test_rls_coverage.py` fails if it drifts.

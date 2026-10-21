@@ -1,12 +1,12 @@
 """Move the demo data from the default tenant into a real Clerk-org tenant.
 
 The seed/repopulate scripts write under the default tenant
-(00000000-…-0001). Once Clerk auth is on, you sign in and pick an organization
-— that creates a `tenants` row on first API call. Run this to hand the existing
-candidates (and their CVs, applications, receipts) to that organization so they
-show up in your workspace:
+(00000000-…-0001). Once Clerk auth is on, the organization needs a workspace —
+`python -m scripts.provision_tenant org_xxx`, since signing in no longer
+creates one by itself. Run this to hand the existing candidates (and their CVs,
+applications, receipts) to that organization so they show up in your workspace:
 
-    # after signing in once, with exactly one org so far:
+    # after provisioning, with exactly one org so far:
     .venv/bin/python -m scripts.assign_tenant
 
     # or target a specific org explicitly:
@@ -44,7 +44,7 @@ async def _resolve_target(clerk_org_id: str | None):
             return tenant.id, tenant.clerk_org_id
         rows = (await s.execute(select(Tenant))).scalars().all()
         if not rows:
-            sys.exit("no organization tenants yet — sign in and select an org first, then re-run.")
+            sys.exit("no organizations admitted yet — run `python -m scripts.provision_tenant org_xxx` first.")
         if len(rows) > 1:
             listing = ", ".join(f"{t.clerk_org_id} ({t.name or '—'})" for t in rows)
             sys.exit(f"multiple orgs exist — pass one explicitly. Found: {listing}")
