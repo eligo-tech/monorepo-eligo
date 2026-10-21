@@ -187,6 +187,27 @@ class Settings(BaseSettings):
     # ``tenant_id``; real requests would resolve it from auth context.
     default_tenant_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
 
+    # --- Outbound email (candidate notices) ------------------------------
+    #: Which provider carries a notice. Empty means the deployment cannot
+    #: send, and every send attempt answers 503 rather than pretending — see
+    #: `domain/notices/delivery/factory.py` on why this one does not fall back.
+    email_provider: str = ""
+    resend_api_key: str | None = None
+    #: The From address. Must be on a domain verified in the provider, or the
+    #: provider refuses every message (the commonest setup mistake by far).
+    email_from: str | None = None
+    #: Where a candidate's reply goes — a human mailbox, not the sender.
+    email_reply_to: str | None = None
+    #: Origin the opt-in link points at. The link travels in an email, so it
+    #: cannot be relative and must not be guessed from the inbound request.
+    public_base_url: str = "https://eligo-tech.vercel.app"
+    #: Name of the controller as it appears in the notice. Art. 13/14 require
+    #: the candidate to be told who holds their data; "eligo-tech" is the
+    #: platform, not necessarily the controller.
+    notice_controller_name: str = "eligo-tech"
+    #: Where a candidate exercises their rights. Falls back to reply-to.
+    notice_contact_email: str | None = None
+
     @field_validator("ingest_token")
     @classmethod
     def _reject_weak_ingest_token(cls, value: str | None) -> str | None:

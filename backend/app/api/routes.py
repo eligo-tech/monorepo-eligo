@@ -21,6 +21,7 @@ from app.domain.hub.router import router as hub_router
 from app.domain.jobs.router import router as jobs_router
 from app.domain.managers.router import router as managers_router
 from app.domain.matching.router import router as matching_router
+from app.domain.notices.router import router as notices_router
 from app.domain.pipeline.router import router as pipeline_router
 from app.domain.projects.router import router as projects_router
 from app.domain.reporting.router import router as reporting_router
@@ -67,6 +68,7 @@ api_router.include_router(pipeline_router)
 api_router.include_router(projects_router)
 api_router.include_router(managers_router)
 api_router.include_router(matching_router)
+api_router.include_router(notices_router)
 api_router.include_router(reporting_router)
 api_router.include_router(searches_router)
 api_router.include_router(verification_router)

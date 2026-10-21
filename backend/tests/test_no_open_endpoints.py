@@ -24,9 +24,16 @@ from fastapi.routing import APIRoute
 #: `/health` is read by the platform's health check before any user exists;
 #: `/` is the API's own root banner. Both are static and say nothing about
 #: any workspace.
+#: The two opt-in links are public because the person clicking them is a
+#: candidate, who has no account and never will. They are authenticated by
+#: the 43-character token in the URL, and the workspace id beside it keeps
+#: Postgres RLS pinned for a request with no session —
+#: `tests/test_notices.py` asserts nothing else uses that dependency.
 DECLARED_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("GET", "/health"),
     ("GET", "/"),
+    ("GET", "/notices/{tenant_id}/{token}/zustimmen"),
+    ("GET", "/notices/{tenant_id}/{token}/ablehnen"),
 }
 
 #: Dependencies that authenticate a request. `get_current_tenant` resolves

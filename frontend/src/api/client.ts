@@ -30,6 +30,7 @@ import type {
   MatchResultDTO,
   PipelineBoardDTO,
   CandidateDocumentDTO,
+  CandidateNoticeDTO,
   CompetingEmployerDTO,
   DocumentKind,
   HistoryEntryDTO,
@@ -37,6 +38,7 @@ import type {
   ImportPreviewDTO,
   ImportResultDTO,
   MeDTO,
+  NoticeCapabilityDTO,
   SourceCapabilitiesDTO,
   TenantSourceDTO,
   JobUpdatePayload,
@@ -624,6 +626,21 @@ export const api = {
   /** Companies this tenant's candidates named as other active processes. */
   competingEmployers: () =>
     request<CompetingEmployerDTO[]>('/candidates/competing-employers'),
+
+  /** Every Art.-14 notice sent to one candidate, newest first. */
+  candidateNotices: (candidateId: string) =>
+    request<CandidateNoticeDTO[]>(`/candidates/${candidateId}/notices`),
+
+  /** Send the notice and the opt-in question. One candidate, one click —
+   *  there is deliberately no batch endpoint behind this. */
+  sendCandidateNotice: (candidateId: string) =>
+    request<CandidateNoticeDTO>(`/candidates/${candidateId}/notices`, {
+      method: 'POST',
+    }),
+
+  /** Can this deployment send at all? Read before offering the button, so a
+   *  recruiter is told "not configured" instead of meeting a 503. */
+  noticeCapability: () => request<NoticeCapabilityDTO>('/notices/capability'),
 
   /** Every file on a candidate (metadata only). */
   candidateDocuments: (candidateId: string) =>
