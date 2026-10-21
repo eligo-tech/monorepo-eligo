@@ -11,7 +11,7 @@ from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -200,7 +200,12 @@ class Settings(BaseSettings):
     email_reply_to: str | None = None
     #: Origin the opt-in link points at. The link travels in an email, so it
     #: cannot be relative and must not be guessed from the inbound request.
-    public_base_url: str = "https://eligo-tech.vercel.app"
+    #:
+    #: It must be the host that serves **`/api/v1`**, because that is where
+    #: the two opt-in routes live — not the cockpit's origin. Pointing it at
+    #: the Vercel site produces a link that 404s for every candidate, which
+    #: is exactly what the first default here did.
+    notice_link_base_url: str = "https://monorepo-eligo-production.up.railway.app"
     #: Name of the controller as it appears in the notice. Art. 13/14 require
     #: the candidate to be told who holds their data; "eligo-tech" is the
     #: platform, not necessarily the controller.
@@ -222,6 +227,34 @@ class Settings(BaseSettings):
                 'with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
             )
         return value.strip() if value else None
+
+    @model_validator(mode="after")
+    def _opt_in_links_must_point_at_this_api(self) -> "Settings":
+        """Refuse a notice link base that is one of our CORS origins.
+
+        A CORS origin is by definition a DIFFERENT origin that calls this
+        API; the API's own public origin can never legitimately appear in
+        that list. So an overlap means somebody set the link base to the
+        cockpit — and the two opt-in routes are backend routes, so every
+        candidate's link would 404.
+
+        This is the check that would have caught the first default here
+        (`https://eligo-tech.vercel.app`, a domain that does not even
+        resolve). A unit test could not: it would have to read the same
+        setting it was checking. Failing at startup is proportionate because
+        the symptom otherwise appears in somebody else's inbox, days later,
+        with no error anywhere in our logs.
+        """
+        base = (self.notice_link_base_url or "").rstrip("/")
+        if base and base in {o.rstrip("/") for o in self.cors_origins}:
+            raise ValueError(
+                f"ELIGO_NOTICE_LINK_BASE_URL ({base}) is one of "
+                "ELIGO_CORS_ORIGINS, so it is the cockpit's origin, not this "
+                "API's. The opt-in links are backend routes "
+                "(/api/v1/notices/...) and would 404 for every candidate. "
+                "Set it to the host that serves /api/v1."
+            )
+        return self
 
     @field_validator("cors_origins", mode="before")
     @classmethod

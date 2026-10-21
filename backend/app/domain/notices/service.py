@@ -72,9 +72,13 @@ def opt_in_links(tenant_id: uuid.UUID, token: str, cfg: Settings | None = None) 
     Resolving the workspace from the link keeps RLS switched on for a public
     request instead of reaching for the admin connection, which
     `core/database.py` reserves for DDL and scripts.
+
+    The base is the API's origin, not the cockpit's: these two routes are
+    served by the backend. `test_the_link_points_at_a_route_that_exists`
+    pins the path; the host is configuration and is checked by reading it.
     """
     cfg = cfg or settings
-    base = cfg.public_base_url.rstrip("/")
+    base = cfg.notice_link_base_url.rstrip("/")
     return (
         f"{base}/api/v1/notices/{tenant_id}/{token}/zustimmen",
         f"{base}/api/v1/notices/{tenant_id}/{token}/ablehnen",

@@ -362,6 +362,83 @@ def test_only_the_opt_in_routes_are_scoped_by_a_url() -> None:
     }
 
 
+def test_the_link_points_at_a_route_that_exists() -> None:
+    """The URL in the email must be one the app actually serves.
+
+    The first version of this shipped pointing at the cockpit's Vercel
+    origin, where `/api/v1/notices/...` is not served at all — every
+    candidate would have clicked through to a 404, and nothing in the suite
+    would have noticed because the link is only ever a string until somebody
+    opens it.
+
+    This pins the path against the real route table, so renaming either
+    endpoint breaks here instead of in an inbox. The HOST stays
+    configuration (`ELIGO_NOTICE_LINK_BASE_URL`); what this asserts is that
+    it is the API's origin that the path is appended to.
+    """
+    from urllib.parse import urlparse
+
+    from fastapi.routing import APIRoute
+
+    from app.domain.notices.service import opt_in_links
+    from app.main import app
+
+    def walk(router):
+        for route in getattr(router, "routes", []):
+            if isinstance(route, APIRoute):
+                yield route
+            else:
+                inner = getattr(route, "original_router", None)
+                if inner is not None:
+                    yield from walk(inner)
+
+    tenant = uuid.uuid4()
+    token = "a" * 43
+    confirm, decline = opt_in_links(tenant, token)
+
+    # Both must sit under the configured API origin, path and all.
+    base = settings.notice_link_base_url.rstrip("/")
+    assert confirm.startswith(f"{base}{settings.api_v1_prefix}/")
+    assert decline.startswith(f"{base}{settings.api_v1_prefix}/")
+
+    served = {
+        route.path
+        for route in walk(app)
+        if "GET" in route.methods
+    }
+    for url in (confirm, decline):
+        path = urlparse(url).path.removeprefix(settings.api_v1_prefix)
+        # Substitute the concrete ids back out to compare with the template.
+        template = path.replace(str(tenant), "{tenant_id}").replace(token, "{token}")
+        assert template in served, f"{url} is not a route this app serves"
+
+
+def test_a_link_base_that_is_really_the_cockpit_is_refused_at_startup() -> None:
+    """The check the path test above cannot make.
+
+    `test_the_link_points_at_a_route_that_exists` derives the origin from
+    the same setting it is checking, so it passes whatever that setting
+    says — it caught nothing when the default was the cockpit's domain. The
+    real invariant is structural: a CORS origin is another origin that calls
+    this API, so this API's own public origin can never be in that list.
+    """
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    fine = Settings(
+        notice_link_base_url="https://api.example.com",
+        cors_origins=["https://cockpit.example.com"],
+    )
+    assert fine.notice_link_base_url == "https://api.example.com"
+
+    with pytest.raises(ValidationError, match="would 404 for every candidate"):
+        Settings(
+            notice_link_base_url="https://cockpit.example.com/",
+            cors_origins=["https://cockpit.example.com"],
+        )
+
+
 # --- the provider seam ---------------------------------------------------
 
 
