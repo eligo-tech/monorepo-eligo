@@ -927,3 +927,31 @@ export interface HistoryEntryDTO {
   summary: string
   source: string | null
 }
+
+/** One Art. 14 notice / opt-in request sent to one candidate.
+ *
+ *  `body` is the text as it was sent, with the opt-in token redacted to `…`:
+ *  those links are the candidate's credential, and a recruiter holding them
+ *  could answer on their behalf. */
+export interface CandidateNoticeDTO {
+  id: string
+  candidate_id: string
+  email: string
+  /** pending · sent · failed · opted_in · opted_out */
+  status: string
+  subject: string
+  body: string
+  provider: string | null
+  sent_at: string | null
+  responded_at: string | null
+  failure_reason: string | null
+  requested_by: string | null
+  created_at: string
+}
+
+/** Whether this deployment can send email at all. */
+export interface NoticeCapabilityDTO {
+  configured: boolean
+  provider: string
+  sender: string | null
+}

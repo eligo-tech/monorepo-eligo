@@ -46,6 +46,7 @@ import { HistoryTrail } from '../../ui/HistoryTrail'
 import { AssignToMandate } from './AssignToMandate'
 import { QualificationChecklist } from './QualificationChecklist'
 import { AttachmentsPanel } from './AttachmentsPanel'
+import { ConsentPanel } from './ConsentPanel'
 import { DossierEditor } from './DossierEditor'
 
 export function CandidateDrawer({
@@ -500,6 +501,13 @@ export function CandidateDrawer({
                   <AttachmentsPanel
                     candidateId={candidate.id}
                     onCandidateChanged={handleSaved}
+                  />
+                </CvSection>
+
+                <CvSection icon={ShieldCheck} title={t('Einwilligung')}>
+                  <ConsentPanel
+                    candidateId={candidate.id}
+                    candidateEmail={candidate.email}
                   />
                 </CvSection>
 
