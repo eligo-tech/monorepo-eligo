@@ -26,6 +26,7 @@ import {
   Paperclip,
   Pencil,
   Phone,
+  MessageSquare,
   ShieldCheck,
   Sparkles,
   User,
@@ -46,6 +47,7 @@ import { HistoryTrail } from '../../ui/HistoryTrail'
 import { AssignToMandate } from './AssignToMandate'
 import { QualificationChecklist } from './QualificationChecklist'
 import { AttachmentsPanel } from './AttachmentsPanel'
+import { CandidateNotesPanel } from './CandidateNotesPanel'
 import { ConsentPanel } from './ConsentPanel'
 import { DossierEditor } from './DossierEditor'
 
@@ -502,6 +504,10 @@ export function CandidateDrawer({
                     candidateId={candidate.id}
                     onCandidateChanged={handleSaved}
                   />
+                </CvSection>
+
+                <CvSection icon={MessageSquare} title={t('Gesprächsnotizen')}>
+                  <CandidateNotesPanel candidateId={candidate.id} />
                 </CvSection>
 
                 <CvSection icon={ShieldCheck} title={t('Einwilligung')}>

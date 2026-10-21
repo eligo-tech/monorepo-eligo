@@ -6,60 +6,47 @@
 // note worth the most — the one written while the conversation is still in
 // your head — had nowhere to go.
 //
-// The kinds live in one exported constant on purpose. The vocabulary is
-// provisional: it is today's coarse enum (call · email · meeting · message ·
-// note), and the recruiter's own list replaces it next. One constant means
-// that is one edit, not a hunt through two screens.
+// The kinds are passed in rather than fixed here. They were a constant, with
+// a note saying the recruiter's own list would replace it — ELI-9 is that
+// list, and it turned out to be TWO lists: five kinds on a manager, three on
+// a candidate. A composer that knew its own vocabulary could only ever serve
+// one of them. Both live in `interactionKinds.ts`.
 
 import { useState } from 'react'
 import { CalendarPlus } from 'lucide-react'
 
 import { t } from '@/i18n'
 import { Button } from './forms'
-
-/** The kinds that can be filed by hand.
- *
- *  `briefing` and `feedback` are deliberately absent. Both belong to a
- *  mandate — one says what the client asked for, the other what they thought
- *  of a candidate — and both are written in the mandate's own panels, where
- *  the job is in scope. Offering them here would produce a briefing attached
- *  to nothing. */
-export const INTERACTION_KINDS = ['call', 'meeting', 'email', 'message', 'note'] as const
-
-export type InteractionKind = (typeof INTERACTION_KINDS)[number]
+import { interactionLabel } from './interactionKinds'
 
 /** Today, as the date input wants it. */
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function InteractionComposer({
+  kinds,
   onSave,
   onCancel,
-  defaultKind = 'call',
+  defaultKind,
 }: {
+  /** The vocabulary for the thing being annotated — `MANAGER_INTERACTION_KINDS`
+   *  or `CANDIDATE_INTERACTION_KINDS`. Neither is a subset of the other:
+   *  `business_call` is meaningless on a candidate and `candidate_call` on a
+   *  manager, so one shared list would offer each half the wrong options. */
+  kinds: readonly string[]
   /** Resolves when the row is written; rejects to show the error. */
   onSave: (entry: {
-    interaction_type: InteractionKind
+    interaction_type: string
     summary: string
     occurred_at: string
   }) => Promise<unknown>
   onCancel: () => void
-  defaultKind?: InteractionKind
+  defaultKind?: string
 }) {
-  const [kind, setKind] = useState<InteractionKind>(defaultKind)
+  const [kind, setKind] = useState<string>(defaultKind ?? kinds[0])
   const [text, setText] = useState('')
   const [when, setWhen] = useState(today())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Inside the component rather than at module scope: a label read once at
-  // import time keeps the language the page started in.
-  const label: Record<InteractionKind, string> = {
-    call: t('Anruf'),
-    meeting: t('Meeting'),
-    email: t('E-Mail'),
-    message: t('Nachricht'),
-    note: t('Notiz'),
-  }
 
   async function save() {
     const summary = text.trim()
@@ -97,12 +84,12 @@ export function InteractionComposer({
           {t('Art')}
           <select
             value={kind}
-            onChange={(e) => setKind(e.target.value as InteractionKind)}
+            onChange={(e) => setKind(e.target.value)}
             className="rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
           >
-            {INTERACTION_KINDS.map((value) => (
+            {kinds.map((value) => (
               <option key={value} value={value}>
-                {label[value]}
+                {interactionLabel(value)}
               </option>
             ))}
           </select>

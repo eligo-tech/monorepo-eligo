@@ -36,6 +36,11 @@ import type { ManagerDTO, ManagerInteractionDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
 import { InteractionComposer } from '../ui/InteractionComposer'
+import {
+  MANAGER_INTERACTION_KINDS,
+  interactionLabel,
+  isContact,
+} from '../ui/interactionKinds'
 
 const dateDe = (iso: string | null | undefined) =>
   iso
@@ -143,9 +148,11 @@ function Note({ entry }: { entry: ManagerInteractionDTO }) {
         </p>
       </div>
       <div className="min-w-0 flex-1">
-        {/* The source's own category, kept verbatim — "BD Call" is the
-            recruiter's word for it and carries more than "call" would. */}
-        <Chip>{entry.interaction_type}</Chip>
+        {/* Labelled, not raw. The backend normalises every stored spelling
+            onto one vocabulary ("BD Call" → `business_call`), so printing the
+            column would now show a machine value where the recruiter's own
+            word used to be. A kind nobody mapped still prints itself. */}
+        <Chip>{interactionLabel(entry.interaction_type)}</Chip>
         <p
           className={cn(
             'mt-2 whitespace-pre-wrap text-[14px] leading-relaxed text-cockpit-dim',
@@ -411,6 +418,7 @@ export function ManagerProfile({
             <>
               {composing && (
                 <InteractionComposer
+                  kinds={MANAGER_INTERACTION_KINDS}
                   onCancel={() => setComposing(false)}
                   onSave={async (entry) => {
                     const row = await api.logManagerInteraction(manager.id, entry)
@@ -426,7 +434,7 @@ export function ManagerProfile({
                       ...m,
                       note_count: (m.note_count ?? 0) + 1,
                       last_contact_at:
-                        entry.interaction_type !== 'note' &&
+                        isContact(entry.interaction_type) &&
                         (!m.last_contact_at || entry.occurred_at > m.last_contact_at)
                           ? entry.occurred_at
                           : m.last_contact_at,

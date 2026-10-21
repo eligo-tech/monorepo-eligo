@@ -92,18 +92,50 @@ class WorkPermitStatus(str, enum.Enum):
 
 
 class InteractionType(str, enum.Enum):
-    """How a recruiter touched a manager.
+    """How a recruiter touched a manager or a candidate.
 
-    Deliberately coarse. The mailbox/calendar integration will want finer
-    grain, and guessing that shape before it exists produces categories nobody
-    fills in.
+    The vocabulary is the one the recruiters named in ELI-9, not a guess:
+    five kinds on a manager, three on a candidate. It replaced a coarser set
+    that could not tell a call to a client under contract from a cold
+    business call — which is the distinction the whole of BD turns on, and
+    the reason `CALL` is retired rather than reused.
+
+    Three vocabularies described this one thing before: this enum, the
+    strings the aiFind import wrote ("BD Call", "N/A", "Meeting Notes"), and
+    the list in ELI-9. `normalise_interaction_type` collapses the first two
+    onto the third; nothing new is ever written in the old spelling.
     """
 
+    #: Manager — notes from a video or onsite meeting.
+    MEETING = "meeting"
+    #: Manager — a call with a client under a framework agreement: running
+    #: processes, future projects.
+    CLIENT_CALL = "client_call"
+    #: Manager — a call to a company with no framework agreement. Business
+    #: development: generating business, exchanging information, building a
+    #: relationship.
+    BUSINESS_CALL = "business_call"
+    #: Candidate — a call or video meeting with a candidate.
+    CANDIDATE_CALL = "candidate_call"
+    #: Either — a LinkedIn or email message, in or out.
+    MESSAGE = "message"
+    #: Either — the person was NOT reached by phone. 170 of the 366 imported
+    #: notes are these, and they must never count as contact: a profile that
+    #: looks freshly touched because somebody tried and failed to call is the
+    #: opposite of what `last_contact_at` is for.
+    NOT_REACHED = "na"
+    #: Either — a note to self. Not on the ELI-9 list, kept because the rows
+    #: and the composer that writes them already exist, and because a note
+    #: nobody was present for is the one kind that is definitionally not
+    #: contact.
+    NOTE = "note"
+
+    #: Retired. Still stored on rows written before ELI-9, so still a member —
+    #: an enum that cannot name its own history makes those rows unreadable.
+    #: Never offered for a new note: `CALL` cannot say which of the three
+    #: kinds of call it was, and `EMAIL` is a `MESSAGE`.
     CALL = "call"
     EMAIL = "email"
-    MEETING = "meeting"
-    MESSAGE = "message"
-    NOTE = "note"
     #: The conversation that defines a mandate (Prozess-Doku, Phase 2). Its
     #: own kind rather than a call with a job attached, because it is the one
     #: a recruiter goes looking for: "what did they actually ask for?"
@@ -118,6 +150,88 @@ class InteractionType(str, enum.Enum):
     #: field: the second piece of feedback on the same step used to overwrite
     #: the first.
     FEEDBACK = "feedback"
+
+
+#: What a recruiter may file against a MANAGER (ELI-9), in the order the
+#: ticket lists them. `BRIEFING` and `FEEDBACK` are absent on purpose — both
+#: belong to a mandate and are written in the mandate's own panels.
+MANAGER_INTERACTION_KINDS: tuple[InteractionType, ...] = (
+    InteractionType.MEETING,
+    InteractionType.CLIENT_CALL,
+    InteractionType.BUSINESS_CALL,
+    InteractionType.MESSAGE,
+    InteractionType.NOT_REACHED,
+    InteractionType.NOTE,
+)
+
+#: What a recruiter may file against a CANDIDATE (ELI-9). Shorter on purpose:
+#: a candidate has no business calls and no client calls.
+CANDIDATE_INTERACTION_KINDS: tuple[InteractionType, ...] = (
+    InteractionType.CANDIDATE_CALL,
+    InteractionType.MESSAGE,
+    InteractionType.NOT_REACHED,
+    InteractionType.NOTE,
+)
+
+#: The spellings already in the database → what they mean now.
+#:
+#: Left-hand side is what the aiFind import actually wrote, read off the 366
+#: live rows rather than from its documentation. Three of its kinds are
+#: deliberately ABSENT — "Job Spec" (27), "Client Canvas" (17) and
+#: "Candidate Qualification" (1) are on neither list in ELI-9, and folding
+#: them into `NOTE` would destroy a distinction 45 real notes still carry.
+#: They stay as they are and display under their own name;
+#: `normalise_interaction_type` returns an unknown value unchanged.
+_LEGACY_INTERACTION_TYPES: dict[str, InteractionType] = {
+    "n/a": InteractionType.NOT_REACHED,
+    "na": InteractionType.NOT_REACHED,
+    "bd call": InteractionType.BUSINESS_CALL,
+    "meeting notes": InteractionType.MEETING,
+    "e-mail": InteractionType.MESSAGE,
+    "email": InteractionType.MESSAGE,
+}
+
+
+def normalise_interaction_type(raw: str | None) -> str:
+    """One stored spelling → the canonical value, or itself if unrecognised.
+
+    Returning the raw string for an unknown kind is the point: an import that
+    invents a category must show up as that category rather than being
+    silently absorbed into a neighbouring one, which is how a vocabulary
+    quietly stops describing its own data.
+    """
+    if not raw:
+        return InteractionType.NOTE.value
+    key = raw.strip().lower()
+    mapped = _LEGACY_INTERACTION_TYPES.get(key)
+    if mapped is not None:
+        return mapped.value
+    try:
+        return InteractionType(key).value
+    except ValueError:
+        return raw.strip()
+
+
+#: Kinds that mean the person was actually REACHED, and so move
+#: `last_contact_at` forward.
+#:
+#: `NOT_REACHED` is the whole reason this set is explicit: it is the single
+#: commonest kind in the record, and counting an unanswered call as contact
+#: would mark 170 managers as freshly touched by nobody. `NOTE` and
+#: `FEEDBACK` are out for the same reason — nobody was on the other end.
+CONTACT_INTERACTION_KINDS = frozenset(
+    {
+        InteractionType.MEETING.value,
+        InteractionType.CLIENT_CALL.value,
+        InteractionType.BUSINESS_CALL.value,
+        InteractionType.CANDIDATE_CALL.value,
+        InteractionType.MESSAGE.value,
+        InteractionType.BRIEFING.value,
+        # Retired spellings still arriving from older rows and re-imports.
+        InteractionType.CALL.value,
+        InteractionType.EMAIL.value,
+    }
+)
 
 
 #: Provenances that constitute EVIDENCE for a field: somebody or something

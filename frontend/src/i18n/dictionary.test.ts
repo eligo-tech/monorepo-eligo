@@ -15,6 +15,13 @@ const SAME_IN_BOTH = new Set([
   'aiFind (ATS)',
   'Arbeitsagentur',
   'Briefing',
+  // The ELI-9 note vocabulary. The recruiters named these kinds in English
+  // and use them in a German UI, so there is nothing to translate.
+  'Business Call',
+  'Candidate Call',
+  'Client Call',
+  'Meeting Notes',
+  'Message',
   'Business Development',
   'CSV / Excel',
   'Cockpit',
@@ -26,7 +33,6 @@ const SAME_IN_BOTH = new Set([
   'Jobs',
   'Know-how',
   'Mail',
-  'Meeting',
   'Minimum',
   'Name (A–Z)',
   'Workspace',
