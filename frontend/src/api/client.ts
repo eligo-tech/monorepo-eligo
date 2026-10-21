@@ -442,6 +442,30 @@ export const api = {
   jobBriefings: (jobId: string) =>
     request<BriefingDTO[]>(`/jobs/${jobId}/briefings`),
 
+  /** Every Gesprächsnotiz on one candidate, newest first.
+   *
+   *  The rows live in `manager_interactions` — the table has carried a
+   *  nullable `candidate_id` since it was created and not one of the 366
+   *  imported notes ever filled it (ELI-9). */
+  candidateInteractions: (id: string) =>
+    request<ManagerInteractionDTO[]>(`/candidates/${id}/interactions`),
+
+  /** File one touch on this candidate — a call, a message, or a call that
+   *  went unanswered. */
+  logCandidateInteraction: (
+    id: string,
+    body: {
+      interaction_type: string
+      summary: string
+      occurred_at?: string
+      job_id?: string | null
+    },
+  ) =>
+    request<ManagerInteractionDTO>(`/candidates/${id}/interactions`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   /** Write down a briefing. The contact is optional: the conversation that
    *  defines a mandate often happens before anyone is in the record. */
   addBriefing: (

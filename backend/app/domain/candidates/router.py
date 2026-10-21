@@ -17,6 +17,11 @@ from app.domain.candidates.schemas import (
     CompetingEmployerRead,
 )
 from app.domain.documents import service as documents_service
+from app.domain.managers import service as managers_service
+from app.domain.managers.schemas import (
+    ManagerInteractionCreate,
+    ManagerInteractionRead,
+)
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
@@ -126,3 +131,42 @@ async def create_candidate(
     payload.tenant_id = tenant_id  # force the authenticated tenant
     row = await service.create_candidate(db, data=payload)
     return CandidateRead.model_validate(row)
+
+# --- Gesprächsnotizen on a candidate (ELI-9) -----------------------------
+#
+# The rows live in `manager_interactions`, which has carried a nullable
+# `candidate_id` since it was created and never had one filled. These two
+# routes are what fill it. They sit in this router because the URL a client
+# asks is about a candidate; the service stays in `managers`, next to the
+# model, the way `jobs/router.py` already reaches across.
+
+
+@router.get("/{candidate_id}/interactions", response_model=list[ManagerInteractionRead])
+async def list_candidate_interactions(
+    candidate_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[ManagerInteractionRead]:
+    rows = await managers_service.list_candidate_interactions(
+        db, tenant_id=tenant_id, candidate_id=candidate_id
+    )
+    return [ManagerInteractionRead.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/{candidate_id}/interactions",
+    response_model=ManagerInteractionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def log_candidate_interaction(
+    candidate_id: uuid.UUID,
+    payload: ManagerInteractionCreate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerInteractionRead:
+    row = await managers_service.log_candidate_interaction(
+        db, tenant_id=tenant_id, candidate_id=candidate_id, payload=payload
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "candidate not found")
+    return ManagerInteractionRead.model_validate(row)

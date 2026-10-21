@@ -10,7 +10,13 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.domain.common.enums import InteractionType, LIVE_JOB_STATUSES
+from app.domain.candidates.models import Candidate
+from app.domain.common.enums import (
+    CONTACT_INTERACTION_KINDS,
+    InteractionType,
+    LIVE_JOB_STATUSES,
+    normalise_interaction_type,
+)
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
@@ -268,21 +274,10 @@ async def managers_owing_art14(
     return [m for m in rows if m.art14_outstanding]
 
 
-#: Kinds that mean somebody was actually spoken to, so the profile's "letzter
-#: Kontakt" may move. NOTE is excluded on purpose: a recruiter writing
-#: themselves a reminder has not contacted anyone, and counting it would clear
-#: the overdue flag on a relationship nobody has touched in a year — which is
-#: precisely the flag's job to show. FEEDBACK is excluded because it is as
-#: often the candidate speaking as the client.
-CONTACT_KINDS = frozenset(
-    {
-        InteractionType.CALL,
-        InteractionType.EMAIL,
-        InteractionType.MEETING,
-        InteractionType.MESSAGE,
-        InteractionType.BRIEFING,
-    }
-)
+#: Which kinds move "letzter Kontakt". Defined once in `common/enums.py`
+#: alongside the vocabulary itself — this used to be a second list here, and
+#: a second list is how `NOT_REACHED` would have been forgotten.
+CONTACT_KINDS = CONTACT_INTERACTION_KINDS
 
 
 def _advance_last_contact(manager: Manager, occurred_at: dt.datetime) -> None:
@@ -324,16 +319,21 @@ async def log_interaction(
         if manager is None:
             return None
     occurred_at = payload.occurred_at or dt.datetime.now(dt.UTC)
+    # Normalised on the way in as well as on the way out: the schema accepts
+    # an `InteractionType`, but a re-import or an older client can still
+    # present "BD Call", and two spellings of one kind in the column is the
+    # state ELI-9 exists to end.
+    kind = normalise_interaction_type(payload.interaction_type)
     interaction = ManagerInteraction(
         tenant_id=tenant_id,
         manager_id=manager_id,
         candidate_id=payload.candidate_id,
         job_id=payload.job_id,
-        interaction_type=payload.interaction_type.value,
+        interaction_type=kind,
         occurred_at=occurred_at,
         summary=payload.summary,
     )
-    if manager is not None and payload.interaction_type in CONTACT_KINDS:
+    if manager is not None and kind in CONTACT_KINDS:
         _advance_last_contact(manager, occurred_at)
     session.add(interaction)
     await session.commit()
@@ -358,6 +358,70 @@ async def list_interactions(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+async def list_candidate_interactions(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    limit: int = 200,
+) -> list[ManagerInteraction]:
+    """Every note filed against one candidate, newest first.
+
+    Lives in this domain because the row does: `manager_interactions` has
+    carried a nullable `candidate_id` since it was created and not one of the
+    366 imported rows ever filled it. ELI-9 is what finally fills it, and a
+    second table for the same shape of note would mean a candidate's history
+    and a manager's history could not be read together.
+    """
+    result = await session.execute(
+        select(ManagerInteraction)
+        .where(
+            ManagerInteraction.tenant_id == tenant_id,
+            ManagerInteraction.candidate_id == candidate_id,
+        )
+        .order_by(ManagerInteraction.occurred_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def log_candidate_interaction(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    payload: ManagerInteractionCreate,
+) -> ManagerInteraction | None:
+    """Record one touch on a candidate. None when the candidate is not ours.
+
+    `manager_id` stays empty: this is a conversation with the candidate, not
+    with a client contact. A note that is about both — what a manager said
+    regarding one candidate — is a FEEDBACK row on the mandate, which has its
+    own panel.
+    """
+    candidate = await session.scalar(
+        select(Candidate).where(
+            Candidate.id == candidate_id, Candidate.tenant_id == tenant_id
+        )
+    )
+    if candidate is None:
+        return None
+
+    interaction = ManagerInteraction(
+        tenant_id=tenant_id,
+        manager_id=None,
+        candidate_id=candidate_id,
+        job_id=payload.job_id,
+        interaction_type=normalise_interaction_type(payload.interaction_type),
+        occurred_at=payload.occurred_at or dt.datetime.now(dt.UTC),
+        summary=payload.summary,
+    )
+    session.add(interaction)
+    await session.commit()
+    await session.refresh(interaction)
+    return interaction
 
 
 async def list_for_job(

@@ -157,8 +157,11 @@ async def test_interactions_record_who_was_discussed(company) -> None:
         rows = await service.list_interactions(
             s, tenant_id=TENANT, manager_id=m.id
         )
-    # newest first
-    assert [r.interaction_type for r in rows] == ["email", "call"]
+    # Newest first — and `email` is stored as `message`. ELI-9 defines
+    # Message as "LinkedIn oder E-Mail Nachricht", so the two were one kind
+    # under two names; normalising on write is what stops the column holding
+    # both spellings forever.
+    assert [r.interaction_type for r in rows] == ["message", "call"]
 
 
 async def test_logging_a_call_moves_the_last_contact_date(company) -> None:

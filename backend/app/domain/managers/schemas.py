@@ -7,7 +7,11 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.common.enums import ConfidenceSource, InteractionType
+from app.domain.common.enums import (
+    ConfidenceSource,
+    InteractionType,
+    normalise_interaction_type,
+)
 
 
 class ManagerInteractionCreate(BaseModel):
@@ -38,6 +42,19 @@ class ManagerInteractionRead(BaseModel):
     occurred_at: dt.datetime
     summary: str | None
     external_source: str | None = None
+
+    @field_validator("interaction_type", mode="before")
+    @classmethod
+    def _canonical(cls, value: str | None) -> str:
+        """One spelling reaches the client, whatever the row holds.
+
+        The column is free text and three vocabularies wrote into it. Doing
+        this here rather than at each call site means the cockpit never has
+        to know that "BD Call" and `business_call` are the same thing — and
+        a kind nobody mapped ("Job Spec") still arrives under its own name
+        rather than being absorbed into a neighbour.
+        """
+        return normalise_interaction_type(value)
 
     @field_validator("occurred_at")
     @classmethod
