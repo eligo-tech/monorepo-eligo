@@ -96,25 +96,25 @@ async def seed() -> None:
                 tenant_id=TENANT, title="Senior Backend Engineer",
                 client_company_id=companies["acme"].id, location="Munich",
                 location_radius_km=50, must_have_skills=["python", "postgresql", "fastapi"],
-                requires_work_permit=True, salary_min=70000, salary_max=95000, status="open",
+                requires_work_permit=True, salary_min=70000, salary_max=95000, status="active",
             ),
             "data": Job(
                 tenant_id=TENANT, title="Data Platform Lead",
                 client_company_id=companies["trade"].id, location="Berlin",
                 must_have_skills=["python", "spark"], requires_work_permit=True,
-                salary_min=90000, salary_max=120000, status="open",
+                salary_min=90000, salary_max=120000, status="active",
             ),
             "finance": Job(
                 tenant_id=TENANT, title="Finance Director",
                 client_company_id=companies["trade"].id, location="Frankfurt",
                 must_have_skills=["m&a", "valuation"], requires_work_permit=False,
-                salary_min=120000, salary_max=180000, status="open",
+                salary_min=120000, salary_max=180000, status="active",
             ),
             "frontend": Job(
                 tenant_id=TENANT, title="Staff Frontend Engineer",
                 client_company_id=companies["helio"].id, location="Remote",
                 must_have_skills=["typescript", "react"], requires_work_permit=False,
-                salary_min=85000, salary_max=115000, status="closed",
+                salary_min=85000, salary_max=115000, status="inactive",
             ),
         }
         session.add_all(jobs.values())

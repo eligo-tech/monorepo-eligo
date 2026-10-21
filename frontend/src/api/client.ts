@@ -164,7 +164,21 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, res.statusText)
     return res.blob()
   },
-  jobs: () => request<JobDTO[]>('/jobs'),
+  /** The workspace's mandates. `status` filters in the DATABASE: the list is
+   *  capped, so filtering what already arrived shows "the active ones among
+   *  the first hundred" and labels them the active ones. */
+  jobs: (status?: string) =>
+    request<JobDTO[]>(`/jobs${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+
+  /** Reuse an old mandate — "alte Jobs als Kopie wiederverwenden" (ELI-7).
+   *
+   *  The Suchprofil comes across; the pipeline, the briefings and the feedback
+   *  do not. This is the way back from `inactive`, which cannot be reopened. */
+  copyJob: (jobId: string, title?: string) =>
+    request<JobDTO>(`/jobs/${jobId}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(title ? { title } : {}),
+    }),
 
   /** Muss-Kriterien the mandate's own title names, drawn from the workspace's
    *  skill vocabulary. Proposals — a human clicks the ones that are really

@@ -11,9 +11,10 @@ import { t } from '@/i18n'
 
 import { useMemo, useState } from 'react'
 import {
+  Archive,
   ArrowUpRight,
   Briefcase,
-  ChevronDown,
+  Copy,
   MapPin,
   Pencil,
   Plus,
@@ -29,13 +30,19 @@ import { searchScore } from '@/lib/search'
 import { Button } from '../ui/forms'
 import { NewMandate } from './NewMandate'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
-import { JOB_STATUSES, JOB_STATUS_TONE, jobStatusLabel } from '../ui/jobStatus'
+import {
+  JOB_STATUSES,
+  JOB_STATUS_TONE,
+  isLive,
+  jobStatus,
+  jobStatusLabel,
+} from '../ui/jobStatus'
 import { MandateEditor } from './MandateEditor'
 
 
 
 const GRID =
-  'grid-cols-[1.5rem_minmax(0,2.5fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_11rem_2rem]'
+  'grid-cols-[1.5rem_minmax(0,2.5fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_15rem_3.5rem]'
 const COLUMNS = ['', t('Titel'), t('Firma'), t('Ort'), t('Gehaltsband'), t('Status'), '']
 
 /** "85.000–95.000 €", or the honest gap. A mandate without a ceiling applies
@@ -51,12 +58,16 @@ function band(job: JobDTO): string | null {
   return null
 }
 
-/** The status chip, but you can change it.
+/** The status chip, and the one transition it can make.
  *
- *  The state was settable in exactly one place — four clicks deep in the
- *  Suchprofil editor, next to the salary band — which is the wrong depth for
- *  the thing you change while reading down the list. Here it is one click on
- *  the chip you were already looking at.
+ *  It was a `<select>` with three options. ELI-7's second half makes `inaktiv`
+ *  final — "kann nicht wieder geöffnet werden, muss neu angelegt werden" — and
+ *  a select is a control whose entire grammar promises you can pick the other
+ *  one back. The backend answers 409 to that; a dropdown offering it would be
+ *  a button whose job is to fail.
+ *
+ *  So: a live mandate gets one action that asks first, and an inactive one
+ *  gets a plain chip and the copy action beside it.
  *
  *  It writes through `PATCH /jobs/{id}`, which routes the change through the
  *  verification gate and leaves a receipt — the same path as editing the
@@ -70,54 +81,78 @@ function StatusPicker({
   job: JobDTO
   onChanged: (updated: JobDTO) => void
 }) {
+  const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
 
-  return (
-    <Chip
-      tone={JOB_STATUS_TONE[job.status]}
-      className={cn(
-        'relative inline-flex items-center px-1.5 py-0',
-        busy && 'opacity-60',
-        failed && 'border-coral-600',
-      )}
-    >
-      <select
-        value={job.status}
-        disabled={busy}
-        aria-label={`${job.title} — ${t('Status')}`}
-        title={failed ? t('Nicht gespeichert — bitte erneut versuchen.') : undefined}
-        onChange={async (e) => {
-          const next = e.target.value
-          if (next === job.status) return
-          setBusy(true)
-          setFailed(false)
-          try {
-            onChanged(await api.updateJob(job.id, { status: next }))
-          } catch {
-            // The select is driven by `job.status`, so a failed write simply
-            // leaves the old value on screen. The ring says the click did not
-            // take, instead of the list quietly disagreeing with the database
-            // until the next reload.
-            setFailed(true)
-          } finally {
-            setBusy(false)
-          }
-        }}
-        className="cursor-pointer appearance-none bg-transparent pr-4 font-mono text-[12px] text-inherit focus:outline-none"
+  if (!isLive(job.status)) {
+    return (
+      <span
+        title={t('Ein inaktives Mandat kann nicht wieder aktiviert werden — legen Sie es als Kopie neu an.')}
+        className="cursor-help"
       >
-        {JOB_STATUSES.map((value) => (
-          <option key={value} value={value} className="bg-cockpit-surface text-cockpit-text">
-            {jobStatusLabel(value)}
-          </option>
-        ))}
-      </select>
-      {/* `appearance-none` takes the native arrow with it, which left a chip
-          that reads exactly like the seventy read-only chips elsewhere in the
-          cockpit. The caret is the only thing saying this one does something.
-          Absolutely placed and click-through, so the whole chip stays one
-          target. */}
-      <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 opacity-70" />
+        <Chip tone={JOB_STATUS_TONE[jobStatus(job.status)]}>
+          {jobStatusLabel(job.status)}
+        </Chip>
+      </span>
+    )
+  }
+
+  if (asking) {
+    return (
+      <span className="flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px]">
+        <span className="text-gold-300">{t('endgültig?')}</span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            setFailed(false)
+            try {
+              onChanged(await api.updateJob(job.id, { status: 'inactive' }))
+              setAsking(false)
+            } catch {
+              // The chip is driven by `job.status`, so a failed write simply
+              // leaves the old value on screen. The ring says the click did
+              // not take, instead of the list quietly disagreeing with the
+              // database until the next reload.
+              setFailed(true)
+            } finally {
+              setBusy(false)
+            }
+          }}
+          className={cn(
+            'rounded-md border border-coral-600/60 px-1.5 py-0.5 text-coral-300',
+            'transition-colors hover:bg-coral-500/10',
+            busy && 'opacity-60',
+            failed && 'border-coral-400',
+          )}
+        >
+          {busy ? t('speichert…') : t('ja, inaktiv')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAsking(false)}
+          className="text-cockpit-faint transition-colors hover:text-cockpit-text"
+        >
+          {t('abbrechen')}
+        </button>
+      </span>
+    )
+  }
+
+  return (
+    <Chip tone={JOB_STATUS_TONE[jobStatus(job.status)]} className="px-1.5 py-0">
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        title={t('Mandat inaktiv setzen. Das ist endgültig — die Rolle wird später als Kopie neu angelegt.')}
+        aria-label={`${job.title} — ${t('inaktiv setzen')}`}
+        className="inline-flex cursor-pointer items-center gap-1 font-mono text-[12px] text-inherit"
+      >
+        {jobStatusLabel(job.status)}
+        <Archive className="h-3 w-3 opacity-70" />
+      </button>
     </Chip>
   )
 }
@@ -156,6 +191,11 @@ export function JobsScreen({
   // re-mounting the screen to see your own edit reads as a bug.
   const [saved, setSaved] = useState<Record<string, JobDTO>>({})
 
+  // "alte Jobs als Kopie wiederverwenden" (ELI-7) — and the only way back
+  // from `inaktiv`, which the backend refuses to undo.
+  const [copying, setCopying] = useState<string | null>(null)
+  const [copyFailed, setCopyFailed] = useState(false)
+
   const [filter, setFilter] = useState('')
   const [status, setStatus] = useState('')
   // 63 of 76 mandates carry no Muss-Kriterien, which makes the matcher's
@@ -174,7 +214,7 @@ export function JobsScreen({
 
   const rows = useMemo(() => {
     const scored = all
-      .filter((job) => !status || job.status === status)
+      .filter((job) => !status || jobStatus(job.status) === status)
       .filter((job) => !onlyUnfiltered || (job.must_have_skills ?? []).length === 0)
       .map((job) => ({
         job,
@@ -200,10 +240,31 @@ export function JobsScreen({
   // "Running" rather than "open", because a mandate being actively worked is
   // the most open thing in the book and would otherwise fall out of the one
   // number on the screen that says how much business is live.
-  const running = rows.filter((j) => j.status !== 'closed').length
+  const running = rows.filter((j) => isLive(j.status)).length
   const withoutCriteria = all.filter(
     (j) => (j.must_have_skills ?? []).length === 0,
   ).length
+
+  /** Copy, then open the Suchprofil of the copy.
+   *
+   *  A mandate is copied in order to be changed — the role is nearly the same
+   *  one, which is why it was worth copying — and the band and the
+   *  Muss-Kriterien are hard filters. Landing in the editor is the difference
+   *  between reusing a Suchprofil and inheriting one.
+   */
+  const copy = async (job: JobDTO) => {
+    setCopying(job.id)
+    setCopyFailed(false)
+    try {
+      const fresh = await api.copyJob(job.id)
+      setReloadKey((k) => k + 1)
+      setEditing(fresh)
+    } catch {
+      setCopyFailed(true)
+    } finally {
+      setCopying(null)
+    }
+  }
 
   const reset = () => {
     setFilter('')
@@ -299,6 +360,11 @@ export function JobsScreen({
           <span>
             <span className="text-cockpit-text">{running}</span> {t('laufend')}
           </span>
+          {copyFailed && (
+            <span className="text-coral-400">
+              {t('Kopie konnte nicht angelegt werden.')}
+            </span>
+          )}
           {term && rows.length > 1 && <span>{t('nach Relevanz sortiert')}</span>}
           {query && (
             <span className="flex items-center gap-1.5 rounded-md border border-gold-600/45 px-2 py-0.5 text-gold-300">
@@ -494,15 +560,30 @@ export function JobsScreen({
                     </span>
                   )}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setEditing(job)}
-                  title={t('Mandat bearbeiten')}
-                  aria-label={`${job.title} bearbeiten`}
-                  className="justify-self-end p-1 text-cockpit-faint transition-colors hover:text-mint-300"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
+                <span className="flex justify-self-end">
+                  <button
+                    type="button"
+                    disabled={copying === job.id}
+                    onClick={() => void copy(job)}
+                    title={t('Als neues Mandat kopieren — Suchprofil, Kunde und Ansprechpartner, ohne den Prozess')}
+                    aria-label={`${job.title} kopieren`}
+                    className={cn(
+                      'p-1 text-cockpit-faint transition-colors hover:text-mint-300',
+                      copying === job.id && 'opacity-50',
+                    )}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(job)}
+                    title={t('Mandat bearbeiten')}
+                    aria-label={`${job.title} bearbeiten`}
+                    className="p-1 text-cockpit-faint transition-colors hover:text-mint-300"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </span>
               </div>
             ))}
           </div>

@@ -19,6 +19,7 @@ import {
   toProcessCards,
 } from './adapters'
 import type { CockpitData } from './types'
+import { isLive } from '../ui/jobStatus'
 
 /** Which sections are showing live data — drives the section-header hints. */
 export interface LiveSections {
@@ -110,8 +111,12 @@ async function loadCockpit(): Promise<Omit<CockpitState, 'reload'>> {
 
   // ── 02 Jobscoring ──
   if (jobs) {
+    // Live business, via the one helper that knows the vocabulary. This read
+    // `=== 'open'`, which silently left out every mandate somebody had marked
+    // as actively worked — the jobscoring section then scored the quietest
+    // mandates in the book.
     const open: JobDTO[] = jobs
-      .filter((j) => j.status === 'open')
+      .filter((j) => isLive(j.status))
       .slice(0, JOBSCORING_LIMIT)
     if (open.length > 0) {
       const matches: (MatchResultDTO[] | null)[] = await Promise.all(

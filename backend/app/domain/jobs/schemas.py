@@ -5,7 +5,9 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.domain.common.enums import JobStatus, normalise_job_status
 
 
 class JobBase(BaseModel):
@@ -27,7 +29,9 @@ class JobBase(BaseModel):
     salary_min: int | None = None
     salary_max: int | None = None
     salary_currency: str = "EUR"
-    status: str = "open"
+    #: `active` or `inactive` (ELI-7). The default is what a new mandate is:
+    #: somebody is only writing it down because the client asked for it.
+    status: str = JobStatus.ACTIVE.value
 
 
 class JobCreate(JobBase):
@@ -39,8 +43,24 @@ class JobRead(JobBase):
 
     id: uuid.UUID
     tenant_id: uuid.UUID
+    #: Set when this mandate was created as a copy — see `JobCopy`.
+    copied_from_job_id: uuid.UUID | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _canonical_status(cls, value: object) -> object:
+        """The cockpit must never see "open" or "closed".
+
+        Migration 0039 rewrites those rows, but the editor sends `status`
+        back on every save, so a row the migration had not reached would
+        hand the old spelling straight back to a backend that no longer
+        knows it. That is exactly how 18 of 79 mandates became unsaveable
+        the last time this vocabulary changed; normalising on the way out
+        means the browser only ever holds a word that is still a word.
+        """
+        return normalise_job_status(value) if isinstance(value, str) else value
 
 
 class JobUpdate(BaseModel):
@@ -66,6 +86,18 @@ class JobUpdate(BaseModel):
     salary_max: int | None = Field(default=None, ge=0)
     salary_currency: str | None = None
     status: str | None = None
+
+
+class JobCopy(BaseModel):
+    """Reuse an old mandate: "alte Jobs als Kopie wiederverwenden" (ELI-7).
+
+    The other half of "inactive is final". Everything about the Suchprofil is
+    carried over; nothing about the history is. An optional new title, because
+    the commonest copy is the same role at the same client a year later and
+    the second commonest is nearly the same role.
+    """
+
+    title: str | None = Field(default=None, max_length=200)
 
 
 class CriteriaSuggestion(BaseModel):

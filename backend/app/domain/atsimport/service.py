@@ -29,7 +29,11 @@ from app.domain.atsimport.connectors.base import AtsExport
 from app.domain.candidates.employment import normalize_employment_form
 from app.domain.candidates import service as candidates_service
 from app.domain.candidates.models import Candidate
-from app.domain.common.enums import ConfidenceSource, JobStatus
+from app.domain.common.enums import (
+    ConfidenceSource,
+    JobStatus,
+    normalise_job_status,
+)
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
@@ -274,11 +278,11 @@ async def import_export(
         summary.jobs_without_manager += int(manager is None)
 
         row = existing_jobs.get(record.external_id)
-        # aiFind has one boolean, so the import can only ever say open or
-        # closed. ACTIVE is a recruiter's judgement about their own week and
-        # is never imported — an import that reset it would overwrite the one
-        # thing on this row a human put there.
-        status = JobStatus.OPEN.value if record.is_open else JobStatus.CLOSED.value
+        # aiFind has one boolean, so an import can only ever say active or
+        # inactive.
+        status = (
+            JobStatus.ACTIVE.value if record.is_open else JobStatus.INACTIVE.value
+        )
         if row is None:
             session.add(
                 Job(
@@ -293,13 +297,20 @@ async def import_export(
             )
             summary.jobs_created += 1
         else:
-            changed = False
-            for attr, value in (
+            # An import may CLOSE a mandate and must never reopen one. ELI-7
+            # makes inactive final, and aiFind keeps reporting `is_open=true`
+            # for a role the recruiter has finished with — so writing the
+            # boolean straight back would undo that decision every night,
+            # from a system that was never told about it.
+            fields = [
                 ("title", record.title),
-                ("status", status),
                 ("client_company_id", company.id if company else None),
                 ("manager_id", manager.id if manager else None),
-            ):
+            ]
+            if normalise_job_status(row.status) != JobStatus.INACTIVE.value:
+                fields.append(("status", status))
+            changed = False
+            for attr, value in fields:
                 if value is not None and getattr(row, attr) != value:
                     setattr(row, attr, value)
                     changed = True

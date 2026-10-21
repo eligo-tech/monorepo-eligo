@@ -183,7 +183,7 @@ async def test_import_builds_the_company_manager_job_graph() -> None:
         company = await s.get(Company, job.client_company_id)
     assert manager.full_name == "Stefan Graf"
     assert company.name == "Conrad Electronic SE"
-    assert job.status == "open"
+    assert job.status == "active"
 
 
 async def test_running_twice_updates_instead_of_duplicating() -> None:
@@ -763,3 +763,71 @@ def test_a_real_person_is_not_mistaken_for_a_tombstone() -> None:
         }
     }
     assert [m.full_name for m in aifind.parse_managers(payload)] == ["Dieter Userkamp"]
+
+
+async def test_an_import_may_close_a_mandate_but_never_reopen_one() -> None:
+    """ELI-7 makes `inaktiv` final, and the nightly import is the one thing
+    that could undo it without anybody clicking.
+
+    aiFind keeps reporting `is_open=true` for a role the recruiter has
+    finished with — the two systems disagree, and the recruiter is the one who
+    knows. Writing the boolean straight back would reopen the mandate every
+    night from a system that was never told about the decision.
+    """
+    companies, managers, jobs = _parsed()
+    tenant = uuid.uuid4()
+    async with SessionLocal() as s:
+        await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
+        )
+    # The source still says open; the recruiter says finished.
+    assert any(j.is_open for j in jobs)
+    async with SessionLocal() as s:
+        row = await s.scalar(
+            select(Job).where(Job.tenant_id == tenant, Job.external_id == "j1")
+        )
+        assert row.status == "active"
+        row.status = "inactive"
+        await s.commit()
+
+    async with SessionLocal() as s:
+        await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
+        )
+    async with SessionLocal() as s:
+        row = await s.scalar(
+            select(Job).where(Job.tenant_id == tenant, Job.external_id == "j1")
+        )
+    assert row.status == "inactive"
+
+
+async def test_an_import_still_closes_a_mandate_the_source_has_closed() -> None:
+    """The other half — otherwise the test above passes with an importer that
+    has simply stopped writing `status` at all."""
+    companies, managers, jobs = _parsed()
+    tenant = uuid.uuid4()
+    async with SessionLocal() as s:
+        await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=managers, jobs=jobs),
+            source="aifind",
+        )
+    closed = [
+        j.__class__(**{**j.__dict__, "is_open": False}) if j.external_id == "j1" else j
+        for j in jobs
+    ]
+    async with SessionLocal() as s:
+        await importer.import_export(
+            s, tenant_id=tenant,
+            export=AtsExport(companies=companies, managers=managers, jobs=closed),
+            source="aifind",
+        )
+    async with SessionLocal() as s:
+        row = await s.scalar(
+            select(Job).where(Job.tenant_id == tenant, Job.external_id == "j1")
+        )
+    assert row.status == "inactive"

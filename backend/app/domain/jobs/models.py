@@ -47,7 +47,18 @@ class Job(Base, IDMixin, TenantMixin, TimestampMixin):
     salary_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     salary_currency: Mapped[str] = mapped_column(String(3), default="EUR")
 
-    status: Mapped[str] = mapped_column(String(30), default="open", nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30), default="active", nullable=False
+    )
+
+    #: The mandate this one was copied from (ELI-7). An inactive mandate is
+    #: final, so working the role again means a new row — and without this the
+    #: new row cannot say that it continues the old one, which is the whole of
+    #: "wurde die Stelle nachbesetzt?". Nullable and never required: most
+    #: mandates are not copies.
+    copied_from_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("jobs.id"), nullable=True, index=True
+    )
     #: Identity in the system this row was imported from. Unique per
     #: (tenant, external_source, external_id) so a re-import updates instead of
     #: duplicating.

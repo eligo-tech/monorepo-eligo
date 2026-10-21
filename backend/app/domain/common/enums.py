@@ -318,33 +318,87 @@ class EmploymentForm(str, enum.Enum):
 
 
 class JobStatus(str, enum.Enum):
-    """Where a mandate stands. Three values, because the business has three.
+    """Where a mandate stands. Two values, because the recruiters have two.
 
-    `OPEN` is on the books — the role exists and nobody is pushing it today.
-    `ACTIVE` is being worked right now. `CLOSED` is finished, whether it was
-    filled or dropped.
+    `ACTIVE` is live business: on the books, whether or not anybody is pushing
+    it this week. `INACTIVE` is finished — and **finished is final**. ELI-7
+    says it plainly: "inaktiv kann nicht wieder geöffnet werden, muss neu
+    angelegt werden". The way to work the role again is a new mandate, which
+    is what `jobs.service.copy_job` is for. The rule itself lives in
+    `update_job`; an enum cannot see where a row is coming from.
 
-    The vocabulary used to be ("open", "on_hold", "filled", "cancelled"), and
-    three of those four had no rows anywhere while "closed" — which 18 live
-    mandates actually carry, written by the aiFind importer from its `is_open`
-    boolean — was not in the list at all. So the Jobs screen offered four
-    filters that between them could not show those 18, and a PATCH setting the
-    status a row already had came back "unknown status 'closed'". Naming what
-    is in the database is the fix; nothing migrates.
+    It was ("open", "active", "closed") for a day, and ("open", "on_hold",
+    "filled", "cancelled") before that. Three values split "is this live
+    business" across two members that nothing on screen could tell apart:
+    `LIVE_JOB_STATUSES` had to name both, the Jobs filter offered both, and
+    `active` had no rows anywhere because the importer only has a boolean.
 
-    Why filled and cancelled are not here: both are *reasons* a mandate closed,
-    not states it sits in, and the one place the difference matters —
-    "this job was filled, create the next one" — reads it off the pipeline,
-    where the placement actually happened.
+    Why there is no `filled` or `cancelled`: both are *reasons* a mandate went
+    inactive, not states it sits in, and the one place the difference matters
+    — "this was filled, open the next" — reads it off the pipeline, where the
+    placement actually happened.
     """
 
-    OPEN = "open"
     ACTIVE = "active"
-    CLOSED = "closed"
+    INACTIVE = "inactive"
 
 
-#: Mandates that still count as business: everything that is not finished.
-#: The cockpit's mandate figure and a manager's `open_job_count` are both
-#: "how much is running", and an ACTIVE mandate vanishing from a count called
-#: "offen" is the kind of wrong number nobody reports because it looks right.
-LIVE_JOB_STATUSES = frozenset({JobStatus.OPEN.value, JobStatus.ACTIVE.value})
+#: Spellings in the record and what they mean now. Read off the live
+#: workspace, not off the importer's documentation: 61 rows say "open" and 18
+#: say "closed", written by the aiFind importer from its `is_open` boolean.
+#: `normalise_job_status` folds them, and migration 0039 rewrites them.
+_STORED_JOB_STATUSES: dict[str, "JobStatus"] = {
+    "open": JobStatus.ACTIVE,
+    "closed": JobStatus.INACTIVE,
+}
+
+#: Spellings that were only ever in the code. They are deliberately NOT
+#: accepted on the way in: "filled" has no rows to heal, and quietly storing
+#: it as `inactive` would answer a question the sender asked ("why did it
+#: close?") by discarding it.
+RETIRED_JOB_STATUSES = frozenset({"on_hold", "filled", "cancelled"})
+
+
+def normalise_job_status(raw: str | None) -> str:
+    """A stored status in today's vocabulary. Unknown values pass through.
+
+    Passing an unknown value through rather than defaulting it is what keeps
+    `update_job` able to refuse it: a normaliser that answered `active` for
+    anything it did not recognise would turn a typo into live business.
+    """
+    value = (raw or "").strip()
+    if not value:
+        return JobStatus.ACTIVE.value
+    stored = _STORED_JOB_STATUSES.get(value.lower())
+    if stored is not None:
+        return stored.value
+    try:
+        return JobStatus(value.lower()).value
+    except ValueError:
+        return value
+
+
+def job_status_spellings(canonical: str) -> frozenset[str]:
+    """Every spelling in the record that means `canonical`.
+
+    A query filters the COLUMN, not the normaliser. `WHERE status =
+    'inactive'` finds none of the 18 rows that say "closed" until migration
+    0039 has run, and a status filter that returns the wrong book of business
+    is a thing nobody reports, because it looks like an answer.
+    """
+    wanted = normalise_job_status(canonical)
+    return frozenset(
+        {wanted}
+        | {
+            raw
+            for raw, mapped in _STORED_JOB_STATUSES.items()
+            if mapped.value == wanted
+        }
+    )
+
+
+#: Mandates that still count as business. The cockpit's mandate figure and a
+#: manager's `open_job_count` are both "how much is running", and this is the
+#: one place that decides it — including the legacy spelling, so a row the
+#: migration has not reached does not quietly drop out of the count.
+LIVE_JOB_STATUSES = job_status_spellings(JobStatus.ACTIVE.value)

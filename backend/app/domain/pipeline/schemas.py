@@ -7,9 +7,13 @@ import uuid
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.common.enums import ApplicationStatus, PipelineStage
+from app.domain.common.enums import (
+    ApplicationStatus,
+    PipelineStage,
+    normalise_job_status,
+)
 
 
 class ApplicationCreate(BaseModel):
@@ -248,8 +252,17 @@ class ProcessJobRead(BaseModel):
     salary_min: int | None = None
     salary_max: int | None = None
     salary_currency: str | None = None
+    #: The mandate's own status, in today's vocabulary — `active` or
+    #: `inactive` (ELI-7). Normalised here as well as in `JobRead`: one column
+    #: reaching the browser as two different words through two endpoints is
+    #: how a screen ends up with its own private mapping.
     status: str | None = None
     candidates: list[ProcessCandidateRead]
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _canonical_status(cls, value: object) -> object:
+        return normalise_job_status(value) if isinstance(value, str) else value
 
 
 class AuswertungParse(BaseModel):

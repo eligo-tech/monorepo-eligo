@@ -22,6 +22,7 @@ import type { CompanyDTO, JobDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { searchScore } from '@/lib/search'
+import { isLive, jobStatusLabel } from '../../ui/jobStatus'
 
 export function AssignToMandate({
   candidateId,
@@ -74,7 +75,7 @@ export function AssignToMandate({
     else
       scored.sort(
         (a, b) =>
-          Number(b.job.status === 'open') - Number(a.job.status === 'open') ||
+          Number(isLive(b.job.status)) - Number(isLive(a.job.status)) ||
           a.job.title.localeCompare(b.job.title, 'de'),
       )
     return scored.map((r) => r.job).slice(0, 40)
@@ -159,7 +160,9 @@ export function AssignToMandate({
                 <span className="block truncate text-[11.5px] text-cockpit-faint">
                   {companyName(job.client_company_id) || '—'}
                   {job.location ? ` · ${job.location}` : ''}
-                  {job.status !== 'open' ? ` · ${job.status}` : ''}
+                  {/* Only worth saying when it is NOT live business —
+                      otherwise seventy rows repeat the same word. */}
+                  {!isLive(job.status) ? ` · ${jobStatusLabel(job.status)}` : ''}
                 </span>
               </span>
               {already ? (

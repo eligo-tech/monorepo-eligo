@@ -19,6 +19,7 @@ from app.domain.managers.schemas import (
 from app.domain.jobs import service
 from app.domain.jobs.schemas import (
     CriteriaSuggestion,
+    JobCopy,
     JobCreate,
     JobRead,
     JobUpdate,
@@ -31,9 +32,15 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 async def list_jobs(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     limit: int = Query(default=100, ge=1, le=500),
+    status: str | None = Query(
+        default=None,
+        description="active | inactive. Legacy spellings are understood.",
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> list[JobRead]:
-    rows = await service.list_jobs(db, tenant_id=tenant_id, limit=limit)
+    rows = await service.list_jobs(
+        db, tenant_id=tenant_id, limit=limit, status=status
+    )
     return [JobRead.model_validate(r) for r in rows]
 
 
@@ -218,8 +225,37 @@ async def update_job(
             patch=payload,
             editor=actor.name,
         )
+    except service.ReopeningRefused as exc:
+        # 409, not 422: the payload is perfectly valid and would be accepted
+        # on any other mandate. What refuses it is the state this one is in.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except (service.InvalidBand, service.ContactNotAtClient) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+    return JobRead.model_validate(row)
+
+
+@router.post(
+    "/{job_id}/copy", response_model=JobRead, status_code=status.HTTP_201_CREATED
+)
+async def copy_job(
+    job_id: uuid.UUID,
+    payload: JobCopy | None = None,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> JobRead:
+    """Reuse an old mandate: "alte Jobs als Kopie wiederverwenden" (ELI-7).
+
+    The Suchprofil comes across; the pipeline, the briefings and the feedback
+    do not. The copy is ACTIVE and knows which mandate it came from.
+    """
+    row = await service.copy_job(
+        db,
+        tenant_id=tenant_id,
+        job_id=job_id,
+        title=payload.title if payload else None,
+    )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     return JobRead.model_validate(row)
