@@ -13,11 +13,12 @@ import { locale } from '@/i18n/format'
 import { t } from '@/i18n'
 
 import { useRef, useState } from 'react'
-import { Trash2, X } from 'lucide-react'
+import { Copy, Trash2, X } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import { cn } from '@/lib/cn'
 import { Panel } from './primitives'
 import { Button, FIELD } from './forms'
+import type { JobDTO } from '@/api/types'
 import type { ProcessCard, ProcessStep } from '../data/types'
 
 const TZ = 'Europe/Berlin'
@@ -80,6 +81,67 @@ function fromBerlinInput(value: string): string | null {
   return toBerlinInput(iso) === value.trim().slice(0, 16) ? iso : null
 }
 
+// ── Placement: the question at the moment a role is filled (ELI-8) ──────────
+//
+// "wenn ein job mit einem Kandidaten besetzt wird, soll die Frage kommen ob
+// dieser job nochmal erstellt werden soll."
+//
+// The mechanism has existed since ELI-7 — `POST /jobs/{id}/copy`, and a copy
+// button on the Jobs list. What was missing is the moment. A recruiter who
+// has just filled a role is not on the Jobs list, they are in this dialog,
+// and a copy somebody has to remember to make later is a copy that does not
+// get made. What it costs to forget is not tidiness: the next search then
+// runs on the mandate that is already filled, and that mandate's Laufzeit,
+// its ratios and its dates end up describing two searches at once.
+
+/** The step that means "filled". Mirrors `derive_stage` in
+ *  backend/app/domain/pipeline/service.py, which reads `vertrag` as PLACED. */
+const PLACEMENT_STEP = 'vertrag'
+
+/** Only the fields the placement question reads, so a `ProcessStep` off the
+ *  card and a `ProcessStepDTO` off the wire can both be passed in — and so a
+ *  test can state a case in one line. */
+export interface StepFacts {
+  key: string
+  scheduledAt?: string | null
+  doneAt?: string | null
+  outcome?: string | null
+}
+
+/** Reached, counted the way the backend counts it: a booked date is a
+ *  commitment, and so is a green cell. */
+const isReached = (s: StepFacts): boolean =>
+  !!(s.doneAt || s.scheduledAt || s.outcome === 'pass')
+
+/** Do these steps say the mandate is filled?
+ *
+ *  A red cell anywhere ends the process — `derive_stage` returns REJECTED
+ *  before it ever looks at `vertrag` — so a contract that fell through is not
+ *  a placement. Asking "noch einmal anlegen?" there would be asking about a
+ *  search that did not finish.
+ */
+export function isPlaced(steps: StepFacts[]): boolean {
+  if (steps.some((s) => s.outcome === 'out')) return false
+  return steps.some((s) => s.key === PLACEMENT_STEP && isReached(s))
+}
+
+/** Did THIS save fill the mandate?
+ *
+ *  The transition, not the state. Someone who reopens the Vertrag step to fix
+ *  its date, or to add "Startdatum 01.03.", is not placing anybody a second
+ *  time — and a dialog that asks again on every edit is one people learn to
+ *  dismiss without reading, which is how the question stops working at all.
+ */
+export function placementJustHappened(before: StepFacts[], saved: StepFacts): boolean {
+  if (isPlaced(before)) return false
+  // A step nobody has touched yet has no row, so it may be missing from the
+  // card entirely rather than present and empty.
+  const after = before.some((s) => s.key === saved.key)
+    ? before.map((s) => (s.key === saved.key ? saved : s))
+    : [...before, saved]
+  return isPlaced(after)
+}
+
 const OUTCOMES: {
   value: 'open' | 'pass' | 'out'
   label: string
@@ -120,6 +182,16 @@ export function StepEditor({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const terminRef = useRef<HTMLInputElement>(null)
+  // 'form' is the step editor; the other two are the ELI-8 question and its
+  // answer, shown in the same dialog because that is where the recruiter
+  // already is.
+  const [phase, setPhase] = useState<'form' | 'ask' | 'copied'>('form')
+  const [fresh, setFresh] = useState<JobDTO | null>(null)
+  // What the card said BEFORE this dialog wrote anything. Snapshotted at
+  // mount on purpose: `onSaved` refreshes the board behind the dialog, and a
+  // `card` prop that already carried the save would make the transition
+  // invisible and the question never fire.
+  const [stepsBefore] = useState<StepFacts[]>(() => card.steps)
 
   const save = async () => {
     // A half-filled date input (a day but no time, say) reports an EMPTY value
@@ -169,6 +241,22 @@ export function StepEditor({
         return
       }
       onSaved()
+      // The one moment the product knows a role has just been filled.
+      // Without a mandate behind the card there is nothing to copy — demo
+      // cards and the coarse board join have no job row.
+      if (
+        card.jobId &&
+        placementJustHappened(stepsBefore, {
+          key: step.key,
+          scheduledAt: saved.scheduled_at,
+          doneAt: saved.done_at,
+          outcome: saved.outcome,
+        })
+      ) {
+        setBusy(false)
+        setPhase('ask')
+        return
+      }
       onClose()
     } catch (e) {
       setError(
@@ -181,6 +269,41 @@ export function StepEditor({
       setBusy(false)
     }
   }
+
+  /** "Ja" — the same `POST /jobs/{id}/copy` the Jobs list calls, from the
+   *  moment it is actually wanted. */
+  const copyMandate = async () => {
+    if (!card.jobId) return
+    setBusy(true)
+    setError(null)
+    try {
+      setFresh(await api.copyJob(card.jobId))
+      setPhase('copied')
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? t('Das Mandat konnte nicht kopiert werden (HTTP {status}).', { status: e.status })
+          : t('Das Mandat konnte nicht kopiert werden — keine Antwort vom Server.'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (phase !== 'form') {
+    return (
+      <PlacementQuestion
+        card={card}
+        phase={phase}
+        fresh={fresh}
+        busy={busy}
+        error={error}
+        onCopy={() => void copyMandate()}
+        onClose={onClose}
+      />
+    )
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -294,6 +417,105 @@ export function StepEditor({
               {busy ? t('Speichert…') : t('Speichern')}
             </Button>
           </div>
+        </Panel>
+      </div>
+    </div>
+  )
+}
+
+/** The ELI-8 question, and what follows from answering it.
+ *
+ *  Its own dialog rather than a phase inside the editor's: once the role is
+ *  filled, the step form has nothing left to say, and the recruiter is being
+ *  asked about the mandate, not about the cell they just ticked.
+ *
+ *  Deliberately not `window.confirm`: the reason to say yes — the finished
+ *  process stays where it is, the new search starts on its own numbers — is
+ *  the whole argument, and it does not fit in a browser dialog.
+ */
+function PlacementQuestion({
+  card,
+  phase,
+  fresh,
+  busy,
+  error,
+  onCopy,
+  onClose,
+}: {
+  card: ProcessCard
+  phase: 'ask' | 'copied'
+  fresh: JobDTO | null
+  busy: boolean
+  error: string | null
+  onCopy: () => void
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <Panel className="space-y-4 p-5">
+          <div className="flex items-start gap-3">
+            <div>
+              <h3 className="text-[16px] font-semibold text-cockpit-text">
+                {t('Position besetzt')}
+              </h3>
+              <p className="mt-0.5 font-mono text-[12px] text-cockpit-faint">
+                {card.candidateName} · {card.role}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('Schließen')}
+              className="ml-auto text-cockpit-faint transition-colors hover:text-cockpit-text"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {phase === 'copied' && fresh ? (
+            <>
+              <p className="text-[14px] leading-relaxed text-cockpit-text">
+                {t('Neues Mandat angelegt — gleiches Suchprofil, eigener Prozess.')}
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button onClick={onClose}>{t('Schließen')}</Button>
+                <Button
+                  tone="primary"
+                  onClick={() => {
+                    // The same spelling CockpitShell navigates with, so the
+                    // copy opens in the per-mandate view instead of reloading.
+                    window.location.hash = `cockpit/${fresh.id}`
+                    onClose()
+                  }}
+                >
+                  {t('Mandat öffnen')}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-[14px] leading-relaxed text-cockpit-text">
+                {t('Soll dieses Mandat noch einmal angelegt werden?')}
+              </p>
+              <p className="text-[13px] leading-relaxed text-cockpit-dim">
+                {t('Die Kopie übernimmt Suchprofil, Kunde und Ansprechpartner und startet mit leerem Prozess. Der abgeschlossene Prozess bleibt an diesem Mandat — so beschreiben Laufzeit und Quoten weiterhin genau eine Suche.')}
+              </p>
+
+              {error && <p className="text-[13px] text-coral-400">{error}</p>}
+
+              <div className="flex justify-end gap-2">
+                <Button onClick={onClose}>{t('Nein')}</Button>
+                <Button tone="primary" onClick={onCopy} disabled={busy}>
+                  <Copy className="h-4 w-4" />
+                  {busy ? t('Legt an…') : t('Ja, Mandat kopieren')}
+                </Button>
+              </div>
+            </>
+          )}
         </Panel>
       </div>
     </div>
