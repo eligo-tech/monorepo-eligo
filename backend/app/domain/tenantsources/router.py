@@ -14,6 +14,7 @@ from app.domain.atsimport import factory
 from app.domain.tenantsources import runner, service
 from app.domain.tenantsources.schemas import (
     ImportRequestRead,
+    ImportRequestWrite,
     TenantSourceRead,
     TenantSourceWrite,
 )
@@ -84,6 +85,7 @@ async def delete_source(
 @router.post("/{kind}/import", response_model=ImportRequestRead)
 async def request_import(
     kind: str,
+    payload: ImportRequestWrite | None = None,
     actor: Actor = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ImportRequestRead:
@@ -94,14 +96,25 @@ async def request_import(
     collection stays a logged, scheduled activity (see `service.py`).
     """
     try:
-        await service.request_import(db, tenant_id=actor.tenant_id, kind=kind)
+        await service.request_import(
+            db,
+            tenant_id=actor.tenant_id,
+            kind=kind,
+            scope=payload.scope if payload else "full",
+        )
     except service.UnknownSource as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except service.NotConfigured as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    basic = payload is not None and payload.scope == "basic"
     return ImportRequestRead(
         queued=True,
-        detail="Import angefordert — der nächste Datenlauf holt die Daten ab.",
+        detail=(
+            "Import angefordert — der nächste Datenlauf holt die Listen ab."
+            if basic
+            else "Import angefordert — der nächste Datenlauf holt die Daten "
+            "samt Managern und Notizen ab."
+        ),
     )
 
 

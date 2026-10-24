@@ -5,6 +5,8 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -24,6 +26,7 @@ class TenantSourceRead(BaseModel):
     username: str
     status: str
     has_secret: bool
+    import_scope: str
     import_requested_at: dt.datetime | None
     last_run_at: dt.datetime | None
     last_result: dict
@@ -41,6 +44,16 @@ class TenantSourceWrite(BaseModel):
     secret: str | None = Field(default=None, min_length=1, max_length=512)
     label: str | None = Field(default=None, max_length=160)
     status: str | None = None
+
+
+class ImportRequestWrite(BaseModel):
+    """Which pass the next run should make (ELI-14).
+
+    Optional, and "full" when absent, so a caller written before this field
+    existed keeps the behaviour it had.
+    """
+
+    scope: Literal["full", "basic"] = "full"
 
 
 class ImportRequestRead(BaseModel):

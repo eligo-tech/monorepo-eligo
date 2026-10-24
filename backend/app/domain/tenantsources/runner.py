@@ -43,6 +43,11 @@ async def import_into(
 async def run_one(row: TenantSource, *, with_details: bool = True) -> dict:
     """Fetch and import one source, recording the outcome either way.
 
+    `with_details` is the run-wide CEILING, not the decision: a workspace
+    that asked for the quick pass gets the quick pass even on a full run
+    (ELI-14). The ceiling stays so an operator can still force a cheap sweep
+    across every tenant when the source is struggling.
+
     A failure is data, not an exception: the workspace needs to see "Login
     abgelehnt" in its own settings, and the runner needs to carry on to the
     next tenant's request.
@@ -64,7 +69,7 @@ async def run_one(row: TenantSource, *, with_details: bool = True) -> dict:
         connector = factory.get_connector(kind)
         export = await connector.fetch(
             Credentials(username=username, secret=password),
-            with_details=with_details,
+            with_details=with_details and row.import_scope != "basic",
         )
         summary = await import_into(
             tenant_id=tenant_id, export=export, source=connector.key
