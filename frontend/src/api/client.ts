@@ -1,6 +1,7 @@
 // Thin typed fetch client for the Eligo Labs backend.
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
+  JobSpecProposalDTO,
   CandidateDTO,
   CandidateUpdatePayload,
   CompanyDTO,
@@ -178,6 +179,18 @@ export const api = {
     request<JobDTO>(`/jobs/${jobId}/copy`, {
       method: 'POST',
       body: JSON.stringify(title ? { title } : {}),
+    }),
+
+  /** Read a job advert into a proposed Suchprofil (ELI-6).
+   *
+   *  Creates nothing: the answer fills the form in and the recruiter saves
+   *  it. Pass `url` for a link, or `text` when the advert sits behind a
+   *  login or a portal that renders in JavaScript — which most German
+   *  applicant-tracking portals do. */
+  parseJobSpec: (body: { url?: string; text?: string }) =>
+    request<JobSpecProposalDTO>('/jobs/parse-spec', {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 
   /** Muss-Kriterien the mandate's own title names, drawn from the workspace's

@@ -17,11 +17,14 @@ from app.domain.managers.schemas import (
     ManagerInteractionRead,
 )
 from app.domain.jobs import service
+from app.domain.jobs import jobspec
 from app.domain.jobs.schemas import (
     CriteriaSuggestion,
     JobCopy,
     JobCreate,
     JobRead,
+    JobSpecProposal,
+    JobSpecRequest,
     JobUpdate,
 )
 
@@ -259,3 +262,54 @@ async def copy_job(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     return JobRead.model_validate(row)
+
+
+@router.post("/parse-spec", response_model=JobSpecProposal)
+async def parse_spec(
+    payload: JobSpecRequest,
+    actor: Actor = Depends(get_current_actor),
+) -> JobSpecProposal:
+    """Read a job advert and PROPOSE a Suchprofil. Creates nothing (ELI-6).
+
+    Why this is not ingestion, and why that distinction is enforced in
+    `jobspec/fetch.py` rather than asserted here: it reads one document the
+    recruiter is already holding, for their own mandate. It writes nothing,
+    touches no `hub_*` table, follows no links and runs on no schedule. The
+    comparison is uploading the advert as a PDF, which this product has
+    always allowed — not crawling a board, which RULE 1 forbids and this
+    cannot become.
+
+    Why it returns a proposal instead of a `Job`: `must_have_skills` feed
+    `apply_hard_filters`, which EXCLUDES candidates. A model may suggest
+    them; a human decides (RULE 5, GDPR Art. 22). The form the recruiter was
+    going to fill in arrives filled in, and they press save.
+    """
+    text = (payload.text or "").strip()
+    document_title = ""
+    source_url = (payload.url or "").strip() or None
+
+    if not text and source_url:
+        try:
+            raw = await jobspec.fetch_posting(source_url)
+        except jobspec.NotFetchable as exc:
+            # 422, not 502: the URL is the payload, and the recruiter is the
+            # one who can fix it — usually by pasting the text instead.
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+            ) from exc
+        text, document_title = jobspec.html_to_text(raw)
+    elif text.lstrip().startswith("<"):
+        # Pasted straight out of "view source".
+        text, document_title = jobspec.html_to_text(text)
+
+    if len(text) < 80:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Aus dieser Seite ließ sich kein Anzeigentext lesen — bitte den "
+            "Text der Anzeige einfügen.",
+        )
+
+    extractor = jobspec.get_job_spec_extractor()
+    spec = extractor.extract(text, document_title)
+    return JobSpecProposal(**spec.as_dict(), source_url=source_url)
+
