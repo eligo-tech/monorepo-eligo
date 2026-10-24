@@ -1,4 +1,4 @@
-// Domain types for the eligo-tech mockup.
+// Domain types for the Eligo Labs mockup.
 // These intentionally mirror the backend canonical model (candidate / job /
 // application / match) so the mock data can later be swapped for live API calls.
 

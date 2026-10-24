@@ -1,4 +1,4 @@
-# eligo-tech — AI-native Recruiting Platform
+# Eligo Labs — AI-native Recruiting Platform
 
 A verified-AI recruiting CRM. The system-of-record stays deliberately simple and
 reliable; a layer of narrow agents continuously reads, enriches, matches and

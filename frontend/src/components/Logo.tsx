@@ -1,4 +1,4 @@
-/** eligo-tech wordmark used in the sidebar header. */
+/** Eligo Labs wordmark used in the sidebar header. */
 export function Logo() {
   return (
     <div className="flex items-center gap-2.5">
@@ -13,7 +13,7 @@ export function Logo() {
         </svg>
       </span>
       <span className="text-[17px] font-semibold tracking-tight text-white">
-        eligo<span className="text-brand-300">-tech</span>
+        eligo<span className="text-brand-300">labs</span>
       </span>
     </div>
   )

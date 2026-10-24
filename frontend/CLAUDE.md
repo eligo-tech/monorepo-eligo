@@ -1,4 +1,4 @@
-# eligo-tech · Frontend
+# Eligo Labs · Frontend
 
 React + TypeScript + Vite + Tailwind. The product surface is the **Cockpit** — a
 dark, full-bleed dashboard that shows what the system noticed, where revenue stands,
