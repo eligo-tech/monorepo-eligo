@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.common.enums import JobStatus, normalise_job_status
 
@@ -112,3 +112,53 @@ class CriteriaSuggestion(BaseModel):
     #: How many of this workspace's candidates carry the skill — a criterion
     #: nobody has filters everyone out, so the number is part of the offer.
     candidates: int = 0
+
+
+# ── Reading an advert into a Suchprofil (ELI-6) ───────────────────────────
+
+
+class JobSpecRequest(BaseModel):
+    """A link to an advert, or the advert pasted in.
+
+    Both, because the link is what a recruiter has and the paste is what
+    works when the advert sits behind a login or a portal that renders in
+    JavaScript — which is most German applicant-tracking portals.
+    """
+
+    url: str | None = None
+    text: str | None = Field(default=None, max_length=200_000)
+
+    @model_validator(mode="after")
+    def _one_of(self) -> JobSpecRequest:
+        if not (self.url or "").strip() and not (self.text or "").strip():
+            raise ValueError("either url or text is required")
+        return self
+
+
+class ProposedValue(BaseModel):
+    """A value the extractor read, and how plainly the advert stated it."""
+
+    value: str
+    confidence: float
+
+
+class JobSpecProposal(BaseModel):
+    """What the advert appears to say. NOT a mandate.
+
+    No `Job` is created by reading an advert. The recruiter gets a filled-in
+    form and presses save, because `must_have_skills` are hard filters that
+    exclude people and ARCHITECTURE.md RULE 5 keeps that decision human.
+    """
+
+    title: ProposedValue | None = None
+    location: ProposedValue | None = None
+    salary_min: ProposedValue | None = None
+    salary_max: ProposedValue | None = None
+    employment_form: ProposedValue | None = None
+    must_have_skills: list[ProposedValue] = Field(default_factory=list)
+    #: The advert's own words, so a proposal can be checked without
+    #: reopening the link.
+    excerpt: str = ""
+    #: Where it came from — echoed back for the receipt the save writes.
+    source_url: str | None = None
+

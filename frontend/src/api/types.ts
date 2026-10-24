@@ -963,3 +963,26 @@ export interface NoticeCapabilityDTO {
   provider: string
   sender: string | null
 }
+
+/** One value read out of a job advert, and how plainly the advert said it. */
+export interface ProposedValueDTO {
+  value: string
+  confidence: number
+}
+
+/** What a job advert appears to say (ELI-6). **Not** a mandate — reading an
+ *  advert creates nothing. `must_have_skills` are hard filters that exclude
+ *  candidates, so they arrive as suggestions a human ticks. */
+export interface JobSpecProposalDTO {
+  title: ProposedValueDTO | null
+  location: ProposedValueDTO | null
+  salary_min: ProposedValueDTO | null
+  salary_max: ProposedValueDTO | null
+  employment_form: ProposedValueDTO | null
+  must_have_skills: ProposedValueDTO[]
+  /** The advert's own words, so a proposal can be checked without reopening
+   *  the link. */
+  excerpt: string
+  source_url: string | null
+}
+
