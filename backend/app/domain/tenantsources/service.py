@@ -69,11 +69,18 @@ def as_read(row: TenantSource) -> dict:
         "username": row.username,
         "status": row.status,
         "has_secret": bool(row.secret_encrypted),
+        "import_scope": row.import_scope,
         "import_requested_at": row.import_requested_at,
         "last_run_at": row.last_run_at,
         "last_result": row.last_result or {},
         "last_error": row.last_error,
     }
+
+
+#: What a requested run may fetch (ELI-14). "full" walks every manager and
+#: candidate for their details and notes — the slow pass, and the only one
+#: that produces Gesprächsnotizen. "basic" takes the lists and stops.
+IMPORT_SCOPES = ("full", "basic")
 
 
 async def list_sources(
@@ -147,9 +154,16 @@ async def delete_source(
 
 
 async def request_import(
-    session: AsyncSession, *, tenant_id: uuid.UUID, kind: str
+    session: AsyncSession, *, tenant_id: uuid.UUID, kind: str, scope: str = "full"
 ) -> TenantSource:
-    """Queue an import. Idempotent: asking twice before the run is one import."""
+    """Queue an import. Idempotent: asking twice before the run is one import.
+
+    `scope` is recorded even when a request is already outstanding, and the
+    WIDER of the two wins: somebody who asked for the quick pass and then
+    decides they want the managers too would otherwise have their second
+    request silently swallowed by the idempotency above, and would wait a
+    whole cycle to find out.
+    """
     row = await get_source(session, tenant_id=tenant_id, kind=kind)
     if row is None:
         raise UnknownSource(f"{kind} ist für diesen Workspace nicht eingerichtet")
@@ -157,8 +171,19 @@ async def request_import(
         raise NotConfigured("Für diese Quelle sind keine Zugangsdaten hinterlegt.")
     if row.status != "active":
         raise NotConfigured("Diese Quelle ist pausiert.")
-    if row.import_requested_at is None:
-        row.import_requested_at = dt.datetime.now(dt.UTC)
+    if scope not in IMPORT_SCOPES:
+        raise ValueError(f"unknown import scope {scope}")
+    outstanding = row.import_requested_at is not None
+    # With nothing queued, the ask IS the scope. With a request already
+    # waiting, the wider of the two wins — see the docstring.
+    wanted = (
+        ("full" if "full" in (row.import_scope, scope) else scope)
+        if outstanding
+        else scope
+    )
+    if not outstanding or wanted != row.import_scope:
+        row.import_scope = wanted
+        row.import_requested_at = row.import_requested_at or dt.datetime.now(dt.UTC)
         await session.commit()
         await session.refresh(row)
     return row

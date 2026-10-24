@@ -50,6 +50,19 @@ class TenantSource(Base, IDMixin, TenantMixin, TimestampMixin):
     #: password later.
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
 
+    #: What the next run should fetch (ELI-14). "full" walks every manager
+    #: and candidate for their details and notes; "basic" takes the lists
+    #: only and is minutes rather than an hour.
+    #:
+    #: It lives on the ROW, not on the runner, because the workspace is the
+    #: one who knows which it wants and the runner executes hours later.
+    #: Before this, `with_details` was a query parameter on the operator
+    #: endpoint — one global switch for every tenant in the run, which the
+    #: workspace asking for the import could neither see nor set.
+    import_scope: Mapped[str] = mapped_column(
+        String(20), default="full", server_default="full", nullable=False
+    )
+
     #: Set when the workspace asks for an import; cleared when one runs. This
     #: single field is the whole request queue, and it is idempotent: asking
     #: twice before the job runs is one import, not two.

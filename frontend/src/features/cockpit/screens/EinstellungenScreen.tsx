@@ -117,11 +117,11 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
     setBusy(false)
   }
 
-  async function requestImport() {
+  async function requestImport(scope: 'full' | 'basic' = 'full') {
     setBusy(true)
     setError(null)
     try {
-      const result = await api.requestImport(kind)
+      const result = await api.requestImport(kind, scope)
       setNotice(result.detail)
       await reload()
     } catch (e) {
@@ -267,10 +267,19 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
                 <Button tone="primary" onClick={save} disabled={busy}>
                   {source ? 'Zugang aktualisieren' : t('Quelle verbinden')}
                 </Button>
+                {/* Two asks, not one with a checkbox: they differ by an
+                    hour of someone else's API, and the slow one is the only
+                    one that brings Gesprächsnotizen back. A recruiter
+                    choosing between them should see both named (ELI-14). */}
                 {source?.has_secret && (
-                  <Button onClick={requestImport} disabled={busy}>
-                    {t('Import anfordern')}
-                  </Button>
+                  <>
+                    <Button tone="primary" onClick={() => void requestImport('full')} disabled={busy}>
+                      {t('Manager & Notizen laden')}
+                    </Button>
+                    <Button onClick={() => void requestImport('basic')} disabled={busy}>
+                      {t('Nur Listen aktualisieren')}
+                    </Button>
+                  </>
                 )}
                 {source && (
                   <Button onClick={disconnect} disabled={busy} className="ml-auto">
@@ -295,7 +304,9 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
                 <div className="flex items-center gap-2 text-gold-300">
                   <Loader2 className="h-3.5 w-3.5" />
                   {t('Import angefordert')} {dateTimeDe(source.import_requested_at)}{' '}
-                  {t('— wartet auf den nächsten Datenlauf.')}
+                  {source.import_scope === 'basic'
+                    ? t('— nur Listen, wartet auf den nächsten Datenlauf.')
+                    : t('— mit Managern und Notizen, wartet auf den nächsten Datenlauf.')}
                 </div>
               )}
               {source.last_run_at && !source.last_error && (

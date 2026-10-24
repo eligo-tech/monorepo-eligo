@@ -845,6 +845,9 @@ export interface TenantSourceDTO {
   username: string
   status: string
   has_secret: boolean
+  /** What the next run will fetch — "full" walks every manager and candidate
+   *  for their details and notes, "basic" takes the lists only (ELI-14). */
+  import_scope: string
   import_requested_at: string | null
   last_run_at: string | null
   last_result: Record<string, number | string>

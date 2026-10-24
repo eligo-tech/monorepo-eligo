@@ -656,9 +656,13 @@ export const api = {
   deleteTenantSource: (kind: string) =>
     request<void>(`/tenant-sources/${kind}`, { method: 'DELETE' }),
   /** Ask for an import. Queues it — the scheduled runner performs it. */
-  requestImport: (kind: string) =>
+  /** Queue an import. `scope` picks the pass the next run makes (ELI-14):
+   *  "full" walks every manager and candidate for their details and their
+   *  notes; "basic" takes the lists and is minutes rather than an hour. */
+  requestImport: (kind: string, scope: 'full' | 'basic' = 'full') =>
     request<{ queued: boolean; detail: string }>(`/tenant-sources/${kind}/import`, {
       method: 'POST',
+      body: JSON.stringify({ scope }),
     }),
 
   /** Companies this tenant's candidates named as other active processes. */

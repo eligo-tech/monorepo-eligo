@@ -250,3 +250,97 @@ async def test_a_bad_login_reads_as_a_bad_login() -> None:
     )
     # Anything else still says something, and never a stack trace.
     assert "fehlgeschlagen" in runner._human_reason(ValueError("boom"))
+
+
+# ── ELI-14: the workspace chooses what the next run fetches ────────────────
+#
+# The slow half of an import is the per-row pass — every manager and every
+# candidate fetched individually — and it is the only pass that produces
+# Gesprächsnotizen. Before this, that choice was a query parameter on the
+# operator endpoint: one switch for every tenant in the run, set by whoever
+# triggered the cron, invisible to the workspace that asked.
+
+
+async def test_the_default_scope_is_the_full_pass() -> None:
+    row = await _connect()
+    assert row.import_scope == "full"
+
+
+async def test_a_workspace_can_ask_for_the_quick_pass() -> None:
+    await _connect()
+    async with SessionLocal() as s:
+        row = await service.request_import(
+            s, tenant_id=TENANT, kind="aifind", scope="basic"
+        )
+    assert row.import_scope == "basic"
+    assert row.import_requested_at is not None
+
+
+async def test_widening_an_outstanding_request_is_not_swallowed() -> None:
+    """The idempotency above must not eat a second, BIGGER ask.
+
+    Somebody who requests the quick pass and then decides they want their
+    managers too would otherwise wait a whole cycle to discover that the
+    second press did nothing.
+    """
+    await _connect()
+    async with SessionLocal() as s:
+        first = await service.request_import(
+            s, tenant_id=TENANT, kind="aifind", scope="basic"
+        )
+        queued_at = first.import_requested_at
+        second = await service.request_import(
+            s, tenant_id=TENANT, kind="aifind", scope="full"
+        )
+    assert second.import_scope == "full"
+    # Still ONE import: widening the scope must not push the queue position.
+    assert second.import_requested_at == queued_at
+
+
+async def test_narrowing_an_outstanding_request_keeps_the_wider_one() -> None:
+    # The other direction has no safe answer — the recruiter has already been
+    # told the managers are coming — so the wider scope wins both ways.
+    await _connect()
+    async with SessionLocal() as s:
+        await service.request_import(s, tenant_id=TENANT, kind="aifind", scope="full")
+        row = await service.request_import(
+            s, tenant_id=TENANT, kind="aifind", scope="basic"
+        )
+    assert row.import_scope == "full"
+
+
+async def test_an_unknown_scope_is_refused() -> None:
+    await _connect()
+    async with SessionLocal() as s:
+        with pytest.raises(ValueError):
+            await service.request_import(
+                s, tenant_id=TENANT, kind="aifind", scope="everything"
+            )
+
+
+async def test_the_scope_reaches_the_api_and_comes_back() -> None:
+    from app.main import app
+
+    await _connect()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        posted = await client.post(f"{API}/aifind/import", json={"scope": "basic"})
+        assert posted.status_code == 200
+        assert posted.json()["queued"] is True
+        listed = await client.get(API)
+    row = next(r for r in listed.json() if r["kind"] == "aifind")
+    assert row["import_scope"] == "basic"
+
+
+async def test_a_caller_that_sends_no_body_still_gets_the_full_pass() -> None:
+    # The endpoint predates the field; a client written against the old
+    # contract must keep the behaviour it had.
+    from app.main import app
+
+    await _connect()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        assert (await client.post(f"{API}/aifind/import")).status_code == 200
+        listed = await client.get(API)
+    row = next(r for r in listed.json() if r["kind"] == "aifind")
+    assert row["import_scope"] == "full"
