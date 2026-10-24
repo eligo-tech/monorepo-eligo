@@ -1,9 +1,9 @@
 {
-  "name": "eligo-tech-frontend",
+  "name": "eligolabs-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "eligo-tech — AI-native recruitment CRM (frontend mockup)",
+  "description": "Eligo Labs — AI-native recruitment CRM (frontend mockup)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

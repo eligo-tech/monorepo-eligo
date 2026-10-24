@@ -56,7 +56,7 @@ class _Refuser:
     name = "refuser"
 
     async def send(self, *, to, subject, text, reply_to=None) -> SentMessage:
-        raise EmailRejected("Resend 403: domain eligo-tech.de is not verified")
+        raise EmailRejected("Resend 403: domain eligolabs.com is not verified")
 
 
 @pytest.fixture
@@ -462,7 +462,7 @@ def test_resend_needs_both_a_key_and_a_verified_sender() -> None:
         update={
             "email_provider": "resend",
             "resend_api_key": "re_x",
-            "email_from": "no-reply@eligo-tech.de",
+            "email_from": "no-reply@eligolabs.com",
         }
     )
     assert delivery_factory.email_is_configured(complete) is True

@@ -9,7 +9,7 @@ it, not something a stranger can mint by clicking "create organization".
     .venv/bin/python -m scripts.provision_tenant --list
 
     # admit one
-    .venv/bin/python -m scripts.provision_tenant org_2abc… "Eligo Tech"
+    .venv/bin/python -m scripts.provision_tenant org_2abc… "Eligo Labs"
 
 The org id is in the refusal the backend logged, and in the Clerk dashboard
 under Organizations. Idempotent: re-running on an admitted org only updates
