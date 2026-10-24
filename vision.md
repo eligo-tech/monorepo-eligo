@@ -1,4 +1,4 @@
-# eligo-tech — Vision & Architektur
+# Eligo Labs — Vision & Architektur
 
 > KI-native Recruiting-Plattform. Vorbild/Referenzmarkt: [aifind.io](https://www.aifind.io/de/blog/).
 > Dies ist die kondensierte Fassung der Architektur- & Begründungslogik.
@@ -8,7 +8,7 @@
 Recruiting-Tools **speichern** Daten – sie **verstehen** sie nicht. Ein ATS ist eine
 Datenbank mit einem Formular: es weiß, dass ein Kandidat existiert, aber nicht, ob er
 passt, ob seine Kontaktdaten noch stimmen oder für welche offene Stelle er vorgestellt
-werden sollte. eligo-tech dreht das um: Das **System of Record bleibt schlicht und
+werden sollte. Eligo Labs dreht das um: Das **System of Record bleibt schlicht und
 zuverlässig**, darüber liegt eine Schicht aus Agenten, die kontinuierlich **lesen,
 anreichern, matchen und erklären**.
 

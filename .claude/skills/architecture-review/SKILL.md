@@ -1,10 +1,10 @@
 ---
 name: architecture-review
-description: Review a change against eligo-tech's binding architecture and compliance rules — layering, the shared-corpus/tenant boundary, agents-propose-verification-commits, GDPR/SOC 2 obligations. Use before opening a PR, when reviewing one, when adding a table or a column, when deciding where data lives, or whenever a change touches app/domain/hub, verification, tenancy, RLS, ingestion, or anything storing personal data.
+description: Review a change against Eligo Labs's binding architecture and compliance rules — layering, the shared-corpus/tenant boundary, agents-propose-verification-commits, GDPR/SOC 2 obligations. Use before opening a PR, when reviewing one, when adding a table or a column, when deciding where data lives, or whenever a change touches app/domain/hub, verification, tenancy, RLS, ingestion, or anything storing personal data.
 tools: Read, Glob, Grep, Bash
 ---
 
-# Architecture review — eligo-tech
+# Architecture review — Eligo Labs
 
 `ARCHITECTURE.md` at the repo root is binding, and `backend/CLAUDE.md` §2 states
 the same invariants in enforcement terms. Read both before reviewing. This skill

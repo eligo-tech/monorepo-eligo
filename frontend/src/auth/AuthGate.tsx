@@ -21,7 +21,7 @@ function Screen({ title, subtitle, children }: { title: string; subtitle?: strin
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-page px-4">
       <div className="text-center">
         <div className="text-[22px] font-bold tracking-tight text-ink">
-          eligo<span className="text-brand-600">-tech</span>
+          eligo<span className="text-brand-600">labs</span>
         </div>
         <h1 className="mt-4 text-[18px] font-semibold text-ink">{title}</h1>
         {subtitle && <p className="mx-auto mt-1 max-w-md text-[14px] text-ink-muted">{subtitle}</p>}
@@ -61,7 +61,7 @@ function OrgGate({ children }: { children: ReactNode }) {
         // reads as a way in, and the backend refuses every organization it
         // was not told to admit. Say so here, where it costs one sentence,
         // rather than after somebody has named a workspace.
-        subtitle={t('Kandidatendaten sind pro Organisation (Mandant) strikt isoliert. Wähle die Organisation, zu der du gehörst — eine neu erstellte muss eligo-tech erst freischalten.')}
+        subtitle={t('Kandidatendaten sind pro Organisation (Mandant) strikt isoliert. Wähle die Organisation, zu der du gehörst — eine neu erstellte muss Eligo Labs erst freischalten.')}
       >
         <OrganizationList
           hidePersonal
@@ -146,7 +146,7 @@ function NotAdmitted({ name, id }: { name: string | null; id: string | null }) {
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-accent-600" />
           <p className="text-[13px] leading-relaxed text-ink-soft">
             {t(
-              'Kandidatendaten liegen pro Organisation getrennt. Eine Organisation bekommt ihren Arbeitsbereich, wenn eligo-tech sie einrichtet — anmelden allein reicht dafür nicht.',
+              'Kandidatendaten liegen pro Organisation getrennt. Eine Organisation bekommt ihren Arbeitsbereich, wenn Eligo Labs sie einrichtet — anmelden allein reicht dafür nicht.',
             )}
           </p>
         </div>
@@ -171,10 +171,10 @@ function NotAdmitted({ name, id }: { name: string | null; id: string | null }) {
 
         {supportEmail && (
           <a
-            href={`mailto:${supportEmail}?subject=${encodeURIComponent('eligo-tech — Arbeitsbereich freischalten')}`}
+            href={`mailto:${supportEmail}?subject=${encodeURIComponent('Eligo Labs — Arbeitsbereich freischalten')}`}
             className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-brand-700"
           >
-            {t('eligo-tech kontaktieren')}
+            {t('Eligo Labs kontaktieren')}
           </a>
         )}
       </div>

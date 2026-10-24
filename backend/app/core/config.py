@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     )
 
     # --- App -------------------------------------------------------------
-    app_name: str = "eligo-tech"
+    app_name: str = "Eligo Labs"
     env: str = "local"
     debug: bool = True
     api_v1_prefix: str = "/api/v1"
@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     # Identify the crawler honestly: Nominatim and most public APIs require a
     # real User-Agent with a contact route, and it is what makes a rate-limit
     # complaint a conversation rather than a block.
-    hub_user_agent: str = "eligo-tech-hub/0.1 (+https://eligo.tech)"
+    hub_user_agent: str = "eligolabs-hub/0.1 (+https://eligolabs.com)"
     hub_http_timeout: float = 20.0
 
     # Bundesagentur für Arbeit Jobsuche API. The client id is the agency's own
@@ -207,9 +207,9 @@ class Settings(BaseSettings):
     #: is exactly what the first default here did.
     notice_link_base_url: str = "https://monorepo-eligo-production.up.railway.app"
     #: Name of the controller as it appears in the notice. Art. 13/14 require
-    #: the candidate to be told who holds their data; "eligo-tech" is the
+    #: the candidate to be told who holds their data; "Eligo Labs" is the
     #: platform, not necessarily the controller.
-    notice_controller_name: str = "eligo-tech"
+    notice_controller_name: str = "Eligo Labs"
     #: Where a candidate exercises their rights. Falls back to reply-to.
     notice_contact_email: str | None = None
 

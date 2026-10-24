@@ -1,4 +1,4 @@
-// Thin typed fetch client for the eligo-tech backend.
+// Thin typed fetch client for the Eligo Labs backend.
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
   CandidateDTO,

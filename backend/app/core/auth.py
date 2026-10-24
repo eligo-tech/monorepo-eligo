@@ -247,7 +247,7 @@ async def _admitted_tenant(db: AsyncSession, *, org_id: str, org_name: str | Non
     raise HTTPException(
         status.HTTP_403_FORBIDDEN,
         "Für diese Organisation ist kein Arbeitsbereich eingerichtet. "
-        "Bitte wenden Sie sich an eligo-tech, um freigeschaltet zu werden.",
+        "Bitte wenden Sie sich an Eligo Labs, um freigeschaltet zu werden.",
     )
 
 

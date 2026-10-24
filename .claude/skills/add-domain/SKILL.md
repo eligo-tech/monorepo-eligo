@@ -1,10 +1,10 @@
 ---
 name: add-domain
-description: Add a new backend domain to eligo-tech (models, schemas, service, router, migration, RLS, tests) following the layered per-domain convention. Use when creating a new entity such as managers/contacts, notes, activities, or any new table — and when a change needs a migration with Row-Level Security.
+description: Add a new backend domain to Eligo Labs (models, schemas, service, router, migration, RLS, tests) following the layered per-domain convention. Use when creating a new entity such as managers/contacts, notes, activities, or any new table — and when a change needs a migration with Row-Level Security.
 tools: Read, Glob, Grep, Bash, Edit, Write
 ---
 
-# Adding a domain — eligo-tech
+# Adding a domain — Eligo Labs
 
 `backend/CLAUDE.md` §3 and §5 are the contract; this is the executable version.
 Before starting, decide **where the data belongs** using the `architecture-review`

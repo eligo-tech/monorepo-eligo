@@ -4,7 +4,7 @@ description: Add a new public job/company source to the information hub (a Sourc
 tools: Read, Glob, Grep, Bash, Edit, Write
 ---
 
-# Adding a hub source — eligo-tech
+# Adding a hub source — Eligo Labs
 
 Sources sit behind the `SourceAdapter` protocol in
 `backend/app/domain/hub/adapters/`. Adding one is a new module plus one line in

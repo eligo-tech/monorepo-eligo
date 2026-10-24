@@ -119,7 +119,7 @@ function Logo() {
         e
       </span>
       <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.3px', color: C.navy }}>
-        eligo
+        eligo<span style={{ color: C.tealDeep }}>labs</span>
       </span>
       <span
         style={{
@@ -181,7 +181,7 @@ function Banner({ L, onClose }: { L: Lfn; onClose: () => void }) {
   return (
     <div style={{ background: C.surface, color: C.onNavy3, fontSize: 12.5, fontWeight: 600, textAlign: 'center', padding: '9px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
       <span className="lp-pulse" style={{ width: 7, height: 7, borderRadius: '50%', background: C.teal }} />
-      {L('eligo Agenten sind jetzt live — autonome KI, menschliche Kontrolle.', 'eligo agents are live — autonomous AI, human control.')}
+      {L('Die Agenten von Eligo Labs sind jetzt live — autonome KI, menschliche Kontrolle.', 'Eligo Labs agents are live — autonomous AI, human control.')}
       <a href="#" onClick={(e) => { e.preventDefault(); onClose() }} style={{ color: C.navy, fontWeight: 700, borderBottom: `1px solid ${C.teal}` }}>
         {L('Mehr erfahren', 'Learn more')} →
       </a>
@@ -255,8 +255,8 @@ function Hero({ L, onEnterApp }: { L: Lfn; onEnterApp: () => void }) {
             </h1>
             <p style={{ fontSize: 17, lineHeight: 1.6, color: C.t1, maxWidth: 500, margin: '20px 0 0' }}>
               {L(
-                'eligo sourct, verifiziert und matcht Kandidaten autonom — jede Aussage mit Beleg. Sie treffen die Entscheidungen, die Agenten erledigen die Arbeit.',
-                'eligo sources, verifies and matches candidates autonomously — every claim sourced. You make the decisions, the agents do the work.',
+                'Eligo Labs sourct, verifiziert und matcht Kandidaten autonom — jede Aussage mit Beleg. Sie treffen die Entscheidungen, die Agenten erledigen die Arbeit.',
+                'Eligo Labs sources, verifies and matches candidates autonomously — every claim sourced. You make the decisions, the agents do the work.',
               )}
             </p>
             <div style={{ display: 'flex', gap: 14, margin: '28px 0 0', flexWrap: 'wrap' }}>
@@ -654,7 +654,7 @@ function Footer({ L }: { L: Lfn }) {
       </div>
       <div style={{ borderTop: `1px solid ${C.line2}` }}>
         <div style={{ ...container, padding: '18px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11.5, flexWrap: 'wrap', gap: 10 }}>
-          <span>© 2026 eligo. {L('Alle Rechte vorbehalten.', 'All rights reserved.')}</span>
+          <span>© 2026 Eligo Labs. {L('Alle Rechte vorbehalten.', 'All rights reserved.')}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.teal }} />
             {L('EU-gehostet · DSGVO-konform', 'EU-hosted · GDPR-compliant')}

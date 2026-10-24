@@ -1,6 +1,6 @@
 # Architecture & compliance rules
 
-Binding rules for how data moves through eligo-tech. `CLAUDE.md` says *what* the
+Binding rules for how data moves through Eligo Labs. `CLAUDE.md` says *what* the
 product is; this says *where code and data are allowed to live*, and why the
 boundaries are shaped by EU-AI-Act / GDPR / SOC 2 obligations rather than taste.
 

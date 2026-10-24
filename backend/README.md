@@ -1,4 +1,4 @@
-# eligo-tech — backend
+# Eligo Labs — backend
 
 AI-native recruitment platform backend. FastAPI + Pydantic v2 + async
 SQLAlchemy 2.0. Postgres (+ pgvector) is the production system-of-record, but

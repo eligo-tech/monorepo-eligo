@@ -1,4 +1,4 @@
-# eligo-tech backend — architecture & contributor guide
+# Eligo Labs backend — architecture & contributor guide
 
 AI-native recruitment platform. This document is the contract: it tells you
 where code goes and which invariants you may **never** break.
