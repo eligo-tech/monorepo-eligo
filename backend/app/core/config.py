@@ -156,6 +156,14 @@ class Settings(BaseSettings):
     # JWKS URL + issuer are derived from the publishable key when unset.
     clerk_jwks_url: str | None = None
     clerk_issuer: str | None = None
+    #: Origins a session token may name as its authorized party (`azp`).
+    #: ADR 0002 §7.7. Empty — the default — falls back to `cors_origins`,
+    #: because the frontends we serve ARE the parties allowed to mint tokens
+    #: for this API, and keeping one list avoids the failure where somebody
+    #: adds an origin to CORS and locks it out here.
+    clerk_authorized_parties: Annotated[list[str], NoDecode] = Field(
+        default_factory=list
+    )
 
     # --- Machine credentials ---------------------------------------------
     # Cron has no Clerk user. A session JWT is the wrong credential for a
@@ -256,7 +264,7 @@ class Settings(BaseSettings):
             )
         return self
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "clerk_authorized_parties", mode="before")
     @classmethod
     def _split_cors(cls, value: object) -> object:
         """Accept a JSON array OR a plain comma-separated string.

@@ -1,4 +1,4 @@
-# eligo-tech backend — production image (Railway, Fly, Render, any Docker host).
+# Eligo Labs backend — production image (Railway, Fly, Render, any Docker host).
 FROM python:3.12-slim
 
 WORKDIR /app

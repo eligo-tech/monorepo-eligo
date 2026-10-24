@@ -402,11 +402,23 @@ while 1 and 2 govern who can become a member of one that was.
    returns zero rows, and `eligo_app` cannot `SET ROLE` out of itself. CI is
    SQLite, so the suite proves the query layer; RLS itself is proved by
    `python -m scripts.apply_rls --status` against the deployment.
-7. Optionally verify `azp` against the known frontend origins. **Open.**
-8. **A frontend screen for the 403.** **Open.** A refused member currently gets
-   the cockpit shell with failing sections rather than a sentence explaining
-   that their workspace has not been set up. Nobody is in that state today;
-   whoever turns on self-serve sign-up puts somebody there.
+7. **Verify `azp` against the known frontend origins.** ✅ `auth.check_authorized_party`
+   refuses a token minted for an origin this API does not serve, with
+   `tests/test_authorized_party.py` pinning it. The allow-list falls back to
+   `cors_origins` rather than being a second list to forget. Two deliberate
+   skips: no allow-list (the SQLite demo has no origin to compare against)
+   and no `azp` claim (machine and backend-API tokens carry none). This was
+   optional while the instance was a development one whose only consumer was
+   localhost; it is not optional for a production instance, where a token
+   picked up on any other site sharing the instance would otherwise be a
+   valid credential here.
+8. **A frontend screen for the 403.** ✅ (ELI-12) `AuthGate.AdmissionGate`
+   probes `GET /me` and renders `NotAdmitted` — what happened, which
+   organization it happened to, its Clerk id to quote at support, and the two
+   ways out. Only a 403 may block: `admissionAfterFailure` returns
+   `unreachable` for everything else, because a gate that fails closed on a
+   dropped connection tells a recruiter their workspace does not exist
+   because the wifi went away.
 
 **Phase 2 — the scope axis. Build when a real member must see less.**
 

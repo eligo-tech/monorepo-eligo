@@ -3,13 +3,13 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "eligo-tech-backend"
+name = "eligolabs-backend"
 version = "0.1.0"
 description = "AI-native recruitment platform backend — layered, agent + verification architecture."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
-authors = [{ name = "eligo-tech" }]
+authors = [{ name = "Eligo Labs" }]
 
 dependencies = [
     # Fernet, for the credentials a workspace stores for its own sources.

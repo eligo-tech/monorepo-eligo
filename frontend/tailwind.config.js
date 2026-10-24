@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// eligo-tech design tokens — derived from the CRM mockups.
+// Eligo Labs design tokens — derived from the CRM mockups.
 // Brand = muted emerald; sidebar = deep navy; accent = amber (active tab).
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],

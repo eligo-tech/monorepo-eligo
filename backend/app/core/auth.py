@@ -60,16 +60,67 @@ def _jwks_client() -> PyJWKClient:
     return PyJWKClient(url)
 
 
+class UnauthorizedParty(Exception):
+    """The token was minted for an origin this API does not serve."""
+
+
+def _authorized_parties() -> set[str]:
+    """Origins allowed to present a session token (ADR 0002 §7.7).
+
+    Falls back to `cors_origins` because the frontends we serve ARE the
+    parties allowed to mint tokens against this API. One list rather than
+    two: the failure mode of a second list is somebody adding an origin to
+    CORS, watching the browser stop complaining, and being locked out here
+    with a 401 that says nothing about the list they forgot.
+    """
+    configured = settings.clerk_authorized_parties or settings.cors_origins
+    return {origin.rstrip("/") for origin in configured if origin}
+
+
+def check_authorized_party(claims: dict) -> None:
+    """Refuse a token minted for somebody else's frontend.
+
+    Clerk signs every session token for an instance, not for an application,
+    so the signature alone does not say which origin asked for it. `azp` is
+    that origin. Without this check a token obtained on any site sharing our
+    Clerk instance is a valid credential here — which is exactly the hole
+    that matters once the instance is production and the keys are long-lived.
+
+    Two deliberate skips:
+
+      * **No allow-list** — local dev and the SQLite demo, where there is no
+        origin to compare against.
+      * **No `azp` claim** — not every Clerk token carries one (machine and
+        backend-API tokens do not), and rejecting those would break callers
+        this check was never aimed at. Clerk's own guidance is to skip rather
+        than fail when the claim is absent.
+    """
+    allowed = _authorized_parties()
+    if not allowed:
+        return
+    azp = claims.get("azp")
+    if azp is None:
+        return
+    if str(azp).rstrip("/") not in allowed:
+        raise UnauthorizedParty(
+            f"token was issued for {azp!r}, which is not one of this API's "
+            "known frontends (ELIGO_CLERK_AUTHORIZED_PARTIES / "
+            "ELIGO_CORS_ORIGINS)"
+        )
+
+
 def verify_token(token: str) -> dict:
     """Verify a Clerk session JWT and return its claims. Raises on any failure."""
     signing_key = _jwks_client().get_signing_key_from_jwt(token)
-    return jwt.decode(
+    claims = jwt.decode(
         token,
         signing_key.key,
         algorithms=["RS256"],
         issuer=_issuer(),
         options={"verify_aud": False, "require": ["exp", "iss"]},
     )
+    check_authorized_party(claims)
+    return claims
 
 
 def _org_id(claims: dict) -> str | None:

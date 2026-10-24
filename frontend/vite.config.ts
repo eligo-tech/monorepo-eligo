@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// eligo-tech frontend — Vite dev server + build config.
+// Eligo Labs frontend — Vite dev server + build config.
 export default defineConfig({
   plugins: [react()],
   resolve: {
