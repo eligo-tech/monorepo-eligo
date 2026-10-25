@@ -1,0 +1,2568 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cockpit · Personalberatung</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    /* Glass-cockpit / avionics MFD palette */
+    --bg:#0E1620;
+    --surface:#17222F;
+    --surface-2:#1C2A3A;
+    --bezel:#2A3B4D;
+    --bezel-soft:#22303f;
+    --text:#E2EAF1;
+    --muted:#7E90A4;
+    --muted-dim:#54677a;
+
+    --cyan:#3FC8E0;    /* Job-/Kundenwelt  (links)  */
+    --coral:#FF7A6B;   /* Kandidatenwelt   (rechts) */
+    --amber:#F2B23E;   /* Business Dev.    (unten)  */
+    --violet:#A98BF0;  /* Mandat & Briefing(oben)   */
+    --go:#5BD08C;      /* positiv / Score up        */
+    --stop:#F2726B;    /* negativ / Score down      */
+
+    --accent:var(--cyan);
+    --r:14px;
+    --font-d:'Space Grotesk',system-ui,sans-serif;
+    --font-b:'IBM Plex Sans',system-ui,sans-serif;
+    --font-m:'IBM Plex Mono',ui-monospace,monospace;
+
+    /* gauge / diagram colors (theme-driven) */
+    --g-ist:var(--cyan);
+    --g-boost:color-mix(in srgb,var(--amber) 62%,transparent);
+    --g-win:color-mix(in srgb,var(--go) 42%,transparent);
+    --g-soll:#EAF2F8;
+    --g-glow:color-mix(in srgb,var(--cyan) 65%,transparent);
+    --g-face:transparent;
+  }
+
+  /* ===== THEME · Mono (clean Schwarz-Weiß + Prozess-Grün) ===== */
+  body[data-theme="mono"]{
+    --bg:#FFFFFF; --surface:#FFFFFF; --surface-2:#F4F5F6;
+    --bezel:#E4E6E9; --bezel-soft:#EFF0F2;
+    --text:#14171A; --muted:#6B7176; --muted-dim:#A6ABB0;
+    --cyan:#14171A; --coral:#14171A; --violet:#14171A;
+    --amber:#5B6167; --go:#2FA866; --stop:#BEC2C6;
+    --g-ist:var(--go); --g-boost:#CBCFD3; --g-win:color-mix(in srgb,var(--go) 26%,#FFFFFF);
+    --g-soll:#14171A; --g-glow:transparent; --g-face:transparent;
+  }
+  body[data-theme="mono"] .brand svg{color:var(--go)}
+  body[data-theme="mono"] .sc-t.dn,body[data-theme="mono"] .trend.dn{color:#8A9096}
+  body[data-theme="mono"] .cell{background-image:linear-gradient(var(--bezel-soft) 1px,transparent 1px),linear-gradient(90deg,var(--bezel-soft) 1px,transparent 1px);background-size:46px 46px,46px 46px}
+  body[data-theme="mono"] #gIst{filter:none}
+  body[data-theme="mono"] .proc.is-won,body[data-theme="mono"] .sig-act{background:color-mix(in srgb,var(--go) 12%,#fff)}
+
+  /* ===== THEME · Heli (warm, analog, matt) ===== */
+  body[data-theme="heli"]{
+    --bg:#141310; --surface:#1E1C17; --surface-2:#262218;
+    --bezel:#3A3529; --bezel-soft:#2C2820;
+    --text:#EDE7D8; --muted:#9C9179; --muted-dim:#6C6353;
+    --cyan:#6FB2A6; --coral:#E8846A; --amber:#F2A93E; --violet:#C0A3D8;
+    --go:#79C58F; --stop:#E0715E;
+    --g-ist:var(--amber); --g-boost:#9BB98C; --g-win:var(--go);
+    --g-soll:#F1EAD8; --g-glow:color-mix(in srgb,var(--amber) 40%,transparent); --g-face:#211E18;
+  }
+  body[data-theme="heli"] .rev{background:radial-gradient(130% 90% at 50% -15%, rgba(242,169,62,.08), transparent 62%), var(--surface)}
+  body[data-theme="heli"] #gIst{stroke-linecap:round}
+
+  /* analog helper elements — only visible in Heli */
+  .heli-only{display:none}
+  body[data-theme="heli"] .heli-only{display:block}
+  #gFace{fill:var(--g-face)}
+  #gBezel{stroke:var(--bezel);stroke-width:3}
+  #gNeedle{stroke:var(--amber);stroke-width:3;stroke-linecap:round;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--amber) 55%,transparent))}
+  #gHub{fill:var(--amber);stroke:var(--surface);stroke-width:2}
+
+  .gauge.over #gIst{stroke:var(--go)}
+
+  /* theme switch in topbar */
+  .theme-sw{display:inline-flex;background:var(--surface);border:1px solid var(--bezel);border-radius:8px;padding:2px;gap:1px;flex-shrink:0}
+  .theme-sw button{border:0;background:none;color:var(--muted);font-family:var(--font-b);font-size:11px;font-weight:500;padding:4px 9px;border-radius:6px;cursor:pointer;transition:.15s}
+  .theme-sw button:hover{color:var(--text)}
+  .theme-sw button.on{background:var(--surface-2);color:var(--text)}
+  @media (max-width:860px){ .theme-sw{display:none} }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-b);
+    background:var(--bg);
+    color:var(--text);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- Viewport & panning map ---------- */
+  .viewport{position:fixed;inset:0;overflow:hidden}
+  .map{
+    position:absolute;top:0;left:0;
+    width:300vw;height:300vh;
+    display:grid;
+    grid-template-columns:repeat(3,100vw);
+    grid-template-rows:repeat(3,100vh);
+    transform:translate(-100vw,-100vh);
+    transition:transform .62s cubic-bezier(.72,.02,.24,1);
+  }
+  .cell{
+    width:100vw;height:100vh;overflow-y:auto;overflow-x:hidden;
+    padding:74px 30px 34px;
+  }
+  .cell::-webkit-scrollbar{width:9px}
+  .cell::-webkit-scrollbar-thumb{background:var(--bezel);border-radius:8px}
+
+  /* console grid backdrop (all cells) */
+  .cell--empty,.cell{
+    background-image:
+      radial-gradient(circle at 50% 40%, rgba(63,200,224,.04), transparent 60%),
+      linear-gradient(var(--bezel-soft) 1px,transparent 1px),
+      linear-gradient(90deg,var(--bezel-soft) 1px,transparent 1px);
+    background-size:auto, 46px 46px, 46px 46px;
+    background-position:center;
+  }
+  .cell--empty{opacity:.5}
+
+  .map.center{transform:translate(-100vw,-100vh)}
+  .map.up{transform:translate(-100vw,0)}
+  .map.down{transform:translate(-100vw,-200vh)}
+  .map.left{transform:translate(0,-100vh)}
+  .map.right{transform:translate(-200vw,-100vh)}
+
+  /* ---------- Top status bar ---------- */
+  .topbar{
+    position:fixed;top:0;left:0;right:0;height:54px;z-index:50;
+    display:flex;align-items:center;gap:16px;
+    padding:0 18px;
+    background:color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--bezel);
+  }
+  .brand{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .brand svg{width:26px;height:26px;color:var(--cyan)}
+  .brand b{font-family:var(--font-d);font-weight:600;letter-spacing:.16em;font-size:14px}
+  .brand span{font-size:11px;color:var(--muted);letter-spacing:.05em}
+  .search{
+    flex:1;max-width:360px;
+    display:flex;align-items:center;gap:8px;
+    background:var(--surface);border:1px solid var(--bezel);
+    border-radius:9px;padding:7px 12px;color:var(--muted);font-size:13px;
+  }
+  .search svg{width:15px;height:15px}
+  .bar-right{margin-left:auto;display:flex;align-items:center;gap:9px}
+  .pill{
+    display:flex;align-items:center;gap:6px;
+    font-size:11.5px;font-weight:500;letter-spacing:.02em;
+    padding:5px 10px;border-radius:20px;
+    border:1px solid var(--bezel);background:var(--surface);
+  }
+  .pill .dot{width:7px;height:7px;border-radius:50%}
+  .pill--data{color:var(--amber);border-color:rgba(242,178,62,.35)}
+  .pill--data .dot{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+  .pill--hitl{color:var(--go);border-color:rgba(91,208,140,.35)}
+  .pill--hitl .dot{background:var(--go);box-shadow:0 0 8px var(--go)}
+  .pill--user{color:var(--text);font-family:var(--font-m);font-size:11px}
+
+  /* ---------- Mini compass (nav) ---------- */
+  .compass{position:relative;width:78px;height:44px;flex-shrink:0}
+  .compass button{
+    position:absolute;background:var(--surface);border:1px solid var(--bezel);
+    color:var(--muted);cursor:pointer;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;padding:0;
+    transition:.15s;
+  }
+  .compass button:hover{color:var(--text);border-color:var(--muted)}
+  .compass button.on{color:var(--bg);border-color:transparent}
+  .compass button svg{width:12px;height:12px}
+  .cmp-c{width:20px;height:20px;left:29px;top:12px;border-radius:5px!important}
+  .cmp-u{width:20px;height:13px;left:29px;top:-2px}
+  .cmp-d{width:20px;height:13px;left:29px;top:33px}
+  .cmp-l{width:13px;height:20px;left:9px;top:12px}
+  .cmp-r{width:13px;height:20px;left:52px;top:12px}
+  .compass button.on.cmp-u{background:var(--cyan)}
+  .compass button.on.cmp-r{background:var(--coral)}
+  .compass button.on.cmp-d{background:var(--violet)}
+  .compass button.on.cmp-l{background:var(--cyan)}
+  .compass button.on.cmp-c{background:var(--text)}
+
+  /* ---------- Shared UI ---------- */
+  .wrap{max-width:1180px;margin:0 auto}
+  .eyebrow{font-family:var(--font-m);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
+  h1.view-title{font-family:var(--font-d);font-weight:600;font-size:30px;letter-spacing:-.01em;margin:6px 0 3px}
+  .view-sub{color:var(--muted);font-size:14px;max-width:60ch}
+  .view-head{display:flex;align-items:flex-start;gap:16px;margin-bottom:22px}
+  .view-head .glyph{
+    width:46px;height:46px;flex-shrink:0;border-radius:12px;
+    display:flex;align-items:center;justify-content:center;
+    background:color-mix(in srgb,var(--accent) 15%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);
+    color:var(--accent);
+  }
+  .view-head .glyph svg{width:24px;height:24px}
+
+  .panel{
+    background:var(--surface);border:1px solid var(--bezel);
+    border-radius:var(--r);padding:18px;
+  }
+  .panel-h{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+  .panel-h h3{font-family:var(--font-d);font-weight:500;font-size:15px;letter-spacing:.01em}
+  .panel-h .tag{margin-left:auto;font-family:var(--font-m);font-size:10.5px;color:var(--muted);letter-spacing:.05em}
+  .panel-h .lead{width:4px;height:16px;border-radius:3px;background:var(--accent)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;font-family:var(--font-m);
+    font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+    padding:3px 8px;border-radius:6px;border:1px solid var(--bezel);color:var(--muted)
+  }
+  .chip--hitl{color:var(--go);border-color:rgba(91,208,140,.4);background:rgba(91,208,140,.08)}
+  .chip--anon{color:var(--violet);border-color:rgba(169,139,240,.4);background:rgba(169,139,240,.08)}
+  .chip--ai{color:var(--cyan);border-color:rgba(63,200,224,.4);background:rgba(63,200,224,.08)}
+  .chip--in{color:var(--cyan);border-color:rgba(63,200,224,.4)}
+  .chip--out{color:var(--amber);border-color:rgba(242,178,62,.4)}
+
+  .card{
+    background:var(--surface-2);border:1px solid var(--bezel);
+    border-radius:11px;padding:13px 14px;
+  }
+  .card + .card{margin-top:10px}
+  .card-t{font-weight:600;font-size:13.5px;margin-bottom:3px}
+  .card-m{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px;align-items:center}
+
+  /* KPI readouts */
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+  .kpi{background:var(--surface);border:1px solid var(--bezel);border-radius:12px;padding:13px 14px}
+  .kpi .num{font-family:var(--font-m);font-weight:600;font-size:23px;line-height:1;color:var(--text)}
+  .kpi .lbl{font-size:11px;color:var(--muted);margin-top:7px;letter-spacing:.02em}
+  .kpi .num.pos{color:var(--go)} .kpi .num.warn{color:var(--amber)}
+
+  /* score bar */
+  .score{display:flex;align-items:center;gap:9px}
+  .score .track{flex:1;height:6px;border-radius:4px;background:var(--bezel);overflow:hidden}
+  .score .fill{height:100%;border-radius:4px;background:var(--accent);width:var(--v)}
+  .score .val{font-family:var(--font-m);font-size:12px;color:var(--text);min-width:34px;text-align:right}
+  .trend{font-family:var(--font-m);font-size:11px}
+  .trend.up{color:var(--go)} .trend.dn{color:var(--stop)}
+
+  .list-row{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--bezel-soft)}
+  .list-row:last-child{border-bottom:0}
+  .list-row .idx{font-family:var(--font-m);color:var(--muted-dim);font-size:12px;padding-top:2px}
+  .list-row .body{flex:1}
+
+  /* gateways on the cockpit core */
+  .gateways{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px}
+  .gateway{
+    text-align:left;cursor:pointer;color:var(--text);
+    background:var(--surface);border:1px solid var(--bezel);border-radius:var(--r);
+    padding:15px;transition:.18s;position:relative;overflow:hidden;
+  }
+  .gateway::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gc)}
+  .gateway:hover{transform:translateY(-3px);border-color:var(--gc);box-shadow:0 10px 30px -14px var(--gc)}
+  .gateway .g-dir{font-family:var(--font-m);font-size:10px;letter-spacing:.18em;color:var(--gc);text-transform:uppercase}
+  .gateway .g-arrow{position:absolute;top:13px;right:13px;color:var(--gc);opacity:.7}
+  .gateway .g-arrow svg{width:16px;height:16px}
+  .gateway h4{font-family:var(--font-d);font-weight:600;font-size:16px;margin:8px 0 5px}
+  .gateway p{font-size:12px;color:var(--muted);line-height:1.45;min-height:34px}
+  .gateway .g-stat{display:flex;gap:14px;margin-top:11px}
+  .gateway .g-stat b{font-family:var(--font-m);font-size:15px;color:var(--text)}
+  .gateway .g-stat small{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+
+  .backlink{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+    font-size:12.5px;color:var(--muted);background:none;border:0;font-family:var(--font-b);
+    margin-bottom:18px;transition:.15s
+  }
+  .backlink:hover{color:var(--text)}
+  .backlink svg{width:14px;height:14px}
+
+  /* stepper (Mandat oben) */
+  .stepper{display:flex;align-items:center;gap:0;margin:4px 0 20px;flex-wrap:wrap}
+  .step{display:flex;align-items:center;gap:9px;padding:9px 15px;border:1px solid var(--bezel);
+    background:var(--surface);border-radius:9px;font-size:13px}
+  .step .s-ico{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-m);font-size:11px;flex-shrink:0}
+  .step.done .s-ico{background:var(--go);color:var(--bg)}
+  .step.active{border-color:var(--violet);box-shadow:0 0 0 1px var(--violet) inset}
+  .step.active .s-ico{background:var(--violet);color:var(--bg)}
+  .step.wait .s-ico{background:var(--bezel);color:var(--muted)}
+  .step-arr{color:var(--muted-dim);padding:0 6px}
+  .step-arr svg{width:15px;height:15px}
+
+  .feeds{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-top:4px}
+  .feed{display:flex;gap:10px;align-items:flex-start;background:var(--surface-2);border:1px solid var(--bezel);
+    border-radius:10px;padding:11px 12px}
+  .feed .f-ico{color:var(--violet);flex-shrink:0;margin-top:1px}
+  .feed .f-ico svg{width:17px;height:17px}
+  .feed b{font-size:13px;font-weight:600;display:block;margin-bottom:2px}
+  .feed span{font-size:11.5px;color:var(--muted);line-height:1.4}
+
+  .note{
+    display:flex;gap:10px;align-items:flex-start;
+    background:color-mix(in srgb,var(--accent) 8%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
+    border-radius:11px;padding:12px 14px;margin-top:16px;font-size:12.5px;line-height:1.5;color:var(--text)
+  }
+  .note svg{width:17px;height:17px;color:var(--accent);flex-shrink:0;margin-top:1px}
+  .note b{color:var(--accent)}
+
+  .approach{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .method{background:var(--surface-2);border:1px solid var(--bezel);border-radius:11px;padding:14px}
+  .method .m-h{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .method .m-h svg{width:17px;height:17px;color:var(--amber)}
+  .method .m-h b{font-family:var(--font-d);font-weight:600;font-size:14px}
+  .method ul{list-style:none;font-size:12px;color:var(--muted);line-height:1.7}
+  .method ul li::before{content:"›";color:var(--amber);margin-right:7px}
+
+  .profile-head{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--bezel);
+    border-radius:var(--r);padding:15px;margin-bottom:18px}
+  .avatar{width:44px;height:44px;border-radius:11px;background:var(--bezel);display:flex;align-items:center;
+    justify-content:center;font-family:var(--font-m);font-weight:600;color:var(--accent);flex-shrink:0;
+    border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+  .profile-head .p-name{font-family:var(--font-d);font-weight:600;font-size:16px}
+  .profile-head .p-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .profile-head .p-right{margin-left:auto;text-align:right}
+  .profile-head .p-right .num{font-family:var(--font-m);font-size:22px;color:var(--go)}
+  .profile-head .p-right small{font-size:10px;color:var(--muted);display:block;letter-spacing:.04em}
+
+  .col-h{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .col-h .badge{font-family:var(--font-m);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:6px}
+  .badge.inb{color:var(--cyan);background:rgba(63,200,224,.1);border:1px solid rgba(63,200,224,.35)}
+  .badge.outb{color:var(--amber);background:rgba(242,178,62,.1);border:1px solid rgba(242,178,62,.35)}
+  .col-h span.h{font-size:12.5px;color:var(--muted)}
+
+  /* ===== Kommandozentrale · drei Ebenen ===== */
+  .cockpit-lead{max-width:66ch}
+  .level{margin-bottom:26px}
+  .level-tab{display:flex;align-items:center;gap:11px;margin-bottom:13px;
+    font-family:var(--font-d);font-weight:500;font-size:14.5px;letter-spacing:.01em;color:var(--text);
+    padding-bottom:9px;border-bottom:1px solid var(--bezel)}
+  .level-no{font-family:var(--font-m);font-size:12px;font-weight:600;color:var(--accent);
+    background:color-mix(in srgb,var(--accent) 14%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);
+    border-radius:6px;padding:2px 7px}
+  .level-tab .lt-hint{margin-left:auto;font-family:var(--font-m);font-size:10.5px;color:var(--muted);letter-spacing:.03em;font-weight:400;text-transform:none}
+
+  /* --- Ebene 1: Umsatz --- */
+  .rev{--accent:var(--go);background:var(--surface);border:1px solid var(--bezel);border-radius:var(--r);padding:18px;position:relative}
+  .rev-periods{display:inline-flex;background:var(--bg);border:1px solid var(--bezel);border-radius:9px;padding:3px;gap:2px;margin-bottom:20px}
+  .rev-periods button{border:0;background:none;color:var(--muted);font-family:var(--font-b);font-size:12.5px;font-weight:500;
+    padding:6px 16px;border-radius:7px;cursor:pointer;transition:.15s}
+  .rev-periods button:hover{color:var(--text)}
+  .rev-periods button.on{background:var(--surface-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--bezel)}
+  .rev-body{display:grid;grid-template-columns:230px 1fr;gap:28px;align-items:center;touch-action:pan-y;user-select:none}
+  .donut-box{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .donut{position:relative;width:200px;height:200px}
+  .donut svg{transform:rotate(-90deg)}
+  #donutArc{transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1),stroke .3s}
+  .donut-c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .donut-c .big{font-family:var(--font-m);font-weight:600;font-size:25px;color:var(--text);line-height:1}
+  .donut-c .pct{font-family:var(--font-m);font-size:13px;font-weight:600}
+  .donut-c .cap{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .rev-legend{display:flex;gap:16px;font-size:11.5px;color:var(--muted)}
+  .rev-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .rev-remain{font-size:12px;color:var(--muted);text-align:center}
+  .rev-remain b{color:var(--text);font-family:var(--font-m)}
+
+  .deals{background:var(--surface-2);border:1px solid var(--bezel);border-radius:12px;padding:16px}
+  .deals-head .dh-l{font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .deals-big{font-family:var(--font-m);font-weight:600;font-size:27px;color:var(--go);line-height:1.15;margin:3px 0 2px}
+  .deals-sub{font-size:11.5px;color:var(--muted);margin-bottom:14px}
+  .deals-sub b{color:var(--text);font-family:var(--font-m)}
+  .deal{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:9px 0;border-top:1px solid var(--bezel-soft)}
+  .deal .d-m{font-size:12.5px;font-weight:500}
+  .deal .d-v{font-family:var(--font-m);font-size:12.5px;color:var(--text);text-align:right}
+  .deal .d-bar{grid-column:1/2;display:flex;align-items:center}
+  .deal .d-track{flex:1;height:5px;background:var(--bezel);border-radius:3px;overflow:hidden}
+  .deal .d-fill{height:100%;background:var(--go);border-radius:3px}
+  .deal .d-p{font-family:var(--font-m);font-size:10.5px;color:var(--muted);text-align:right;align-self:center}
+
+  .swipe-dots{display:flex;gap:6px;justify-content:center;margin-top:18px}
+  .swipe-dots span{width:7px;height:7px;border-radius:50%;background:var(--bezel);transition:.2s;cursor:pointer}
+  .swipe-dots span.on{background:var(--go);width:20px;border-radius:4px}
+
+  /* --- Ebene 2: Jobscoring --- */
+  .score-sum{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:15px}
+  .score-sum b{font-family:var(--font-m);color:var(--text)}
+  .score-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px}
+  .sc-row{display:flex;align-items:center;gap:11px}
+  .sc-row .sc-m{flex:0 0 168px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sc-row .sc-track{flex:1;height:7px;background:var(--bezel);border-radius:4px;overflow:hidden}
+  .sc-row .sc-fill{height:100%;border-radius:4px}
+  .sc-row .sc-v{font-family:var(--font-m);font-size:12.5px;min-width:24px;text-align:right}
+  .sc-row .sc-t{font-family:var(--font-m);font-size:10.5px;min-width:30px;text-align:right;color:var(--muted)}
+  .sc-t.up{color:var(--go)} .sc-t.dn{color:var(--stop)}
+  .sc-hi{color:var(--go)} .sc-mid{color:var(--amber)} .sc-lo{color:var(--stop)}
+  .bg-hi{background:var(--go)} .bg-mid{background:var(--amber)} .bg-lo{background:var(--stop)}
+
+  /* --- Ebene 3: Prozesse --- */
+  .proc{background:var(--surface);border:1px solid var(--bezel);border-radius:var(--r);padding:15px 16px;margin-bottom:12px}
+  .proc-head{display:flex;align-items:center;gap:13px;margin-bottom:16px}
+  .proc-ring{width:42px;height:42px;flex-shrink:0;position:relative}
+  .proc-ring svg{transform:rotate(-90deg)}
+  .proc-ring circle.pr-fg{transition:stroke-dashoffset .5s ease}
+  .proc-ring .pr-t{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-m);font-size:10.5px;font-weight:600;color:var(--text)}
+  .proc-id b{font-family:var(--font-d);font-weight:600;font-size:14px}
+  .proc-id span{font-size:12px;color:var(--muted)}
+  .proc-val{margin-left:auto;text-align:right}
+  .proc-val b{font-family:var(--font-m);font-size:15px;color:var(--go)}
+  .proc-val small{display:block;font-size:10px;color:var(--muted);letter-spacing:.03em}
+
+  .track-row{display:flex;gap:0;overflow-x:auto;padding-bottom:8px}
+  .track-row::-webkit-scrollbar{height:6px}
+  .track-row::-webkit-scrollbar-thumb{background:var(--bezel);border-radius:6px}
+  .node{flex:1;min-width:98px;display:flex;flex-direction:column;align-items:center;position:relative;padding:0 2px}
+  .node::before{content:"";position:absolute;top:14px;left:-50%;width:100%;height:2px;background:var(--bezel);z-index:0}
+  .node:first-child::before{display:none}
+  .node.done::before{background:var(--go)}
+  .dot-btn{width:30px;height:30px;border-radius:50%;border:2px solid var(--bezel);background:var(--surface-2);
+    z-index:1;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:.15s;padding:0}
+  .dot-btn svg{width:15px;height:15px}
+  .node.done .dot-btn{background:var(--go);border-color:var(--go);color:var(--bg)}
+  .node.current .dot-btn{border-color:var(--coral);color:var(--coral);box-shadow:0 0 0 4px color-mix(in srgb,var(--coral) 18%,transparent)}
+  button.dot-btn:hover{border-color:var(--text)}
+  .node .n-lbl{font-size:11px;text-align:center;margin-top:8px;color:var(--muted);line-height:1.25;max-width:94px}
+  .node.done .n-lbl,.node.current .n-lbl{color:var(--text)}
+  .node .n-date{font-family:var(--font-m);font-size:10px;color:var(--muted-dim);margin-top:3px}
+  .fb-chips{display:flex;gap:4px;margin-top:6px}
+  .fb-chip{font-family:var(--font-m);font-size:9.5px;letter-spacing:.02em;padding:2px 6px;border-radius:5px;
+    border:1px solid var(--bezel);color:var(--muted);cursor:pointer;background:var(--surface-2);transition:.12s}
+  .fb-chip.on{background:var(--go);border-color:var(--go);color:var(--bg)}
+  .fb-chip:hover{border-color:var(--text)}
+
+  /* world strip */
+  .world-strip{display:flex;gap:9px;flex-wrap:wrap;margin-top:8px;padding-top:18px;border-top:1px solid var(--bezel)}
+  .ws-btn{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--bezel);
+    border-radius:9px;padding:9px 13px;cursor:pointer;color:var(--text);font-family:var(--font-b);font-size:12.5px;transition:.15s}
+  .ws-btn:hover{border-color:var(--wc);transform:translateY(-2px)}
+  .ws-btn .ws-dot{width:9px;height:9px;border-radius:3px;background:var(--wc)}
+  .ws-btn .ws-dir{font-family:var(--font-m);color:var(--muted);font-size:12px}
+
+  /* ===== v2 · lebendiges System, Jahresziel, Kurz-vor-Abschluss ===== */
+  .rev-body{align-items:flex-start}
+
+  .signals{background:var(--surface);border:1px solid var(--bezel);border-radius:var(--r);padding:13px 15px;margin-bottom:22px}
+  .sig-h{display:flex;align-items:center;gap:8px;font-family:var(--font-d);font-weight:500;font-size:13px;color:var(--text);margin-bottom:8px}
+  .sig-h svg{width:16px;height:16px;color:var(--go)}
+  .sig-tag{margin-left:auto;font-family:var(--font-m);font-size:10px;letter-spacing:.05em;color:var(--muted);font-weight:400}
+  .sig{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text);padding:8px 0;border-top:1px solid var(--bezel-soft);line-height:1.45}
+  .sig-src{font-family:var(--font-m);font-size:10px;letter-spacing:.02em;color:var(--muted);background:var(--surface-2);border:1px solid var(--bezel);border-radius:5px;padding:2px 7px;flex-shrink:0}
+  .sig-act{margin-left:auto;flex-shrink:0;font-family:var(--font-b);font-size:11.5px;color:var(--go);background:rgba(91,208,140,.1);border:1px solid rgba(91,208,140,.4);border-radius:7px;padding:5px 11px;cursor:pointer;transition:.15s}
+  .sig-act:hover{background:rgba(91,208,140,.2)}
+
+  .year-goal{width:100%;margin-top:6px}
+  .yg-top{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-bottom:5px}
+  .yg-top b{color:var(--text);font-family:var(--font-m)}
+  .yg-track{height:6px;background:var(--bezel);border-radius:4px;overflow:hidden}
+  .yg-fill{height:100%;background:var(--cyan);border-radius:4px;transition:width .5s}
+
+  .deals .dh-l{display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+  .dh-note{font-size:9.5px;letter-spacing:.02em;color:var(--muted-dim);text-transform:none}
+  .near-big{font-family:var(--font-m);font-weight:600;font-size:23px;color:var(--coral);line-height:1.2;margin:3px 0 8px}
+  .near{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-top:1px solid var(--bezel-soft)}
+  .near-m{font-size:12.5px;font-weight:500}
+  .near-v{font-family:var(--font-m);font-size:12.5px;text-align:right}
+  .near-meta{grid-column:1/3;display:flex;gap:8px;align-items:center}
+  .eta{font-family:var(--font-m);font-size:9.5px;letter-spacing:.03em;padding:2px 7px;border-radius:5px;border:1px solid var(--bezel);color:var(--muted)}
+  .eta.eta-now{color:var(--go);border-color:rgba(91,208,140,.4);background:rgba(91,208,140,.08)}
+  .eta.eta-next{color:var(--amber);border-color:rgba(242,178,62,.4);background:rgba(242,178,62,.08)}
+  .near-p{font-family:var(--font-m);font-size:10px;color:var(--muted)}
+  .near-empty{font-size:11.5px;color:var(--muted-dim);padding:8px 0}
+  .deals-div{height:1px;background:var(--bezel);margin:14px 0}
+  .deals-sub{margin-top:2px}
+
+  .sc-row .sc-m{flex-basis:150px}
+  .sc-row .sc-mc{font-family:var(--font-m);font-size:10px;color:var(--muted);min-width:48px;text-align:right}
+
+  .node.is-deal .dot-btn{border-color:var(--go)}
+  .node.is-deal.current .dot-btn{color:var(--go);animation:dealPulse 1.7s ease-in-out infinite}
+  .node.is-deal.done .dot-btn{background:var(--go);border-color:var(--go);color:var(--bg)}
+  @keyframes dealPulse{0%,100%{box-shadow:0 0 0 3px color-mix(in srgb,var(--go) 24%,transparent)}50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--go) 8%,transparent)}}
+  .proc.is-won{border-color:color-mix(in srgb,var(--go) 55%,var(--bezel))}
+  .proc.is-won .proc-head{opacity:.96}
+
+  @media (prefers-reduced-motion:reduce){ .node.is-deal.current .dot-btn{animation:none} }
+  @media (max-width:860px){ .sc-row .sc-m{flex-basis:120px} }
+
+  /* ===== v3 · Instrument-Cluster (Jet / Supercar) ===== */
+  .rev{position:relative;overflow:hidden;
+    background:radial-gradient(130% 90% at 50% -15%, rgba(63,200,224,.07), transparent 62%), var(--surface)}
+  .rev::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;
+    background:linear-gradient(90deg,transparent,var(--g-ist),transparent);opacity:.55}
+  .signals{position:relative;overflow:hidden}
+  .signals::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;
+    background:linear-gradient(90deg,transparent,var(--go),transparent);opacity:.5}
+
+  .rev-body{grid-template-columns:250px 1fr;align-items:center;gap:26px}
+
+  .gauge{position:relative;width:250px;height:250px;margin:0 auto}
+  .gauge svg{width:250px;height:250px;overflow:visible}
+  #gTrack{stroke:var(--bezel);stroke-width:13;fill:none;stroke-linecap:round}
+  #gWin{stroke:var(--g-win);stroke-width:13;fill:none;stroke-linecap:butt;transition:stroke-dashoffset .6s}
+  #gPot{stroke:var(--g-boost);stroke-width:13;fill:none;stroke-linecap:butt;transition:stroke-dashoffset .8s}
+  #gIst{stroke:var(--g-ist);stroke-width:13;fill:none;stroke-linecap:round;
+    filter:drop-shadow(0 0 6px var(--g-glow));
+    transition:stroke-dashoffset 1.15s cubic-bezier(.16,.84,.28,1),stroke .3s}
+  #gSoll{stroke:var(--g-soll);stroke-width:2.6}
+  .g-tick{stroke:var(--muted-dim);stroke-width:1.4}
+  .g-tick.maj{stroke:var(--muted);stroke-width:2.2}
+
+  .gauge-c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:none}
+  .g-ist{font-family:var(--font-m);font-weight:600;font-size:30px;color:var(--text);line-height:1;letter-spacing:-.02em}
+  .g-pct{font-family:var(--font-m);font-size:12px;font-weight:600;color:var(--cyan)}
+  .g-boost{font-family:var(--font-m);font-size:11px;color:var(--amber);margin-top:3px;min-height:14px}
+  .g-cap{font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+
+  .readout{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .ro-tiles{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;
+    background:var(--bg);border:1px solid var(--bezel);border-radius:12px;padding:13px 15px}
+  .ro{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .ro-l{font-family:var(--font-m);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+  .ro-v{font-family:var(--font-m);font-weight:600;font-size:15px;color:var(--text);white-space:nowrap}
+  .ro-v.boost{color:var(--amber)}
+  .ro.eq .ro-v{color:var(--go)}
+  .ro-sep{font-family:var(--font-m);font-size:15px;color:var(--muted-dim);text-align:center}
+
+  .near-block .dh-l{display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+  .pipe-line{font-size:11.5px;color:var(--muted)}
+  .pipe-line b{font-family:var(--font-m);color:var(--text)}
+  .pipe-line .pl-plus{font-family:var(--font-m);color:var(--go)}
+
+  /* deal-won animation */
+  #dealFx{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0}
+  #dealFx.show{animation:fxWrap 2.2s ease forwards}
+  #dealFx .fx-card{position:relative;background:var(--surface);border:1px solid var(--go);border-radius:18px;
+    padding:26px 42px;text-align:center;box-shadow:0 0 70px -12px var(--go);transform:scale(.7)}
+  #dealFx.show .fx-card{animation:fxPop 2.2s cubic-bezier(.2,1.25,.3,1) forwards}
+  #dealFx .fx-ring{position:absolute;inset:-1px;border-radius:18px;border:2px solid var(--go);opacity:0}
+  #dealFx.show .fx-ring{animation:fxRing 1.15s ease-out forwards}
+  #dealFx .fx-check{width:48px;height:48px;margin:0 auto 12px;border-radius:50%;background:var(--go);color:var(--bg);
+    display:flex;align-items:center;justify-content:center}
+  #dealFx .fx-check svg{width:27px;height:27px}
+  #dealFx .fx-t{font-family:var(--font-d);font-weight:700;letter-spacing:.16em;font-size:13px;color:var(--go);text-transform:uppercase}
+  #dealFx .fx-val{font-family:var(--font-m);font-weight:600;font-size:32px;color:var(--text);margin-top:4px}
+  @keyframes fxWrap{0%{opacity:0}7%{opacity:1}82%{opacity:1}100%{opacity:0}}
+  @keyframes fxPop{0%{transform:scale(.7)}11%{transform:scale(1.05)}20%{transform:scale(1)}100%{transform:scale(1)}}
+  @keyframes fxRing{0%{transform:scale(1);opacity:.85}100%{transform:scale(1.55);opacity:0}}
+
+  @media (prefers-reduced-motion:reduce){
+    #gIst,#gPot,#gWin{transition:none}
+    #dealFx.show,#dealFx.show .fx-card,#dealFx.show .fx-ring{animation:none}
+    #dealFx.show{opacity:1}
+  }
+  @media (max-width:860px){
+    .rev-body{grid-template-columns:1fr;gap:16px}
+    .gauge{margin-bottom:4px}
+  }
+
+
+
+  @media (max-width:860px){
+    .rev-body{grid-template-columns:1fr;gap:20px}
+    .score-grid{grid-template-columns:1fr}
+    .sc-row .sc-m{flex-basis:130px}
+  }
+
+  @media (max-width:860px){
+    .kpis{grid-template-columns:repeat(3,1fr)}
+    .grid2,.grid3,.gateways,.feeds,.approach{grid-template-columns:1fr}
+    .search,.pill--data{display:none}
+    .cell{padding:70px 16px 30px}
+    h1.view-title{font-size:24px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .map{transition:none}
+    .gateway:hover{transform:none}
+  }
+  /* ===== Nächste beste Aktionen ===== */
+  .level-mark{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;
+    color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+  .level-mark svg{width:13px;height:13px}
+  .nba-list{display:flex;flex-direction:column;gap:8px}
+  .nba{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--bezel);
+    border-radius:12px;padding:11px 14px;transition:.15s;--ac:var(--amber)}
+  .nba:hover{border-color:color-mix(in srgb,var(--ac) 55%,var(--bezel))}
+  .nba-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--bezel);background:var(--surface-2);
+    flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);padding:0;transition:.15s}
+  .nba-check svg{width:12px;height:12px}
+  .nba-check:hover{border-color:var(--text)}
+  .nba-ico{width:34px;height:34px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    color:var(--ac);background:color-mix(in srgb,var(--ac) 14%,transparent);border:1px solid color-mix(in srgb,var(--ac) 34%,transparent)}
+  .nba-ico svg{width:18px;height:18px}
+  .nba-body{flex:1;min-width:0}
+  .nba-t{font-size:13.5px;font-weight:600;line-height:1.25}
+  .nba-m{font-size:12px;color:var(--muted);line-height:1.4;margin-top:2px}
+  .nba-cat{font-family:var(--font-m);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ac);
+    border:1px solid color-mix(in srgb,var(--ac) 40%,transparent);background:color-mix(in srgb,var(--ac) 9%,transparent);
+    border-radius:6px;padding:3px 8px;flex-shrink:0}
+  .nba.done{opacity:.5}
+  .nba.done .nba-check{background:var(--go);border-color:var(--go);color:var(--bg)}
+  .nba.done .nba-t{text-decoration:line-through;text-decoration-color:var(--muted-dim)}
+  @media (max-width:860px){ .nba-cat{display:none} }
+
+  /* ===== Prozess-Status / Vertrag-Logik ===== */
+  .proc-status{font-family:var(--font-m);font-size:9.5px;letter-spacing:.03em;padding:5px 10px;border-radius:8px;
+    border:1px solid var(--bezel);color:var(--muted);white-space:nowrap;margin-left:12px}
+  .proc-status.verbal{color:var(--go);border-color:color-mix(in srgb,var(--go) 45%,transparent);background:color-mix(in srgb,var(--go) 10%,transparent)}
+  .eta.zusage{color:var(--go);border-color:color-mix(in srgb,var(--go) 55%,transparent);background:color-mix(in srgb,var(--go) 14%,transparent)}
+  #dealFx .fx-sub{font-family:var(--font-m);font-size:11px;color:var(--muted);margin-top:4px;letter-spacing:.03em}
+  @media (max-width:860px){ .proc-status{display:none} }
+
+
+  /* ===== Kandidatenwelt · Innen / Außen ===== */
+  .kw-h{display:flex;align-items:center;gap:9px;font-family:var(--font-d);font-weight:500;font-size:14px;margin-bottom:14px;flex-wrap:wrap}
+  .kw-tag{font-family:var(--font-m);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:6px}
+  .kw-tag.inb{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent);border:1px solid color-mix(in srgb,var(--cyan) 40%,transparent)}
+  .kw-tag.outb{color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,transparent);border:1px solid color-mix(in srgb,var(--amber) 40%,transparent)}
+  .kw-note{margin-left:auto;font-family:var(--font-m);font-size:10px;color:var(--muted);letter-spacing:.03em;font-weight:400}
+  .mrow{background:var(--surface-2);border:1px solid var(--bezel);border-radius:11px;padding:12px 13px}
+  .mrow + .mrow{margin-top:10px}
+  .mrow-top{display:flex;align-items:flex-start;gap:8px;justify-content:space-between}
+  .mrow-title{font-size:13px;line-height:1.3}
+  .mrow-title b{font-weight:600}
+  .mrow-job{font-size:12px;color:var(--muted);margin-top:3px}
+  .mrow-job b{color:var(--text);font-weight:500}
+  .mrow-foot{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
+  .chips{display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex:1}
+  .mini-chip{font-family:var(--font-m);font-size:10px;color:var(--muted);border:1px solid var(--bezel);border-radius:5px;padding:2px 6px}
+  .match{font-family:var(--font-m);font-size:11px;color:var(--go)}
+  .match.strong{font-size:15px;font-weight:600;color:var(--go)}
+  .anrede{font-family:var(--font-m);font-size:9.5px;letter-spacing:.04em;padding:3px 8px;border-radius:6px;white-space:nowrap;flex-shrink:0}
+  .anrede.du{color:var(--coral);border:1px solid color-mix(in srgb,var(--coral) 45%,transparent);background:color-mix(in srgb,var(--coral) 10%,transparent)}
+  .anrede.sie{color:var(--cyan);border:1px solid color-mix(in srgb,var(--cyan) 45%,transparent);background:color-mix(in srgb,var(--cyan) 10%,transparent)}
+  .kw-btn{font-family:var(--font-b);font-size:12px;font-weight:500;color:var(--text);background:var(--surface);border:1px solid var(--bezel);border-radius:8px;padding:7px 12px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+  .kw-btn:hover{border-color:var(--muted)}
+  .kw-btn svg{width:14px;height:14px}
+  .kw-btn.primary{color:var(--coral);border-color:color-mix(in srgb,var(--coral) 45%,transparent);background:color-mix(in srgb,var(--coral) 10%,transparent)}
+  .kw-btn.primary:hover{background:color-mix(in srgb,var(--coral) 18%,transparent)}
+  .kw-btn.oa{flex-direction:column;align-items:flex-start;gap:2px;padding:8px 11px;flex:1;min-width:96px}
+  .kw-btn.oa .oa-top{display:flex;align-items:center;gap:6px;font-weight:600}
+  .kw-btn em{font-style:normal;font-family:var(--font-m);font-size:9px;color:var(--muted);letter-spacing:.02em}
+  .out-actions{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap}
+
+  /* toast */
+  #kwToast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);z-index:210;
+    background:var(--surface);border:1px solid var(--bezel);border-radius:10px;padding:11px 16px;font-size:13px;color:var(--text);
+    box-shadow:0 14px 44px -14px #000;opacity:0;pointer-events:none;transition:.3s;display:flex;align-items:center;gap:9px;max-width:90vw}
+  #kwToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #kwToast .kt-ic{color:var(--go);display:flex}
+  #kwToast .kt-ic svg{width:16px;height:16px}
+
+  /* presentation modal */
+  #presentModal{position:fixed;inset:0;z-index:220;display:none;align-items:center;justify-content:center;padding:22px;
+    background:rgba(6,10,14,.72);backdrop-filter:blur(4px)}
+  #presentModal.show{display:flex}
+  .pm-wrap{width:min(660px,96vw);max-height:92vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--bezel);border-radius:14px;overflow:hidden}
+  .pm-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--bezel)}
+  .pm-head b{font-family:var(--font-d);font-size:14px}
+  .pm-recipient{margin-left:auto;font-size:12px;color:var(--muted)}
+  .pm-recipient b{color:var(--text)}
+  .pm-x{background:none;border:0;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:0 4px}
+  .pm-x:hover{color:var(--text)}
+  .pm-body{overflow:auto;padding:22px;background:#E9EBE7}
+  .pm-actions{display:flex;align-items:center;gap:9px;padding:12px 16px;border-top:1px solid var(--bezel)}
+  .pm-cover{margin-right:auto;font-size:11.5px;color:var(--muted)}
+
+  /* Panam Partners CI document */
+  .panam-doc{background:#fff;color:#2B2B2B;border:1px solid #D6DAD6;border-radius:3px;padding:26px 28px;font-family:'IBM Plex Sans',system-ui,sans-serif}
+  .panam-top{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:2px solid #2E4A44;padding-bottom:10px;margin-bottom:15px}
+  .panam-title{font-size:16px;color:#2E4A44;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+  .panam-logo{font-family:'Space Grotesk',system-ui,sans-serif;text-align:right;line-height:1}
+  .panam-logo b{font-size:19px;color:#2E4A44;letter-spacing:.02em}
+  .panam-logo span{display:block;font-size:9px;letter-spacing:.34em;color:#6E8983;margin-top:3px}
+  .panam-pos{border:1px solid #C9D2CE;border-radius:2px;padding:9px 12px;text-align:center;font-size:12.5px;color:#3A5F58;margin-bottom:14px}
+  .panam-pos b{color:#2E4A44}
+  .panam-grid{border:1px solid #C9D2CE;border-radius:2px;overflow:hidden}
+  .panam-row{display:grid;grid-template-columns:150px 1fr;border-bottom:1px solid #DDE3E0}
+  .panam-row:last-child{border-bottom:0}
+  .panam-k{background:#F4F6F4;color:#3A5F58;font-size:12px;font-weight:600;padding:10px 12px;border-right:1px solid #DDE3E0}
+  .panam-v{padding:10px 12px;font-size:12.5px;color:#2B2B2B;line-height:1.5}
+  .panam-v ul{margin:0;padding-left:16px}
+  .panam-foot{margin-top:14px;border:1px solid #C9D2CE;border-radius:2px;text-align:center;padding:9px;font-size:11.5px;color:#3A5F58}
+  .panam-addr{margin-top:10px;text-align:center;font-size:10px;color:#6E8983}
+  .panam-legal{margin-top:11px;font-size:8.5px;color:#9AA29E;line-height:1.45}
+
+  @media (max-width:860px){ .panam-row{grid-template-columns:110px 1fr} }
+
+
+  /* ===== Kandidatenprofil (Kandidatenwelt) ===== */
+  .cand-profile{background:var(--surface);border:1px solid var(--bezel);border-radius:var(--r);padding:16px 18px;margin-bottom:18px}
+  .cp-top{display:flex;align-items:center;gap:14px}
+  .cp-avatar{width:46px;height:46px;border-radius:12px;background:var(--bezel);display:flex;align-items:center;justify-content:center;font-family:var(--font-m);font-weight:600;color:var(--coral);border:1px solid color-mix(in srgb,var(--coral) 40%,transparent);flex-shrink:0}
+  .cp-id{flex:1;min-width:0}
+  .cp-name{font-family:var(--font-d);font-weight:600;font-size:17px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .cp-num{font-family:var(--font-m);font-size:11px;color:var(--muted);font-weight:400}
+  .cp-role{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .cp-score{text-align:right;flex-shrink:0}
+  .cp-score-num{font-family:var(--font-m);font-weight:600;font-size:26px;color:var(--go);line-height:1}
+  .cp-score-lbl{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+  .cp-flags{display:flex;flex-wrap:wrap;gap:6px;margin:13px 0}
+  .cp-flag{font-family:var(--font-m);font-size:10px;letter-spacing:.02em;padding:3px 9px;border-radius:6px;border:1px solid var(--bezel);color:var(--muted)}
+  .cp-flag.good{color:var(--go);border-color:color-mix(in srgb,var(--go) 45%,transparent);background:color-mix(in srgb,var(--go) 10%,transparent)}
+  .cp-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;padding-top:12px;border-top:1px solid var(--bezel-soft)}
+  .cp-cell{display:flex;flex-direction:column;gap:2px}
+  .cp-k{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .cp-v{font-size:12.5px;color:var(--text);font-weight:500}
+  .cp-summary{font-size:12px;color:var(--muted);line-height:1.5;margin-top:12px;padding-top:12px;border-top:1px solid var(--bezel-soft)}
+  @media (max-width:860px){ .cp-grid{grid-template-columns:1fr} }
+
+  /* ===== Markt · Ansprechpartner-Schritt ===== */
+  .out-step{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
+  .out-hint{font-size:11px;color:var(--muted-dim);font-family:var(--font-m)}
+  .out-ap{font-size:12px;color:var(--text);margin-top:11px;padding:8px 11px;border-radius:8px;
+    background:color-mix(in srgb,var(--cyan) 8%,transparent);border:1px solid color-mix(in srgb,var(--cyan) 30%,transparent)}
+  .out-ap b{font-weight:600}
+
+  /* ===== Business-Development-Notizen ===== */
+  .bd-notes{background:var(--surface);border:1px solid var(--bezel);border-radius:var(--r);padding:15px 17px;margin-top:16px}
+  .bd-notes-h{display:flex;align-items:baseline;gap:9px;font-family:var(--font-d);font-weight:500;font-size:13.5px;margin-bottom:6px}
+  .bd-sub{font-family:var(--font-m);font-size:10px;color:var(--muted);letter-spacing:.03em;font-weight:400}
+  .bd-note{display:flex;gap:11px;font-size:12.5px;line-height:1.5;padding:9px 0;border-top:1px solid var(--bezel-soft)}
+  .bd-note:first-of-type{border-top:0}
+  .bd-when{font-family:var(--font-m);font-size:10px;color:var(--amber);flex-shrink:0;min-width:58px;padding-top:2px}
+  .bd-note b{font-weight:600}
+
+
+  /* ===== Kandidatensuche (links · briefing-basiert) ===== */
+  .ks-profile{margin-bottom:18px}
+  .ks-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:26px}
+  .ks-block{min-width:0}
+  .ks-k{font-family:var(--font-m);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .ks-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .ks-chip{font-size:11.5px;padding:4px 10px;border-radius:7px;border:1px solid var(--bezel)}
+  .ks-chip.must{color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent);background:color-mix(in srgb,var(--cyan) 9%,transparent)}
+  .ks-chip.nice{color:var(--muted)}
+  .ks-add{font-family:var(--font-m);font-size:11px;color:var(--muted-dim);background:none;border:1px dashed var(--bezel);border-radius:7px;padding:4px 9px;cursor:pointer;transition:.15s}
+  .ks-add:hover{color:var(--text);border-color:var(--muted)}
+  .ks-culture{font-size:12.5px;color:var(--text);line-height:1.5;margin-bottom:14px}
+  .ks-facts{display:flex;flex-direction:column}
+  .ks-fact{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:7px 0;border-top:1px solid var(--bezel-soft)}
+  .ks-fact:first-child{border-top:0}
+  .ks-fact span{color:var(--muted)}
+  .ks-fact b{font-weight:600;text-align:right}
+
+  .ks-search{display:flex;align-items:center;gap:9px;background:var(--bg);border:1px solid var(--bezel);border-radius:9px;padding:10px 13px;color:var(--muted);font-size:13px;margin-bottom:13px}
+  .ks-search svg{width:15px;height:15px;flex-shrink:0}
+  .ks-sources{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+  .ks-src{font-family:var(--font-b);font-size:12px;padding:6px 12px;border-radius:20px;border:1px solid var(--bezel);background:var(--surface);color:var(--muted);cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px}
+  .ks-src::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--bezel);transition:.15s}
+  .ks-src.on{color:var(--text);border-color:color-mix(in srgb,var(--cyan) 45%,transparent)}
+  .ks-src.on::before{background:var(--cyan);box-shadow:0 0 7px var(--cyan)}
+  .ks-src.add{border-style:dashed;color:var(--muted-dim)}
+  .ks-src.add::before{display:none}
+  .ks-search-foot{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .ks-only{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer}
+  .ks-only input{accent-color:var(--cyan);width:15px;height:15px}
+  .ks-fresh,.ks-learn{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-top:12px;line-height:1.4}
+  .ks-fresh .dot,.ks-learn .dot{width:7px;height:7px;border-radius:50%;background:var(--go);box-shadow:0 0 7px var(--go);flex-shrink:0}
+
+  .ks-anrede-toggle{display:inline-flex;background:var(--bg);border:1px solid var(--bezel);border-radius:8px;padding:3px;gap:2px;margin-bottom:12px}
+  .ks-anrede-toggle button{border:0;background:none;color:var(--muted);font-family:var(--font-b);font-size:12px;font-weight:500;padding:5px 16px;border-radius:6px;cursor:pointer;transition:.15s}
+  .ks-anrede-toggle button.on{background:var(--surface-2);color:var(--text)}
+  .ks-msg{background:var(--surface-2);border:1px solid var(--bezel);border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.6;color:var(--text)}
+
+  .ks-results{margin-top:18px}
+  .ks-res-empty{font-size:12.5px;color:var(--muted-dim);text-align:center;padding:16px}
+  .ks-res-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .ks-res-count{font-family:var(--font-m);font-weight:600;font-size:22px;color:var(--cyan)}
+  .ks-srcbadge{font-family:var(--font-m);font-size:10px;padding:2px 7px;border-radius:5px;color:var(--sc);border:1px solid color-mix(in srgb,var(--sc) 45%,transparent);background:color-mix(in srgb,var(--sc) 10%,transparent)}
+
+  @media (max-width:860px){ .ks-grid{grid-template-columns:1fr} }
+
+
+  /* ===== Laufende Prozesse · Job-Gruppierung ===== */
+  .job-sec{margin-bottom:18px}
+  .job-head{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface-2);
+    border:1px solid var(--bezel);border-radius:11px;margin-bottom:10px}
+  .job-id b{font-family:var(--font-d);font-weight:600;font-size:14px}
+  .job-id span{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
+  .job-sum{margin-left:auto;text-align:right;font-family:var(--font-m);font-size:11px;color:var(--muted)}
+  .job-sum b{color:var(--text)}
+  .job-procs{border-left:2px solid var(--bezel);margin-left:7px;padding-left:13px}
+  .job-procs .proc:last-child{margin-bottom:0}
+
+  /* ===== Job-Aktivität (Kandidatensuche) ===== */
+  .ks-activity{margin-bottom:18px}
+  .act-funnel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .af-step{background:var(--surface-2);border:1px solid var(--bezel);border-radius:10px;padding:9px 14px;text-align:center;min-width:92px}
+  .af-num{font-family:var(--font-m);font-weight:600;font-size:19px;color:var(--text)}
+  .af-lbl{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .af-arrow{color:var(--muted-dim);font-family:var(--font-m);font-size:16px}
+  .act-channels{display:flex;flex-direction:column;gap:9px}
+  .act-ch{display:grid;grid-template-columns:132px 96px 1fr 40px 72px;align-items:center;gap:10px;font-size:12px}
+  .ac-name{font-weight:600}
+  .ac-sent{color:var(--muted);font-family:var(--font-m);font-size:11px}
+  .ac-bar{height:6px;background:var(--bezel);border-radius:4px;overflow:hidden}
+  .ac-fill{height:100%;background:var(--cyan);border-radius:4px}
+  .ac-rate{font-family:var(--font-m);text-align:right}
+  .ac-pos{color:var(--go);font-family:var(--font-m);font-size:11px;text-align:right}
+  .act-untried{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid var(--bezel-soft)}
+  .au-label{font-size:11.5px;color:var(--muted)}
+  .au-chip{font-family:var(--font-m);font-size:11px;color:var(--amber);background:color-mix(in srgb,var(--amber) 10%,transparent);
+    border:1px dashed color-mix(in srgb,var(--amber) 45%,transparent);border-radius:7px;padding:4px 10px;cursor:pointer;transition:.15s}
+  .au-chip:hover{background:color-mix(in srgb,var(--amber) 18%,transparent)}
+  @media (max-width:860px){ .act-ch{grid-template-columns:1fr auto;gap:4px 10px} .ac-bar,.ac-sent{grid-column:1/3} }
+
+
+  /* ===== editierbares Suchprofil + Manager-Feedback ===== */
+  .ks-chip{position:relative;display:inline-flex;align-items:center;gap:6px}
+  .ks-chip.fb{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 55%,transparent);background:color-mix(in srgb,var(--amber) 12%,transparent)}
+  .ks-chip-x{background:none;border:0;color:inherit;opacity:.45;cursor:pointer;font-size:13px;line-height:1;padding:0}
+  .ks-chip-x:hover{opacity:1}
+  .ks-fb-banner{display:flex;align-items:center;gap:10px;font-size:11.5px;color:var(--amber);line-height:1.45;
+    background:color-mix(in srgb,var(--amber) 8%,transparent);border:1px solid color-mix(in srgb,var(--amber) 30%,transparent);border-radius:9px;padding:9px 12px;margin-bottom:14px}
+  .ks-fb-banner svg{width:16px;height:16px;flex-shrink:0}
+  .ks-fb-banner b{color:var(--amber)}
+
+  /* ===== Qualifizierung ===== */
+  .ks-qual{margin-top:18px}
+  .ks-qnote{font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:14px}
+  .ks-qnote b{color:var(--text)}
+  .qual{background:var(--surface-2);border:1px solid var(--bezel);border-radius:12px;padding:14px;margin-bottom:11px}
+  .qual-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .qual-id{font-size:13px}
+  .qual-id b{font-weight:600}
+  .qual-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .qual-eign{font-family:var(--font-m);font-size:11px;color:var(--go)}
+  .cv-badge{font-family:var(--font-m);font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid}
+  .cv-badge.ok{color:var(--go);border-color:color-mix(in srgb,var(--go) 45%,transparent);background:color-mix(in srgb,var(--go) 10%,transparent)}
+  .cv-badge.bad{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 10%,transparent)}
+  .qsteps{display:flex;gap:0;overflow-x:auto;padding-bottom:6px}
+  .qstep{flex:1;min-width:106px;display:flex;flex-direction:column;align-items:center;position:relative;padding:0 2px;text-align:center}
+  .qstep::before{content:"";position:absolute;top:13px;left:-50%;width:100%;height:2px;background:var(--bezel);z-index:0}
+  .qstep:first-child::before{display:none}
+  .qstep.done::before{background:var(--go)}
+  .qdot{width:28px;height:28px;border-radius:50%;border:2px solid var(--bezel);background:var(--surface);z-index:1;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);padding:0;transition:.15s}
+  .qdot svg{width:14px;height:14px}
+  .qstep.done .qdot{background:var(--go);border-color:var(--go);color:var(--bg)}
+  .qstep.current .qdot{border-color:var(--coral);color:var(--coral);box-shadow:0 0 0 4px color-mix(in srgb,var(--coral) 18%,transparent)}
+  .qlbl{font-size:10.5px;margin-top:7px;color:var(--muted);line-height:1.25;max-width:100px}
+  .qstep.done .qlbl,.qstep.current .qlbl{color:var(--text)}
+  .qnote{font-family:var(--font-m);font-size:9px;color:var(--muted-dim);margin-top:2px}
+  .qual-foot{display:flex;gap:9px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+  .kw-btn[disabled]{opacity:.4;cursor:not-allowed}
+  .kw-btn[disabled]:hover{border-color:var(--bezel)}
+
+
+  /* ===== Job-Switcher / Job-Wechsel ===== */
+  .job-switch{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:18px}
+  .job-switch::-webkit-scrollbar{height:5px}
+  .job-switch::-webkit-scrollbar-thumb{background:var(--bezel);border-radius:6px}
+  .js-tab{flex-shrink:0;font-family:var(--font-b);font-size:12.5px;font-weight:500;color:var(--muted);background:var(--surface);border:1px solid var(--bezel);border-radius:9px;padding:8px 14px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .js-tab:hover{color:var(--text);border-color:var(--muted)}
+  .js-tab.on{color:var(--text);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+
+  .act-job{display:flex;align-items:baseline;gap:9px;margin:2px 0 15px;flex-wrap:wrap}
+  .act-job b{font-family:var(--font-d);font-weight:600;font-size:17px;color:var(--text)}
+  .act-job span{font-size:12.5px;color:var(--muted)}
+
+  .mb-bar{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .mb-bar .job-switch{margin-bottom:0;flex:1}
+  .mb-drop{flex-shrink:0;font-family:var(--font-m);font-size:12px;color:var(--muted);border:1px solid var(--bezel);border-radius:9px;padding:7px 13px;background:var(--surface)}
+  .mb-drop b{font-size:16px}
+
+  /* ===== Qualifizierung · Entscheidungspanel ===== */
+  .q-action{margin-top:12px;background:var(--surface);border:1px solid var(--bezel);border-radius:10px;padding:12px 13px}
+  .q-action.rejected{color:var(--muted);font-family:var(--font-m);font-size:12px;text-align:center}
+  .q-assess{font-size:12.5px;line-height:1.5;color:var(--text)}
+  .q-assess .q-eign{font-family:var(--font-m);font-size:11px;color:var(--go);margin-left:4px}
+  .q-hint{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.45}
+  .q-hint b{color:var(--text)}
+  .q-ok{font-size:12.5px;color:var(--go)}
+  .q-warn{font-size:12.5px;color:var(--amber)}
+  .q-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px;justify-content:flex-end}
+  .q-slots{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+  .q-slot{font-family:var(--font-m);font-size:12px;color:var(--cyan);background:color-mix(in srgb,var(--cyan) 9%,transparent);border:1px solid color-mix(in srgb,var(--cyan) 40%,transparent);border-radius:8px;padding:7px 12px;cursor:pointer;transition:.15s}
+  .q-slot:hover{background:color-mix(in srgb,var(--cyan) 18%,transparent)}
+  .qual.is-rej{opacity:.55}
+
+
+  /* ===== Mandat & Briefing · Stammdaten / Optionen ===== */
+  .kw-tag.mb{color:var(--violet);border:1px solid color-mix(in srgb,var(--violet) 40%,transparent);background:color-mix(in srgb,var(--violet) 12%,transparent);
+    font-family:var(--font-m);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:6px}
+  .mb-card{background:var(--surface-2);border:1px solid var(--bezel);border-radius:11px;padding:13px 14px;margin-bottom:10px}
+  .mb-card-h{display:flex;align-items:center;gap:8px;font-family:var(--font-d);font-weight:600;font-size:13px;margin-bottom:9px}
+  .mb-src{margin-left:auto;font-family:var(--font-m);font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .mb-firma-name{font-family:var(--font-d);font-weight:600;font-size:15px;margin-bottom:9px}
+  .mb-firma-name span{display:block;font-family:var(--font-b);font-weight:400;font-size:11.5px;color:var(--muted);margin-top:2px}
+  .mb-kv{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px}
+  .mb-kv > div{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .mb-kv span{font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .mb-kv b{font-family:var(--font-m);font-size:12px;font-weight:500;overflow-wrap:anywhere}
+  .mb-chips-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .mb-mini{font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+  .mb-mgr{font-size:13px;margin-bottom:9px}
+  .mb-mgr b{font-weight:600}
+  .mb-refresh{margin-top:11px;font-size:11px;padding:5px 10px}
+  .mb-cond{border-color:color-mix(in srgb,var(--violet) 35%,var(--bezel))}
+
+  .mb-opt{padding:14px 0;border-top:1px solid var(--bezel-soft)}
+  .mb-opt:first-child{padding-top:0;border-top:0}
+  .mb-opt-h{font-family:var(--font-d);font-weight:600;font-size:13.5px;margin-bottom:3px}
+  .mb-opt-sub{font-size:11.5px;color:var(--muted);line-height:1.45;margin-bottom:11px}
+  .mb-ad{margin-top:12px;background:var(--surface-2);border:1px solid var(--bezel);border-radius:10px;padding:13px 14px}
+  .mb-ad-t{font-family:var(--font-d);font-weight:600;font-size:13.5px;margin-bottom:6px}
+  .mb-ad-b{font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:11px}
+  .mb-ad-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .mb-fb{display:flex;gap:9px;font-size:12px;line-height:1.5;padding:9px 0;border-top:1px solid var(--bezel-soft)}
+  .mb-fb:first-child{border-top:0}
+  .mb-fb-who{font-family:var(--font-m);font-size:9.5px;letter-spacing:.03em;padding:2px 7px;border-radius:5px;height:fit-content;flex-shrink:0}
+  .mb-fb-who.k{color:var(--cyan);border:1px solid color-mix(in srgb,var(--cyan) 40%,transparent);background:color-mix(in srgb,var(--cyan) 10%,transparent)}
+  .mb-fb-who.c{color:var(--coral);border:1px solid color-mix(in srgb,var(--coral) 40%,transparent);background:color-mix(in srgb,var(--coral) 10%,transparent)}
+  .mb-fb b{font-weight:600}
+  .mb-fb-input{margin-top:12px}
+  .mb-fb-input textarea{width:100%;min-height:56px;resize:vertical;background:var(--bg);border:1px solid var(--bezel);border-radius:9px;padding:10px 12px;color:var(--text);font-family:var(--font-b);font-size:12.5px}
+  .mb-fb-input textarea::placeholder{color:var(--muted-dim)}
+  .mb-fb-row{display:flex;gap:9px;margin-top:9px;justify-content:flex-end}
+  .mb-fb-row select{background:var(--surface);border:1px solid var(--bezel);border-radius:8px;color:var(--text);font-family:var(--font-b);font-size:12px;padding:6px 10px}
+
+  /* ===== Externe Recruiter ===== */
+  .ks-ext{margin-top:18px}
+
+  /* ===== Rechnung ===== */
+  #invoiceModal{position:fixed;inset:0;z-index:220;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(6,10,14,.72);backdrop-filter:blur(4px)}
+  #invoiceModal.show{display:flex}
+  .inv-parties{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px}
+  .inv-lbl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#6E8983;margin-bottom:4px}
+  .inv-block{font-size:12px;color:#2B2B2B;line-height:1.6}
+  .inv-amount{font-weight:600;color:#2E4A44;font-family:'IBM Plex Mono',monospace}
+
+
+  /* ===== kompakte Stammdaten (im Job-Workspace unten) ===== */
+  .ks-jobbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+  .ks-jobbar .mb-drop{margin:0}
+  .ks-jobbar #mbNew{margin-left:auto}
+  .ks-stamm .stamm-row{display:flex;gap:12px;font-size:12.5px;padding:6px 0;border-top:1px solid var(--bezel-soft)}
+  .ks-stamm .stamm-row:first-of-type{border-top:0}
+  .stamm-k{flex:0 0 88px;color:var(--muted);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;padding-top:2px}
+  .stamm-v{flex:1;min-width:0;overflow-wrap:anywhere}
+  .stamm-v b{font-weight:600}
+  .stamm-sub{font-size:11px;color:var(--muted);font-family:var(--font-m);line-height:1.5;padding:1px 0 1px 100px}
+  .stamm-row.cond .stamm-v{color:var(--violet)}
+  .stamm-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .ks-adopt{margin-top:12px;padding-top:12px;border-top:1px solid var(--bezel-soft)}
+  @media (max-width:860px){ .stamm-sub{padding-left:0} }
+
+
+  /* ===== BD · Stellen prominent ===== */
+  .method--wide{grid-column:1/-1;border-color:color-mix(in srgb,var(--amber) 40%,var(--bezel));background:color-mix(in srgb,var(--amber) 6%,transparent)}
+  .m-tag{margin-left:auto;font-family:var(--font-m);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--amber);border:1px solid color-mix(in srgb,var(--amber) 45%,transparent);border-radius:6px;padding:2px 8px}
+  .method .m-h{display:flex;align-items:center;gap:8px}
+
+
+  /* ===== Kandidatenwelt · Suche + Filter ===== */
+  .kwsearch{margin-bottom:18px}
+  .kws-bar{display:flex;gap:10px;margin-bottom:12px}
+  .kws-input{flex:1;display:flex;align-items:center;gap:9px;background:var(--bg);border:1px solid var(--bezel);border-radius:9px;padding:0 12px}
+  .kws-input svg{width:15px;height:15px;color:var(--muted);flex-shrink:0}
+  .kws-input input{flex:1;background:none;border:0;outline:none;color:var(--text);font-family:var(--font-b);font-size:13px;padding:10px 0}
+  .kws-input input::placeholder{color:var(--muted-dim)}
+  .kws-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .kws-filters select{background:var(--surface-2);border:1px solid var(--bezel);border-radius:8px;color:var(--text);font-family:var(--font-b);font-size:12px;padding:7px 10px;cursor:pointer}
+  .kws-check{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer}
+  .kws-check input{accent-color:var(--coral);width:15px;height:15px}
+
+
+  /* ===== Laufende Prozesse · dieser Job (Job-Workspace) ===== */
+  .kw-tag.proc{color:var(--coral);border:1px solid color-mix(in srgb,var(--coral) 40%,transparent);background:color-mix(in srgb,var(--coral) 12%,transparent);
+    font-family:var(--font-m);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:6px}
+  .mbproc{background:var(--surface-2);border:1px solid var(--bezel);border-radius:10px;padding:11px 13px}
+  .mbproc + .mbproc{margin-top:9px}
+  .mbproc.won{border-color:color-mix(in srgb,var(--go) 50%,var(--bezel))}
+  .mbproc-top{display:flex;align-items:baseline;gap:8px;font-size:13px}
+  .mbproc-top b{font-weight:600}
+  .mbproc-fee{margin-left:auto;font-family:var(--font-m);font-size:12px;color:var(--go);flex-shrink:0}
+  .mbproc-bar{height:5px;border-radius:4px;background:var(--bezel);overflow:hidden;margin:9px 0 6px}
+  .mbproc-fill{height:100%;border-radius:4px;background:var(--coral)}
+  .mbproc.won .mbproc-fill{background:var(--go)}
+  .mbproc-foot{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)}
+  .mbproc-foot b{color:var(--text);font-weight:600}
+  .mbproc-pct{font-family:var(--font-m)}
+
+
+  /* ===== Aktivität & Performance ===== */
+  .kpi-bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .kpi-bar .rev-periods{margin-bottom:0}
+  .kpi-gauges{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .kg{background:var(--surface);border:1px solid var(--bezel);border-radius:var(--r);padding:14px 14px 13px;display:flex;flex-direction:column;align-items:center;position:relative;overflow:hidden}
+  .kg::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--g-ist),transparent);opacity:.5}
+  .kg-t{font-family:var(--font-d);font-weight:600;font-size:13.5px;align-self:flex-start}
+  .kg-src{font-family:var(--font-m);font-size:9.5px;color:var(--muted);letter-spacing:.03em;align-self:flex-start;margin-top:2px}
+  .kg-g{position:relative;width:150px;height:150px;margin-top:6px}
+  .kg-g svg{width:150px;height:150px;overflow:visible}
+  .kg-track{stroke:var(--bezel);stroke-width:13;fill:none;stroke-linecap:round}
+  .kg-ist{stroke:var(--g-ist);stroke-width:13;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 5px var(--g-glow));transition:stroke-dasharray .8s cubic-bezier(.16,.84,.28,1)}
+  .kg.over .kg-ist{stroke:var(--go)}
+  .kg-soll{stroke:var(--g-soll);stroke-width:2.6}
+  .kg-c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .kg-num{font-family:var(--font-m);font-weight:600;font-size:27px;line-height:1}
+  .kg-of{font-family:var(--font-m);font-size:10.5px;color:var(--muted);margin-top:4px}
+  .kg-pct{font-family:var(--font-m);font-size:11.5px;font-weight:600;color:var(--g-ist);margin-top:3px}
+  .kg.over .kg-pct{color:var(--go)}
+  .kg-trend{font-family:var(--font-m);font-size:10.5px;margin-top:2px}
+  .kg-trend.up{color:var(--go)} .kg-trend.dn{color:var(--stop)}
+  .kpi-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .kt{background:var(--surface-2);border:1px solid var(--bezel);border-radius:11px;padding:12px 13px}
+  .kt-v{font-family:var(--font-m);font-weight:600;font-size:19px}
+  .kt-l{font-size:12px;font-weight:600;margin-top:3px}
+  .kt-s{font-family:var(--font-m);font-size:9.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+  @media (max-width:1000px){ .kpi-gauges{grid-template-columns:repeat(2,1fr)} .kpi-tiles{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:560px){ .kpi-gauges,.kpi-tiles{grid-template-columns:1fr} }
+
+
+  /* ===== Prozess-Funnel / Stage-Tracking ===== */
+  .fn-row{display:flex;align-items:stretch;overflow-x:auto;padding-bottom:6px;gap:0}
+  .fn-stage{flex:1;min-width:84px;display:flex;flex-direction:column;align-items:center}
+  .fn-n{font-family:var(--font-m);font-weight:600;font-size:20px}
+  .fn-barwrap{width:64%;height:96px;display:flex;align-items:flex-end;margin:6px 0}
+  .fn-bar{width:100%;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,var(--g-ist),color-mix(in srgb,var(--g-ist) 45%,transparent));transition:height .6s}
+  .fn-l{font-size:11px;color:var(--muted);text-align:center;line-height:1.25}
+  .fn-tr{flex:0 0 62px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:9px;padding:4px 0;margin-bottom:22px}
+  .fn-tr.worst{background:color-mix(in srgb,var(--stop) 10%,transparent);outline:1px solid color-mix(in srgb,var(--stop) 40%,transparent)}
+  .fn-rate{font-family:var(--font-m);font-weight:600;font-size:13px}
+  .fn-rate.ok{color:var(--go)} .fn-rate.low{color:var(--amber)}
+  .fn-days{font-family:var(--font-m);font-size:10px;color:var(--muted);margin-top:2px}
+  .fn-arrow{color:var(--muted-dim);font-family:var(--font-m);font-size:15px;line-height:1}
+  .fn-detail{margin-top:14px;display:flex;flex-direction:column;gap:9px}
+  .ft{background:var(--surface-2);border:1px solid var(--bezel);border-radius:11px;padding:11px 13px}
+  .ft.worst{border-color:color-mix(in srgb,var(--stop) 50%,var(--bezel))}
+  .ft-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:12.5px}
+  .ft-h b{font-weight:600}
+  .ft-q{color:var(--muted);font-size:11.5px}
+  .ft-flag{margin-left:auto;font-family:var(--font-m);font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--stop);border:1px solid color-mix(in srgb,var(--stop) 45%,transparent);border-radius:6px;padding:2px 8px}
+  .ft-m{display:grid;grid-template-columns:1fr 150px 84px;align-items:center;gap:12px;margin-top:9px}
+  .ft-bar{position:relative;height:7px;background:var(--bezel);border-radius:4px}
+  .ft-fill{height:100%;border-radius:4px}
+  .ft-fill.ok{background:var(--go)} .ft-fill.low{background:var(--amber)}
+  .ft-target{position:absolute;top:-3px;width:2px;height:13px;background:var(--g-soll);border-radius:1px}
+  .ft-v{font-family:var(--font-m);font-size:12.5px;font-weight:600}
+  .ft-v.ok{color:var(--go)} .ft-v.low{color:var(--amber)}
+  .ft-v small{font-weight:400;color:var(--muted);font-size:10px;margin-left:4px}
+  .ft-d{font-family:var(--font-m);font-size:11.5px;color:var(--muted);text-align:right}
+  .ft-r{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px}
+  .ft-rl{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+  .kpi-groups{display:flex;flex-direction:column;gap:14px}
+  .kgrp-h{font-family:var(--font-m);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+  .kt.warn .kt-v{color:var(--amber)}
+  @media (max-width:760px){ .ft-m{grid-template-columns:1fr;gap:5px} .ft-d{text-align:left} }
+
+</style>
+
+
+</head>
+<body>
+
+<!-- ================= TOP BAR ================= -->
+<div class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><path d="M12 12l4.5-4.5" stroke-width="2"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+    <div><b>COCKPIT</b> <span>· Personalberatung</span></div>
+  </div>
+
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+    Kandidat, Mandat oder Firma suchen …
+  </div>
+
+  <div class="bar-right">
+    <div class="pill pill--data"><span class="dot"></span>Datenlauf fällig · 5 Änderungen</div>
+    <div class="pill pill--hitl"><span class="dot"></span>Human-in-the-Loop aktiv</div>
+    <div class="pill pill--user">TB · Ansprache: Sie</div>
+    <div class="theme-sw" id="themeSw" role="group" aria-label="Design">
+      <button data-theme="jet" class="on">Jet</button>
+      <button data-theme="mono">Mono</button>
+      <button data-theme="heli">Heli</button>
+    </div>
+    <div class="compass" role="navigation" aria-label="Cockpit-Navigation">
+      <button class="cmp-l" data-go="left" title="Business Development (←)" aria-label="Nach links"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
+      <button class="cmp-c on" data-go="center" title="Cockpit" aria-label="Zum Cockpit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg></button>
+      <button class="cmp-r" data-go="right" title="Kandidatenwelt (→)" aria-label="Nach rechts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <button class="cmp-d" data-go="down" title="Aktivität &amp; Performance (↓)" aria-label="Nach unten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
+      <button class="cmp-u" data-go="up" title="Mandat &amp; Kandidatensuche (↑)" aria-label="Nach oben"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= PANNING MAP ================= -->
+<div class="viewport">
+<div class="map center" id="map">
+
+  <!-- 0: TL empty -->
+  <div class="cell cell--empty"></div>
+
+  <!-- 1: UP · Mandat & Kandidatensuche (cyan) -->
+  <section class="cell" style="--accent:var(--cyan)">
+    <div class="wrap">
+      <button class="backlink" data-go="center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M6 13l6 6 6-6"/></svg>Zum Cockpit</button>
+      <div class="view-head">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></div>
+        <div>
+          <div class="eyebrow">Oben · Job-Workspace</div>
+          <h1 class="view-title">Mandat &amp; Kandidatensuche</h1>
+          <p class="view-sub">Die Stammdaten des Mandats plus die komplette Kandidatensuche in einem Bereich – vom Job über Ansprache und Ergebnisse bis zur Qualifizierung.</p>
+        </div>
+      </div>
+
+      <div class="job-switch" id="ksJobSwitch"></div>
+
+      <div class="ks-jobbar">
+        <div class="mb-drop">Dropscore <b id="mbDrop">–</b></div>
+        <button class="kw-btn" id="mbNew">+ Neues Mandat</button>
+      </div>
+
+      <div class="panel ks-stamm">
+        <div class="kw-h"><span class="kw-tag mb">Stammdaten</span> Firma · Manager · Job · Konditionen</div>
+        <div id="mbLeft"></div>
+      </div>
+
+      <div class="panel">
+        <div class="kw-h"><span class="kw-tag outb">Feedback</span> Rückmeldungen zu Kandidaten</div>
+        <div class="mb-opt-sub">Von Kunde &amp; Kandidaten aus den Prozessschritten (inkl. Interview) – schärft die nächsten Kandidaten.</div>
+        <div id="mbFeedback"></div>
+        <div class="mb-fb-input">
+          <textarea id="mbFbText" placeholder="Feedback notieren …"></textarea>
+          <div class="mb-fb-row"><select id="mbFbWho"><option>Kunde</option><option>Kandidat</option></select><button class="kw-btn primary" id="mbFbBtn">Feedback hinzufügen</button></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="kw-h"><span class="kw-tag proc">Prozesse</span> Laufende Prozesse · <b id="mbProcsJob"></b> <span class="kw-note" id="mbProcsCount"></span></div>
+        <div id="mbProcs"></div>
+      </div>
+
+
+      <!-- Aktivität für diesen Job -->
+      <div class="panel ks-activity">
+        <div class="kw-h"><span class="kw-tag inb">Aktivität</span> Was haben wir für diesen Job getan?</div>
+        <div class="act-job" id="actJob"></div>
+        <div class="act-funnel" id="actFunnel"></div>
+        <div class="act-channels" id="actChannels"></div>
+        <div class="act-untried" id="actUntried"></div>
+      </div>
+
+      <!-- Suchprofil aus Briefing -->
+      <div class="panel ks-profile">
+        <div class="kw-h"><span class="kw-tag inb">Suchprofil</span> Ideales Kandidatenprofil <span class="kw-note" id="ksProfileNote">aus Briefing #A-238 · Head of Data Engineering</span></div>
+        <div class="ks-fb-banner" id="ksFbBanner"></div>
+        <div class="ks-grid">
+          <div class="ks-block">
+            <div class="ks-k">Musskriterien</div>
+            <div class="ks-chips" id="ksMust"></div>
+            <div class="ks-k" style="margin-top:14px">Nice-to-have</div>
+            <div class="ks-chips" id="ksNice"></div>
+          </div>
+          <div class="ks-block">
+            <div class="ks-k">Kultur</div>
+            <div class="ks-culture" id="ksCulture"></div>
+            <div class="ks-facts" id="ksFacts"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <!-- Zentrale Suche & Quellen -->
+        <div class="panel">
+          <div class="kw-h"><span class="kw-tag inb">Zentrale Suche</span> Datenbank &amp; Portale</div>
+          <div class="ks-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+            <span>Intelligente Suche über alle Quellen …</span>
+          </div>
+          <div class="ks-sources" id="ksSources">
+            <button class="ks-src on" data-src="db">Eigene Datenbank</button>
+            <button class="ks-src on" data-src="li">LinkedIn</button>
+            <button class="ks-src on" data-src="xing">Xing</button>
+            <button class="ks-src" data-src="aa">Arbeitsagentur</button>
+            <button class="ks-src" data-src="step">Stepstone</button>
+            <button class="ks-src add">+ Portal</button>
+          </div>
+          <div class="ks-search-foot">
+            <label class="ks-only"><input type="checkbox" id="ksOnlyDb"> Nur eigene Datenbank</label>
+            <button class="kw-btn primary" id="ksSearchBtn" style="margin-left:auto">Kandidaten suchen →</button>
+          </div>
+          <div class="ks-fresh"><span class="dot"></span>KI hält Kandidatendaten laufend aktuell</div>
+          <div class="ks-adopt"><button class="kw-btn" id="mbAdBtn">Anonyme Stellenanzeige erstellen</button><div id="mbAd" class="mb-ad" style="display:none"></div></div>
+        </div>
+
+        <!-- Ansprache -->
+        <div class="panel">
+          <div class="kw-h"><span class="kw-tag outb">Ansprache</span> Nachricht an Kandidaten <span class="kw-note" id="ksAnredeNote">Sie-Form</span></div>
+          <div class="ks-anrede-toggle" id="ksAnrede">
+            <button class="on" data-anr="sie">Sie</button><button data-anr="du">Du</button>
+          </div>
+          <div class="ks-msg" id="ksMsg"></div>
+          <div class="ks-learn"><span class="dot"></span>KI lernt deinen Stil – jede Anpassung verbessert die nächste Ansprache</div>
+        </div>
+      </div>
+
+      <!-- Ergebnisse -->
+      <div class="panel ks-results">
+        <div class="ks-res-empty" id="ksResEmpty">Quellen wählen und Suche starten – die gefundenen Kandidaten erscheinen hier.</div>
+        <div id="ksResBody" style="display:none">
+          <div class="ks-res-head">
+            <div><span class="ks-res-count" id="ksResCount">0</span> passende Kandidaten <span class="kw-note" id="ksResSrc">über 0 Quellen</span></div>
+            <button class="kw-btn primary" id="ksMassBtn">Alle anschreiben &amp; Interesse abfragen</button>
+          </div>
+          <div id="ksResList"></div>
+        </div>
+      </div>
+      <!-- Qualifizierung interessierter Kandidaten -->
+      <div class="panel ks-qual">
+        <div class="kw-h"><span class="kw-tag outb">Qualifizierung</span> Interessierte Kandidaten · <b id="ksQualJob"></b> <span class="kw-note">CV → Video → Vorstellung → Prozess</span></div>
+        <div class="ks-qnote">CV muss <b>vor</b> dem Video-Interview eingehen. Die KI prüft dann Eignung und bereitet Fragen vor. Nach dem Gespräch wird der CV mit dem Transkript abgeglichen und die Vorstellung erstellt – bei gutem CV direkt, sonst über die Panam-Vorlage. Mit der Vorstellung beim Kunden startet der Prozess.</div>
+        <div id="ksQualList"></div>
+      </div>
+
+      <!-- Externe Recruiter -->
+      <div class="panel ks-ext">
+        <div class="kw-h"><span class="kw-tag outb">Externe Recruiter</span> Eingereichte Kandidaten · <b id="ksExtJob"></b> <span class="kw-note" id="ksExtCount">0 offen</span></div>
+        <div class="ks-qnote">Externe Recruiter haben eingeschränkten Zugriff: sie sehen die wichtigsten Auftragsdaten und laden passende Kandidaten hoch. Die KI prüft, du entscheidest – ablehnen, direkt kontaktieren (Video/Anruf/Mail) oder in die Qualifizierung übernehmen.</div>
+        <div id="ksExtList"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 2: TR empty -->
+  <div class="cell cell--empty"></div>
+
+  <!-- 3: LEFT · Business Development (amber) -->
+  <section class="cell" style="--accent:var(--amber)">
+    <div class="wrap">
+      <button class="backlink" data-go="center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Zum Cockpit</button>
+      <div class="view-head">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></div>
+        <div>
+          <div class="eyebrow">Links · Ohne konkreten Bezug</div>
+          <h1 class="view-title">Business Development</h1>
+          <p class="view-sub">Reine Kundenarbeit – unabhängig von einem einzelnen Kandidaten oder Job. Drei Wege, die sich ergänzen.</p>
+        </div>
+      </div>
+
+      <div class="approach">
+        <div class="method method--wide">
+          <div class="m-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg><b>Stellen</b><span class="m-tag">Größter Hebel</span></div>
+          <ul>
+            <li>Neu ausgeschriebene Stellen als Einstieg – laufend gescreent</li>
+            <li>Firma sucht → wir haben passende Profile aus der Datenbank</li>
+            <li>Direkter Aufhänger fürs Gespräch, hohe Trefferquote</li>
+          </ul>
+        </div>
+        <div class="method">
+          <div class="m-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5c0 8 7 15 15 15v-3l-4-2-2 2c-3-1-6-4-7-7l2-2-2-4H4z"/></svg><b>Datenbank</b></div>
+          <ul>
+            <li>KI-Anrufliste: wer, wann zuletzt, worüber</li>
+            <li>Notizen &amp; Projektsignale vorbereitet</li>
+            <li>„XY anrufen – Migrationsprojekt geplant"</li>
+          </ul>
+        </div>
+        <div class="method">
+          <div class="m-h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L3.2 7.7l5.4-.8z"/></svg><b>Marktsignale</b></div>
+          <ul>
+            <li>Startups, Fundings &amp; Branchen-News als Anlass</li>
+            <li>In Firmen reintelefonieren &amp; vorstellen (Kaltakquise)</li>
+            <li>Kontaktdaten generieren – KI sammelt automatisch mit</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="bd-notes">
+        <div class="bd-notes-h">Letzte Notizen aus BD-Calls <span class="bd-sub">unter allen Wegen</span></div>
+        <div class="bd-note"><span class="bd-when">Heute</span><div><b>M. Wagner · Nexval GmbH</b> — Migrationsprojekt Q3 bestätigt, Budget steht. Follow-up in KW 32.</div></div>
+        <div class="bd-note"><span class="bd-when">Gestern</span><div><b>T. Lang · Paystream</b> — sucht Plattform-Team, 2 Rollen. Briefing angefragt.</div></div>
+        <div class="bd-note"><span class="bd-when">vor 2 Tg.</span><div><b>Cloudspire</b> — Reorg, evtl. Cloud-Architektur-Bedarf Q4. Locker halten.</div></div>
+        <div class="bd-note"><span class="bd-when">vor 3 Tg.</span><div><b>Aventos GmbH</b> — Erstkontakt über Funding-News. Interesse an Senior-Profilen.</div></div>
+      </div>
+
+      <div class="note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        <div>Im Vertrieb alle Wege bedienen und messen, <b>welcher wie effizient</b> ist – nichts auslassen. Ein Dashboard hält die Ergebnisse fest.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4: CENTER · Cockpit (drei Ebenen) -->
+  <section class="cell" id="cockpit">
+    <div class="wrap">
+      <div class="view-head" style="margin-bottom:12px">
+        <div>
+          <div class="eyebrow" style="--accent:var(--cyan)">Kommandozentrale</div>
+          <h1 class="view-title">Cockpit</h1>
+          <p class="view-sub cockpit-lead">Ein lebendiges System: es liest mit, hält jeden Prozess aktuell und erkennt, wo Umsatz entsteht.</p>
+        </div>
+      </div>
+
+      <!-- Lebendiges System · erkannte Signale -->
+      <div class="signals">
+        <div class="sig-h">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/></svg>
+          Erkannte Signale <span class="sig-tag">CRM · E-Mail &amp; Notizen</span>
+        </div>
+        <div class="sig"><span class="sig-src">E-Mail · vor 2 Std</span> Manager (Scale-up) kündigt Offer für <b>#K-0731</b> an — Stage „Offer" vorschlagen? <button class="sig-act">Übernehmen</button></div>
+        <div class="sig"><span class="sig-src">Telefonnotiz</span> Bei <b>#A-238</b> Budget bestätigt. Gelernt: Manager braucht Ø 21 Tage bis Offer → Abschluss eher <b>August</b>. <button class="sig-act">Prüfen</button></div>
+      </div>
+
+      <!-- ===== EBENE 01 · Umsatz & Potenzial ===== -->
+      <div class="level">
+        <div class="level-tab"><span class="level-no">01</span> Umsatz &amp; Potenzial <span class="lt-hint">‹ wischen · tippen ›</span></div>
+        <div class="rev" id="rev">
+          <div class="rev-periods" id="revPeriods">
+            <button data-p="jahr">Jahr</button>
+            <button data-p="quartal">Quartal</button>
+            <button data-p="monat" class="on">Monat</button>
+            <button data-p="tag">Tag</button>
+          </div>
+          <div class="rev-body" id="revBody">
+            <div class="gauge">
+              <svg viewBox="0 0 200 200" width="250" height="250">
+                <circle class="heli-only" id="gFace" cx="100" cy="100" r="88"/>
+                <circle class="heli-only" id="gBezel" cx="100" cy="100" r="93" fill="none"/>
+                <g id="gaugeTicks"></g>
+                <path id="gTrack" d="M43.4 156.6 A80 80 0 1 1 156.6 156.6" pathLength="1000"/>
+                <path id="gWin"   d="M43.4 156.6 A80 80 0 1 1 156.6 156.6" pathLength="1000" stroke-dasharray="0 1000"/>
+                <path id="gPot"   d="M43.4 156.6 A80 80 0 1 1 156.6 156.6" pathLength="1000" stroke-dasharray="0 1000"/>
+                <path id="gIst"   d="M43.4 156.6 A80 80 0 1 1 156.6 156.6" pathLength="1000" stroke-dasharray="1000" stroke-dashoffset="1000"/>
+                <line id="gSoll" x1="100" y1="18" x2="100" y2="34"/>
+                <line class="heli-only" id="gNeedle" x1="100" y1="100" x2="100" y2="34"/>
+                <circle class="heli-only" id="gHub" cx="100" cy="100" r="6"/>
+              </svg>
+              <div class="gauge-c">
+                <div class="g-ist" id="revIst">–</div>
+                <div class="g-pct" id="revPct">–</div>
+                <div class="g-boost" id="gBoost"></div>
+                <div class="g-cap" id="revPeriodLbl">Monat</div>
+              </div>
+            </div>
+
+            <div class="readout">
+              <div class="ro-tiles">
+                <div class="ro"><span class="ro-l">Ist</span><span class="ro-v" id="roIst">–</span></div>
+                <span class="ro-sep">+</span>
+                <div class="ro"><span class="ro-l">Potenzial</span><span class="ro-v boost" id="roPot">–</span></div>
+                <span class="ro-sep">=</span>
+                <div class="ro eq"><span class="ro-l">Prognose</span><span class="ro-v" id="roForecast">–</span></div>
+              </div>
+              <div class="year-goal" id="yearGoal"></div>
+              <div class="near-block">
+                <div class="dh-l">Kurz vor Abschluss <span class="dh-note">fließt in den Umsatz</span></div>
+                <div id="nearList"></div>
+              </div>
+              <div class="pipe-line" id="pipeLine"></div>
+            </div>
+          </div>
+          <div class="swipe-dots" id="revDots"><span></span><span></span><span class="on"></span><span></span></div>
+        </div>
+      </div>
+
+      <!-- ===== EBENE 03 · Laufende Prozesse ===== -->
+      <div class="level" style="--accent:var(--coral)">
+        <div class="level-tab"><span class="level-no">02</span> Laufende Prozesse <span class="lt-hint">Schritte antippen · Deal bestätigen</span></div>
+        <div id="procList"></div>
+      </div>
+
+      <!-- ===== Nächste beste Aktionen (unter Umsatz) ===== -->
+      <div class="level" style="--accent:var(--amber)">
+        <div class="level-tab">
+          <span class="level-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M13 2 4.5 13.5H11l-1 8.5L19.5 10H13z"/></svg></span>
+          Nächste beste Aktionen <span class="lt-hint" id="nbaCount">–</span>
+        </div>
+        <div id="nbaList" class="nba-list"></div>
+      </div>
+
+      <!-- ===== EBENE 02 · Jobscoring ===== -->
+      <div class="level" style="--accent:var(--cyan)">
+        <div class="level-tab"><span class="level-no">03</span> Jobscoring <span class="lt-hint">Besetzbarkeit &amp; Deal-Chance · gelernt</span></div>
+        <div class="score-sum">
+          <span>Ø <b>68</b></span><span><b>5</b> über 70</span><span><b>2</b> kritisch</span><span>M = Deal-Chance beim Manager</span>
+        </div>
+        <div class="score-grid" id="scoreGrid"></div>
+      </div>
+
+      <!-- Sprung in die vier Arbeitswelten -->
+      <div class="world-strip">
+        <button class="ws-btn" style="--wc:var(--coral)" data-go="right"><span class="ws-dot"></span><span class="ws-dir">→</span> Kandidatenwelt</button>
+        <button class="ws-btn" style="--wc:var(--amber)" data-go="left"><span class="ws-dot"></span><span class="ws-dir">←</span> Business Development</button>
+        <button class="ws-btn" style="--wc:var(--violet)" data-go="down"><span class="ws-dot"></span><span class="ws-dir">↓</span> Aktivität &amp; Performance</button>
+        <button class="ws-btn" style="--wc:var(--cyan)" data-go="up"><span class="ws-dot"></span><span class="ws-dir">↑</span> Mandat &amp; Kandidatensuche</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5: RIGHT · Kandidatenwelt (coral) -->
+  <section class="cell" style="--accent:var(--coral)">
+    <div class="wrap">
+      <button class="backlink" data-go="center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Zum Cockpit</button>
+      <div class="view-head">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M5 21c0-4 3-6 7-6s7 2 7 6"/></svg></div>
+        <div>
+          <div class="eyebrow">Rechts · Ausgangspunkt Kandidat</div>
+          <h1 class="view-title">Kandidatenwelt · Profilvertrieb</h1>
+          <p class="view-sub">Ausgehend vom Kandidaten: das System screent die eigene Datenbank nach passenden Managern und Jobs und findet konkrete offene Stellen am Markt – Vorstellung und Ansprache per Knopfdruck.</p>
+        </div>
+      </div>
+
+      <div class="panel kwsearch">
+        <div class="kw-h"><span class="kw-tag inb">Suche</span> Kandidaten durchsuchen</div>
+        <div class="kws-bar">
+          <div class="kws-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="kwSearchInput" type="text" placeholder="Name, Skill oder Titel …"></div>
+          <button class="kw-btn primary" id="kwSearchBtn">Suchen</button>
+        </div>
+        <div class="kws-filters">
+          <select><option>Skill: alle</option><option>AWS</option><option>Kubernetes</option><option>Python</option><option>Go</option><option>Spark</option></select>
+          <select><option>Standort: alle</option><option>München</option><option>Remote</option><option>Berlin</option></select>
+          <select><option>Seniorität: alle</option><option>Senior</option><option>Lead</option><option>Head</option></select>
+          <select><option>Verfügbarkeit: alle</option><option>sofort</option><option>1 Monat</option><option>3 Monate</option></select>
+          <select><option>Min. Score</option><option>60+</option><option>75+</option><option>85+</option></select>
+          <label class="kws-check"><input type="checkbox"> nur exklusiv</label>
+        </div>
+      </div>
+
+      <div class="cand-profile">
+        <div class="cp-top">
+          <div class="cp-avatar">SB</div>
+          <div class="cp-id">
+            <div class="cp-name">Sarah Bergmann <span class="cp-num">#K-0731</span></div>
+            <div class="cp-role">Senior Cloud Architect · 9 Jahre Erfahrung</div>
+          </div>
+          <div class="cp-score">
+            <div class="cp-score-num">88</div>
+            <div class="cp-score-lbl">Kandidaten-Score</div>
+          </div>
+        </div>
+        <div class="cp-flags">
+          <span class="cp-flag good">Exklusiv mit uns</span>
+          <span class="cp-flag good">Marktgefragtes Profil</span>
+          <span class="cp-flag neutral">Nicht selbst beworben</span>
+          <span class="cp-flag neutral">Keine anderen Beratungen</span>
+        </div>
+        <div class="cp-grid">
+          <div class="cp-cell"><span class="cp-k">Standort · Einzugsgebiet</span><span class="cp-v">München · +50 km / Remote</span></div>
+          <div class="cp-cell"><span class="cp-k">Verfügbarkeit · Kündigung</span><span class="cp-v">ab KW 32 · 3 Monate</span></div>
+          <div class="cp-cell"><span class="cp-k">Gehaltsvorstellung</span><span class="cp-v">120.000 €</span></div>
+          <div class="cp-cell"><span class="cp-k">Technologien</span><span class="cp-v">AWS · Kubernetes · Go · Terraform</span></div>
+        </div>
+        <div class="cp-summary">Cloud-Architektin mit Fokus auf AWS-Landing-Zones und Kubernetes-Plattformen; sucht mehr Architektur-Verantwortung und Remote-Flexibilität.</div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <div class="kw-h"><span class="kw-tag inb">In der Datenbank</span> Passende Manager &amp; offene Jobs <span class="kw-note">Skill-Screening</span></div>
+          <div id="kwInner"></div>
+        </div>
+        <div class="panel">
+          <div class="kw-h"><span class="kw-tag outb">Am Markt</span> Passende offene Stellen <span class="kw-note">extern · Job-Portale</span></div>
+          <div id="kwOuter"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6: BL empty -->
+  <div class="cell cell--empty"></div>
+
+  <!-- 7: DOWN · Aktivität & Performance (violet) -->
+  <section class="cell" style="--accent:var(--violet)">
+    <div class="wrap">
+      <button class="backlink" data-go="center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Zum Cockpit</button>
+      <div class="view-head">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
+        <div>
+          <div class="eyebrow">Unten · Tracking</div>
+          <h1 class="view-title">Aktivität &amp; Performance</h1>
+          <p class="view-sub">Die Aktivitäten, die zu Umsatz führen – automatisch aus dem System gemessen, pro Recruiter und Zeitraum, mit Ziel.</p>
+        </div>
+      </div>
+
+      <div class="kpi-bar">
+        <div class="rev-periods" id="kpiPeriods">
+          <button data-kp="woche">Woche</button><button data-kp="monat" class="on">Monat</button><button data-kp="quartal">Quartal</button>
+        </div>
+        <div class="rev-periods" id="kpiWho">
+          <button data-kw="team" class="on">Team</button><button data-kw="tb">Thomas B.</button><button data-kw="c360">360°-Consultant</button>
+        </div>
+      </div>
+
+      <div class="kpi-gauges" id="kpiGauges"></div>
+
+      <div class="panel" style="margin-top:18px">
+        <div class="kw-h"><span class="kw-tag proc">Stage-Tracking</span> Prozess-Funnel · wo hakt es? <span class="kw-note" id="fnTotal"></span></div>
+        <div class="fn-row" id="fnRow"></div>
+        <div class="fn-detail" id="fnDetail"></div>
+        <div class="q-hint" style="margin-top:12px">Absagegründe kommen aus den Feedbacks im Mandat. Jeder Stage-Wechsel wird mit Datum gespeichert, daraus entstehen Quote und Dauer.</div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <div class="kw-h"><span class="kw-tag mb">Kennzahlen</span> Sourcing · Mandate · Ergebnis</div>
+        <div class="kpi-groups" id="kpiTiles"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8: BR empty -->
+  <div class="cell cell--empty"></div>
+
+</div>
+</div>
+
+<script>
+  const map = document.getElementById('map');
+  const dirs = ['center','up','right','down','left'];
+  const compassBtns = document.querySelectorAll('.compass button');
+
+  function goTo(view){
+    if(!dirs.includes(view)) return;
+    map.className = 'map ' + view;
+    compassBtns.forEach(b => b.classList.toggle('on', b.dataset.go === view));
+    // move focus to the newly shown section for a11y
+    const cellIndex = {up:1,left:3,center:4,right:5,down:7}[view];
+    const cell = map.children[cellIndex];
+    if(cell){ cell.setAttribute('tabindex','-1'); cell.focus({preventScroll:true}); }
+  }
+
+  document.querySelectorAll('[data-go]').forEach(el=>{
+    el.addEventListener('click', ()=> goTo(el.dataset.go));
+  });
+
+  document.addEventListener('keydown', e=>{
+    const k = e.key;
+    if(k==='ArrowUp'){ goTo('up'); e.preventDefault(); }
+    else if(k==='ArrowDown'){ goTo('down'); e.preventDefault(); }
+    else if(k==='ArrowLeft'){ goTo('left'); e.preventDefault(); }
+    else if(k==='ArrowRight'){ goTo('right'); e.preventDefault(); }
+    else if(k==='Escape' || k==='Home'){ goTo('center'); }
+  });
+
+  /* ============ Ebene 01 · Umsatz & Potenzial (Instrument) ============ */
+  const fmt  = n => '\u20AC\u00A0' + Math.round(n).toLocaleString('de-DE');
+  const fmtC = n => n >= 1000 ? '\u20AC\u00A0' + (Math.round(n/100)/10).toLocaleString('de-DE') + 'k' : fmt(n);
+  const REV = {
+    jahr:    {label:'2026',  ist:840000, soll:1200000},
+    quartal: {label:'Q3',    ist:245000, soll:300000},
+    monat:   {label:'Juli',  ist:62000,  soll:100000},
+    tag:     {label:'Heute', ist:5200,   soll:4500}
+  };
+  const ORDER = ['jahr','quartal','monat','tag'];
+  let currentP = 'monat';
+
+  // Weitere Pipeline (nicht periodengebunden) — Dealgrößen 15–48k, Ø ~23k
+  const DEALS = [
+    {m:'#A-244 · Interim CTO',      v:34000, p:45},
+    {m:'#A-251 · Eng. Manager',     v:22000, p:60},
+    {m:'#A-219 · Senior Architect', v:18000, p:65},
+    {m:'#A-263 · Data Scientist',   v:15000, p:40}
+  ];
+  const pipelineSum = DEALS.reduce((s,d)=> s + d.v, 0);
+  const pipelineWeighted = DEALS.reduce((s,d)=> s + d.v*d.p/100, 0);
+
+  /* ============ Prozess-Modell (von Ebene 1 & 3 genutzt) ============ */
+  const STEPS = [
+    {id:'vorgestellt', label:'Vorgestellt',     kind:'date'},
+    {id:'fb1',         label:'Feedback',        kind:'feedback', who:[['kunde','Kunde']]},
+    {id:'interview',   label:'Interviewtermin', kind:'date', time:true},
+    {id:'prep1',       label:'Interview-Vorb.', kind:'task'},
+    {id:'fb2',         label:'Feedback',        kind:'feedback', who:[['kandidat','Kand.'],['kunde','Kunde']]},
+    {id:'finaltermin', label:'Finaltermin',     kind:'date', time:true},
+    {id:'prepFinal',   label:'Final-Vorb.',     kind:'task'},
+    {id:'offer',       label:'Offer & Zusage',  kind:'feedback', who:[['offer','Offer'],['annahme','Zusage']]},
+    {id:'deal',        label:'Vertrag',         kind:'deal'}
+  ];
+  const TOTAL = STEPS.reduce((n,s)=> n + (s.kind==='feedback' ? s.who.length : 1), 0);
+  const FINAL_IDX = STEPS.findIndex(s => s.id === 'finaltermin');
+
+  const PROCS = [
+    {cand:'#K-0588', name:'Michael Vogel', role:'DevOps Lead',         mandat:'#A-260 · FinTech',  value:41000, closeProb:85, eta:'diesen Monat', timing:'Ø 9 T bis Offer',
+      dates:{vorgestellt:'27.06', interview:'15.07', finaltermin:'29.07'}, times:{interview:'10:00', finaltermin:'14:00'},
+      state:{vorgestellt:true, fb1:{kandidat:true,kunde:true}, prep1:true, interview:true, fb2:{kandidat:true,kunde:true}, prepFinal:true, finaltermin:true, offer:{offer:true,annahme:true}, deal:false}},
+    {cand:'#K-0731', name:'Sarah Bergmann', role:'Cloud Architect',     mandat:'#A-231 · Scale-up', value:32000, closeProb:78, eta:'diesen Monat', timing:'Ø 11 T bis Offer',
+      dates:{vorgestellt:'09.07', interview:'24.07', finaltermin:'30.07'}, times:{interview:'11:30', finaltermin:'15:00'},
+      state:{vorgestellt:true, fb1:{kandidat:true,kunde:true}, prep1:true, interview:true, fb2:{kandidat:true,kunde:true}, prepFinal:true, finaltermin:true, offer:{offer:true,annahme:false}, deal:false}},
+    {cand:'#K-1042', name:'Daniel Krause', role:'Lead Data Engineer',  mandat:'#A-238 · Nexval',   value:28000, closeProb:55, eta:'August', timing:'Ø 21 T bis Offer',
+      dates:{vorgestellt:'02.07', interview:'21.07', finaltermin:'\u2014'}, times:{interview:'09:30'},
+      state:{vorgestellt:true, fb1:{kandidat:true,kunde:true}, prep1:true, interview:true, fb2:{kandidat:true,kunde:false}, prepFinal:false, finaltermin:false, offer:{offer:false,annahme:false}, deal:false}},
+    {cand:'#K-0876', name:'Lena Hoffmann', role:'Senior Data Engineer',mandat:'#A-238 · Nexval',   value:24000, closeProb:40, eta:'\u2014', timing:'Ø 21 T bis Offer',
+      dates:{vorgestellt:'18.07', interview:'\u2014', finaltermin:'\u2014'},
+      state:{vorgestellt:true, fb1:{kandidat:false,kunde:false}, prep1:false, interview:false, fb2:{kandidat:false,kunde:false}, prepFinal:false, finaltermin:false, offer:{offer:false,annahme:false}, deal:false}}
+  ];
+  const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>';
+
+  const nodeDone = (s, st) => s.kind === 'feedback'
+    ? s.who.every(([k]) => st[s.id] && st[s.id][k])
+    : st[s.id] === true;
+  function units(st){
+    return STEPS.reduce((d,s)=>{
+      if(s.kind==='feedback'){ const f=st[s.id]||{}; return d + s.who.reduce((n,[k])=> n+(f[k]?1:0), 0); }
+      return d + (st[s.id]?1:0);
+    },0);
+  }
+  const curIdx  = st => { const i = STEPS.findIndex(s => !nodeDone(s, st)); return i<0 ? STEPS.length : i; };
+  const isWon   = p => p.state.deal === true;
+  const inFinal = p => !isWon(p) && curIdx(p.state) >= FINAL_IDX;
+  const wonSum  = () => PROCS.reduce((s,p)=> s + (isWon(p)?p.value:0), 0);
+  const istOf   = name => name==='tag' ? REV[name].ist : REV[name].ist + wonSum();
+  const nearCloseSum = () => PROCS.filter(inFinal).reduce((s,p)=> s + p.value, 0);
+
+  /* ---- Gauge geometry ---- */
+  const GC=100, GA0=-135, GSWEEP=270;
+  const polar = (r,deg) => { const a=(deg-90)*Math.PI/180; return [GC + r*Math.cos(a), GC + r*Math.sin(a)]; };
+  const gIst  = document.getElementById('gIst');
+  const gPot  = document.getElementById('gPot');
+  const gWin  = document.getElementById('gWin');
+  const gSoll = document.getElementById('gSoll');
+  const gaugeEl = document.querySelector('.gauge');
+  const gNeedle = document.getElementById('gNeedle');
+  const revIst = document.getElementById('revIst');
+  const revPct = document.getElementById('revPct');
+  const revPeriodLbl = document.getElementById('revPeriodLbl');
+  const periodBtns = [...document.querySelectorAll('#revPeriods button')];
+  const dots = [...document.querySelectorAll('#revDots span')];
+
+  function buildTicks(){
+    let out='';
+    for(let i=0;i<=10;i++){
+      const deg=GA0+GSWEEP*i/10, maj=(i%5===0);
+      const [x1,y1]=polar(maj?70:73,deg), [x2,y2]=polar(80,deg);
+      out+=`<line class="g-tick ${maj?'maj':''}" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+    }
+    document.getElementById('gaugeTicks').innerHTML = out;
+  }
+
+  function renderGauge(name){
+    const soll = REV[name].soll, ist = istOf(name), pot = nearCloseSum();
+    const gMax = Math.max(soll*1.35, ist+pot, 1);
+    const istF = Math.min(ist/gMax,1), potEnd = Math.min((ist+pot)/gMax,1), sollF = Math.min(soll/gMax,1);
+    const ratio = ist/soll;
+    gIst.style.strokeDashoffset = 1000*(1-istF);
+    gaugeEl.classList.toggle('over', ratio>=1);
+    const nDeg = GA0 + GSWEEP*istF; const [nx,ny] = polar(70, nDeg);
+    gNeedle.setAttribute('x2', nx.toFixed(1)); gNeedle.setAttribute('y2', ny.toFixed(1));
+    gPot.setAttribute('stroke-dasharray', `${Math.max(0,potEnd-istF)*1000} 1000`);
+    gPot.setAttribute('stroke-dashoffset', `${-istF*1000}`);
+    gWin.setAttribute('stroke-dasharray', `${(1-sollF)*1000} 1000`);
+    gWin.setAttribute('stroke-dashoffset', `${-sollF*1000}`);
+    const deg = GA0+GSWEEP*sollF;
+    const [sx1,sy1]=polar(64,deg), [sx2,sy2]=polar(86,deg);
+    gSoll.setAttribute('x1',sx1.toFixed(1)); gSoll.setAttribute('y1',sy1.toFixed(1));
+    gSoll.setAttribute('x2',sx2.toFixed(1)); gSoll.setAttribute('y2',sy2.toFixed(1));
+    revIst.textContent = fmtC(ist);
+    revPct.textContent = Math.round(ratio*100) + '% Ziel';
+    revPct.style.color = ratio>=1 ? 'var(--go)' : 'var(--g-ist)';
+    document.getElementById('gBoost').textContent = pot>0 ? '+ ' + fmtC(pot) + ' Boost' : '';
+    revPeriodLbl.textContent = REV[name].label;
+    document.getElementById('roIst').textContent = fmt(ist);
+    document.getElementById('roPot').textContent = '+ ' + fmt(pot);
+    document.getElementById('roForecast').textContent = fmt(ist + pot);
+  }
+
+  function renderYearGoal(){
+    const ist=istOf('jahr'), soll=REV.jahr.soll, pct=Math.round(ist/soll*100);
+    document.getElementById('yearGoal').innerHTML =
+      `<div class="yg-top"><span>Jahresziel</span><span><b>${fmt(ist)}</b> / ${fmt(soll)} · ${pct}%</span></div>
+       <div class="yg-track"><div class="yg-fill" style="width:${Math.min(pct,100)}%"></div></div>`;
+  }
+  function renderNearClose(){
+    const list = PROCS.filter(inFinal);
+    document.getElementById('nearList').innerHTML = list.length ? list.map(p => {
+      const cls = p.eta==='diesen Monat' ? 'eta-now' : (p.eta==='\u2014' ? '' : 'eta-next');
+      const etaTxt = p.eta==='\u2014' ? 'Termin offen' : p.eta;
+      const verbal = p.state.offer && p.state.offer.annahme;
+      return `<div class="near"><div class="near-m">${p.cand} · ${p.mandat}</div><div class="near-v">${fmt(p.value)}</div>
+        <div class="near-meta"><span class="eta ${cls}">${etaTxt}</span><span class="near-p">Chance ${p.closeProb}%</span>${verbal?'<span class="eta zusage">mündl. Zusage</span>':''}</div></div>`;
+    }).join('') : '<div class="near-empty">Sobald ein Prozess den Finaltermin erreicht, erscheint er hier.</div>';
+  }
+  function renderPipeLine(){
+    document.getElementById('pipeLine').innerHTML =
+      'Weitere Pipeline <span class="pl-plus">+' + fmt(pipelineSum) + '</span> möglich · gewichtet <b>' + fmt(pipelineWeighted) + '</b>';
+  }
+
+  function setPeriod(name){
+    if(!REV[name]) return; currentP = name;
+    renderGauge(name); renderYearGoal(); renderNearClose();
+    periodBtns.forEach(b => b.classList.toggle('on', b.dataset.p === name));
+    dots.forEach((s,i) => s.classList.toggle('on', ORDER[i] === name));
+  }
+  const refreshRevenue = () => setPeriod(currentP);
+
+  periodBtns.forEach(b => b.addEventListener('click', () => setPeriod(b.dataset.p)));
+  dots.forEach((s,i) => s.addEventListener('click', () => setPeriod(ORDER[i])));
+  const revBody = document.getElementById('revBody');
+  let sx=null, sy=null;
+  revBody.addEventListener('pointerdown', e => { sx=e.clientX; sy=e.clientY; });
+  revBody.addEventListener('pointerup', e => {
+    if(sx===null) return;
+    const dx=e.clientX-sx, dy=e.clientY-sy;
+    if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)){
+      let i=ORDER.indexOf(currentP);
+      i = dx<0 ? Math.min(i+1,ORDER.length-1) : Math.max(i-1,0);
+      setPeriod(ORDER[i]);
+    }
+    sx=sy=null;
+  });
+
+  /* ============ Ebene 02 · Jobscoring ============ */
+  const SCORES = [
+    {m:'#A-231 · VP Engineering',      v:88, t:'+6', mc:74},
+    {m:'#A-244 · Interim CTO',         v:81, t:'+3', mc:52},
+    {m:'#A-238 · Head of Data Eng.',   v:74, t:'+2', mc:61},
+    {m:'#A-219 · Senior Architect',    v:71, t:'+1', mc:58},
+    {m:'#A-260 · Team Lead Frontend',  v:66, t:'0',  mc:47},
+    {m:'#A-212 · DevOps Engineer',     v:58, t:'\u22122', mc:39},
+    {m:'#A-205 · Interim CFO',         v:39, t:'\u22129', mc:22},
+    {m:'#A-198 · Head of Sales',       v:34, t:'\u22124', mc:28}
+  ];
+  document.getElementById('scoreGrid').innerHTML = SCORES.map(s => {
+    const band = s.v>=70 ? 'hi' : s.v>=50 ? 'mid' : 'lo';
+    const tCls = (s.t[0]==='\u2212' || s.t[0]==='-') ? 'dn' : (s.t==='0' ? '' : 'up');
+    return `<div class="sc-row"><div class="sc-m">${s.m}</div>
+      <div class="sc-track"><div class="sc-fill bg-${band}" style="width:${s.v}%"></div></div>
+      <div class="sc-v sc-${band}">${s.v}</div><div class="sc-t ${tCls}">${s.t}</div><div class="sc-mc">M ${s.mc}%</div></div>`;
+  }).join('');
+
+  /* ============ Nächste beste Aktionen (unter Umsatz) ============ */
+  const IC_PHONE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.9v3a2 2 0 0 1-2.2 2A19 19 0 0 1 3 5.2 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.7l.7 3a2 2 0 0 1-.5 1.9L8.9 11a16 16 0 0 0 4 4l1.4-1.3a2 2 0 0 1 1.9-.5l3 .7A2 2 0 0 1 22 16.9z"/></svg>';
+  const IC_FLAG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22V4"/></svg>';
+  const IC_SHIELD='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 3v5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/></svg>';
+  const IC_SYNC='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/></svg>';
+  const IC_CHAT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+  const ACTIONS = [
+    {t:'M. Wagner (CTO · Nexval) anrufen',            m:'Migrationsprojekt Q3 erwähnt · letzter Kontakt vor 26 Tagen.', cat:'Business Dev.', ac:'var(--amber)',  ico:IC_PHONE,  done:false},
+    {t:'#K-0731 · Offer nachfassen',                  m:'Kunde hat Offer angekündigt (aus E-Mail) · mündliche Zusage einholen.', cat:'Abschluss',     ac:'var(--go)',     ico:IC_FLAG,   done:false},
+    {t:'Anonyme Ansprache für #A-238 freigeben',      m:'3 Entwürfe warten auf Prüfung, bevor sie rausgehen.',          cat:'Freigabe',      ac:'var(--violet)', ico:IC_SHIELD, done:false},
+    {t:'5 Kandidaten mit geändertem Jobtitel',        m:'Aus dem Datenlauf erkannt · Profile aktualisieren.',           cat:'Datenlauf',     ac:'var(--cyan)',   ico:IC_SYNC,   done:false},
+    {t:'Interview-Feedback Technoparc GmbH einpflegen', m:'Schärft Briefing und Suchprofil.',                            cat:'Feedback',      ac:'var(--coral)',  ico:IC_CHAT,   done:false}
+  ];
+  const nbaList = document.getElementById('nbaList');
+  function renderActions(){
+    nbaList.innerHTML = ACTIONS.map((a,i) => `
+      <div class="nba ${a.done?'done':''}" style="--ac:${a.ac}">
+        <button class="nba-check" data-nba="${i}" aria-label="Als erledigt markieren">${a.done?CHECK:''}</button>
+        <div class="nba-ico">${a.ico}</div>
+        <div class="nba-body"><div class="nba-t">${a.t}</div><div class="nba-m">${a.m}</div></div>
+        <span class="nba-cat">${a.cat}</span>
+      </div>`).join('');
+    const open = ACTIONS.filter(a => !a.done).length;
+    document.getElementById('nbaCount').textContent = open===0 ? 'alle erledigt' : open+' offen';
+  }
+  nbaList.addEventListener('click', e => {
+    const b = e.target.closest('[data-nba]'); if(!b) return;
+    const i = +b.dataset.nba; ACTIONS[i].done = !ACTIONS[i].done; renderActions();
+  });
+
+  /* ============ Kandidatenwelt · Innen / Außen ============ */
+  const IC_MAIL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
+  const IC_LI='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 10v7M7 7v.01M11 17v-4a2 2 0 0 1 4 0v4M11 17v-7"/></svg>';
+
+  // Manager/Jobs in der Datenbank, gescreent auf die Skills des Kandidaten (inkl. bekannter Anrede)
+  const KW_INNER = [
+    {name:'M. Wagner', role:'CTO', company:'Nexval GmbH',        job:'Head of Cloud Platform',  du:false, score:93, skills:['AWS','Kubernetes','Team-Lead']},
+    {name:'T. Lang',   role:'VP Engineering', company:'Paystream', job:'Lead Platform Engineer', du:true,  score:87, skills:['Kubernetes','Go']},
+    {name:'S. Brandt', role:'Head of Infrastructure', company:'Cloudspire', job:'Cloud Architect', du:false, score:82, skills:['AWS','Terraform']}
+  ];
+  // Konkrete offene Stellen am Markt inkl. Passung (Ansprechpartner wird erst ermittelt)
+  const KW_OUTER = [
+    {title:'Principal Cloud Architect', company:'Aventos GmbH',       loc:'München', score:90, salary:'passt',          src:'LinkedIn Jobs',   skills:['AWS','Kubernetes','Go'], ap:{name:'Dr. K. Mayer', role:'Head of Engineering'}, revealed:false},
+    {title:'Staff Platform Engineer',   company:'Fintory',            loc:'Remote',  score:85, salary:'leicht darüber',  src:'Xing',            skills:['Kubernetes','Go'], ap:{name:'J. Petrov', role:'VP Technology'}, revealed:false},
+    {title:'Cloud Solutions Lead',      company:'Beryll Consulting',  loc:'München', score:78, salary:'passt',          src:'Firmen-Website',  skills:['AWS','Architektur'], ap:{name:'A. Roth', role:'Partner / Practice Lead'}, revealed:false}
+  ];
+
+  function renderKW(){
+    const inner = document.getElementById('kwInner');
+    const outer = document.getElementById('kwOuter');
+    if(inner) inner.innerHTML = KW_INNER.map((m,i)=>`
+      <div class="mrow">
+        <div class="mrow-top">
+          <div class="mrow-title"><b>${m.name}</b> · ${m.role} · ${m.company}</div>
+          <span class="anrede ${m.du?'du':'sie'}" title="Bekannte Anrede">${m.du?'per Du':'per Sie'}</span>
+        </div>
+        <div class="mrow-job">offen: <b>${m.job}</b></div>
+        <div class="mrow-foot">
+          <div class="chips">${m.skills.map(s=>`<span class="mini-chip">${s}</span>`).join('')}<span class="match">${m.score}% Match</span></div>
+          <button class="kw-btn primary" data-present="${i}">Vorstellen →</button>
+        </div>
+      </div>`).join('');
+    if(outer) outer.innerHTML = KW_OUTER.map((p,i)=>`
+      <div class="mrow">
+        <div class="mrow-top">
+          <div class="mrow-title"><b>${p.title}</b> · ${p.company}</div>
+          <span class="match strong">${p.score}%</span>
+        </div>
+        <div class="mrow-job">${p.loc} · Gehalt ${p.salary} · Quelle: ${p.src}</div>
+        <div class="chips" style="margin-top:8px">${p.skills.map(s=>`<span class="mini-chip">${s}</span>`).join('')}</div>
+        ${p.revealed ? `
+        <div class="out-ap">Ansprechpartner: <b>${p.ap.name}</b> · ${p.ap.role}</div>
+        <div class="out-actions">
+          <button class="kw-btn oa" data-outreach="tel"  data-i="${i}"><span class="oa-top">${IC_PHONE} Telefon</span><em>Nummer generieren</em></button>
+          <button class="kw-btn oa" data-outreach="mail" data-i="${i}"><span class="oa-top">${IC_MAIL} Mail</span><em>Adresse generieren</em></button>
+          <button class="kw-btn oa" data-outreach="li-connect" data-i="${i}"><span class="oa-top">${IC_LI} LinkedIn</span><em>Vernetzen</em></button>
+          <button class="kw-btn oa" data-outreach="li-msg" data-i="${i}"><span class="oa-top">${IC_LI} LinkedIn</span><em>Nachricht</em></button>
+        </div>` : `
+        <div class="out-step">
+          <span class="out-hint">Ansprechpartner noch nicht ermittelt</span>
+          <button class="kw-btn primary" data-findap="${i}">Ansprechpartner ermitteln →</button>
+        </div>`}
+      </div>`).join('');
+  }
+
+  function kwToast(msg){
+    const t = document.getElementById('kwToast'); if(!t) return;
+    t.querySelector('.kt-msg').textContent = msg;
+    t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(()=> t.classList.remove('show'), 2600);
+  }
+
+  let presentIdx = 0;
+  function openPresent(i){
+    presentIdx = i; const m = KW_INNER[i];
+    document.getElementById('pmTo').innerHTML = 'An: <b>' + m.name + ' · ' + m.company + '</b>';
+    const a = document.getElementById('pmAnrede');
+    a.className = 'anrede ' + (m.du?'du':'sie'); a.textContent = m.du?'per Du':'per Sie';
+    document.getElementById('pmCover').textContent = (m.du?'Anschreiben in Du-Form':'Anschreiben in Sie-Form') + ' · ' + m.job;
+    document.getElementById('presentModal').classList.add('show');
+  }
+  const closePresent = () => document.getElementById('presentModal').classList.remove('show');
+
+  document.addEventListener('click', e => {
+    const pr = e.target.closest('[data-present]');   if(pr){ openPresent(+pr.dataset.present); return; }
+    const fa = e.target.closest('[data-findap]'); if(fa){
+      const i = +fa.dataset.findap; const p = KW_OUTER[i];
+      kwToast('Ansprechpartner für ' + p.company + ' wird ermittelt … (Stellenanzeige / Social Media / Website)');
+      p.revealed = true; renderKW(); return;
+    }
+    const oa = e.target.closest('[data-outreach]');  if(oa){
+      const p = KW_OUTER[+oa.dataset.i] || {}; const ap = (p.ap && p.ap.name) || 'Ansprechpartner';
+      const msg = {
+        tel:        'Telefonnummer von ' + ap + ' wird angereichert … · Call-Notiz vorbereitet',
+        mail:       'E-Mail von ' + ap + ' wird ermittelt … Ansprache-Entwurf für ' + (p.company||'') + ' wird erstellt',
+        'li-connect': 'LinkedIn-Vernetzung mit ' + ap + ' vorbereitet',
+        'li-msg':     'LinkedIn-Nachricht an ' + ap + ' wird entworfen'
+      }[oa.dataset.outreach] || '…';
+      kwToast(msg); return;
+    }
+    if(e.target.closest('[data-pmclose]')){ closePresent(); return; }
+    if(e.target.closest('[data-pmsend]')){
+      const m = KW_INNER[presentIdx];
+      kwToast('Vorstellung für ' + m.name + ' erstellt (' + (m.du?'Du':'Sie') + '-Form) · bereit zum Senden');
+      closePresent(); return;
+    }
+    if(e.target.id === 'presentModal'){ closePresent(); }
+  });
+
+  /* ============ Kandidatensuche (links · briefing-basiert · job-aware) ============ */
+  let activeJob = 'A-238';
+  const KS_SRC_META = {
+    db:  {l:'Datenbank',     c:'var(--cyan)'},
+    li:  {l:'LinkedIn',      c:'var(--coral)'},
+    xing:{l:'Xing',          c:'var(--go)'},
+    aa:  {l:'Arbeitsagentur',c:'var(--amber)'},
+    step:{l:'Stepstone',     c:'var(--violet)'}
+  };
+  const KS_SRC_COUNTS = { db:6, li:320, xing:140, aa:40, step:90 };
+  const KS_CANDS = [
+    {name:'#K-1042 · Daniel Krause', src:'db',   role:'Lead Data Engineer',    loc:'München',   score:91, skills:['Python','Spark','Airflow']},
+    {name:'Anonym',                  src:'li',   role:'Senior Data Engineer',  loc:'Remote',    score:87, skills:['Python','dbt','Airflow']},
+    {name:'Anonym',                  src:'li',   role:'Data Platform Lead',    loc:'München',   score:83, skills:['Spark','Kafka']},
+    {name:'Anonym',                  src:'xing', role:'Data Engineering Lead', loc:'Nürnberg',  score:81, skills:['Python','Spark']},
+    {name:'#K-0876 · Lena Hoffmann', src:'db',   role:'Senior Data Engineer',  loc:'Augsburg',  score:78, skills:['GCP','Python']},
+    {name:'Anonym',                  src:'step', role:'Senior Data Engineer',  loc:'Stuttgart', score:76, skills:['Spark','dbt']},
+    {name:'Anonym',                  src:'aa',   role:'Data Engineer',         loc:'München',   score:74, skills:['Python']}
+  ];
+  let ksAnr = 'sie', ksLast = [];
+  const ksMsgFor = (anr,role) => anr==='sie'
+    ? `Sehr geehrte(r) [Name], ich bin auf Ihr Profil aufmerksam geworden – für eine spannende Rolle im Bereich ${role} (München / Remote) suche ich jemanden mit Ihrem Hintergrund. Hätten Sie Interesse an einem kurzen Austausch?`
+    : `Hallo [Vorname], ich bin auf dein Profil gestoßen – für eine spannende ${role}-Rolle (München / Remote) suche ich gerade jemanden mit deinem Hintergrund. Hättest du Lust auf einen kurzen Austausch?`;
+  function ksRenderMsg(){
+    document.getElementById('ksMsg').textContent = ksMsgFor(ksAnr, JOBS[activeJob].role);
+    document.getElementById('ksAnredeNote').textContent = ksAnr==='sie' ? 'Sie-Form' : 'Du-Form';
+  }
+  const ksActiveSources = () => document.getElementById('ksOnlyDb').checked
+    ? ['db']
+    : [...document.querySelectorAll('#ksSources .ks-src.on')].map(b=>b.dataset.src).filter(Boolean);
+  function ksSearch(){
+    const active = ksActiveSources();
+    ksLast = KS_CANDS.filter(c => active.includes(c.src)).sort((a,b)=> b.score-a.score);
+    const total = active.reduce((n,s)=> n + (KS_SRC_COUNTS[s]||0), 0);
+    document.getElementById('ksResEmpty').style.display = 'none';
+    document.getElementById('ksResBody').style.display = 'block';
+    document.getElementById('ksResCount').textContent = total.toLocaleString('de-DE');
+    document.getElementById('ksResSrc').textContent = 'über ' + active.length + ' Quelle' + (active.length===1?'':'n') + ' · Top-Treffer';
+    document.getElementById('ksResList').innerHTML = ksLast.map((c,i)=>{
+      const m = KS_SRC_META[c.src];
+      return `<div class="mrow">
+        <div class="mrow-top"><div class="mrow-title"><b>${c.name}</b> · ${c.role}</div><span class="match strong">${c.score}%</span></div>
+        <div class="mrow-job">${c.loc} · <span class="ks-srcbadge" style="--sc:${m.c}">${m.l}</span></div>
+        <div class="mrow-foot"><div class="chips">${c.skills.map(s=>`<span class="mini-chip">${s}</span>`).join('')}</div>
+          <button class="kw-btn" data-ksapproach="${i}">Ansprechen →</button></div>
+      </div>`;
+    }).join('');
+  }
+
+  // ---- Aktivität (job-aware) ----
+  function renderActivity(){
+    const ch = JOBS[activeJob].channels;
+    const tried = ch.filter(c=>c.sent>0), untried = ch.filter(c=>c.sent===0);
+    const sent = ch.reduce((n,c)=>n+c.sent,0), resp = ch.reduce((n,c)=>n+c.resp,0), pos = ch.reduce((n,c)=>n+c.pos,0);
+    const vorgestellt = PROCS.filter(p=> jidOf(p)===activeJob && p.state.vorgestellt).length;
+    const funnel = [['Angesprochen',sent,''],['Antworten',resp,sent?Math.round(resp/sent*100)+'%':''],['Interessiert',pos,''],['Vorgestellt',vorgestellt,'']];
+    document.getElementById('actFunnel').innerHTML = funnel.map((f,i)=>
+      `<div class="af-step"><div class="af-num">${f[1]}</div><div class="af-lbl">${f[0]}${f[2]?' · '+f[2]:''}</div></div>${i<funnel.length-1?'<div class="af-arrow">›</div>':''}`).join('');
+    document.getElementById('actChannels').innerHTML = tried.map(c=>{
+      const rate = c.sent ? Math.round(c.resp/c.sent*100) : 0;
+      return `<div class="act-ch"><div class="ac-name">${c.name}</div><div class="ac-sent">${c.sent} angesprochen</div>
+        <div class="ac-bar"><div class="ac-fill" style="width:${rate}%"></div></div><div class="ac-rate">${rate}%</div><div class="ac-pos">${c.pos} positiv</div></div>`;
+    }).join('');
+    document.getElementById('actUntried').innerHTML = untried.length
+      ? '<span class="au-label">Noch nicht probiert:</span>' + untried.map(c=>`<button class="au-chip" data-tryc="${c.name}">${c.name} · starten</button>`).join('')
+      : '';
+  }
+
+  // ---- Suchprofil (job-aware, editierbar) ----
+  function renderChips(){
+    const job = JOBS[activeJob];
+    const mk = (group,arr) => arr.map((c,i)=>`<span class="ks-chip ${group} ${c.fb?'fb':''}">${c.t}<button class="ks-chip-x" data-rmchip="${group}:${i}" aria-label="Entfernen">×</button></span>`).join('')
+      + `<button class="ks-add" data-addchip="${group}">+ Kriterium</button>`;
+    document.getElementById('ksMust').innerHTML = mk('must', job.must);
+    document.getElementById('ksNice').innerHTML = mk('nice', job.nice);
+  }
+
+  // ---- Qualifizierung (Entscheidungsflow) ----
+  const QSLOTS = ['Mo 14:00','Di 10:30','Di 16:00','Mi 09:00','Do 11:00'];
+  const QSTAGES = [{id:'cv',label:'CV-Prüfung'},{id:'assessment',label:'KI-Einschätzung'},{id:'video',label:'Video-Interview'},{id:'transkript',label:'Transkript-Abgleich'},{id:'vorstellen',label:'Vorstellen'}];
+  const QUALS = [
+    {cand:'#K-2051', name:'Marco Berger', role:'Senior Data Engineer',  src:'li',   eignung:84, value:26000, cvOk:true,  job:'A-238', mandat:'#A-238 · Nexval', stage:3, status:'active', slot:'Di 10:30',
+      assessment:'Starke Passung: Spark/Airflow, Lead-Background.'},
+    {cand:'#K-2044', name:'Julia Frank',  role:'Data Engineering Lead', src:'xing', eignung:79, value:27000, cvOk:false, job:'A-238', mandat:'#A-238 · Nexval', stage:1, status:'active', slot:null,
+      assessment:'Solide, CV dünn bei Cloud. Kurzer Video-Call zur Klärung empfohlen.'}
+  ];
+  function renderQuals(){
+    const el = document.getElementById('ksQualList');
+    const qj = document.getElementById('ksQualJob'); if(qj){ const j=JOBS[activeJob]||{}; qj.textContent = (j.id||'') + ' · ' + (j.title||''); }
+    const list = QUALS.map((q,i)=>({q,i})).filter(x=>x.q.job===activeJob);
+    if(!list.length){ el.innerHTML = '<div class="ks-res-empty">Keine offenen Qualifizierungen für diese Position.</div>'; return; }
+    el.innerHTML = list.map(({q,i})=>{
+      const m = KS_SRC_META[q.src] || {l:'',c:'var(--cyan)'};
+      const stepper = QSTAGES.map((s,j)=>{
+        const done = q.status!=='rejected' && j<q.stage;
+        const current = q.status!=='rejected' && j===q.stage;
+        return `<div class="qstep ${done?'done':''} ${current?'current':''}"><span class="qdot">${done?CHECK:''}</span><span class="qlbl">${s.label}</span></div>`;
+      }).join('');
+      let action = '';
+      if(q.status==='rejected'){
+        action = `<div class="q-action rejected">Abgesagt · automatische Begründung versendet</div>`;
+      } else if(q.stage===1){
+        action = `<div class="q-action">
+          <div class="q-assess"><b>KI-Einschätzung:</b> ${q.assessment} <span class="q-eign">Eignung ${q.eignung}%</span></div>
+          <div class="q-hint">KI-Fragen für das Erstgespräch vorbereitet.</div>
+          <div class="q-btns"><button class="kw-btn" data-qreject="${i}">Ablehnen</button><button class="kw-btn primary" data-qinvite="${i}">Zum Video-Call einladen →</button></div>
+        </div>`;
+      } else if(q.stage===2){
+        action = q.slot
+          ? `<div class="q-action"><div class="q-hint">Eingeladen: <b>${q.slot}</b> · Kandidat hat bestätigt.</div><div class="q-btns"><button class="kw-btn primary" data-qheld="${i}">Interview fand statt → Transkript</button></div></div>`
+          : `<div class="q-action"><div class="q-hint">Kalender verknüpft · Zeit für das Erstgespräch wählen:</div><div class="q-slots">${QSLOTS.map(sl=>`<button class="q-slot" data-qslot="${i}:${sl}">${sl}</button>`).join('')}</div></div>`;
+      } else if(q.stage===3){
+        action = q.cvOk
+          ? `<div class="q-action"><div class="q-ok">Transkript eingegangen · CV deckt sich mit dem Gespräch.</div><div class="q-btns"><button class="kw-btn primary" data-qcontinue="${i}">Weiter →</button></div></div>`
+          : `<div class="q-action"><div class="q-warn">Transkript eingegangen · Lücken erkannt: Cloud-Erfahrung im CV unvollständig.</div><div class="q-hint">CV + Panam-Sheet geht anschließend an den Kunden.</div><div class="q-btns"><button class="kw-btn" data-qcvdemand="${i}">CV nachfordern</button><button class="kw-btn primary" data-qcvai="${i}">KI erstellt CV</button></div></div>`;
+      } else if(q.stage===4){
+        const job = JOBS[q.job] || {};
+        action = `<div class="q-action"><div class="q-hint">Für <b>${(job.id||'')} ${(job.title||'')}</b> vorstellen?</div><div class="q-btns"><button class="kw-btn primary" data-qpresent="${i}">Beim Kunden vorstellen →</button></div></div>`;
+      }
+      return `<div class="qual ${q.status==='rejected'?'is-rej':''}">
+        <div class="qual-head"><div class="qual-id"><b>${q.name}</b> · ${q.role} <span class="ks-srcbadge" style="--sc:${m.c}">${m.l}</span></div>
+          <div class="qual-meta"><span class="qual-eign">Eignung ${q.eignung}%</span><span class="cv-badge ${q.cvOk?'ok':'bad'}">${q.cvOk?'CV gut':'CV mangelhaft'}</span></div></div>
+        <div class="qsteps">${stepper}</div>
+        ${action}
+      </div>`;
+    }).join('');
+  }
+  function qualPresent(i){
+    const q = QUALS[i];
+    PROCS.push({
+      cand:q.cand, name:q.name, role:q.role, mandat:q.mandat, value:q.value,
+      closeProb:60, eta:'\u2014', timing:'Ø 18 T bis Offer',
+      dates:{vorgestellt:todayStr()}, times:{},
+      state:{vorgestellt:true, fb1:{kandidat:false,kunde:false}, prep1:false, interview:false, fb2:{kandidat:false,kunde:false}, finaltermin:false, prepFinal:false, offer:{offer:false,annahme:false}, deal:false}
+    });
+    QUALS.splice(i,1);
+    renderAll(); refreshRevenue(); renderQuals();
+    kwToast(q.name + ' wird beim Kunden vorgestellt · Prozess unter ' + q.mandat.split(' ')[0] + ' gestartet');
+  }
+
+  // ---- Job-Wechsel (Switcher + Wischen) ----
+  function renderJobSwitch(){
+    const html = Object.keys(JOBS).map(jid=>{ const j=JOBS[jid]; return `<button class="js-tab ${jid===activeJob?'on':''}" data-job="${jid}">${j.id} · ${j.title}</button>`; }).join('');
+    ['ksJobSwitch','mbJobSwitch'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=html; });
+  }
+  function updateMB(){
+    const j = JOBS[activeJob];
+    const d = document.getElementById('mbDrop'); if(d){ d.textContent = j.drop; d.style.color = j.drop>=70?'var(--go)':(j.drop>=50?'var(--amber)':'var(--stop)'); }
+    const id = document.getElementById('mbBriefId'); if(id) id.textContent = j.id;
+    const t = document.getElementById('mbBriefTitle'); if(t) t.textContent = j.title + ' · ' + j.company;
+  }
+  function renderLeft(){
+    const job = JOBS[activeJob];
+    document.getElementById('actJob').innerHTML = `<b>${job.id} · ${job.title}</b> <span>${job.company}</span>`;
+    document.getElementById('ksProfileNote').textContent = 'aus Briefing ' + job.id + ' · ' + job.title;
+    const fb = document.getElementById('ksFbBanner');
+    if(job.fb){ fb.style.display='flex'; fb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><div>' + job.fb + '</div>'; }
+    else fb.style.display='none';
+    document.getElementById('ksCulture').textContent = job.culture;
+    document.getElementById('ksFacts').innerHTML = Object.entries(job.facts).map(([k,v])=>`<div class="ks-fact"><span>${k}</span><b>${v}</b></div>`).join('');
+    renderActivity(); renderChips(); ksRenderMsg(); renderQuals();
+    document.getElementById('ksResEmpty').style.display = '';
+    document.getElementById('ksResBody').style.display = 'none';
+  }
+  function setActiveJob(jid){ if(!JOBS[jid]) return; activeJob = jid; renderJobSwitch(); renderLeft(); updateMB(); renderTop(); renderExt(); }
+  function jobStep(dir){ const ks=Object.keys(JOBS); let i=ks.indexOf(activeJob); i=Math.min(ks.length-1,Math.max(0,i+dir)); if(ks[i]!==activeJob) setActiveJob(ks[i]); }
+
+  function ksInit(){
+    // Quellen
+    const sources = document.getElementById('ksSources');
+    const onlyDb  = document.getElementById('ksOnlyDb');
+    const defaults = {db:true, li:true, xing:true, aa:false, step:false};
+    sources.addEventListener('click', e => {
+      const b = e.target.closest('.ks-src'); if(!b || b.classList.contains('add')) return;
+      if(onlyDb.checked) onlyDb.checked = false; b.classList.toggle('on');
+    });
+    onlyDb.addEventListener('change', () => {
+      sources.querySelectorAll('.ks-src').forEach(b => { if(b.classList.contains('add')) return;
+        b.classList.toggle('on', onlyDb.checked ? b.dataset.src==='db' : defaults[b.dataset.src]); });
+    });
+    document.getElementById('ksSearchBtn').addEventListener('click', ksSearch);
+    document.getElementById('ksMassBtn').addEventListener('click', () => {
+      const active = ksActiveSources(); const total = active.reduce((n,s)=> n + (KS_SRC_COUNTS[s]||0), 0);
+      kwToast(total.toLocaleString('de-DE') + ' Kandidaten werden über ' + active.length + ' Quellen angeschrieben · Interesse-Abfrage läuft (' + (ksAnr==='sie'?'Sie':'Du') + '-Form)');
+    });
+    document.getElementById('ksAnrede').addEventListener('click', e => {
+      const b = e.target.closest('button'); if(!b) return; ksAnr = b.dataset.anr;
+      document.querySelectorAll('#ksAnrede button').forEach(x => x.classList.toggle('on', x===b)); ksRenderMsg();
+    });
+    document.getElementById('ksResList').addEventListener('click', e => {
+      const b = e.target.closest('[data-ksapproach]'); if(!b) return; const c = ksLast[+b.dataset.ksapproach];
+      kwToast('Ansprache an ' + c.name + ' (' + KS_SRC_META[c.src].l + ') wird erstellt · ' + (ksAnr==='sie'?'Sie':'Du') + '-Form');
+    });
+    document.getElementById('actUntried').addEventListener('click', e => {
+      const b = e.target.closest('[data-tryc]'); if(!b) return;
+      kwToast(b.dataset.tryc + '-Ansprache für ' + JOBS[activeJob].id + ' wird vorbereitet');
+    });
+    // Chips editieren (aktiver Job)
+    ['ksMust','ksNice'].forEach(id => document.getElementById(id).addEventListener('click', e => {
+      const rm = e.target.closest('[data-rmchip]');
+      if(rm){ const [g,ix] = rm.dataset.rmchip.split(':'); (g==='must'?JOBS[activeJob].must:JOBS[activeJob].nice).splice(+ix,1); renderChips(); return; }
+      const add = e.target.closest('[data-addchip]');
+      if(add){ const g = add.dataset.addchip; const t = prompt('Neues ' + (g==='must'?'Musskriterium':'Nice-to-have') + ':', '');
+        if(t && t.trim()){ (g==='must'?JOBS[activeJob].must:JOBS[activeJob].nice).push({t:t.trim()}); renderChips(); } }
+    }));
+    // Qualifizierung
+    document.getElementById('ksQualList').addEventListener('click', e => {
+      let b;
+      if(b=e.target.closest('[data-qreject]')){ QUALS[+b.dataset.qreject].status='rejected'; kwToast('Absage mit zusammenfassender Begründung wird automatisch versendet'); renderQuals(); return; }
+      if(b=e.target.closest('[data-qinvite]')){ QUALS[+b.dataset.qinvite].stage=2; renderQuals(); return; }
+      if(b=e.target.closest('[data-qslot]')){ const [ix,sl]=b.dataset.qslot.split(':'); QUALS[+ix].slot=sl; kwToast('Video-Call am '+sl+' im Kalender geblockt · Einladung versendet'); renderQuals(); return; }
+      if(b=e.target.closest('[data-qheld]')){ QUALS[+b.dataset.qheld].stage=3; kwToast('Transkript eingegangen · Abgleich mit CV läuft'); renderQuals(); return; }
+      if(b=e.target.closest('[data-qcontinue]')){ QUALS[+b.dataset.qcontinue].stage=4; renderQuals(); return; }
+      if(b=e.target.closest('[data-qcvdemand]')){ QUALS[+b.dataset.qcvdemand].stage=4; kwToast('CV-Nachforderung an Kandidaten versendet · danach mit Panam-Sheet an den Kunden'); renderQuals(); return; }
+      if(b=e.target.closest('[data-qcvai]')){ QUALS[+b.dataset.qcvai].stage=4; kwToast('KI erstellt vollständigen CV · mit Panam-Sheet bereit für den Kunden'); renderQuals(); return; }
+      if(b=e.target.closest('[data-qpresent]')){ qualPresent(+b.dataset.qpresent); return; }
+    });
+    // Job-Wechsel: Klick + Wischen
+    ['ksJobSwitch','mbJobSwitch'].forEach(id => { const bar = document.getElementById(id); if(!bar) return;
+      bar.addEventListener('click', e => { const t = e.target.closest('[data-job]'); if(t) setActiveJob(t.dataset.job); });
+    });
+    const guard = t => t.closest('.qsteps,.track-row,.out-actions,.q-slots,#revBody,.ks-sources');
+    const ksCell = document.getElementById('ksJobSwitch').closest('.cell');
+    const mbCell = (document.getElementById('mbJobSwitch')||{}).closest ? document.getElementById('mbJobSwitch').closest('.cell') : null;
+    [ksCell, mbCell].forEach(cell => { if(!cell) return;
+      cell.addEventListener('wheel', e => {
+        if(Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 40){
+          if(guard(e.target)) return; e.preventDefault();
+          if(!cell._sw || Date.now()-cell._sw > 450){ cell._sw = Date.now(); jobStep(e.deltaX>0?1:-1); }
+        }
+      }, {passive:false});
+      let sx=null, sy=null;
+      cell.addEventListener('pointerdown', e => { if(e.pointerType==='mouse') return; sx=e.clientX; sy=e.clientY; });
+      cell.addEventListener('pointerup', e => { if(sx==null) return; const dx=e.clientX-sx, dy=e.clientY-sy;
+        if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5 && !guard(e.target)) jobStep(dx<0?1:-1); sx=sy=null; });
+    });
+
+    // Mandat & Briefing · Optionen
+    document.getElementById('mbAdBtn').addEventListener('click', mbCreateAd);
+    document.getElementById('mbFbBtn').addEventListener('click', mbAddFeedback);
+    document.getElementById('mbNew').addEventListener('click', ()=> kwToast('Neues Mandat: Firma auswählen oder aus dem Internet hinzufügen'));
+    document.getElementById('mbLeft').addEventListener('click', e=>{ const b=e.target.closest('[data-mbrefresh]'); if(b) kwToast((b.dataset.mbrefresh==='firma'?'Firmendaten':'Manager-Daten')+' werden aus dem Internet aktualisiert'); });
+    document.getElementById('mbAd').addEventListener('click', e=>{ const b=e.target.closest('[data-post]'); if(b) kwToast('Anonyme Stellenanzeige nach '+b.dataset.post+' übertragen'); });
+    // Externe Recruiter
+    document.getElementById('ksExtList').addEventListener('click', e=>{
+      const x=JOBX[activeJob]; if(!x) return; let b;
+      if(b=e.target.closest('[data-extqual]')){ const c=x.externals.splice(+b.dataset.extqual,1)[0];
+        QUALS.push({cand:c.cand,name:c.name,role:c.role,src:c.src,eignung:c.ai,value:c.value,cvOk:c.ai>=75,job:activeJob,mandat:JOBS[activeJob].id+' · '+JOBS[activeJob].company,stage:1,status:'active',slot:null,assessment:'Von externem Recruiter eingereicht · KI-geprüft.'});
+        renderExt(); renderQuals(); kwToast(c.name+' in die Qualifizierung übernommen'); return; }
+      if(b=e.target.closest('[data-extreject]')){ const c=x.externals.splice(+b.dataset.extreject,1)[0]; renderExt(); kwToast(c.name+' abgelehnt · Rückmeldung an Recruiter'); return; }
+      if(b=e.target.closest('[data-extvid]')){ kwToast('Video-Interview mit '+x.externals[+b.dataset.extvid].name+' wird vorbereitet'); return; }
+      if(b=e.target.closest('[data-extcall]')){ kwToast('Anruf bei '+x.externals[+b.dataset.extcall].name+' · Nummer wird ermittelt'); return; }
+      if(b=e.target.closest('[data-extmail]')){ kwToast('E-Mail an '+x.externals[+b.dataset.extmail].name+' wird entworfen'); return; }
+    });
+    // Rechnung
+    document.addEventListener('click', e=>{
+      if(e.target.closest('[data-invclose]') || e.target.id==='invoiceModal'){ document.getElementById('invoiceModal').classList.remove('show'); return; }
+      if(e.target.closest('[data-invsend]')){ kwToast('Rechnung an Kunden gesendet · Kopie an DATEV'); document.getElementById('invoiceModal').classList.remove('show'); return; }
+      if(e.target.closest('[data-invpdf]')){ kwToast('Rechnung als PDF erstellt'); return; }
+      if(e.target.closest('[data-invdatev]')){ kwToast('Rechnung an DATEV übergeben'); return; }
+    });
+
+    document.getElementById('kwSearchBtn').addEventListener('click', ()=>{
+      const q = document.getElementById('kwSearchInput').value.trim();
+      kwToast('Suche' + (q?' nach \u201E'+q+'\u201C':'') + ' \u00b7 Kandidaten werden nach Filtern &amp; Score sortiert'.replace('&amp;','&'));
+    });
+
+    setActiveJob('A-238');
+  }
+
+  /* ============ Mandat & Briefing · Stammdaten + Rechnung + Externe ============ */
+  const JOBX = {
+    'A-238': {
+      firma:{name:'Nexval GmbH', group:'Teil der Vantic Group', hrb:'HRB 214380 München', ust:'DE 315204871', phone:'+49 89 4520 1130', email:'kontakt@nexval.de', address:'Leopoldstr. 21 · 80802 München', locations:['München','Berlin'], subs:['Nexval Data GmbH','Nexval Labs GmbH']},
+      manager:{name:'M. Wagner', role:'CTO', linkedin:'in/m-wagner', anrede:'Sie'},
+      posting:{title:'Head of Data Engineering', loc:'München · hybrid', seniority:'Lead / Head', salary:'110–140k', type:'Festanstellung'},
+      briefComplete:82,
+      conditions:{fee:'25 % vom Bruttojahresgehalt', base:'135.000 €', terms:'14 Tage netto', warranty:'6 Monate Garantie'},
+      feedback:[
+        {who:'Kunde',    cand:'#K-1042 Daniel Krause', text:'Fachlich stark, Cloud-Erfahrung aber dünn — bitte stärker auf AWS/GCP filtern.'},
+        {who:'Kandidat', cand:'#K-0876 Lena Hoffmann', text:'Rolle spannend, München ok. Gehaltsrahmen muss oben liegen.'}
+      ],
+      externals:[
+        {cand:'#K-3001', name:'Tobias Renner', role:'Senior Data Engineer',  from:'R. Hoffmann · TalentBridge', ai:83, src:'li',   value:26000},
+        {cand:'#K-3002', name:'Sara Klein',    role:'Data Platform Engineer', from:'M. Schulz · DevHunt',      ai:71, src:'xing', value:25000}
+      ]
+    },
+    'A-231': {
+      firma:{name:'Paystream GmbH', group:'Teil der Nordic Fin Group', hrb:'HRB 198774 München', ust:'DE 289330145', phone:'+49 89 3300 210', email:'hello@paystream.io', address:'Rosenheimer Str. 8 · 81667 München', locations:['München','Wien'], subs:['Paystream Pay GmbH']},
+      manager:{name:'T. Lang', role:'VP Engineering', linkedin:'in/t-lang', anrede:'Du'},
+      posting:{title:'Head of Cloud Platform', loc:'München · hybrid', seniority:'Head', salary:'120–150k', type:'Festanstellung'},
+      briefComplete:90,
+      conditions:{fee:'28 % vom Bruttojahresgehalt', base:'140.000 €', terms:'14 Tage netto', warranty:'6 Monate Garantie'},
+      feedback:[{who:'Kunde', cand:'#K-0731 Sarah Bergmann', text:'Sehr guter Fit. Bitte Verfügbarkeit früher klären.'}],
+      externals:[{cand:'#K-3010', name:'Niklas Weber', role:'Platform Engineer', from:'A. Simon · CloudTalents', ai:79, src:'li', value:31000}]
+    },
+    'A-260': {
+      firma:{name:'Finpeak AG', group:'', hrb:'HRB 231908 München', ust:'DE 341882005', phone:'+49 89 9010 55', email:'jobs@finpeak.de', address:'Arnulfstr. 60 · 80335 München', locations:['Remote-DE'], subs:[]},
+      manager:{name:'S. Brandt', role:'Head of Infrastructure', linkedin:'in/s-brandt', anrede:'Sie'},
+      posting:{title:'DevOps Lead', loc:'Remote', seniority:'Lead', salary:'95–120k', type:'Festanstellung'},
+      briefComplete:68,
+      conditions:{fee:'22 % vom Bruttojahresgehalt', base:'105.000 €', terms:'30 Tage netto', warranty:'3 Monate Garantie'},
+      feedback:[],
+      externals:[]
+    }
+  };
+
+  function renderTop(){
+    const j = JOBS[activeJob], x = JOBX[activeJob];
+    const left = document.getElementById('mbLeft'); if(!left) return;
+    if(!x){ left.innerHTML = ''; return; }
+    const f = x.firma, mg = x.manager, po = x.posting, co = x.conditions;
+    left.innerHTML = `
+      <div class="stamm-row"><span class="stamm-k">Firma</span><span class="stamm-v"><b>${f.name}</b>${f.group?' · '+f.group:''}</span></div>
+      <div class="stamm-sub">${f.address} · Tel ${f.phone} · ${f.email}</div>
+      <div class="stamm-sub">HRB ${f.hrb} · USt-ID ${f.ust} · Standorte: ${f.locations.join(', ')}${f.subs.length?' · Tochter: '+f.subs.join(', '):''}</div>
+      <div class="stamm-row"><span class="stamm-k">Manager</span><span class="stamm-v"><b>${mg.name}</b> · ${mg.role} <span class="anrede ${mg.anrede==='Du'?'du':'sie'}">per ${mg.anrede}</span> · ${mg.linkedin}</span></div>
+      <div class="stamm-row"><span class="stamm-k">Job</span><span class="stamm-v"><b>${po.title}</b> · ${po.loc} · ${po.seniority} · ${po.salary} · ${po.type}</span></div>
+      <div class="stamm-row"><span class="stamm-k">Briefing</span><span class="stamm-v">Vollständigkeit ${x.briefComplete}%</span></div>
+      <div class="stamm-row cond"><span class="stamm-k">Konditionen</span><span class="stamm-v">${co.fee} · Basis ${co.base} · ${co.terms} · ${co.warranty}</span></div>
+      <div class="stamm-actions"><button class="kw-btn" data-mbrefresh="firma">Firma aus Internet</button><button class="kw-btn" data-mbrefresh="manager">Manager via LinkedIn</button></div>`;
+    document.getElementById('mbFeedback').innerHTML = x.feedback.length
+      ? x.feedback.map(fb=>`<div class="mb-fb"><span class="mb-fb-who ${fb.who==='Kunde'?'k':'c'}">${fb.who}</span><div><b>${fb.cand}</b> — ${fb.text}</div></div>`).join('')
+      : '<div class="q-hint">Noch kein Feedback erfasst.</div>';
+    const ad = document.getElementById('mbAd'); if(ad) ad.style.display = 'none';
+    renderMbProcs();
+  }
+
+  function renderMbProcs(){
+    const el = document.getElementById('mbProcs'); if(!el) return;
+    const j = JOBS[activeJob] || {};
+    const title = document.getElementById('mbProcsJob'); if(title) title.textContent = (j.id||'') + ' · ' + (j.title||'');
+    const list = PROCS.map((p,i)=>({p,i})).filter(x=> jidOf(x.p)===activeJob && x.p.state.vorgestellt);
+    const cnt = document.getElementById('mbProcsCount'); if(cnt) cnt.textContent = list.length ? list.length + (list.length===1?' Kandidat':' Kandidaten') : '';
+    el.innerHTML = list.length
+      ? list.map(x=> renderProc(x.i)).join('')
+      : '<div class="q-hint">Noch keine Kandidaten im Prozess für diese Position.</div>';
+  }
+
+  function mbCreateAd(){
+    const po = JOBX[activeJob].posting, ad = document.getElementById('mbAd');
+    ad.style.display = 'block';
+    ad.innerHTML = `<div class="mb-ad-t">${po.title} (m/w/d)</div>
+      <div class="mb-ad-b">Für ein wachsendes Unternehmen (${po.loc}) suchen wir eine erfahrene Persönlichkeit im Bereich ${JOBS[activeJob].role}. Seniorität: ${po.seniority} · ${po.type} · Gehalt ${po.salary}. Firmenname vertraulich – Details im Erstgespräch.</div>
+      <div class="mb-ad-actions"><button class="kw-btn" data-post="LinkedIn">Auf LinkedIn posten</button><button class="kw-btn" data-post="Xing">Auf Xing posten</button><button class="kw-btn" data-post="Zwischenablage">Kopieren</button></div>`;
+  }
+  function mbAddFeedback(){
+    const ta = document.getElementById('mbFbText'), t = ta.value.trim(); if(!t) return;
+    JOBX[activeJob].feedback.unshift({who:document.getElementById('mbFbWho').value, cand:'laufender Prozess', text:t});
+    ta.value = ''; renderTop();
+    kwToast('Feedback erfasst · fließt in die Vorbereitung der nächsten Kandidaten (Suchprofil links)');
+  }
+
+  // ---- Externe Recruiter ----
+  function renderExt(){
+    const el = document.getElementById('ksExtList'); if(!el) return;
+    const list = (JOBX[activeJob] && JOBX[activeJob].externals) || [];
+    const cnt = document.getElementById('ksExtCount'); if(cnt) cnt.textContent = list.length + ' offen';
+    const ej = document.getElementById('ksExtJob'); if(ej){ const j=JOBS[activeJob]||{}; ej.textContent = (j.id||'') + ' · ' + (j.title||''); }
+    el.innerHTML = list.length ? list.map((c,i)=>{
+      const m = KS_SRC_META[c.src] || {l:'',c:'var(--cyan)'};
+      return `<div class="qual">
+        <div class="qual-head"><div class="qual-id"><b>${c.name} · ${c.role}</b> <span class="ks-srcbadge" style="--sc:${m.c}">${m.l}</span></div>
+          <div class="qual-meta"><span class="qual-eign">KI-Check ${c.ai}%</span></div></div>
+        <div class="q-hint">Eingereicht von <b>${c.from}</b> · KI-geprüft – bereit zur Entscheidung.</div>
+        <div class="q-btns" style="justify-content:space-between">
+          <div class="q-btns" style="margin:0"><button class="kw-btn" data-extvid="${i}">Video</button><button class="kw-btn" data-extcall="${i}">Anruf</button><button class="kw-btn" data-extmail="${i}">E-Mail</button></div>
+          <div class="q-btns" style="margin:0"><button class="kw-btn" data-extreject="${i}">Ablehnen</button><button class="kw-btn primary" data-extqual="${i}">In Qualifizierung →</button></div>
+        </div>
+      </div>`;
+    }).join('') : '<div class="ks-res-empty">Keine offenen externen Einreichungen für diesen Job.</div>';
+  }
+
+  // ---- Rechnung ----
+  function openInvoice(p){
+    const jid = (p.mandat.split(' ')[0]||'').replace('#','');
+    const x = JOBX[jid] || JOBX[activeJob], j = JOBS[jid] || {};
+    const f = (x&&x.firma)||{}, co = (x&&x.conditions)||{};
+    const no = 'R-2026-' + String(Math.floor(1000 + Math.random()*9000));
+    const set = (id,html) => { const e=document.getElementById(id); if(e) e.innerHTML = html; };
+    set('invNo', no);
+    set('invTo', 'An: <b>' + (f.name||j.company||'') + '</b>');
+    set('invClient', (f.name||'') + '<br>' + (f.address||'') + '<br>HRB ' + (f.hrb||'') + '<br>USt-ID ' + (f.ust||''));
+    set('invMeta', 'Nr.: ' + no + '<br>Datum: ' + todayStr() + '.2026<br>Leistung: Personalvermittlung');
+    set('invService', 'Vermittlung von ' + (p.name||p.cand) + ' als ' + (j.title||p.role));
+    set('invFee', (co.fee||'—') + ' · Basis ' + (co.base||'—'));
+    set('invTerms', co.terms||'14 Tage netto');
+    set('invAmount', fmt(p.value));
+    document.getElementById('invoiceModal').classList.add('show');
+  }
+
+  /* ============ Ebene 03 · Prozess-Rendering (Design unverändert) ============ */
+
+
+
+  function renderProc(i){
+    const p = PROCS[i], st = p.state;
+    const pct = Math.round(units(st)/TOTAL*100);
+    const cur = STEPS.findIndex(s => !nodeDone(s, st));
+    const ringOff = 107 * (1 - pct/100);
+    const nodes = STEPS.map((s,j) => {
+      const done = nodeDone(s, st), current = (j === cur);
+      const inner = done ? CHECK : '';
+      const dot = s.kind === 'feedback'
+        ? `<span class="dot-btn" style="cursor:default">${inner}</span>`
+        : `<button class="dot-btn" data-toggle data-proc="${i}" data-step="${s.id}" aria-label="${s.label} ${done?'erledigt':'offen'}">${inner}</button>`;
+      const _t = p.times && p.times[s.id];
+      const date = (s.kind==='date' && p.dates[s.id]) ? `<div class="n-date">${p.dates[s.id]}${_t ? ' · '+_t : ''}</div>` : '';
+      let fb = '';
+      if(s.kind === 'feedback'){
+        const f = st[s.id] || {};
+        fb = '<div class="fb-chips">' + s.who.map(([k,l]) =>
+          `<button class="fb-chip ${f[k]?'on':''}" data-fb data-proc="${i}" data-step="${s.id}" data-who="${k}">${l}</button>`
+        ).join('') + '</div>';
+      }
+      return `<div class="node ${done?'done':''} ${current?'current':''} ${s.kind==='deal'?'is-deal':''}">${dot}<div class="n-lbl">${s.label}</div>${date}${fb}</div>`;
+    }).join('');
+    const won = isWon(p);
+    const verbal = !won && p.state.offer && p.state.offer.annahme;
+    return `<div class="proc ${won?'is-won':''}">
+      <div class="proc-head">
+        <div class="proc-ring">
+          <svg width="42" height="42">
+            <circle cx="21" cy="21" r="17" fill="none" stroke="var(--bezel)" stroke-width="4"/>
+            <circle class="pr-fg" cx="21" cy="21" r="17" fill="none" stroke="var(--go)" stroke-width="4" stroke-linecap="round" stroke-dasharray="107" stroke-dashoffset="${ringOff}"/>
+          </svg>
+          <div class="pr-t">${pct}%</div>
+        </div>
+        <div class="proc-id"><b>${p.cand} · ${p.name} · ${p.role}</b><br><span>${p.mandat} · ${p.timing}</span></div>
+        ${verbal ? '<span class="proc-status verbal">Mündl. Zusage · Vertrag ausstehend</span>' : ''}
+        <div class="proc-val"><b>${fmt(p.value)}</b><small>${won?'Deal gewonnen':'Fee-Potenzial'}</small></div>
+      </div>
+      <div class="track-row">${nodes}</div>
+    </div>`;
+  }
+  const JOBS = {
+    'A-238': {id:'#A-238', title:'Head of Data Engineering', company:'Nexval GmbH', drop:74, role:'Data Engineering',
+      culture:'Hands-on · Ownership · Startup-Mentalität · flache Hierarchien',
+      fb:'Manager-Feedback zu den letzten Profilen: <b>Streaming (Kafka) stärker gewichten</b> – ins Suchprofil übernommen.',
+      must:[{t:'Data Engineering'},{t:'Python'},{t:'Spark'},{t:'Airflow'},{t:'Team-Lead (3+)'},{t:'Streaming (Kafka)',fb:true},{t:'Cloud (AWS/GCP)'}],
+      nice:[{t:'dbt'},{t:'MLOps'},{t:'Finanzbranche'}],
+      facts:{'Seniorität':'Lead / Head','Region':'München +100 km · Remote-DE','Gehaltsrahmen':'110.000 – 140.000 €','Verfügbarkeit':'ab Q3'},
+      channels:[{name:'LinkedIn',sent:48,resp:14,pos:5},{name:'Xing',sent:22,resp:6,pos:2},{name:'Eigene Datenbank',sent:9,resp:6,pos:4},{name:'Mail',sent:5,resp:2,pos:1},{name:'Telefon',sent:0,resp:0,pos:0},{name:'Arbeitsagentur',sent:0,resp:0,pos:0},{name:'Stepstone',sent:0,resp:0,pos:0}]},
+    'A-231': {id:'#A-231', title:'Head of Cloud Platform', company:'Paystream', drop:88, role:'Cloud Platform',
+      culture:'Ownership · Reliability-Fokus · schnelle Iteration',
+      fb:'Manager-Feedback: <b>FinOps-Erfahrung wünschenswert</b> – als Nice-to-have ergänzt.',
+      must:[{t:'AWS'},{t:'Kubernetes'},{t:'Terraform'},{t:'Go'},{t:'Plattform-Ownership'},{t:'Team-Lead'}],
+      nice:[{t:'Service Mesh'},{t:'FinOps',fb:true},{t:'Compliance'}],
+      facts:{'Seniorität':'Head','Region':'München · Remote-DE','Gehaltsrahmen':'120.000 – 150.000 €','Verfügbarkeit':'ab Q3'},
+      channels:[{name:'LinkedIn',sent:62,resp:21,pos:8},{name:'Eigene Datenbank',sent:12,resp:9,pos:6},{name:'Xing',sent:14,resp:3,pos:1},{name:'Mail',sent:0,resp:0,pos:0},{name:'Telefon',sent:0,resp:0,pos:0},{name:'Arbeitsagentur',sent:0,resp:0,pos:0},{name:'Stepstone',sent:0,resp:0,pos:0}]},
+    'A-260': {id:'#A-260', title:'DevOps Lead', company:'FinTech', drop:66, role:'DevOps',
+      culture:'Automatisierung · Zuverlässigkeit · On-Call-Kultur',
+      fb:null,
+      must:[{t:'CI/CD'},{t:'Kubernetes'},{t:'Terraform'},{t:'Observability'},{t:'Incident-Mgmt'}],
+      nice:[{t:'Go'},{t:'Security'},{t:'AWS'}],
+      facts:{'Seniorität':'Lead','Region':'Remote-DE','Gehaltsrahmen':'95.000 – 120.000 €','Verfügbarkeit':'ab Q4'},
+      channels:[{name:'LinkedIn',sent:30,resp:7,pos:2},{name:'Stepstone',sent:18,resp:4,pos:1},{name:'Xing',sent:9,resp:2,pos:1},{name:'Eigene Datenbank',sent:4,resp:2,pos:1},{name:'Mail',sent:0,resp:0,pos:0},{name:'Telefon',sent:0,resp:0,pos:0},{name:'Arbeitsagentur',sent:0,resp:0,pos:0}]}
+  };
+  const jidOf = p => p.mandat.split(' ')[0].replace('#','');
+  const stageLabel = p => { if(isWon(p)) return 'Gewonnen'; const i = STEPS.findIndex(s=>!nodeDone(s,p.state)); return i<0 ? 'Vertrag' : STEPS[i].label; };
+
+  const procListEl = document.getElementById('procList');
+  function renderAll(){
+    const groups = {};
+    PROCS.forEach((p,idx)=>{ if(!p.state.vorgestellt) return; const j = jidOf(p); (groups[j] = groups[j] || []).push({p,idx}); });
+    const jids = Object.keys(groups).sort((x,y)=>
+      Math.max(...groups[y].map(o=>units(o.p.state))) - Math.max(...groups[x].map(o=>units(o.p.state))));
+    procListEl.innerHTML = jids.map(jid=>{
+      const list = groups[jid], job = JOBS[jid] || {id:'#'+jid, title:'', company:''};
+      const best = list.reduce((a,b)=> units(b.p.state)>units(a.p.state) ? b : a);
+      const bestFee = Math.max(...list.map(o=>o.p.value));
+      const won = list.some(o=>isWon(o.p));
+      const sum = `${list.length} Kandidat${list.length>1?'en':''} · bester Stand: <b>${stageLabel(best.p)}</b> · Fee <b>${fmtC(bestFee)}</b>`;
+      return `<div class="job-sec">
+        <div class="job-head">
+          <div class="job-id"><b>${job.id} · ${job.title}</b><span>${job.company}</span></div>
+          <div class="job-sum">${won?'<b style="color:var(--go)">gewonnen</b> · ':''}${sum}</div>
+        </div>
+        <div class="job-procs">${list.map(o=>renderProc(o.idx)).join('')}</div>
+      </div>`;
+    }).join('');
+    if(typeof renderMbProcs === 'function') renderMbProcs();
+    if(typeof renderKPI === 'function' && document.getElementById('kpiGauges')) { try{ renderKPI(); }catch(e){} }
+  }
+
+  const todayStr = () => { const d=new Date(); return String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0'); };
+  function dealWon(p){
+    const fx = document.getElementById('dealFx');
+    fx.querySelector('.fx-val').textContent = '+ ' + fmt(p.value);
+    fx.classList.remove('show'); void fx.offsetWidth; fx.classList.add('show');
+    clearTimeout(fx._t); fx._t = setTimeout(()=> fx.classList.remove('show'), 2200);
+    setTimeout(()=> openInvoice(p), 1500);
+  }
+
+  function procClick(e){
+    const t = e.target.closest('[data-toggle]');
+    if(t){
+      const i=+t.dataset.proc, id=t.dataset.step, st=PROCS[i].state;
+      const step=STEPS.find(s=>s.id===id), willBe=!st[id];
+      if(step.kind==='date' && willBe){
+        const cur = (PROCS[i].dates[id] && PROCS[i].dates[id]!=='\u2014') ? PROCS[i].dates[id] : todayStr();
+        const d = prompt('Datum für \u201E'+step.label+'\u201C (TT.MM):', cur);
+        if(d===null) return;
+        PROCS[i].dates[id] = (d.trim() || '\u2014');
+        if(step.time){
+          PROCS[i].times = PROCS[i].times || {};
+          const tm = prompt('Uhrzeit für \u201E'+step.label+'\u201C (HH:MM):', PROCS[i].times[id] || '10:00');
+          if(tm!==null) PROCS[i].times[id] = tm.trim();
+        }
+      }
+      st[id] = willBe;
+      if(id==='deal' && st.deal) dealWon(PROCS[i]);
+      renderAll(); refreshRevenue(); return;
+    }
+    const f = e.target.closest('[data-fb]');
+    if(f){ const i=+f.dataset.proc, id=f.dataset.step, who=f.dataset.who;
+      const st=PROCS[i].state; st[id]=st[id]||{}; st[id][who]=!st[id][who]; renderAll(); refreshRevenue(); }
+  }
+  procListEl.addEventListener('click', procClick);
+  document.getElementById('mbProcs').addEventListener('click', procClick);
+
+  /* ============ Aktivität & Performance (Tracking) ============ */
+  let kpiP = 'monat', kpiW = 'team';
+  const KPI_SHARE = { team:1, tb:0.6, c360:0.4 };
+  const KPI_DEF = [
+    {id:'calls', t:'Business Calls',          src:'Quelle: Notizen bei Managern',          ist:{woche:18,monat:64,quartal:171}, soll:{woche:25,monat:100,quartal:300}, trend:'+12%'},
+    {id:'vorg',  t:'Vorgestellte Kandidaten', src:'Quelle: Prozess · Stage „Vorgestellt“', ist:{woche:2, monat:5, quartal:14},  soll:{woche:3, monat:12, quartal:36},  trend:'+2', live:true},
+    {id:'rv',    t:'Rahmenverträge',          src:'Quelle: Verträge im System',            ist:{woche:1, monat:2, quartal:5},   soll:{woche:1, monat:3,  quartal:8},   trend:'+1'},
+    {id:'net',   t:'Netzwerk-Wachstum',       src:'Quelle: LinkedIn · neue Kontakte',      ist:{woche:44,monat:168,quartal:470},soll:{woche:50,monat:200,quartal:600}, trend:'\u22125%'}
+  ];
+  const KPI_PF = { woche:0.25, monat:1, quartal:3 };
+  const FUNNEL = ['CV vorgestellt','1. Interview','2. Interview','Finale','Angebot','Annahme'];
+  const TRANS = [
+    {q:'Anforderungen verstanden?',   rate:.58, ziel:.60, days:6, reasons:[['Fachlich nicht passend',50],['Gehalt',20],['Seniorität',20],['Kandidat zurückgezogen',10]]},
+    {q:'Passt der Kandidat ins Team?', rate:.57, ziel:.65, days:9, reasons:[['Kultur / Fit',50],['Fachliche Tiefe',33],['Kandidat zurückgezogen',17]]},
+    {q:'Überzeugt im Vergleich?',      rate:.63, ziel:.70, days:7, reasons:[['Anderer Kandidat',67],['Gehalt',33]]},
+    {q:'Entscheidet sich der Kunde?',  rate:.60, ziel:.70, days:5, reasons:[['Kunde entscheidet anders',100]]},
+    {q:'Sagt der Kandidat zu?',        rate:.67, ziel:.85, days:4, reasons:[['Gegenangebot',100]]}
+  ];
+  const ttHire = TRANS.reduce((n,t)=>n+t.days,0);
+  const KPI_GROUPS = [
+    {g:'Sourcing', items:[
+      {n:312, l:'Kandidaten-Ansprachen', s:'Kandidatensuche'},
+      {v:'24%', l:'Response-Rate', s:'Antworten / Ansprachen'},
+      {n:11, l:'Erstgespräche', s:'Video-Interviews · Qualifizierung'}]},
+    {g:'Mandate & Kunden', items:[
+      {n:4, l:'Neue Briefings', s:'Briefing angelegt'},
+      {v:'9 T', l:'Time-to-Submit', s:'Briefing → 1. Vorstellung'},
+      {n:6, l:'Kontakte ohne Follow-up', s:'Manager > 30 Tage ohne Notiz', warn:true}]},
+    {g:'Ergebnis', items:[
+      {n:2, l:'Placements', s:'Vertrag unterschrieben'},
+      {v:'€\u00A023k', l:'Umsatz pro Placement', s:'Rechnung'},
+      {v:ttHire+' T', l:'Time-to-Hire', s:'Vorstellung → Annahme'}]}
+  ];
+  function renderFunnel(){
+    const row = document.getElementById('fnRow'); if(!row) return;
+    const top = Math.max(1, Math.round(24*KPI_PF[kpiP]*KPI_SHARE[kpiW]));
+    const c = [top]; TRANS.forEach((t,k)=> c.push(Math.round(c[k]*t.rate)));
+    let worst = 0; TRANS.forEach((t,k)=>{ if((t.rate-t.ziel) < (TRANS[worst].rate-TRANS[worst].ziel)) worst = k; });
+    row.innerHTML = FUNNEL.map((l,k)=>{
+      const h = Math.max(4, Math.round(c[k]/top*100));
+      const stage = `<div class="fn-stage"><div class="fn-n">${c[k]}</div><div class="fn-barwrap"><div class="fn-bar" style="height:${h}%"></div></div><div class="fn-l">${l}</div></div>`;
+      if(k===FUNNEL.length-1) return stage;
+      const t = TRANS[k], ok = t.rate>=t.ziel;
+      return stage + `<div class="fn-tr ${k===worst?'worst':''}"><div class="fn-rate ${ok?'ok':'low'}">${Math.round(t.rate*100)}%</div><div class="fn-days">Ø ${t.days} T</div><div class="fn-arrow">›</div></div>`;
+    }).join('');
+    document.getElementById('fnDetail').innerHTML = TRANS.map((t,k)=>{
+      const ok = t.rate>=t.ziel, gap = Math.round((t.rate-t.ziel)*100);
+      return `<div class="ft ${k===worst?'worst':''}">
+        <div class="ft-h"><b>${FUNNEL[k]} → ${FUNNEL[k+1]}</b><span class="ft-q">${t.q}</span>${k===worst?'<span class="ft-flag">Hier hakt es</span>':''}</div>
+        <div class="ft-m">
+          <div class="ft-bar"><div class="ft-fill ${ok?'ok':'low'}" style="width:${Math.round(t.rate*100)}%"></div><div class="ft-target" style="left:${Math.round(t.ziel*100)}%"></div></div>
+          <span class="ft-v ${ok?'ok':'low'}">${Math.round(t.rate*100)}% <small>Ziel ${Math.round(t.ziel*100)}% · ${gap>=0?'+':''}${gap}</small></span>
+          <span class="ft-d">Ø ${t.days} Tage</span>
+        </div>
+        <div class="ft-r"><span class="ft-rl">Absagegründe</span>${t.reasons.map(([r,p])=>`<span class="mini-chip">${r} · ${p}%</span>`).join('')}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('fnTotal').textContent = 'Ø Time-to-Hire ' + ttHire + ' Tage';
+  }
+  function renderTiles(){
+    const tl = document.getElementById('kpiTiles'); if(!tl) return;
+    const f = KPI_PF[kpiP]*KPI_SHARE[kpiW];
+    tl.innerHTML = KPI_GROUPS.map(g=>`<div class="kgrp"><div class="kgrp-h">${g.g}</div><div class="kpi-tiles">${g.items.map(t=>{
+      const v = t.v != null ? t.v : Math.round(t.n*f);
+      return `<div class="kt ${t.warn?'warn':''}"><div class="kt-v">${v}</div><div class="kt-l">${t.l}</div><div class="kt-s">${t.s}</div></div>`;
+    }).join('')}</div></div>`).join('');
+  }
+  function kpiGaugeSVG(ist, soll){
+    const gMax = Math.max(soll*1.25, ist, 1), istF = Math.min(ist/gMax,1), sollF = Math.min(soll/gMax,1);
+    const d = 'M43.4 156.6 A80 80 0 1 1 156.6 156.6';
+    const a = ((-135 + 270*sollF) - 90) * Math.PI/180;
+    const x1 = 100 + 64*Math.cos(a), y1 = 100 + 64*Math.sin(a), x2 = 100 + 88*Math.cos(a), y2 = 100 + 88*Math.sin(a);
+    return `<svg viewBox="0 0 200 200"><path class="kg-track" d="${d}" pathLength="1000"/><path class="kg-ist" d="${d}" pathLength="1000" stroke-dasharray="${(istF*1000).toFixed(1)} 1000"/><line class="kg-soll" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/></svg>`;
+  }
+  function renderKPI(){
+    const el = document.getElementById('kpiGauges'); if(!el) return;
+    const share = KPI_SHARE[kpiW];
+    const liveVorg = PROCS.filter(p=>p.state.vorgestellt).length;
+    el.innerHTML = KPI_DEF.map(k=>{
+      let ist = k.ist[kpiP] + (k.live ? liveVorg : 0);
+      ist = Math.round(ist*share); const soll = Math.max(1, Math.round(k.soll[kpiP]*share));
+      const pct = Math.round(ist/soll*100), over = ist>=soll;
+      const tCls = k.trend[0]==='\u2212' ? 'dn' : 'up';
+      return `<div class="kg ${over?'over':''}">
+        <div class="kg-t">${k.t}</div><div class="kg-src">${k.src}</div>
+        <div class="kg-g">${kpiGaugeSVG(ist,soll)}
+          <div class="kg-c"><div class="kg-num">${ist}</div><div class="kg-of">Ziel ${soll}</div><div class="kg-pct">${pct}%</div><div class="kg-trend ${tCls}">${k.trend} ggü. Vorperiode</div></div>
+        </div>
+      </div>`;
+    }).join('');
+    renderFunnel(); renderTiles();
+  }
+  document.getElementById('kpiPeriods').addEventListener('click', e=>{ const b=e.target.closest('[data-kp]'); if(!b) return; kpiP=b.dataset.kp; document.querySelectorAll('#kpiPeriods button').forEach(x=>x.classList.toggle('on',x===b)); renderKPI(); });
+  document.getElementById('kpiWho').addEventListener('click', e=>{ const b=e.target.closest('[data-kw]'); if(!b) return; kpiW=b.dataset.kw; document.querySelectorAll('#kpiWho button').forEach(x=>x.classList.toggle('on',x===b)); renderKPI(); });
+
+  // init
+  buildTicks();
+  renderPipeLine();
+  renderAll();
+  renderYearGoal();
+  renderNearClose();
+  renderActions();
+  renderKPI();
+  renderKW();
+  ksInit();
+  setTimeout(() => setPeriod('monat'), 160); // Zünd-Sweep der Nadel
+
+  // Theme-Umschalter (Jet / Mono / Heli)
+  const themeBtns = [...document.querySelectorAll('#themeSw button')];
+  themeBtns.forEach(b => b.addEventListener('click', () => {
+    const th = b.dataset.theme;
+    if(th === 'jet') document.body.removeAttribute('data-theme');
+    else document.body.dataset.theme = th;
+    themeBtns.forEach(x => x.classList.toggle('on', x === b));
+    setPeriod(currentP); // Gauge inkl. Nadel neu zeichnen
+  }));
+
+</script>
+<div id="dealFx" aria-hidden="true">
+  <div class="fx-card">
+    <div class="fx-ring"></div>
+    <div class="fx-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></div>
+    <div class="fx-t">Deal gewonnen</div>
+    <div class="fx-val">–</div>
+    <div class="fx-sub">Vertrag unterzeichnet · gebucht</div>
+  </div>
+</div>
+
+<div id="presentModal" aria-hidden="true">
+  <div class="pm-wrap">
+    <div class="pm-head">
+      <b>Vorstellung generieren</b>
+      <span class="pm-recipient" id="pmTo">An: –</span>
+      <span class="anrede sie" id="pmAnrede">per Sie</span>
+      <button class="pm-x" data-pmclose aria-label="Schließen">×</button>
+    </div>
+    <div class="pm-body">
+      <div class="panam-doc">
+        <div class="panam-top">
+          <div class="panam-title">Kandidatenprofil – #K-0731 (anonym)</div>
+          <div class="panam-logo"><b>PANAM.</b><span>PARTNERS</span></div>
+        </div>
+        <div class="panam-pos">Angestrebte Position: <b>Cloud Architect / Principal</b></div>
+        <div class="panam-grid">
+          <div class="panam-row"><div class="panam-k">Zusammenfassung</div><div class="panam-v">Cloud-Architekt mit 9 Jahren Erfahrung im Aufbau und Skalieren von Plattformen; Track-Record in AWS-Landing-Zones, Kubernetes-Betrieb und Team-Führung (bis 8 Personen).</div></div>
+          <div class="panam-row"><div class="panam-k">Technologie Stack</div><div class="panam-v">AWS · Kubernetes · Go · Terraform · CI/CD · Observability</div></div>
+          <div class="panam-row"><div class="panam-k">Rahmenbedingungen</div><div class="panam-v"><ul><li>Gehaltsvorstellung: 120.000 €</li><li>Kündigungsfrist: 3 Monate</li><li>Verfügbarkeit für Interviews: ab KW 32</li></ul></div></div>
+          <div class="panam-row"><div class="panam-k">Qualifikationen</div><div class="panam-v"><ul><li>Master (Informatik)</li><li>Sprachkenntnisse: deutsch Muttersprache (C2) · englisch fließend (C1)</li></ul></div></div>
+          <div class="panam-row"><div class="panam-k">Wechselmotivation</div><div class="panam-v">Sucht mehr Architektur-Verantwortung und Remote-Flexibilität; im aktuellen Umfeld wenig Gestaltungsspielraum.</div></div>
+        </div>
+        <div class="panam-foot">Kontakt: Thomas Bausch – t.bausch@panam-partners.com · 0151 275 70 924</div>
+        <div class="panam-addr">Panam Partners GmbH · Wallbergstr. 3 · 82024 Taufkirchen · www.panam-partners.com</div>
+        <div class="panam-legal">Dieses Profil wird anonymisiert übermittelt. Mit Einladung dieser Kandidatin / dieses Kandidaten zu einem Vorstellungsgespräch gelten die AGB der Panam Partners GmbH; nachfolgende Einstellungen erfolgen für 12 Monate über die Panam Partners GmbH.</div>
+      </div>
+    </div>
+    <div class="pm-actions">
+      <span class="pm-cover" id="pmCover">Anschreiben in Sie-Form</span>
+      <button class="kw-btn" data-pmclose>Schließen</button>
+      <button class="kw-btn primary" data-pmsend>Vorstellung senden</button>
+    </div>
+  </div>
+</div>
+<div id="kwToast"><span class="kt-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span><span class="kt-msg">–</span></div>
+
+<div id="invoiceModal" aria-hidden="true">
+  <div class="pm-wrap">
+    <div class="pm-head"><b>Rechnung</b><span class="pm-recipient" id="invTo">–</span><span class="chip chip--ai">automatisch erstellt</span><button class="pm-x" data-invclose aria-label="Schließen">×</button></div>
+    <div class="pm-body">
+      <div class="panam-doc">
+        <div class="panam-top"><div class="panam-title">Rechnung <span id="invNo"></span></div><div class="panam-logo"><b>PANAM.</b><span>PARTNERS</span></div></div>
+        <div class="inv-parties">
+          <div><div class="inv-lbl">Rechnung an</div><div id="invClient" class="inv-block"></div></div>
+          <div><div class="inv-lbl">Rechnungsdaten</div><div id="invMeta" class="inv-block"></div></div>
+        </div>
+        <div class="panam-grid">
+          <div class="panam-row"><div class="panam-k">Leistung</div><div class="panam-v" id="invService"></div></div>
+          <div class="panam-row"><div class="panam-k">Honorar</div><div class="panam-v" id="invFee"></div></div>
+          <div class="panam-row"><div class="panam-k">Zahlungsziel</div><div class="panam-v" id="invTerms"></div></div>
+          <div class="panam-row"><div class="panam-k">Rechnungsbetrag</div><div class="panam-v inv-amount" id="invAmount"></div></div>
+        </div>
+        <div class="panam-foot">Panam Partners GmbH · Wallbergstr. 3 · 82024 Taufkirchen · t.bausch@panam-partners.com</div>
+        <div class="panam-legal">Zahlbar innerhalb des angegebenen Zahlungsziels ohne Abzug. Es gelten die AGB der Panam Partners GmbH.</div>
+      </div>
+    </div>
+    <div class="pm-actions">
+      <span class="pm-cover">Konditionen aus den Kundendaten übernommen</span>
+      <button class="kw-btn" data-invpdf>Als PDF</button>
+      <button class="kw-btn" data-invdatev>An DATEV</button>
+      <button class="kw-btn primary" data-invsend>An Kunden senden</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

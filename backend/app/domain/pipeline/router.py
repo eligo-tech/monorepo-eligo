@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
+from app.domain.activity import kpis as activity_kpis
+from app.domain.activity import service as activity_service
 from app.domain.pipeline import auswertung
 from app.domain.pipeline import service
 from app.domain.pipeline import steps as steps_mod
@@ -157,6 +159,35 @@ async def add_step(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+    # ELI-15: "Vorgestellt" is the KPI the recruiters actually steer by, and
+    # ticking the step IS the event — nobody counts presentations by hand.
+    # Reached is counted the way `derive_stage` counts it, so the number and
+    # the board can never disagree.
+    if row.step_key == "vorgestellt":
+        reached = bool(row.done_at or row.scheduled_at or row.outcome == "pass")
+        if reached:
+            await activity_service.record_safely(
+                db,
+                tenant_id=actor.tenant_id,
+                event_type=activity_kpis.CANDIDATE_PRESENTED,
+                occurred_at=service.as_utc(row.done_at or row.scheduled_at)
+                or row.created_at,
+                ref_type="process_step",
+                ref_id=row.id,
+                actor_user_id=actor.user_id,
+                actor_name=actor.name,
+            )
+        else:
+            # Un-ticked: it did not happen after all, so it must leave the
+            # count. A KPI that only ever goes up is a KPI people game.
+            await activity_service.forget(
+                db,
+                tenant_id=actor.tenant_id,
+                event_type=activity_kpis.CANDIDATE_PRESENTED,
+                ref_id=row.id,
+            )
+        await db.commit()
     return _step_read(row)
 
 

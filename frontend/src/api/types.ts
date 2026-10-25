@@ -986,3 +986,33 @@ export interface JobSpecProposalDTO {
   source_url: string | null
 }
 
+/** One instrument on the Tracking screen (ELI-15). */
+export interface KpiDTO {
+  key: string
+  /** German label; the dictionary is keyed by it. */
+  label: string
+  source: string
+  /** null when nothing measures this KPI — render the reason, not a 0. */
+  ist: number | null
+  /** null when no target is set. Distinct from 0, which is a target of none. */
+  ziel: number | null
+  available: boolean
+  unavailable_because: string
+}
+
+export interface TrackingDTO {
+  period: string
+  period_start: string
+  period_end: string
+  /** null = the whole workspace. */
+  actor_user_id: string | null
+  kpis: KpiDTO[]
+}
+
+/** Somebody with activity in the record, for the per-consultant switch. */
+export interface ConsultantDTO {
+  actor_user_id: string | null
+  name: string
+  events: number
+}
+

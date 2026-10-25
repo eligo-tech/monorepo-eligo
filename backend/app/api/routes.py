@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.auth import Actor, get_current_actor
 
+from app.domain.activity.router import router as activity_router
 from app.domain.candidates.router import router as candidates_router
 from app.domain.companies.router import router as companies_router
 from app.domain.documents.router import router as documents_router
@@ -55,6 +56,7 @@ async def me(actor: Actor = Depends(get_current_actor)) -> dict:
     }
 
 
+api_router.include_router(activity_router)
 api_router.include_router(candidates_router)
 api_router.include_router(companies_router)
 api_router.include_router(documents_router)

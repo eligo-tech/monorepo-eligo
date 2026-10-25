@@ -7,6 +7,7 @@ table creation never misses a domain.
 
 from __future__ import annotations
 
+from app.domain.activity import models as activity_models  # noqa: F401
 from app.domain.candidates import models as candidate_models  # noqa: F401
 from app.domain.companies import models as company_models  # noqa: F401
 from app.domain.documents import models as document_models  # noqa: F401
