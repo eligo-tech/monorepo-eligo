@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_tenant
+from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.managers import service
 from app.domain.managers.schemas import (
@@ -144,11 +144,19 @@ async def list_interactions(
 async def log_interaction(
     manager_id: uuid.UUID,
     payload: ManagerInteractionCreate,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> ManagerInteractionRead:
+    # ELI-15: the note IS the event, so the only thing it was missing is who
+    # wrote it. Stamped on the row itself — a second table holding the same
+    # call could only ever drift from this one.
     row = await service.log_interaction(
-        db, tenant_id=tenant_id, manager_id=manager_id, payload=payload
+        db,
+        tenant_id=actor.tenant_id,
+        manager_id=manager_id,
+        payload=payload,
+        actor_user_id=actor.user_id,
+        actor_name=actor.name,
     )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")

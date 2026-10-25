@@ -142,6 +142,12 @@ def test_the_admin_only_routes_are_the_ones_we_meant() -> None:
         ("DELETE", "/tenant-sources/{kind}"),
         ("POST", "/tenant-sources/{kind}/import"),
         ("POST", "/imports/commit"),
+        # A goal somebody can set for themselves is not a goal. ELI-15 asks
+        # for it the other way round — "wir als Admins legen unsere Ziele
+        # selbst fest" — so writing a target is an admin action while
+        # READING the tracking is not: a consultant must be able to see
+        # their own numbers.
+        ("PUT", "/activity/targets"),
     }
 
 

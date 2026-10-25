@@ -41,6 +41,9 @@ export function serverCopy(): ServerString[] {
   const connectors = ['file_upload.py', 'aifind.py'].map((f) =>
     read(backend('app', 'domain', 'atsimport', 'connectors', f)),
   )
+  // ELI-15: the KPI definitions live in Python because the backend decides
+  // what is countable. Their labels reach `t()` as `t(kpi.label)`.
+  const kpiDefs = read(backend('app', 'domain', 'activity', 'kpis.py'))
 
   const out: ServerString[] = []
   const push = (source: string, values: string[]) => {
@@ -54,6 +57,9 @@ export function serverCopy(): ServerString[] {
     push('connector label', all(src, /^\s{4}label = "([^"]+)"/gm))
     push('connector hint', all(src, /^\s{4}hint = "([^"]+)"/gm))
   }
+  push('kpis.py label', all(kpiDefs, /^\s*label="([^"]+)"/gm))
+  push('kpis.py source', all(kpiDefs, /^\s*source="([^"]+)"/gm))
+  push('kpis.py reason', all(kpiDefs, /^\s*unavailable_because="([^"]+)"/gm))
   return out
 }
 

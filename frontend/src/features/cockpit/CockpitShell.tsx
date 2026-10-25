@@ -15,6 +15,7 @@ import { CommandBar } from './CommandBar'
 import { CockpitScreen } from './screens/CockpitScreen'
 import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
 import { EinstellungenScreen } from './screens/EinstellungenScreen'
+import { TrackingScreen } from './screens/TrackingScreen'
 import { JobsScreen } from './screens/JobsScreen'
 import { ManagerScreen } from './screens/ManagerScreen'
 import { MarktScreen } from './screens/MarktScreen'
@@ -31,6 +32,7 @@ export type ScreenKey =
   | 'managers'
   | 'jobs'
   | 'kandidaten'
+  | 'tracking'
   | 'einstellungen'
 
 // The order the product reads in: the book of business, then the market it
@@ -43,6 +45,7 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'managers', label: 'Manager', placeholder: true },
   { key: 'jobs', label: t('Jobs') },
   { key: 'kandidaten', label: t('Kandidaten') },
+  { key: 'tracking', label: t('Tracking') },
   { key: 'einstellungen', label: t('Einstellungen') },
 ]
 
@@ -159,6 +162,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
             onPipelineChanged={state.reload}
           />
         )}
+        {screen === 'tracking' && <TrackingScreen me={me} />}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
       </main>
     </div>

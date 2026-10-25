@@ -297,6 +297,7 @@ async def set_step(
     note: str | None = None,
     clear: list[str] | None = None,
     actor: str = "recruiter",
+    actor_user_id: str | None = None,
 ) -> ProcessStep:
     """Create or update one step, then re-derive the application's stage.
 
@@ -332,6 +333,11 @@ async def set_step(
     # Ticking a step the process had removed is how you put it back — the
     # alternative is a write that silently lands on an invisible row.
     row.active = True
+    # ELI-15: the first person to record this step keeps it. Somebody
+    # correcting a date afterwards did not make the presentation.
+    if row.actor_user_id is None and actor_user_id is not None:
+        row.actor_user_id = actor_user_id
+        row.actor_name = actor
     if scheduled_at is not None:
         row.scheduled_at = scheduled_at
     if done_at is not None:

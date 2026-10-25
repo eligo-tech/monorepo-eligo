@@ -1,6 +1,8 @@
 // Thin typed fetch client for the Eligo Labs backend.
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
+  ConsultantDTO,
+  TrackingDTO,
   JobSpecProposalDTO,
   CandidateDTO,
   CandidateUpdatePayload,
@@ -179,6 +181,30 @@ export const api = {
     request<JobDTO>(`/jobs/${jobId}/copy`, {
       method: 'POST',
       body: JSON.stringify(title ? { title } : {}),
+    }),
+
+  /** Ist vs. Ziel for one period (ELI-15). `who` is "team", a Clerk user
+   *  id, or "unassigned" — the events imported history has no author for. */
+  tracking: (period: string, who = 'team') =>
+    request<TrackingDTO>(
+      `/activity/tracking?period=${encodeURIComponent(period)}&who=${encodeURIComponent(who)}`,
+    ),
+
+  /** Who the per-consultant switch can switch to — derived from events, not
+   *  from a roster: there is no users table, membership lives in Clerk. */
+  consultants: () => request<ConsultantDTO[]>('/activity/consultants'),
+
+  /** Set a goal. Admin only; `actor_user_id: null` is the workspace default
+   *  that anybody without their own number inherits. */
+  setTarget: (body: {
+    kpi: string
+    period: string
+    value: number
+    actor_user_id: string | null
+  }) =>
+    request<unknown>('/activity/targets', {
+      method: 'PUT',
+      body: JSON.stringify(body),
     }),
 
   /** Read a job advert into a proposed Suchprofil (ELI-6).
