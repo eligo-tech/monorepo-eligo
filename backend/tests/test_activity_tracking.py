@@ -24,7 +24,6 @@ import datetime as dt
 import uuid
 
 import pytest
-from sqlalchemy import select
 
 from app.core.database import SessionLocal
 from app.domain.activity import kpis, service
