@@ -220,6 +220,11 @@ class Settings(BaseSettings):
     notice_controller_name: str = "Eligo Labs"
     #: Where a candidate exercises their rights. Falls back to reply-to.
     notice_contact_email: str | None = None
+    #: The full Art. 14 information, which the notice links to rather than
+    #: reciting. Art. 12(1) allows the layered form, and a forty-line legal
+    #: text in a stranger's inbox is read by nobody. This one IS the cockpit's
+    #: public site — unlike `notice_link_base_url`, which must be the API.
+    notice_privacy_url: str = "https://eligolabs.com/datenschutz/"
 
     @field_validator("ingest_token")
     @classmethod
