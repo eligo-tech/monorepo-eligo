@@ -25,7 +25,40 @@ PRESENTED_STEP = "vorgestellt"
 #: different conversation and belongs to a different KPI; `na` is the one
 #: that was not reached and must not count as a call made — the same rule
 #: `isContact` applies to "letzter Kontakt".
-MANAGER_CALL_KINDS = ("business_call", "client_call")
+_MANAGER_CALL_CANONICAL = ("business_call", "client_call")
+
+
+def manager_call_spellings() -> tuple[str, ...]:
+    """Every stored spelling that MEANS a call with a manager.
+
+    The canonical values are not enough, and assuming they were made this
+    KPI read zero while 133 real business calls sat in the record. The
+    aiFind importer writes the source's own words — "BD Call" — and
+    `normalise_interaction_type` folds them on READ, in Python. A KPI that
+    filters in SQL never sees that fold.
+
+    So the filter is derived from the same mapping rather than restated:
+    anything that normalises to a manager call counts, whatever it is
+    spelled like in the column. That stays true after a normalisation pass
+    and stays true if the next importer writes raw words again.
+    """
+    from app.domain.common.enums import (
+        _LEGACY_INTERACTION_TYPES,
+        normalise_interaction_type,
+    )
+
+    spellings = set(_MANAGER_CALL_CANONICAL)
+    for raw in _LEGACY_INTERACTION_TYPES:
+        if normalise_interaction_type(raw) in _MANAGER_CALL_CANONICAL:
+            # Stored with the source's capitalisation ("BD Call"), so the
+            # query compares case-insensitively — see `_manager_calls`.
+            spellings.add(raw)
+    return tuple(sorted(spellings))
+
+
+#: Kept for callers that only need the canonical pair (the migration's
+#: backfill, and the frontend's own vocabulary).
+MANAGER_CALL_KINDS = _MANAGER_CALL_CANONICAL
 
 PERIODS = ("woche", "monat", "quartal")
 
