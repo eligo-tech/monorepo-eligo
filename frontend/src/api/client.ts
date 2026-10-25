@@ -160,6 +160,26 @@ export const api = {
       body: JSON.stringify(patch),
     }),
 
+  /** Write somebody down who has no CV and came from no import (ELI-17).
+   *
+   *  `source` is quoted verbatim into the Art. 14 notice the person
+   *  receives, so it carries human words ("Empfehlung"), never a code. */
+  createCandidate: (body: {
+    full_name: string
+    email?: string
+    phone?: string
+    current_title?: string
+    current_company?: string
+    location?: string
+    skills?: string[]
+    salary_expectation?: number | null
+    source?: string
+  }) =>
+    request<CandidateDTO>('/candidates', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   /** Fetch the original uploaded CV (PDF) for a candidate. null if none on file. */
   async candidateCv(id: string): Promise<Blob | null> {
     const res = await fetch(`${BASE}/candidates/${id}/cv`, { headers: await authHeaders() })

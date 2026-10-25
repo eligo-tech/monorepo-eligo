@@ -30,6 +30,7 @@ import { Building2, Check, Link2, Plus, UserRound, X } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { CompanyDTO, JobSpecProposalDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
+import { toAmount } from '@/lib/amount'
 import { searchScore } from '@/lib/search'
 import {
   Button,
@@ -41,15 +42,6 @@ import {
 } from '../ui/forms'
 import { Label } from '../ui/primitives'
 
-/** "92.000" / "92000" / "92k" → 92000. Empty → null. */
-function toAmount(text: string): number | null {
-  const trimmed = text.trim()
-  if (!trimmed) return null
-  const digits = trimmed.replace(/[^\d]/g, '')
-  if (!digits) return null
-  const value = Number(digits)
-  return /k$/i.test(trimmed) && value < 1000 ? value * 1000 : value
-}
 
 /** The typed name, when it is not one of the rows: what would be created.
  *

@@ -14,7 +14,7 @@
 import { t } from '@/i18n'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDownUp, Check, Download, Search, SlidersHorizontal, Upload, X } from 'lucide-react'
+import { ArrowDownUp, Check, Download, Search, SlidersHorizontal, Upload, UserRoundPlus, X } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { LinkedInMark } from '@/components/ui/LinkedInMark'
 import type { Candidate } from '@/data/types'
@@ -27,6 +27,7 @@ import { Chip, Panel, SectionHeader } from '../../ui/primitives'
 import { Button, FIELD } from '../../ui/forms'
 import { CandidateDrawer } from './CandidateDrawer'
 import { CvUploadModal } from './CvUploadModal'
+import { NewCandidate } from './NewCandidate'
 
 type SortKey = 'created' | 'name' | 'verification'
 const SORT_LABELS: Record<SortKey, string> = {
@@ -220,6 +221,7 @@ export function KandidatenScreen({
   onPipelineChanged?: () => void
 } = {}) {
   // Deep-link: ?upload=1 opens the CV import dialog straight away.
+  const [newOpen, setNewOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(
     () => new URLSearchParams(window.location.search).get('upload') === '1',
   )
@@ -440,6 +442,12 @@ export function KandidatenScreen({
             <Download className="h-4 w-4" /> Export
           </Button>
 
+          {/* Two ways in, named by what you have in your hand: a document,
+              or only a conversation. */}
+          <Button onClick={() => setNewOpen(true)}>
+            <UserRoundPlus className="h-4 w-4" /> {t('Kandidat anlegen')}
+          </Button>
+
           <Button tone="primary" onClick={() => setUploadOpen(true)}>
             <Upload className="h-4 w-4" /> {t('Kandidat aus CV')}
           </Button>
@@ -606,6 +614,13 @@ export function KandidatenScreen({
       {uploadOpen && (
         <CvUploadModal
           onClose={() => setUploadOpen(false)}
+          onCreated={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
+
+      {newOpen && (
+        <NewCandidate
+          onClose={() => setNewOpen(false)}
           onCreated={() => setRefreshKey((k) => k + 1)}
         />
       )}
