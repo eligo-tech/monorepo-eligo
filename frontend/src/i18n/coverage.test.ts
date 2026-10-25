@@ -67,6 +67,10 @@ const ALLOWED = new Set([
   'Head of IT',
   'Dillenburg',
   'IT-Administrator produktionsnahe IT / OT (m/w/d)',
+  // Example values in the manual candidate form — a person's name and
+  // a role, shown as grey hints, not copy to translate.
+  'Marie Hoffmann',
+  'Senior Backend Engineer',
   // Same word in both languages.
   'Manager',
   'Business Dev.',
