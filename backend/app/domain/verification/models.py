@@ -127,22 +127,32 @@ class EnrichmentRecord(Base, IDMixin, TenantMixin, TimestampMixin):
 # misconfigured grant. Migration 0014 additionally revokes both privileges from
 # the runtime role, so a stolen application credential never held them.
 
-_PG_APPEND_ONLY = """
-CREATE OR REPLACE FUNCTION receipts_are_append_only()
-RETURNS trigger AS $$
-BEGIN
-    RAISE EXCEPTION 'receipts are append-only: % is not permitted', TG_OP;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS receipts_no_update ON receipts;
-DROP TRIGGER IF EXISTS receipts_no_delete ON receipts;
-
-CREATE TRIGGER receipts_no_update BEFORE UPDATE ON receipts
-    FOR EACH ROW EXECUTE FUNCTION receipts_are_append_only();
-CREATE TRIGGER receipts_no_delete BEFORE DELETE ON receipts
-    FOR EACH ROW EXECUTE FUNCTION receipts_are_append_only();
-"""
+# One string per statement, not one blob. asyncpg sends DDL as a prepared
+# statement and refuses more than one command in it, so the blob this used to
+# be made `create_all` fail outright on a FRESH Postgres database — the exact
+# path the comment above calls untested. It never showed in production
+# because `receipts` already existed there, so `after_create` never fired,
+# and never in CI because CI is SQLite. Splitting the statements is the fix;
+# the Postgres CI job is what stops it coming back.
+#
+# Note the function body is dollar-quoted and contains its own semicolons,
+# which is why this is an explicit tuple rather than a `split(";")`.
+_PG_APPEND_ONLY = (
+    """
+    CREATE OR REPLACE FUNCTION receipts_are_append_only()
+    RETURNS trigger AS $$
+    BEGIN
+        RAISE EXCEPTION 'receipts are append-only: % is not permitted', TG_OP;
+    END;
+    $$ LANGUAGE plpgsql
+    """,
+    "DROP TRIGGER IF EXISTS receipts_no_update ON receipts",
+    "DROP TRIGGER IF EXISTS receipts_no_delete ON receipts",
+    "CREATE TRIGGER receipts_no_update BEFORE UPDATE ON receipts "
+    "FOR EACH ROW EXECUTE FUNCTION receipts_are_append_only()",
+    "CREATE TRIGGER receipts_no_delete BEFORE DELETE ON receipts "
+    "FOR EACH ROW EXECUTE FUNCTION receipts_are_append_only()",
+)
 
 _SQLITE_APPEND_ONLY = (
     "CREATE TRIGGER IF NOT EXISTS receipts_no_update BEFORE UPDATE ON receipts "
@@ -154,8 +164,12 @@ _SQLITE_APPEND_ONLY = (
 
 @event.listens_for(Receipt.__table__, "after_create")
 def _install_append_only_guard(target, connection, **kw) -> None:  # noqa: ARG001
-    if connection.dialect.name == "postgresql":
-        connection.exec_driver_sql(_PG_APPEND_ONLY)
-    elif connection.dialect.name == "sqlite":
-        for statement in _SQLITE_APPEND_ONLY:
-            connection.exec_driver_sql(statement)
+    statements = (
+        _PG_APPEND_ONLY
+        if connection.dialect.name == "postgresql"
+        else _SQLITE_APPEND_ONLY
+        if connection.dialect.name == "sqlite"
+        else ()
+    )
+    for statement in statements:
+        connection.exec_driver_sql(statement)

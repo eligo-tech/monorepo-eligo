@@ -45,6 +45,96 @@ jobs:
           ELIGO_DATABASE_URL: "sqlite+aiosqlite:///./ci.db"
         run: pytest -q
 
+  rls:
+    name: Backend · RLS on Postgres
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # The rest of the suite runs on SQLite, which has no Row-Level Security.
+    # It proves the query layer filters by tenant_id; it cannot prove the
+    # DATABASE refuses when the application forgets. ADR 0002 §6 records this
+    # as owed.
+    #
+    # It stopped being theoretical on 2026-10-25, when `activity_targets`
+    # reached the production database through `create_all` — which makes
+    # tables but not policies — and sat there as the only tenant table with
+    # FORCE off. The suite was green. A human found it by reading
+    # `apply_rls --status` output. This job is that reading, automated.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eligo_owner
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: eligo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U eligo_owner -d eligo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The OWNER connection: DDL, migrations, and the RLS setup.
+      ELIGO_ADMIN_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
+      ELIGO_DB_APP_ROLE: eligo_app
+      # Throwaway, for a container that lives about ninety seconds. The point
+      # of a password here is that it puts the app role in LOGIN mode, which
+      # is how production connects — as a role that is NOT the table owner.
+      ELIGO_DB_APP_ROLE_PASSWORD: ci_app_pw
+      ELIGO_DB_SSL: 'false'
+      ELIGO_AUTH_ENABLED: 'false'
+      ELIGO_LLM_PROVIDER: heuristic
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,postgres]"
+
+      - name: Create the schema
+        # `create_all`, not `alembic upgrade head`: the migrations are written
+        # against a baseline this creates, so 0003 fails on an empty database.
+        # This is also the documented bootstrap for a customer bringing their
+        # own database — and the path that was broken until today, because
+        # the receipts append-only trigger was sent to asyncpg as five
+        # statements in one prepared statement.
+        env:
+          ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
+        run: python -c "import asyncio; from app.core.database import create_all; asyncio.run(create_all())"
+
+      - name: Mark migrations as applied
+        env:
+          ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
+        run: alembic stamp head
+
+      - name: Provision the app role and apply RLS
+        env:
+          ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
+        run: python -m scripts.apply_rls
+
+      - name: Prove the isolation
+        # Connects as eligo_app — the non-owner role production uses. Running
+        # these as the owner would prove nothing: the owner is exactly who
+        # FORCE exists to constrain.
+        env:
+          ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_app:ci_app_pw@localhost:5432/eligo
+        run: pytest tests/test_rls_postgres.py -q
+
+      - name: Report the final state
+        if: always()
+        env:
+          ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
+        run: python -m scripts.apply_rls --status
+
   frontend:
     name: Frontend · typecheck & build
     runs-on: ubuntu-latest
