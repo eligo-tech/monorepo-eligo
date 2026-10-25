@@ -50,16 +50,13 @@ def _source_sentence(candidate: Candidate) -> str:
     a sentence that says exactly that rather than a confident guess, which is
     the same rule the rest of the product follows about unverifiable claims.
     """
+    #: One short clause, and the same one in both languages: it sits inside a
+    #: bilingual notice that is deliberately a few lines long, so a sentence
+    #: per language here would be a third of the mail spent on provenance.
     origin = (candidate.external_source or candidate.source or "").strip()
     if origin:
-        return (
-            f"Wir haben Ihre Daten aus folgender Quelle erhalten: {origin}. "
-            "Gerne nennen wir Ihnen auf Anfrage weitere Einzelheiten."
-        )
-    return (
-        "Ihre Daten stammen nicht aus einer direkten Erhebung bei Ihnen. "
-        "Die genaue Quelle nennen wir Ihnen gerne auf Anfrage."
-    )
+        return f"Quelle / source: {origin}."
+    return "Die Quelle nennen wir Ihnen auf Anfrage / source on request."
 
 
 def opt_in_links(tenant_id: uuid.UUID, token: str, cfg: Settings | None = None) -> tuple[str, str]:

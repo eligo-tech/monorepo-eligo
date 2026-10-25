@@ -196,9 +196,12 @@ async def _settle(
             "jederzeit widersprechen — eine kurze E-Mail genügt.",
         )
     return _page(
-        "Danke — wir haben Sie entfernt" if not already else "Bereits widersprochen",
-        "Wir löschen Ihre Daten aus unserem Bewerberpool und melden uns "
-        "nicht wieder.",
+        "Danke — wir melden uns nicht wieder"
+        if not already
+        else "Bereits widersprochen",
+        "Wir sprechen Sie nicht mehr an. Wenn Sie darüber hinaus möchten, "
+        "dass wir Ihre Daten löschen, genügt eine kurze E-Mail — wir "
+        "löschen sie dann.",
     )
 
 
