@@ -47,3 +47,9 @@ DEPLOY.md
 # working tree. GitHub's push protection caught one; this is the belt.
 client_secret*.json
 *service-account*.json
+
+# Row backups an operator script writes before a destructive step. These hold
+# real personal data — a note's full text names the manager it is about — so
+# they are exactly what must never reach a commit. Push protection does not
+# look for this: it scans for credentials, not for other people's data.
+manager_notes_*.json
