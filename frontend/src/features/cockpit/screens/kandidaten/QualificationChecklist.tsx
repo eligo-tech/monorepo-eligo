@@ -50,7 +50,7 @@ function groups(c: Candidate, p: CandidateProfile | undefined): [string, Row[]][
     .join(', ')
   return [
     [
-      'Anschrift & Kontakt',
+      t('Anschrift & Kontakt'),
       [
         { label: t('Name'), value: text(c.name), field: 'full_name' },
         { label: t('Adresse'), value: text(address), field: 'street' },
@@ -162,8 +162,14 @@ export function QualificationChecklist({
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
           {t('Kerndaten')}
         </span>
+        {/* The count keeps its brighter colour; everything else is one
+            `t()` call. It used to be bare JSX text wrapped around two
+            expressions and read "2 von 25 erfasst" in the English UI:
+            `coverage.test.ts` scans text runs, and " von " and " erfasst"
+            are each too short a fragment to look like copy. */}
         <span className="font-mono text-[12px] text-cockpit-faint">
-          <span className="text-cockpit-text">{filled}</span> von {rows.length} erfasst
+          <span className="text-cockpit-text">{filled}</span>{' '}
+          {t('von {total} erfasst', { total: rows.length })}
         </span>
         <button
           type="button"
