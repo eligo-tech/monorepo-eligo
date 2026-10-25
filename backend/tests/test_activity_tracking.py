@@ -483,3 +483,44 @@ async def test_presentations_split_by_consultant_too() -> None:
     await _step(done_at=at, actor=BEN)
     assert await _presented() == 2
     assert await _presented(everyone=False, actor_user_id=ANNA) == 1
+
+
+# ── storage spelling must not zero a KPI ──────────────────────────────────
+#
+# Shipped broken and found the same day. The aiFind importer writes the
+# source's own words — "BD Call" — and `normalise_interaction_type` folds
+# them to `business_call` on READ, in Python. The KPI filters in SQL, which
+# never sees that fold, so it reported 0 while 133 real business calls sat
+# in the record. The filter is now derived from the same mapping.
+
+
+@pytest.mark.parametrize("stored", ["BD Call", "bd call", "business_call", "client_call"])
+async def test_a_call_counts_whatever_it_is_spelled_like(stored) -> None:
+    await _call(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC), kind=stored)
+    assert await _count(*WEEK) == 1, f"{stored!r} was not counted as a manager call"
+
+
+@pytest.mark.parametrize("stored", ["N/A", "n/a", "Meeting Notes", "E-Mail", "Job Spec"])
+async def test_the_other_imported_spellings_are_still_not_calls(stored) -> None:
+    # "N/A" is the commonest kind in the record — a call that did not
+    # connect. Folding it in would roughly double the number and make the
+    # KPI flattering rather than true.
+    await _call(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC), kind=stored)
+    assert await _count(*WEEK) == 0, f"{stored!r} was wrongly counted as a call"
+
+
+def test_the_filter_is_derived_rather_than_restated() -> None:
+    """If somebody adds a legacy spelling for a call, the KPI follows.
+
+    A hand-maintained second list is the bug this whole section exists
+    about, one layer up.
+    """
+    from app.domain.common.enums import (
+        _LEGACY_INTERACTION_TYPES,
+        normalise_interaction_type,
+    )
+
+    spellings = {s.lower() for s in kpis.manager_call_spellings()}
+    for raw in _LEGACY_INTERACTION_TYPES:
+        if normalise_interaction_type(raw) in ("business_call", "client_call"):
+            assert raw.lower() in spellings, f"{raw!r} folds to a call but is not counted"

@@ -34,7 +34,12 @@ def _manager_calls(tenant_id: uuid.UUID, start: dt.datetime, end: dt.datetime) -
     return select(ManagerInteraction).where(
         ManagerInteraction.tenant_id == tenant_id,
         ManagerInteraction.manager_id.isnot(None),
-        ManagerInteraction.interaction_type.in_(kpi_defs.MANAGER_CALL_KINDS),
+        # Lowercased on both sides: the column holds the source's own
+        # capitalisation ("BD Call") alongside the canonical value, and
+        # `normalise_interaction_type` lowercases before it maps.
+        func.lower(ManagerInteraction.interaction_type).in_(
+            [k.lower() for k in kpi_defs.manager_call_spellings()]
+        ),
         ManagerInteraction.occurred_at >= start,
         ManagerInteraction.occurred_at < end,
     )
