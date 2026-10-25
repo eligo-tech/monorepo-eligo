@@ -40,3 +40,10 @@ venv/
 DEPLOY.md
 # Local editor/tool configs — machine-specific, often carry localhost ports
 .codex/
+
+# Credential files a provider hands you as a download. Google names its
+# OAuth client secrets exactly like this, and they land in whatever folder
+# the browser is pointed at — which on this repo was docs/, inside the
+# working tree. GitHub's push protection caught one; this is the belt.
+client_secret*.json
+*service-account*.json

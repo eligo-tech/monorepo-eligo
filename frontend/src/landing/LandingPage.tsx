@@ -625,10 +625,26 @@ function FinalCta({ L, onEnterApp }: { L: Lfn; onEnterApp: () => void }) {
 
 // ── 11. Footer ─────────────────────────────────────────────────────────────
 function Footer({ L }: { L: Lfn }) {
-  const cols = [
-    [L('Produkt', 'Product'), ['Sourcing', 'Verifikation', 'Matching', 'Reporting']],
-    [L('Unternehmen', 'Company'), [L('Über uns', 'About'), 'Blog', L('Karriere', 'Careers'), 'Kontakt']],
-    [L('Rechtliches', 'Legal'), ['DSGVO / GDPR', 'AI Act', L('Impressum', 'Imprint'), L('Datenschutz', 'Privacy')]],
+  // A link with a destination and one without are different promises. The
+  // legal column in particular advertised "Impressum" and "Datenschutz" as
+  // `href="#"` — in Germany those two have to go somewhere, and Google will
+  // not let an OAuth app leave testing without a privacy policy it can
+  // fetch. The rest stay inert until the pages behind them exist.
+  const cols: [string, { label: string; href?: string }[]][] = [
+    [L('Produkt', 'Product'), ['Sourcing', 'Verifikation', 'Matching', 'Reporting'].map((label) => ({ label }))],
+    [
+      L('Unternehmen', 'Company'),
+      [L('Über uns', 'About'), 'Blog', L('Karriere', 'Careers'), 'Kontakt'].map((label) => ({ label })),
+    ],
+    [
+      L('Rechtliches', 'Legal'),
+      [
+        { label: 'DSGVO / GDPR' },
+        { label: 'AI Act' },
+        { label: L('Impressum', 'Imprint'), href: '/impressum/' },
+        { label: L('Datenschutz', 'Privacy'), href: '/datenschutz/' },
+      ],
+    ],
   ]
   return (
     <footer style={{ background: C.surface, color: C.onNavy }}>
@@ -641,11 +657,18 @@ function Footer({ L }: { L: Lfn }) {
             </p>
           </div>
           {cols.map(([h, items]) => (
-            <div key={h as string}>
+            <div key={h}>
               <div style={{ fontSize: 11, fontWeight: 800, color: C.navy, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 14 }}>{h}</div>
               <div style={{ display: 'grid', gap: 9 }}>
-                {(items as string[]).map((it) => (
-                  <a key={it} href="#" className="lp-footlink" style={{ fontSize: 12.5, color: C.onNavy }}>{it}</a>
+                {items.map(({ label, href }) => (
+                  <a
+                    key={label}
+                    href={href ?? '#'}
+                    className="lp-footlink"
+                    style={{ fontSize: 12.5, color: C.onNavy }}
+                  >
+                    {label}
+                  </a>
                 ))}
               </div>
             </div>
