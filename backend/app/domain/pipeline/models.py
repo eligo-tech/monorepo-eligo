@@ -77,6 +77,23 @@ class ProcessStep(Base, IDMixin, TenantMixin, TimestampMixin):
     #: One of `PROCESS_STEP_KEYS`, an extra round ("interviewtermin_3"), or a
     #: step this process added for itself ("custom_probearbeitstag").
     step_key: Mapped[str] = mapped_column(String(40), nullable=False)
+
+    #: Who recorded it (the Clerk `sub`), for the per-consultant KPIs in
+    #: ELI-15. NULL is a real and common answer: everything the aiFind
+    #: importer wrote, and everything saved before this column existed,
+    #: genuinely has no author. The tracking screen shows that as "Nicht
+    #: zugeordnet" rather than attributing it to somebody.
+    #:
+    #: A column here rather than a separate events table: the row IS the
+    #: event, and a second copy of it could only drift from this one.
+    actor_user_id: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, index=True
+    )
+    #: Denormalised deliberately — there is no users table, the name lives
+    #: in Clerk, and a KPI list that calls an identity provider per row is a
+    #: list nobody opens.
+    actor_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+
     #: Set only for a custom step — the canonical nine take their label from
     #: `steps.py`, so renaming one there renames it everywhere at once.
     label: Mapped[str | None] = mapped_column(String(80), nullable=True)

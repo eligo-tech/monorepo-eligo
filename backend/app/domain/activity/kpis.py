@@ -12,10 +12,14 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass
 
-#: Event types this module knows how to count.
+#: What each measurable KPI counts. These are not event types in a table of
+#: their own — they name a query over the row that already records the fact.
 MANAGER_CALL = "manager_call"
 CANDIDATE_PRESENTED = "candidate_presented"
-EVENT_TYPES = (MANAGER_CALL, CANDIDATE_PRESENTED)
+COUNTABLE = (MANAGER_CALL, CANDIDATE_PRESENTED)
+
+#: The process step that means a candidate was put in front of the client.
+PRESENTED_STEP = "vorgestellt"
 
 #: Note kinds that are a call WITH A MANAGER. `candidate_call` is a
 #: different conversation and belongs to a different KPI; `na` is the one
@@ -34,7 +38,8 @@ class Kpi:
     #: Where the number comes from, shown under it. A figure whose source a
     #: recruiter cannot name is a figure they will not trust.
     source: str
-    event_type: str | None
+    #: Which query counts it, or None when nothing can.
+    counts: str | None
     #: False when nothing in the record measures it yet.
     available: bool
     #: Why not — rendered instead of a number.
@@ -46,21 +51,21 @@ KPIS: tuple[Kpi, ...] = (
         key="business_calls",
         label="Business Calls",
         source="Notizen bei Managern",
-        event_type=MANAGER_CALL,
+        counts=MANAGER_CALL,
         available=True,
     ),
     Kpi(
         key="candidates_presented",
         label="Vorgestellte Kandidaten",
         source="Prozess · Schritt „Vorgestellt“",
-        event_type=CANDIDATE_PRESENTED,
+        counts=CANDIDATE_PRESENTED,
         available=True,
     ),
     Kpi(
         key="framework_contracts",
         label="Rahmenverträge",
         source="Verträge im System",
-        event_type=None,
+        counts=None,
         available=False,
         # Not "coming soon": there is no Contract entity at all, so this
         # cannot be counted, estimated or derived from anything we hold.
@@ -70,7 +75,7 @@ KPIS: tuple[Kpi, ...] = (
         key="network_growth",
         label="Netzwerk-Wachstum",
         source="LinkedIn · neue Kontakte",
-        event_type=None,
+        counts=None,
         available=False,
         unavailable_because="Noch keine LinkedIn-Anbindung",
     ),

@@ -148,6 +148,22 @@ class ManagerInteraction(Base, IDMixin, TenantMixin, TimestampMixin):
         DateTime(timezone=True), nullable=False, index=True
     )
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Who recorded it (the Clerk `sub`), for the per-consultant KPIs in
+    #: ELI-15. NULL is a real and common answer: everything the aiFind
+    #: importer wrote, and everything saved before this column existed,
+    #: genuinely has no author. The tracking screen shows that as "Nicht
+    #: zugeordnet" rather than attributing it to somebody.
+    #:
+    #: A column here rather than a separate events table: the row IS the
+    #: event, and a second copy of it could only drift from this one.
+    actor_user_id: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, index=True
+    )
+    #: Denormalised deliberately — there is no users table, the name lives
+    #: in Clerk, and a KPI list that calls an identity provider per row is a
+    #: list nobody opens.
+    actor_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+
     #: Identity in the system this note came from, so a re-import updates the
     #: same row instead of appending the conversation again.
     external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)

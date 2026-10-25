@@ -302,6 +302,8 @@ async def log_interaction(
     tenant_id: uuid.UUID,
     manager_id: uuid.UUID | None,
     payload: ManagerInteractionCreate,
+    actor_user_id: str | None = None,
+    actor_name: str | None = None,
 ) -> ManagerInteraction | None:
     """Record one touch. `manager_id` may be None for a mandate-level note.
 
@@ -332,6 +334,10 @@ async def log_interaction(
         interaction_type=kind,
         occurred_at=occurred_at,
         summary=payload.summary,
+        # ELI-15: who wrote it, so the KPI can be counted per consultant off
+        # this row rather than off a copy of it.
+        actor_user_id=actor_user_id,
+        actor_name=actor_name,
     )
     if manager is not None and kind in CONTACT_KINDS:
         _advance_last_contact(manager, occurred_at)

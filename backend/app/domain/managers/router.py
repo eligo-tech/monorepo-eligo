@@ -9,8 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
-from app.domain.activity import kpis as activity_kpis
-from app.domain.activity import service as activity_service
 from app.domain.managers import service
 from app.domain.managers.schemas import (
     ManagerCreate,
@@ -149,25 +147,17 @@ async def log_interaction(
     actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> ManagerInteractionRead:
+    # ELI-15: the note IS the event, so the only thing it was missing is who
+    # wrote it. Stamped on the row itself — a second table holding the same
+    # call could only ever drift from this one.
     row = await service.log_interaction(
-        db, tenant_id=actor.tenant_id, manager_id=manager_id, payload=payload
+        db,
+        tenant_id=actor.tenant_id,
+        manager_id=manager_id,
+        payload=payload,
+        actor_user_id=actor.user_id,
+        actor_name=actor.name,
     )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
-
-    # ELI-15: a call with a manager is a Business Call, counted from the note
-    # that was going to be written anyway. `record_safely` cannot raise — the
-    # note is already saved, and a KPI row is not worth losing it over.
-    if row.interaction_type in activity_kpis.MANAGER_CALL_KINDS:
-        await activity_service.record_safely(
-            db,
-            tenant_id=actor.tenant_id,
-            event_type=activity_kpis.MANAGER_CALL,
-            occurred_at=row.occurred_at,
-            ref_type="manager_interaction",
-            ref_id=row.id,
-            actor_user_id=actor.user_id,
-            actor_name=actor.name,
-        )
-        await db.commit()
     return ManagerInteractionRead.model_validate(row)

@@ -1,6 +1,12 @@
-"""Counting what happened, and comparing it to what was asked.
+"""Counting what happened, and comparing it to what was asked (ELI-15).
 
-No business logic lives in the router; nothing here imports FastAPI.
+Every count here is a query over the row that ALREADY records the fact — a
+manager note, a process step. Nothing is copied into a second table, so
+there is nothing that can disagree with the record: delete the note and the
+call is gone from the KPI by construction, not by a cleanup somebody has to
+remember to write.
+
+No FastAPI imports; the router validates and calls this.
 """
 
 from __future__ import annotations
@@ -8,112 +14,88 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.logging import get_logger
 from app.domain.activity import kpis as kpi_defs
-from app.domain.activity.models import ActivityEvent, ActivityTarget
-
-logger = get_logger(__name__)
-
-
-async def record(
-    session: AsyncSession,
-    *,
-    tenant_id: uuid.UUID,
-    event_type: str,
-    occurred_at: dt.datetime,
-    ref_type: str,
-    ref_id: uuid.UUID,
-    actor_user_id: str | None = None,
-    actor_name: str | None = None,
-) -> None:
-    """Note that something countable happened. Idempotent per (type, ref)."""
-    if event_type not in kpi_defs.EVENT_TYPES:
-        raise ValueError(f"unknown event type {event_type}")
-
-    existing = await session.scalar(
-        select(ActivityEvent).where(
-            ActivityEvent.tenant_id == tenant_id,
-            ActivityEvent.event_type == event_type,
-            ActivityEvent.ref_id == ref_id,
-        )
-    )
-    if existing is not None:
-        # Editing a note moves WHEN it happened — a call corrected from
-        # Friday to Monday belongs in the other week — but never who it
-        # belongs to: the first author keeps it, or nobody does.
-        existing.occurred_at = occurred_at
-        if existing.actor_user_id is None and actor_user_id is not None:
-            existing.actor_user_id = actor_user_id
-            existing.actor_name = actor_name
-        return
-
-    session.add(
-        ActivityEvent(
-            tenant_id=tenant_id,
-            event_type=event_type,
-            actor_user_id=actor_user_id,
-            actor_name=actor_name,
-            occurred_at=occurred_at,
-            ref_type=ref_type,
-            ref_id=ref_id,
-        )
-    )
+from app.domain.activity.models import ActivityTarget
+from app.domain.managers.models import ManagerInteraction
+from app.domain.pipeline.models import ProcessStep
 
 
-async def record_safely(session: AsyncSession, **kwargs) -> None:
-    """`record`, with the guarantee that it cannot break the caller.
+def _manager_calls(tenant_id: uuid.UUID, start: dt.datetime, end: dt.datetime) -> Select:
+    """Calls WITH A MANAGER in the window.
 
-    The write paths that call this have already done the thing that matters
-    — the note is saved, the step is ticked. Losing a KPI row is a wrong
-    number on a dashboard; raising here would lose the recruiter's work.
+    `manager_id IS NOT NULL` because a briefing note can be filed against a
+    mandate with no contact yet, and that is not a call with anybody.
+    `candidate_call` is a different conversation and `na` is a call that did
+    not connect — the same rule `isContact` applies to "letzter Kontakt".
     """
-    try:
-        await record(session, **kwargs)
-    except Exception as exc:  # pragma: no cover - defensive by design
-        logger.warning("activity event not recorded: %s", exc)
-
-
-async def forget(
-    session: AsyncSession, *, tenant_id: uuid.UUID, event_type: str, ref_id: uuid.UUID
-) -> None:
-    """Undo: the step was un-ticked, so it did not happen after all."""
-    await session.execute(
-        delete(ActivityEvent).where(
-            ActivityEvent.tenant_id == tenant_id,
-            ActivityEvent.event_type == event_type,
-            ActivityEvent.ref_id == ref_id,
-        )
+    return select(ManagerInteraction).where(
+        ManagerInteraction.tenant_id == tenant_id,
+        ManagerInteraction.manager_id.isnot(None),
+        ManagerInteraction.interaction_type.in_(kpi_defs.MANAGER_CALL_KINDS),
+        ManagerInteraction.occurred_at >= start,
+        ManagerInteraction.occurred_at < end,
     )
+
+
+def _presentations(tenant_id: uuid.UUID, start: dt.datetime, end: dt.datetime) -> Select:
+    """Candidates put in front of a client in the window.
+
+    "Reached" is counted exactly the way `derive_stage` counts it — a done
+    date, a booked date, or a green cell — so this number and the board can
+    never tell different stories. The date is the one the recruiter
+    recorded, not the row's mtime: a presentation entered on Monday for last
+    Thursday belongs in last week.
+    """
+    when = func.coalesce(ProcessStep.done_at, ProcessStep.scheduled_at)
+    return select(ProcessStep).where(
+        ProcessStep.tenant_id == tenant_id,
+        ProcessStep.step_key == kpi_defs.PRESENTED_STEP,
+        ProcessStep.active.is_(True),
+        or_(
+            ProcessStep.done_at.isnot(None),
+            ProcessStep.scheduled_at.isnot(None),
+            ProcessStep.outcome == "pass",
+        ),
+        and_(when >= start, when < end),
+    )
+
+
+#: KPI key → (query builder, the model's author column).
+_SOURCES = {
+    kpi_defs.MANAGER_CALL: (_manager_calls, ManagerInteraction.actor_user_id),
+    kpi_defs.CANDIDATE_PRESENTED: (_presentations, ProcessStep.actor_user_id),
+}
 
 
 async def count(
     session: AsyncSession,
     *,
     tenant_id: uuid.UUID,
-    event_type: str,
+    counts: str,
     start: dt.datetime,
     end: dt.datetime,
     actor_user_id: str | None = None,
     everyone: bool = True,
 ) -> int:
-    """How many of these happened in [start, end).
+    """How many happened in [start, end).
 
     `everyone=True` counts the workspace. With `everyone=False` the count is
-    for one consultant — and `actor_user_id=None` then means the events
-    nobody is recorded for, which is a real bucket worth being able to see.
+    for one consultant — and `actor_user_id=None` then means the rows nobody
+    is recorded for, which is a real bucket worth being able to look at.
     """
-    query = select(func.count()).where(
-        ActivityEvent.tenant_id == tenant_id,
-        ActivityEvent.event_type == event_type,
-        ActivityEvent.occurred_at >= start,
-        ActivityEvent.occurred_at < end,
-    )
+    build, author = _SOURCES[counts]
+    query = build(tenant_id, start, end)
     if not everyone:
-        query = query.where(ActivityEvent.actor_user_id == actor_user_id)
-    return int(await session.scalar(query) or 0)
+        query = query.where(
+            author.is_(None) if actor_user_id is None else author == actor_user_id
+        )
+    total = await session.scalar(
+        select(func.count()).select_from(query.subquery())
+    )
+    return int(total or 0)
 
 
 async def targets(
@@ -215,13 +197,13 @@ async def tracking(
             await count(
                 session,
                 tenant_id=tenant_id,
-                event_type=kpi.event_type,
+                counts=kpi.counts,
                 start=start,
                 end=end,
                 actor_user_id=actor_user_id,
                 everyone=everyone,
             )
-            if kpi.available and kpi.event_type
+            if kpi.available and kpi.counts
             else None
         )
         out.append(
@@ -251,25 +233,40 @@ async def tracking(
 
 
 async def consultants(session: AsyncSession, *, tenant_id: uuid.UUID) -> list[dict]:
-    """Who shows up in the record at all, most active first."""
-    rows = await session.execute(
-        select(
-            ActivityEvent.actor_user_id,
-            func.max(ActivityEvent.actor_name),
-            func.count().label("events"),
+    """Who shows up in the record at all, busiest first.
+
+    Read from the source tables, so somebody who has only ever ticked a
+    process step still appears. There is no users table to list instead —
+    membership lives in Clerk, and asking it per render is not worth it.
+    """
+    tallies: dict[str | None, dict] = {}
+    for model in (ManagerInteraction, ProcessStep):
+        rows = await session.execute(
+            select(
+                model.actor_user_id,
+                func.max(model.actor_name),
+                func.count(),
+            )
+            .where(model.tenant_id == tenant_id)
+            .group_by(model.actor_user_id)
         )
-        .where(ActivityEvent.tenant_id == tenant_id)
-        .group_by(ActivityEvent.actor_user_id)
-        .order_by(func.count().desc())
+        for user_id, name, total in rows.all():
+            seen = tallies.setdefault(
+                user_id, {"actor_user_id": user_id, "name": None, "events": 0}
+            )
+            seen["name"] = seen["name"] or name
+            seen["events"] += int(total)
+
+    return sorted(
+        (
+            {
+                "actor_user_id": row["actor_user_id"],
+                # The unattributed bucket is named in the UI, which knows the
+                # viewer's language; the API just says it has no author.
+                "name": row["name"] or (row["actor_user_id"] or ""),
+                "events": row["events"],
+            }
+            for row in tallies.values()
+        ),
+        key=lambda r: -r["events"],
     )
-    return [
-        {
-            "actor_user_id": user_id,
-            # Imported history and anything written before this existed has
-            # no author. Naming the bucket beats hiding it: those events are
-            # in the workspace total and would otherwise look lost.
-            "name": name or ("Nicht zugeordnet" if user_id is None else user_id),
-            "events": int(events),
-        }
-        for user_id, name, events in rows.all()
-    ]

@@ -28,7 +28,8 @@ from sqlalchemy import select
 
 from app.core.database import SessionLocal
 from app.domain.activity import kpis, service
-from app.domain.activity.models import ActivityEvent
+from app.domain.companies.models import Company
+from app.domain.managers.models import Manager, ManagerInteraction
 
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
 OTHER = uuid.uuid4()
@@ -36,28 +37,44 @@ ANNA = "user_anna"
 BEN = "user_ben"
 
 
-async def _event(
+async def _call(
     *,
     when: dt.datetime,
     actor: str | None = ANNA,
-    event_type: str = kpis.MANAGER_CALL,
+    kind: str = "business_call",
     tenant: uuid.UUID = TENANT,
-    ref: uuid.UUID | None = None,
 ) -> uuid.UUID:
-    ref = ref or uuid.uuid4()
+    """A manager note — the row that IS the Business Call."""
     async with SessionLocal() as s:
-        await service.record(
-            s,
+        company = Company(tenant_id=tenant, name="Linde + Wiemann")
+        s.add(company)
+        await s.flush()
+        manager = Manager(
+            tenant_id=tenant, company_id=company.id, full_name="Jürgen Nothof"
+        )
+        s.add(manager)
+        await s.flush()
+        note = ManagerInteraction(
             tenant_id=tenant,
-            event_type=event_type,
+            manager_id=manager.id,
+            interaction_type=kind,
             occurred_at=when,
-            ref_type="manager_interaction",
-            ref_id=ref,
             actor_user_id=actor,
             actor_name="Anna" if actor == ANNA else actor,
         )
+        s.add(note)
         await s.commit()
-    return ref
+        return note.id
+
+
+async def _count(start: dt.datetime, end: dt.datetime, **kw) -> int:
+    async with SessionLocal() as s:
+        return await service.count(
+            s, tenant_id=TENANT, counts=kpis.MANAGER_CALL, start=start, end=end, **kw
+        )
+
+
+WEEK = (dt.datetime(2026, 10, 19, tzinfo=dt.UTC), dt.datetime(2026, 10, 26, tzinfo=dt.UTC))
 
 
 # ── periods ───────────────────────────────────────────────────────────────
@@ -90,128 +107,93 @@ def test_an_unknown_period_is_refused() -> None:
 
 
 # ── counting ──────────────────────────────────────────────────────────────
+#
+# There is no events table. Every count below is a query over the row that
+# already records the fact, which is what makes these properties free rather
+# than maintained: a deleted note cannot linger in a KPI it was never copied
+# into.
 
 
-async def test_an_event_is_counted_once_however_often_it_is_saved() -> None:
-    # Editing a note must not invent a second call.
-    ref = uuid.uuid4()
-    at = dt.datetime(2026, 10, 20, 10, 0, tzinfo=dt.UTC)
-    await _event(when=at, ref=ref)
-    await _event(when=at, ref=ref)
+async def test_a_saved_call_is_counted() -> None:
+    await _call(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC))
+    assert await _count(*WEEK) == 1
+
+
+async def test_deleting_the_note_removes_the_call() -> None:
+    """By construction, not by cleanup. This is the whole argument for
+    counting the source row instead of copying it into an events table."""
+    note_id = await _call(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC))
     async with SessionLocal() as s:
-        assert (
-            await service.count(
-                s,
-                tenant_id=TENANT,
-                event_type=kpis.MANAGER_CALL,
-                start=dt.datetime(2026, 10, 19, tzinfo=dt.UTC),
-                end=dt.datetime(2026, 10, 26, tzinfo=dt.UTC),
-            )
-            == 1
-        )
+        await s.delete(await s.get(ManagerInteraction, note_id))
+        await s.commit()
+    assert await _count(*WEEK) == 0
 
 
 async def test_moving_when_it_happened_moves_which_week_it_counts_in() -> None:
     # A call logged on Monday for last Friday belongs in last week.
-    ref = uuid.uuid4()
-    await _event(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC), ref=ref)
-    await _event(when=dt.datetime(2026, 10, 13, tzinfo=dt.UTC), ref=ref)
+    note_id = await _call(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC))
+    assert await _count(*WEEK) == 1
     async with SessionLocal() as s:
-        this_week = await service.count(
-            s, tenant_id=TENANT, event_type=kpis.MANAGER_CALL,
-            start=dt.datetime(2026, 10, 19, tzinfo=dt.UTC),
-            end=dt.datetime(2026, 10, 26, tzinfo=dt.UTC),
+        note = await s.get(ManagerInteraction, note_id)
+        note.occurred_at = dt.datetime(2026, 10, 13, tzinfo=dt.UTC)
+        await s.commit()
+    assert await _count(*WEEK) == 0
+    assert (
+        await _count(
+            dt.datetime(2026, 10, 12, tzinfo=dt.UTC),
+            dt.datetime(2026, 10, 19, tzinfo=dt.UTC),
         )
-        last_week = await service.count(
-            s, tenant_id=TENANT, event_type=kpis.MANAGER_CALL,
-            start=dt.datetime(2026, 10, 12, tzinfo=dt.UTC),
-            end=dt.datetime(2026, 10, 19, tzinfo=dt.UTC),
-        )
-    assert (this_week, last_week) == (0, 1)
-
-
-async def test_undoing_a_step_removes_the_event() -> None:
-    ref = await _event(
-        when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC),
-        event_type=kpis.CANDIDATE_PRESENTED,
+        == 1
     )
+
+
+@pytest.mark.parametrize("kind", ["na", "note", "message", "candidate_call", "meeting"])
+async def test_only_a_call_with_a_manager_counts(kind) -> None:
+    # "NA" is a call that did not connect; a candidate call is a different
+    # conversation. Neither is a Business Call.
+    await _call(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC), kind=kind)
+    assert await _count(*WEEK) == 0
+
+
+async def test_a_mandate_note_with_no_contact_is_not_a_call() -> None:
+    # A briefing can be filed before the contact exists in the record. That
+    # is not a call with anybody.
     async with SessionLocal() as s:
-        await service.forget(
-            s, tenant_id=TENANT, event_type=kpis.CANDIDATE_PRESENTED, ref_id=ref
+        s.add(
+            ManagerInteraction(
+                tenant_id=TENANT,
+                manager_id=None,
+                interaction_type="business_call",
+                occurred_at=dt.datetime(2026, 10, 20, tzinfo=dt.UTC),
+            )
         )
         await s.commit()
-        assert (
-            await service.count(
-                s, tenant_id=TENANT, event_type=kpis.CANDIDATE_PRESENTED,
-                start=dt.datetime(2026, 10, 19, tzinfo=dt.UTC),
-                end=dt.datetime(2026, 10, 26, tzinfo=dt.UTC),
-            )
-            == 0
-        )
+    assert await _count(*WEEK) == 0
 
 
-async def test_the_first_author_keeps_the_event() -> None:
-    # Ben editing Anna's note does not make it Ben's call.
-    ref = uuid.uuid4()
+async def test_each_consultant_is_counted_separately() -> None:
     at = dt.datetime(2026, 10, 20, tzinfo=dt.UTC)
-    await _event(when=at, ref=ref, actor=ANNA)
-    await _event(when=at, ref=ref, actor=BEN)
-    async with SessionLocal() as s:
-        row = await s.scalar(select(ActivityEvent).where(ActivityEvent.ref_id == ref))
-    assert row is not None and row.actor_user_id == ANNA
+    await _call(when=at, actor=ANNA)
+    await _call(when=at, actor=ANNA)
+    await _call(when=at, actor=BEN)
+    assert await _count(*WEEK) == 3
+    assert await _count(*WEEK, everyone=False, actor_user_id=ANNA) == 2
+    assert await _count(*WEEK, everyone=False, actor_user_id=BEN) == 1
 
 
-async def test_an_unattributed_event_adopts_the_first_author_it_gets() -> None:
-    # The backfill writes history with no author; the first person to touch
-    # that row afterwards is a better answer than nobody.
-    ref = uuid.uuid4()
+async def test_rows_with_no_author_are_their_own_bucket() -> None:
+    # Imported history has no author, and hiding it would make the workspace
+    # total look wrong against the sum of the consultants.
     at = dt.datetime(2026, 10, 20, tzinfo=dt.UTC)
-    await _event(when=at, ref=ref, actor=None)
-    await _event(when=at, ref=ref, actor=BEN)
-    async with SessionLocal() as s:
-        row = await s.scalar(select(ActivityEvent).where(ActivityEvent.ref_id == ref))
-    assert row is not None and row.actor_user_id == BEN
+    await _call(when=at, actor=None)
+    await _call(when=at, actor=ANNA)
+    assert await _count(*WEEK) == 2
+    assert await _count(*WEEK, everyone=False, actor_user_id=None) == 1
 
 
 async def test_one_workspace_cannot_count_anothers_activity() -> None:
-    at = dt.datetime(2026, 10, 20, tzinfo=dt.UTC)
-    await _event(when=at, tenant=OTHER)
-    async with SessionLocal() as s:
-        assert (
-            await service.count(
-                s, tenant_id=TENANT, event_type=kpis.MANAGER_CALL,
-                start=dt.datetime(2026, 10, 19, tzinfo=dt.UTC),
-                end=dt.datetime(2026, 10, 26, tzinfo=dt.UTC),
-            )
-            == 0
-        )
-
-
-async def test_an_unknown_event_type_is_refused() -> None:
-    async with SessionLocal() as s:
-        with pytest.raises(ValueError):
-            await service.record(
-                s,
-                tenant_id=TENANT,
-                event_type="coffee_made",
-                occurred_at=dt.datetime.now(dt.UTC),
-                ref_type="x",
-                ref_id=uuid.uuid4(),
-            )
-
-
-async def test_recording_never_breaks_the_caller() -> None:
-    # The note is already saved by the time this runs. Losing a KPI row is a
-    # wrong dashboard; raising would lose the recruiter's work.
-    async with SessionLocal() as s:
-        await service.record_safely(
-            s,
-            tenant_id=TENANT,
-            event_type="coffee_made",
-            occurred_at=dt.datetime.now(dt.UTC),
-            ref_type="x",
-            ref_id=uuid.uuid4(),
-        )
+    await _call(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC), tenant=OTHER)
+    assert await _count(*WEEK) == 0
 
 
 # ── targets ───────────────────────────────────────────────────────────────
@@ -403,8 +385,102 @@ async def test_a_target_set_through_the_api_comes_back() -> None:
 
 
 async def test_consultants_lists_who_actually_did_something() -> None:
-    await _event(when=dt.datetime.now(dt.UTC), actor=ANNA)
+    # Read off the source tables, so somebody who has only ticked a process
+    # step appears too — there is no roster to list instead.
+    await _call(when=dt.datetime.now(dt.UTC), actor=ANNA)
     async with await _client() as client:
         rows = (await client.get("/api/v1/activity/consultants")).json()
     assert any(r["actor_user_id"] == ANNA for r in rows)
 
+
+
+# ── presentations, counted off the step itself ────────────────────────────
+
+
+async def _step(
+    *,
+    done_at: dt.datetime | None = None,
+    scheduled_at: dt.datetime | None = None,
+    outcome: str = "open",
+    actor: str | None = ANNA,
+    step_key: str = kpis.PRESENTED_STEP,
+    active: bool = True,
+) -> uuid.UUID:
+    from app.domain.pipeline.models import ProcessStep
+
+    async with SessionLocal() as s:
+        row = ProcessStep(
+            tenant_id=TENANT,
+            application_id=uuid.uuid4(),
+            step_key=step_key,
+            position=0,
+            active=active,
+            done_at=done_at,
+            scheduled_at=scheduled_at,
+            outcome=outcome,
+            actor_user_id=actor,
+            actor_name="Anna" if actor == ANNA else actor,
+        )
+        s.add(row)
+        await s.commit()
+        return row.id
+
+
+async def _presented(**kw) -> int:
+    async with SessionLocal() as s:
+        return await service.count(
+            s,
+            tenant_id=TENANT,
+            counts=kpis.CANDIDATE_PRESENTED,
+            start=WEEK[0],
+            end=WEEK[1],
+            **kw,
+        )
+
+
+async def test_a_ticked_presentation_counts() -> None:
+    await _step(done_at=dt.datetime(2026, 10, 20, tzinfo=dt.UTC))
+    assert await _presented() == 1
+
+
+async def test_a_booked_presentation_counts_like_the_board_counts_it() -> None:
+    # `derive_stage` treats a scheduled step as reached: the date is the
+    # commitment. The KPI and the board must not tell different stories.
+    await _step(scheduled_at=dt.datetime(2026, 10, 20, 9, 0, tzinfo=dt.UTC))
+    assert await _presented() == 1
+
+
+async def test_an_empty_step_does_not_count() -> None:
+    await _step()
+    assert await _presented() == 0
+
+
+async def test_un_ticking_removes_it_from_the_count() -> None:
+    """A KPI that only ever goes up is a KPI people game."""
+    from app.domain.pipeline.models import ProcessStep
+
+    step_id = await _step(done_at=dt.datetime(2026, 10, 20, tzinfo=dt.UTC))
+    assert await _presented() == 1
+    async with SessionLocal() as s:
+        row = await s.get(ProcessStep, step_id)
+        row.done_at = None
+        await s.commit()
+    assert await _presented() == 0
+
+
+async def test_a_step_removed_from_the_process_does_not_count() -> None:
+    await _step(done_at=dt.datetime(2026, 10, 20, tzinfo=dt.UTC), active=False)
+    assert await _presented() == 0
+
+
+async def test_another_step_is_not_a_presentation() -> None:
+    await _step(done_at=dt.datetime(2026, 10, 20, tzinfo=dt.UTC), step_key="vertrag")
+    assert await _presented() == 0
+
+
+async def test_presentations_split_by_consultant_too() -> None:
+    at = dt.datetime(2026, 10, 20, tzinfo=dt.UTC)
+    await _step(done_at=at, actor=ANNA)
+    await _step(done_at=at, actor=BEN)
+    assert await _presented() == 2
+    assert await _presented(everyone=False, actor_user_id=ANNA) == 1
