@@ -30,7 +30,14 @@ dependencies = [
     "httpx>=0.27",             # hub ingestion: async HTTP to public job sources
     # Pre/postcondition process-contract harness — checks are pure predicates
     # over real state (the system-of-record), never over model output.
-    "laufwise @ git+https://github.com/dfadeeff/laufwise.git",
+    # PINNED TO A COMMIT, not a branch. Unpinned, every rebuild pulled
+    # whatever was on the default branch at that minute: on 2026-10-26 the
+    # local venv sat at dc05135 while CI and the production image built
+    # 5e091d6 — nine commits and ~1,000 lines apart, including 165 in
+    # `contract/evaluator.py`. Both passed, which is luck, not a property.
+    # This is the gate that decides what reaches the system of record; it
+    # does not get to change between a green CI run and a deploy.
+    "laufwise @ git+https://github.com/dfadeeff/laufwise.git@5e091d67f1b01832d2039daeb1bed7aaa19a9d66",
 ]
 
 [project.optional-dependencies]
