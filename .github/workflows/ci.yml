@@ -47,7 +47,10 @@ jobs:
         # floor in pyproject stops being satisfiable, which is the thing a
         # lock makes easy to ignore. This job is allowed to break first.
         if: matrix.python-version != '3.12'
-        run: pip install -e ".[dev]"
+        # `monitoring` too: the crash-reporting tests import sentry_sdk at
+        # module scope, so without it this job fails at COLLECTION and the
+        # matrix cancels its sibling — one missing extra, two red jobs.
+        run: pip install -e ".[dev,monitoring]"
 
       - name: Lint
         # Catches undefined names and unused imports — the class of bug tests
@@ -89,10 +92,10 @@ jobs:
         # committed as requirements.lock differed on line 2 every single time
         # and the check could never pass.
         run: |
-          uv pip compile pyproject.toml --extra postgres --extra llm \
+          uv pip compile pyproject.toml --extra postgres --extra llm --extra monitoring \
             --python-version 3.12 --no-header --quiet -o /tmp/prod.lock
-          uv pip compile pyproject.toml --extra postgres --extra llm --extra dev \
-            --python-version 3.12 --no-header --quiet -o /tmp/dev.lock
+          uv pip compile pyproject.toml --extra postgres --extra llm --extra monitoring \
+            --extra dev --python-version 3.12 --no-header --quiet -o /tmp/dev.lock
           stale=0
           # Both are compared before failing: short-circuiting reports one
           # stale lock, you fix it, push, and discover the other.

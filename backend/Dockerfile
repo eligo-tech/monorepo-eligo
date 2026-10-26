@@ -17,10 +17,10 @@ RUN apt-get update \
 # build unless both install the same thing.
 #
 # Regenerate BOTH locks with (uv 0.10.7, the version CI pins):
-#   uv pip compile pyproject.toml --extra postgres --extra llm \
+#   uv pip compile pyproject.toml --extra postgres --extra llm --extra monitoring \
 #       --python-version 3.12 --no-header -o requirements.lock
-#   uv pip compile pyproject.toml --extra postgres --extra llm --extra dev \
-#       --python-version 3.12 --no-header -o requirements-dev.lock
+#   uv pip compile pyproject.toml --extra postgres --extra llm --extra monitoring \
+#       --extra dev --python-version 3.12 --no-header -o requirements-dev.lock
 #
 # `--no-header` is not cosmetic: uv writes the --output-file path into the
 # header, so a lock compiled to a temporary file never compares equal to the

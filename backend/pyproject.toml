@@ -51,6 +51,12 @@ postgres = [
 llm = [
     "openai>=1.40",
 ]
+# Crash reporting to a SELF-HOSTED collector. An extra, not a base
+# dependency: the scaffold runs with no external services, and a reporter that
+# reads every request is not something to inherit by accident.
+monitoring = [
+    "sentry-sdk>=2.0",
+]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
