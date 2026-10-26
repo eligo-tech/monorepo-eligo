@@ -25,6 +25,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.context import ActorRef, current_actor_var
 from app.core.database import current_tenant_var, get_db
 from app.core.logging import get_logger
 from app.domain.tenants import service as tenants_service
@@ -302,6 +303,20 @@ async def _admitted_tenant(db: AsyncSession, *, org_id: str, org_name: str | Non
     )
 
 
+def _remembered(actor: Actor) -> Actor:
+    """Publish the actor for code that is never handed one.
+
+    `append_receipt` is six calls deep behind an agent and a service, and
+    threading an `Actor` through every one of them would mean touching every
+    write path to record something none of them care about. The tenant already
+    travels this way (`current_tenant_var`); attribution travels beside it.
+
+    Returns the actor so the dependency stays a one-liner at both call sites.
+    """
+    current_actor_var.set(ActorRef(user_id=actor.user_id, name=actor.name))
+    return actor
+
+
 async def get_current_actor(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
@@ -317,12 +332,14 @@ async def get_current_actor(
     if not settings.auth_enabled:
         current_tenant_var.set(str(settings.default_tenant_id))
         await _set_tenant_guc(db, settings.default_tenant_id)
-        return Actor(
-            tenant_id=settings.default_tenant_id,
-            user_id=None,
-            name="Demo",
-            role=ADMIN,
-            role_known=False,
+        return _remembered(
+            Actor(
+                tenant_id=settings.default_tenant_id,
+                user_id=None,
+                name="Demo",
+                role=ADMIN,
+                role_known=False,
+            )
         )
 
     if creds is None:
@@ -345,12 +362,14 @@ async def get_current_actor(
     await _set_tenant_guc(db, tenant.id)  # pin the in-flight transaction too
 
     role, known = _role(claims)
-    return Actor(
-        tenant_id=tenant.id,
-        user_id=claims.get("sub"),
-        name=_actor_name(claims),
-        role=role,
-        role_known=known,
+    return _remembered(
+        Actor(
+            tenant_id=tenant.id,
+            user_id=claims.get("sub"),
+            name=_actor_name(claims),
+            role=role,
+            role_known=known,
+        )
     )
 
 

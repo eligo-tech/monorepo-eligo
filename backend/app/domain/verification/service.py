@@ -26,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.context import current_actor_var
 from app.core.logging import get_logger
 from app.domain.common.enums import ReceiptAction
 from app.domain.verification.models import EnrichmentRecord, Receipt
@@ -60,28 +61,40 @@ def _hash_receipt(
     summary: str,
     payload: dict[str, Any],
     prev_hash: str | None,
+    actor_user_id: str | None = None,
+    actor_name: str | None = None,
 ) -> str:
     """Deterministic SHA-256 over the receipt content + previous hash."""
     # ``action`` is a ``ReceiptAction`` on the write path but a plain string
     # when re-read from the DB (the column is String, not Enum) — normalize.
     action_value = action.value if isinstance(action, ReceiptAction) else action
-    material = json.dumps(
-        {
-            "id": str(receipt_id),
-            "tenant_id": str(tenant_id),
-            "agent": agent,
-            "action": action_value,
-            "subject_type": subject_type,
-            "subject_id": subject_id,
-            "verified": verified,
-            "summary": summary,
-            "payload": payload,
-            "prev_hash": prev_hash,
-        },
-        sort_keys=True,
-        default=str,
-    )
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+    material: dict[str, Any] = {
+        "id": str(receipt_id),
+        "tenant_id": str(tenant_id),
+        "agent": agent,
+        "action": action_value,
+        "subject_type": subject_type,
+        "subject_id": subject_id,
+        "verified": verified,
+        "summary": summary,
+        "payload": payload,
+        "prev_hash": prev_hash,
+    }
+    # Hashed ONLY when there is an actor, so every receipt written before the
+    # column existed still re-hashes to the value stored beside it. Adding the
+    # keys unconditionally would have made `verify_chain` report the entire
+    # historical ledger as tampered the moment this shipped — and an alarm
+    # that cries wolf once is never believed again.
+    #
+    # It also keeps the attribution tamper-evident in both directions: filling
+    # in an actor on an old row changes what the hash should be, so the forgery
+    # is as visible as editing the summary would be.
+    if actor_user_id is not None or actor_name is not None:
+        material["actor_user_id"] = actor_user_id
+        material["actor_name"] = actor_name
+    return hashlib.sha256(
+        json.dumps(material, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
 
 
 async def _chain_head(
@@ -157,12 +170,23 @@ async def append_receipt(
     verified: bool = False,
     summary: str = "",
     payload: dict[str, Any] | None = None,
+    actor_user_id: str | None = None,
+    actor_name: str | None = None,
 ) -> Receipt:
     """Append one receipt to the tenant's hash-chained ledger.
 
     This is the ONLY way receipts are created. There is no update/delete path.
+
+    The actor defaults to whoever the request belongs to. A caller that knows
+    better may name one; a cron run or a script has none and records NULL,
+    which is the truthful answer rather than a missing one.
     """
     payload = payload or {}
+
+    if actor_user_id is None and actor_name is None:
+        actor = current_actor_var.get()
+        if actor is not None:
+            actor_user_id, actor_name = actor.user_id, actor.name
 
     # One writer per tenant from here to the end of the transaction.
     await _serialise_appends(session, tenant_id)
@@ -191,6 +215,8 @@ async def append_receipt(
             summary=summary,
             payload=payload,
             prev_hash=prev_hash,
+            actor_user_id=actor_user_id,
+            actor_name=actor_name,
         )
         receipt = Receipt(
             id=receipt_id,
@@ -203,6 +229,8 @@ async def append_receipt(
             verified=verified,
             summary=summary,
             payload=payload,
+            actor_user_id=actor_user_id,
+            actor_name=actor_name,
             prev_hash=prev_hash,
             receipt_hash=receipt_hash,
             created_at=dt.datetime.now(dt.UTC),
@@ -401,6 +429,8 @@ async def verify_chain(
             summary=receipt.summary,
             payload=receipt.payload,
             prev_hash=prev,
+            actor_user_id=receipt.actor_user_id,
+            actor_name=receipt.actor_name,
         )
         if receipt.prev_hash != prev or receipt.receipt_hash != expected:
             return False, f"chain broken at receipt {receipt.id}"
