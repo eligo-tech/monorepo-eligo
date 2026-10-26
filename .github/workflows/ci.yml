@@ -47,7 +47,10 @@ jobs:
         # floor in pyproject stops being satisfiable, which is the thing a
         # lock makes easy to ignore. This job is allowed to break first.
         if: matrix.python-version != '3.12'
-        run: pip install -e ".[dev]"
+        # `monitoring` too: the crash-reporting tests import sentry_sdk at
+        # module scope, so without it this job fails at COLLECTION and the
+        # matrix cancels its sibling — one missing extra, two red jobs.
+        run: pip install -e ".[dev,monitoring]"
 
       - name: Lint
         # Catches undefined names and unused imports — the class of bug tests
