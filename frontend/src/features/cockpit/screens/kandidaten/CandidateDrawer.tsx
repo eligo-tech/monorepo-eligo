@@ -97,12 +97,19 @@ export function CandidateDrawer({
     setEditing(true)
     setFocusField(field)
     setDtoError(false)
-    if (!dto) {
-      try {
-        setDto(await api.candidate(candidate.id))
-      } catch {
-        setDtoError(true)
-      }
+    // Always re-read, never `if (!dto)`. The cached copy was fetched the
+    // first time this drawer was opened and nothing has invalidated it
+    // since — so with the list now refreshing itself on focus, the panel
+    // behind the button could show a colleague's correction while the
+    // editor opened on the value it replaced. Clearing it first matters as
+    // much as the fetch: `DossierEditor` seeds its draft once, at mount, so
+    // mounting it against the stale copy and swapping the prop underneath
+    // would leave the form showing the old values with no way back.
+    setDto(null)
+    try {
+      setDto(await api.candidate(candidate.id))
+    } catch {
+      setDtoError(true)
     }
   }
 

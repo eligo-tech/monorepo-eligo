@@ -21,6 +21,7 @@ import type { Candidate } from '@/data/types'
 import { api } from '@/api/client'
 import { toCandidate } from '@/api/adapters'
 import { useAsync } from '@/hooks/useAsync'
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus'
 import { cn } from '@/lib/cn'
 import { searchScore, type SearchField } from '@/lib/search'
 import { Chip, Panel, SectionHeader } from '../../ui/primitives'
@@ -230,7 +231,14 @@ export function KandidatenScreen({
   const [sort, setSort] = useState<SortKey>('created')
   const [skillFilter, setSkillFilter] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Candidate | null>(null)
-  const { data, loading, error } = useAsync(() => api.candidatesPage(), [refreshKey])
+  const { data, loading, error } = useAsync(() => api.candidatesPage(), [refreshKey], {
+    // A refresh nobody asked for must not blank the pool — see AsyncOptions.
+    keepPrevious: true,
+  })
+
+  // Nothing pushes a colleague's edit to this screen; coming back to the tab
+  // is when the recruiter looks again, so that is when it is re-read.
+  useRefreshOnFocus(() => setRefreshKey((k) => k + 1))
 
   // Live data or nothing. There used to be a mock fallback here — five
   // invented people rendered whenever the call failed, which in a product
