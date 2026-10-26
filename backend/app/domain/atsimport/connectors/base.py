@@ -152,10 +152,20 @@ class Credentials:
     Two fields cover both shapes seen so far: a login (user + password) and a
     token (`secret` alone). A connector states which it needs through
     `needs`, so the settings form can ask for exactly that and no more.
+
+    `config` is the third thing a source can need and the one that is not a
+    secret: WHICH INSTANCE of the vendor this workspace is on. A multi-tenant
+    ATS gives each customer its own realm and hostname, so the address is a
+    property of the customer, not of the integration — and a connector that
+    hardcodes one is one customer's address compiled into every workspace's
+    product. Declared per connector through `config_needs`, stored and
+    returned in the clear because a hostname is not a credential and the
+    recruiter needs to see which instance is connected.
     """
 
     username: str | None = None
     secret: str | None = None
+    config: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 #: How a source is read, which decides who may start it.
@@ -192,6 +202,17 @@ class AtsConnector(AtsSource, Protocol):
 
     #: Which credential fields the form must ask for: "username", "secret".
     needs: tuple[str, ...]
+
+    #: A connector MAY also declare
+    #:
+    #:     config_needs: tuple[str, ...]
+    #:
+    #: — the non-secret instance settings the form must ask for, which become
+    #: the keys of `Credentials.config`. It is deliberately NOT part of this
+    #: protocol: most systems have one address for everybody, and requiring
+    #: every connector to write `config_needs = ()` to say "nothing special"
+    #: makes the common case pay for the rare one. The registry reads it with
+    #: a default, so a connector that is silent asks for nothing.
 
     async def fetch(
         self, credentials: Credentials, *, with_details: bool = True

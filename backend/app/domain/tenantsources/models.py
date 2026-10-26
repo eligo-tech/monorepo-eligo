@@ -63,6 +63,20 @@ class TenantSource(Base, IDMixin, TenantMixin, TimestampMixin):
         String(20), default="full", server_default="full", nullable=False
     )
 
+    #: WHICH INSTANCE of the source this workspace is on — the keys a
+    #: connector declares in `config_needs`. aiFind gives each customer its
+    #: own Keycloak realm and subdomain, so the address is a property of the
+    #: customer rather than of the integration; it lived in the connector as
+    #: a constant, which meant the product could serve exactly one customer
+    #: of that vendor and would have sent a second one's credentials to the
+    #: first one's realm.
+    #:
+    #: Not a secret, so stored and returned in the clear, unlike
+    #: `secret_encrypted`: a hostname is not a credential, and a recruiter
+    #: needs to see which instance is connected. Empty for a source that has
+    #: one address for everybody.
+    config: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+
     #: Set when the workspace asks for an import; cleared when one runs. This
     #: single field is the whole request queue, and it is idempotent: asking
     #: twice before the job runs is one import, not two.

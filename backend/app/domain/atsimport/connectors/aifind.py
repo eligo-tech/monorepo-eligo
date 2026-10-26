@@ -39,6 +39,7 @@ import html
 import re
 import secrets
 import urllib.parse
+from functools import partial
 
 import httpx
 
@@ -52,10 +53,39 @@ from app.domain.atsimport.connectors.base import (
     SourcedNote,
 )
 
-ISSUER = "https://kc.apps.aifind.de/auth/realms/panam"
+#: The vendor's own, identical for every customer.
+KEYCLOAK_HOST = "kc.apps.aifind.de"
 CLIENT_ID = "aifind-ui"
-REDIRECT_URI = "https://panam.apps.aifind.de/dashboard"
-GRAPHQL_URL = "https://panam.apps.aifind.de/api/graphql"
+
+#: What each CUSTOMER of aiFind has of their own: a Keycloak realm and a
+#: subdomain (`<customer>.apps.aifind.de`). These were module constants naming
+#: one workspace — which meant the connector could only ever serve that one
+#: workspace, and a second customer's credentials would have been sent to the
+#: first customer's realm. They now come from `TenantSource.config`.
+CONFIG_NEEDS = ("realm", "host")
+
+
+def endpoints(config: dict[str, str] | None) -> tuple[str, str, str]:
+    """`(issuer, redirect_uri, graphql_url)` for one workspace's instance.
+
+    Raises rather than defaulting. A default here would be some customer's
+    address, silently used by everyone who had not filled the form in — the
+    exact bug this function exists to remove.
+    """
+    values = {k: str((config or {}).get(k) or "").strip() for k in CONFIG_NEEDS}
+    missing = [k for k in CONFIG_NEEDS if not values[k]]
+    if missing:
+        raise ValueError(
+            "aiFind braucht die Angabe der eigenen Instanz — es fehlt: "
+            + ", ".join(missing)
+            + ' (z. B. realm "muster", host "muster.apps.aifind.de")'
+        )
+    realm, host = values["realm"], values["host"]
+    return (
+        f"https://{KEYCLOAK_HOST}/auth/realms/{realm}",
+        f"https://{host}/dashboard",
+        f"https://{host}/api/graphql",
+    )
 
 #: Exactly the queries the app's own list screens issue, harvested from the
 #: running client. Apollo introspection is DISABLED on their server, so a schema
@@ -480,7 +510,12 @@ PARSERS = {
 
 
 async def fetch_access_token(
-    client: httpx.AsyncClient, *, username: str, password: str
+    client: httpx.AsyncClient,
+    *,
+    username: str,
+    password: str,
+    issuer: str,
+    redirect_uri: str,
 ) -> str:
     """Authorization code + PKCE against Keycloak, driving the login form.
 
@@ -494,10 +529,10 @@ async def fetch_access_token(
         .decode()
     )
     page = await client.get(
-        f"{ISSUER}/protocol/openid-connect/auth",
+        f"{issuer}/protocol/openid-connect/auth",
         params={
             "client_id": CLIENT_ID,
-            "redirect_uri": REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "response_type": "code",
             "scope": "openid profile email",
             "code_challenge": challenge,
@@ -527,12 +562,12 @@ async def fetch_access_token(
     code = urllib.parse.parse_qs(urllib.parse.urlparse(location).query)["code"][0]
 
     token = await client.post(
-        f"{ISSUER}/protocol/openid-connect/token",
+        f"{issuer}/protocol/openid-connect/token",
         data={
             "grant_type": "authorization_code",
             "client_id": CLIENT_ID,
             "code": code,
-            "redirect_uri": REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "code_verifier": verifier,
         },
     )
@@ -545,6 +580,7 @@ async def fetch_all(
     *,
     token: str,
     operation: str,
+    graphql_url: str,
     page_size: int = 200,
 ) -> list:
     """Every record of one entity, paged, parsed.
@@ -561,7 +597,7 @@ async def fetch_all(
     offset = 0
     while total is None or offset < total:
         response = await client.post(
-            GRAPHQL_URL,
+            graphql_url,
             headers={"authorization": f"Bearer {token}"},
             json={
                 "operationName": operation,
@@ -590,6 +626,7 @@ async def fetch_candidate_details(
     *,
     token: str,
     external_ids: list[str],
+    graphql_url: str,
     concurrency: int = 4,
     on_progress=None,
 ) -> list[SourcedCandidate]:
@@ -611,7 +648,7 @@ async def fetch_candidate_details(
         async with semaphore:
             try:
                 response = await client.post(
-                    GRAPHQL_URL,
+                    graphql_url,
                     headers={"authorization": f"Bearer {token}"},
                     json={
                         "operationName": "candidate",
@@ -640,6 +677,7 @@ async def fetch_manager_details(
     *,
     token: str,
     external_ids: list[str],
+    graphql_url: str,
     concurrency: int = 4,
     with_notes: bool = True,
 ) -> list[SourcedManager]:
@@ -659,7 +697,7 @@ async def fetch_manager_details(
         async with semaphore:
             try:
                 detail = await client.post(
-                    GRAPHQL_URL,
+                    graphql_url,
                     headers={"authorization": f"Bearer {token}"},
                     json={
                         "operationName": "manager",
@@ -676,7 +714,7 @@ async def fetch_manager_details(
                 if with_notes:
                     try:
                         response = await client.post(
-                            GRAPHQL_URL,
+                            graphql_url,
                             headers={"authorization": f"Bearer {token}"},
                             json={
                                 "operationName": "contactNotes",
@@ -714,21 +752,31 @@ class AiFindConnector:
     hint = "Laufender Abgleich — Firmen, Ansprechpartner, Mandate, Kandidaten"
     mode = "pull"
     needs = ("username", "secret")
+    config_needs = CONFIG_NEEDS
 
     async def fetch(
         self, credentials: Credentials, *, with_details: bool = True
     ) -> AtsExport:
         if not credentials.username or not credentials.secret:
             raise ValueError("aiFind benötigt E-Mail und Passwort")
+        # Before the login, so a workspace that has not named its instance is
+        # told that rather than being sent to somebody else's realm and shown
+        # "Login abgelehnt".
+        issuer, redirect_uri, graphql_url = endpoints(credentials.config)
         async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
             token = await fetch_access_token(
-                client, username=credentials.username, password=credentials.secret
+                client,
+                username=credentials.username,
+                password=credentials.secret,
+                issuer=issuer,
+                redirect_uri=redirect_uri,
             )
+            fetch_one = partial(fetch_all, client, token=token, graphql_url=graphql_url)
             export = AtsExport(
-                companies=await fetch_all(client, token=token, operation="companies"),
-                managers=await fetch_all(client, token=token, operation="managers"),
-                jobs=await fetch_all(client, token=token, operation="jobs"),
-                candidates=await fetch_all(client, token=token, operation="candidates"),
+                companies=await fetch_one(operation="companies"),
+                managers=await fetch_one(operation="managers"),
+                jobs=await fetch_one(operation="jobs"),
+                candidates=await fetch_one(operation="candidates"),
             )
             if not with_details:
                 return export
@@ -736,7 +784,7 @@ class AiFindConnector:
             # Keep the list record for anyone a detail call lost, so a partial
             # detail pass never shrinks the import.
             detailed = await fetch_manager_details(
-                client, token=token,
+                client, token=token, graphql_url=graphql_url,
                 external_ids=[m.external_id for m in export.managers],
             )
             by_manager = {m.external_id: m for m in export.managers}
@@ -744,7 +792,7 @@ class AiFindConnector:
             export.managers = list(by_manager.values())
 
             detailed_candidates = await fetch_candidate_details(
-                client, token=token,
+                client, token=token, graphql_url=graphql_url,
                 external_ids=[c.external_id for c in export.candidates],
             )
             by_candidate = {c.external_id: c for c in export.candidates}

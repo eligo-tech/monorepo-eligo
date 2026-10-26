@@ -706,7 +706,13 @@ export const api = {
    *  an update, so a username can be fixed without re-typing the password. */
   saveTenantSource: (
     kind: string,
-    body: { username: string; secret?: string; label?: string; status?: string },
+    body: {
+      username: string
+      secret?: string
+      label?: string
+      status?: string
+      config?: Record<string, string>
+    },
   ) =>
     request<TenantSourceDTO>(`/tenant-sources/${kind}`, {
       method: 'PUT',
