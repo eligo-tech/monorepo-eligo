@@ -90,14 +90,34 @@ async def update_candidate(
     Each changed field is committed through the verification gate as a
     HUMAN_VERIFIED change, leaving an append-only receipt (attributed to the
     acting user) + provenance record.
+
+    **409 means a colleague got there first.** If the payload carries
+    `base_updated_at` and somebody else has committed one of the same fields
+    since, nothing is written and the response names the disputed fields. The
+    client reloads, or re-sends without the baseline to overwrite
+    deliberately. Two people editing *different* fields of one candidate is
+    not a conflict and never was — the patch is a per-field diff.
     """
-    row = await service.update_candidate(
-        db,
-        tenant_id=actor.tenant_id,
-        candidate_id=candidate_id,
-        patch=payload,
-        editor=actor.name,
-    )
+    try:
+        row = await service.update_candidate(
+            db,
+            tenant_id=actor.tenant_id,
+            candidate_id=candidate_id,
+            patch=payload,
+            editor=actor.name,
+        )
+    except service.ConcurrentEdit as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "code": "concurrent_edit",
+                "fields": exc.fields,
+                "message": (
+                    "Diese Felder wurden von jemand anderem geändert, seit Sie "
+                    "den Datensatz geöffnet haben: " + ", ".join(exc.fields)
+                ),
+            },
+        ) from exc
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "candidate not found")
     return CandidateRead.model_validate(row)

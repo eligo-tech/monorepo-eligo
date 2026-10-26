@@ -91,6 +91,19 @@ class CandidateUpdate(BaseModel):
     the value stays as auditable as an agent-proposed one.
     """
 
+    #: The ``updated_at`` the editor was opened on, echoed back so the server
+    #: can tell a fresh edit from one written against a record somebody else
+    #: has since changed. **Control, not content** — `update_candidate` pops
+    #: it before the field loop, and
+    #: `test_candidates_concurrent_edit.py::test_the_baseline_is_not_a_writable_field`
+    #: fails if it ever reaches a column.
+    #:
+    #: Optional on purpose. Omitting it means "write regardless", which is
+    #: what the importers, the seed script and every existing API client do;
+    #: adding the check as a requirement would have broken all of them to
+    #: protect a two-person workspace. The cockpit always sends it.
+    base_updated_at: dt.datetime | None = None
+
     full_name: str | None = None
     email: str | None = None
     phone: str | None = None

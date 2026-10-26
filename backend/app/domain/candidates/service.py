@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import enum
 import json
 import uuid
@@ -183,6 +184,73 @@ async def recompute_scores(
     return candidate
 
 
+class ConcurrentEdit(Exception):
+    """Somebody else wrote one of these fields while this editor was open.
+
+    Carries the field names rather than a bare "conflict": the recruiter's
+    next question is always *which* value is in dispute, and the names come
+    straight off the `EnrichmentRecord`s so nothing has to be guessed.
+    """
+
+    def __init__(self, fields: list[str]) -> None:
+        self.fields = fields
+        super().__init__(
+            "changed by someone else since this record was opened: "
+            + ", ".join(fields)
+        )
+
+
+async def _fields_changed_since(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    since: dt.datetime,
+    among: set[str],
+) -> list[str]:
+    """Which of `among` a committed change has touched since `since`.
+
+    Reads `enrichment_records`, not `candidates.updated_at`, and the
+    difference is the whole point. `updated_at` moves for reasons that are
+    not an edit — `recompute_scores` writes `verification_score` on every
+    save, so a row-level timestamp check would refuse a perfectly safe write
+    and teach people to click past the warning. The enrichment ledger is
+    per field, already indexed on `entity_id`, and is written by
+    `verify_and_commit` on the one path anything reaches a candidate column.
+
+    The failure mode is therefore a *missed* conflict, never a false one: a
+    write that somehow bypassed the gate is invisible here. That is exactly
+    today's behaviour, so this can only improve on it — whereas a false
+    conflict would be a new way to lose work.
+    """
+    if not among:
+        return []
+    # The client sends whatever offset its clock is in, and SQLAlchemy's
+    # SQLite dialect binds a datetime by its *wall-clock* fields with the
+    # tzinfo dropped — so a Berlin-offset baseline would be compared two
+    # hours adrift of a column that stores UTC. Postgres would have got this
+    # right on its own; normalising here keeps the two dialects answering the
+    # same question. A naive value is taken as UTC, which is what every
+    # timestamp this codebase stores already is (see `pipeline.as_utc`).
+    since = (
+        since.astimezone(dt.UTC) if since.tzinfo is not None
+        else since.replace(tzinfo=dt.UTC)
+    )
+    rows = await session.execute(
+        select(EnrichmentRecord.field)
+        .where(
+            EnrichmentRecord.tenant_id == tenant_id,
+            EnrichmentRecord.entity_type == "candidate",
+            EnrichmentRecord.entity_id == candidate_id,
+            EnrichmentRecord.committed.is_(True),
+            EnrichmentRecord.created_at > since,
+            EnrichmentRecord.field.in_(among),
+        )
+        .distinct()
+    )
+    return sorted(rows.scalars().all())
+
+
 async def update_candidate(
     session: AsyncSession,
     *,
@@ -199,6 +267,11 @@ async def update_candidate(
     external state to re-check — the value passes and is written via the
     ``apply_hook``, leaving a VERIFY + WRITE receipt and an ``EnrichmentRecord``.
     Returns ``None`` if the candidate does not exist for this tenant.
+
+    Raises `ConcurrentEdit` when `patch.base_updated_at` is given and another
+    user has committed one of the same fields since — see
+    `_fields_changed_since`. A patch that leaves that baseline unset is
+    written unconditionally, which is what every non-cockpit caller does.
     """
     candidate = await get_candidate(
         session, tenant_id=tenant_id, candidate_id=candidate_id
@@ -210,8 +283,15 @@ async def update_candidate(
         "manual edit via recruiter UI"
     )
     changes = patch.model_dump(exclude_unset=True, mode="json")
-    applied: list[str] = []
+    # Control, not content: it names the version this edit was composed
+    # against and must never be looked up as a column.
+    changes.pop("base_updated_at", None)
 
+    # Settle what would really change BEFORE asking whether anyone else
+    # touched it. Re-typing the value that is already stored is not an edit
+    # and must not collide with somebody who typed the same thing first —
+    # agreeing is not a conflict.
+    effective: dict[str, object] = {}
     for field, new_value in changes.items():
         # Never NULL a non-nullable column (would raise IntegrityError). The UI
         # never does this; it guards against a raw-API null.
@@ -221,7 +301,25 @@ async def update_candidate(
             continue
         if _norm(getattr(candidate, field, None)) == _norm(new_value):
             continue
+        effective[field] = new_value
 
+    if patch.base_updated_at is not None:
+        clash = await _fields_changed_since(
+            session,
+            tenant_id=tenant_id,
+            candidate_id=candidate_id,
+            since=patch.base_updated_at,
+            among=set(effective),
+        )
+        if clash:
+            # Nothing has been written yet — the loop below has not run — so
+            # refusing here leaves the record exactly as the other person left
+            # it. The caller decides whether to reload or to overwrite.
+            raise ConcurrentEdit(clash)
+
+    applied: list[str] = []
+
+    for field, new_value in effective.items():
         change = ProposedChange(
             tenant_id=tenant_id,
             entity_type="candidate",

@@ -1,8 +1,8 @@
 import { t } from '@/i18n'
 
 import { useEffect, useRef, useState } from 'react'
-import { Trash2, Save, Ban, AlertCircle } from 'lucide-react'
-import { api } from '@/api/client'
+import { Trash2, Save, Ban, AlertCircle, RefreshCw } from 'lucide-react'
+import { ApiError, api } from '@/api/client'
 import type { CandidateDTO, CandidateUpdatePayload, EducationDTO, WorkRoleDTO } from '@/api/types'
 import {
   AddButton,
@@ -315,6 +315,50 @@ function focusTarget(root: HTMLElement | null, field: string | undefined) {
   }, 120)
 }
 
+/** The record's own column names, in the recruiter's words. Falls back to the
+ *  raw name — a field nobody has labelled yet should still be nameable in a
+ *  conflict warning, and an unlabelled `focus_areas` beats an empty list. */
+const FIELD_LABELS: Record<string, string> = {
+  full_name: t('Vollständiger Name'),
+  first_name: t('Vorname'),
+  last_name: t('Nachname'),
+  email: t('E-Mail'),
+  phone: t('Telefon'),
+  street: t('Straße'),
+  postal_code: t('PLZ'),
+  city: t('Stadt'),
+  country: t('Land'),
+  location: t('Standort'),
+  current_title: t('Job-Titel'),
+  current_company: t('Aktuelles Unternehmen'),
+  employment_form: t('Anstellungsform'),
+  work_permit: t('Arbeitserlaubnis'),
+  current_salary: t('Aktuelles Gehalt'),
+  salary_expectation: t('Gehaltsvorstellung'),
+  salary_minimum: t('Mindestgehalt'),
+  availability_weeks: t('Verfügbarkeit (Wochen)'),
+  skills: t('Skills'),
+  languages: t('Sprachen'),
+  profile_summary: t('Kurzprofil'),
+  other_notes: t('Notizen'),
+}
+
+/** 409 from the API, or null if this was an ordinary failure.
+ *
+ *  `ApiError.message` is the raw response body — see `api/client.ts`, which
+ *  does not parse it, because most callers only need the text. */
+function conflictFields(e: unknown): string[] | null {
+  if (!(e instanceof ApiError) || e.status !== 409) return null
+  try {
+    const detail = JSON.parse(e.message)?.detail
+    if (detail?.code !== 'concurrent_edit') return null
+    const fields: unknown = detail.fields
+    return Array.isArray(fields) ? (fields as string[]) : []
+  } catch {
+    return null
+  }
+}
+
 export function DossierEditor({
   dto,
   onCancel,
@@ -330,7 +374,14 @@ export function DossierEditor({
   const [d, setD] = useState<Draft>(() => seed(dto))
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [clash, setClash] = useState<string[] | null>(null)
   const root = useRef<HTMLDivElement | null>(null)
+  //: The record as it stood when this form was seeded — the baseline BOTH the
+  //: diff and the conflict check are taken against. It has to be a snapshot:
+  //: once the list refreshes underneath an open drawer, `dto` moves to the
+  //: colleague's version, and diffing the draft against THAT would quietly
+  //: resend their field as if the recruiter had retyped it.
+  const base = useRef(dto)
 
   useEffect(() => {
     focusTarget(root.current, focusField)
@@ -339,18 +390,36 @@ export function DossierEditor({
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setD((prev) => ({ ...prev, [key]: value }))
 
-  async function save() {
+  /** @param force skip the conflict check — the recruiter has seen the warning
+   *  and chosen to overwrite. */
+  async function save(force = false) {
     const problem = validate(d)
     if (problem) return setErr(problem)
-    const patch = buildPatch(dto, d)
+    const patch = buildPatch(base.current, d)
     if (Object.keys(patch).length === 0) return onCancel() // nothing changed
+    if (!force) patch.base_updated_at = base.current.updated_at
     setErr(null)
+    setClash(null)
     setSaving(true)
     try {
       const updated = await api.updateCandidate(dto.id, patch)
       onSaved(updated)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t('Speichern fehlgeschlagen.'))
+      const fields = conflictFields(e)
+      if (fields) setClash(fields)
+      else setErr(e instanceof Error ? e.message : t('Speichern fehlgeschlagen.'))
+      setSaving(false)
+    }
+  }
+
+  /** Throw away this draft and take the colleague's version. Destructive, and
+   *  the button says so — the alternative is a merge UI nobody asked for. */
+  async function reload() {
+    setSaving(true)
+    try {
+      onSaved(await api.candidate(dto.id))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t('Laden fehlgeschlagen.'))
       setSaving(false)
     }
   }
@@ -583,13 +652,37 @@ export function DossierEditor({
             <AlertCircle className="h-4 w-4 shrink-0" /> {err}
           </div>
         )}
+        {clash && (
+          <div className="flex items-center gap-1.5 text-[13px] font-medium text-gold-300">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>
+              {t('Jemand anderes hat diese Felder geändert, seit Sie den Datensatz geöffnet haben:')}{' '}
+              <span className="font-mono text-gold-200">
+                {clash.map((f) => FIELD_LABELS[f] ?? f).join(', ')}
+              </span>
+            </span>
+          </div>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Button onClick={onCancel} disabled={saving}>
-            <Ban className="h-4 w-4" /> {t('Abbrechen')}
-          </Button>
-          <Button tone="primary" onClick={save} disabled={saving}>
-            <Save className="h-4 w-4" /> {saving ? t('Speichert…') : t('Speichern')}
-          </Button>
+          {clash ? (
+            <>
+              <Button onClick={reload} disabled={saving}>
+                <RefreshCw className="h-4 w-4" /> {t('Neu laden (meine Änderungen verwerfen)')}
+              </Button>
+              <Button tone="danger" onClick={() => save(true)} disabled={saving}>
+                <Save className="h-4 w-4" /> {t('Trotzdem speichern')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={onCancel} disabled={saving}>
+                <Ban className="h-4 w-4" /> {t('Abbrechen')}
+              </Button>
+              <Button tone="primary" onClick={() => save()} disabled={saving}>
+                <Save className="h-4 w-4" /> {saving ? t('Speichert…') : t('Speichern')}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
