@@ -29,9 +29,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements-dev.lock
 
-      - name: Install dependencies
+      - name: Install dependencies (locked — 3.12 mirrors production)
+        if: matrix.python-version == '3.12'
+        run: |
+          pip install -r requirements-dev.lock
+          pip install --no-deps -e .
+
+      - name: Install dependencies (free resolution — 3.11 is the canary)
+        # Deliberately NOT locked. A lock on every job would hide the day a
+        # floor in pyproject stops being satisfiable, which is the thing a
+        # lock makes easy to ignore. This job is allowed to break first.
+        if: matrix.python-version != '3.12'
         run: pip install -e ".[dev]"
 
       - name: Lint
@@ -95,10 +105,28 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements-dev.lock
 
-      - name: Install dependencies
-        run: pip install -e ".[dev,postgres]"
+      - name: Install the locked dependencies
+        # The versions the production image ships, so this job tests what
+        # actually deploys rather than whatever resolves today.
+        run: |
+          pip install -r requirements-dev.lock
+          pip install --no-deps -e .
+
+      - name: Prove the locks still match pyproject
+        # Without this, a dependency added to pyproject would be installed in
+        # CI by the editable install and be missing from the image.
+        run: |
+          pipx run uv pip compile pyproject.toml --extra postgres --extra llm \
+            --python-version 3.12 --quiet --output-file /tmp/prod.lock
+          pipx run uv pip compile pyproject.toml --extra postgres --extra llm \
+            --extra dev --python-version 3.12 --quiet --output-file /tmp/dev.lock
+          diff -u requirements.lock /tmp/prod.lock && \
+          diff -u requirements-dev.lock /tmp/dev.lock || {
+            echo "::error::a lock is stale — recompile both (see Dockerfile header)"
+            exit 1
+          }
 
       - name: Create the schema
         # `create_all`, not `alembic upgrade head`: the migrations are written
