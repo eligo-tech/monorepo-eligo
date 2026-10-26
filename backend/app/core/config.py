@@ -120,6 +120,12 @@ class Settings(BaseSettings):
     #: Escape hatch for the startup guard below: a real database served with
     #: authentication off. Only ever right for a local Postgres you own.
     allow_insecure_no_auth: bool = False
+    #: Escape hatch for `assert_runtime_rls_enforced`: boot even though the
+    #: database cannot enforce tenant isolation. Exists so a credential
+    #: emergency is recoverable without a code change — a guard with no
+    #: override gets deleted the first night it blocks a deploy. Every boot
+    #: under it logs the reason, and it must never be set in production.
+    allow_insecure_rls: bool = False
 
     #: May an organization the record has never seen mint itself a workspace?
     #:

@@ -77,6 +77,24 @@ class Receipt(Base, IDMixin, TenantMixin, TimestampMixin):
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     payload: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
 
+    #: Who did it (the Clerk `sub`), taken from the request rather than passed
+    #: down by each caller — see `core.context`. The ledger recorded *what*
+    #: happened and never *who*, which made "who changed this candidate?" a
+    #: question the audit trail could not answer, and an EU-AI-Act traceability
+    #: story with a hole in it.
+    #:
+    #: NULL is a real answer, not a gap: a scheduled crawl, an ATS import and a
+    #: script have no human behind them. Same shape as
+    #: `manager_interactions.actor_user_id`, deliberately — one way to ask this
+    #: question across the system.
+    actor_user_id: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, index=True
+    )
+    #: Denormalised for the same reason as on `manager_interactions`: there is
+    #: no users table, the name lives in Clerk, and a ledger view that calls an
+    #: identity provider per row is a view nobody opens.
+    actor_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+
     # Tamper-evidence: hash of this receipt + hash of the previous one.
     prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     receipt_hash: Mapped[str] = mapped_column(String(64), nullable=False)

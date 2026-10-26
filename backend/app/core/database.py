@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import ssl
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from contextvars import ContextVar
 
 from sqlalchemy import event
@@ -148,18 +148,102 @@ async def create_all() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def assert_runtime_rls_enforced() -> None:
-    """Warn loudly if the RUNTIME connection can bypass Row-Level Security.
+class TenantIsolationNotEnforced(RuntimeError):
+    """The database cannot keep one workspace's rows away from another's."""
 
-    Fail-closed tenant isolation requires the app to connect as a NOBYPASSRLS
-    role: only then does an un-pinned query return zero rows instead of every
-    tenant's. This is a no-op off Postgres or with auth disabled (single-tenant
-    demo). It never blocks startup — a transient probe failure must not take the
-    service down — but a BYPASSRLS runtime role is logged as a SECURITY error.
+
+#: Which tables must be policed, read from the DATABASE rather than from the
+#: models on purpose: `create_all` will happily add a table no migration ever
+#: saw, and that table — the one nobody remembered to write a policy for — is
+#: precisely what this check exists to catch. Asking the model registry would
+#: only ever confirm what the code already believes.
+#:
+#: Three properties, because any two without the third are worthless: the
+#: policy exists, RLS is enabled, and it is FORCEd (without FORCE the table
+#: owner silently bypasses every policy on it).
+_TENANT_TABLE_AUDIT = """
+SELECT c.relname,
+       c.relrowsecurity,
+       c.relforcerowsecurity,
+       EXISTS (SELECT 1 FROM pg_policies p
+                WHERE p.schemaname = n.nspname
+                  AND p.tablename = c.relname
+                  AND p.policyname = 'tenant_isolation')
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = 'public'
+   AND c.relkind = 'r'
+   AND EXISTS (SELECT 1 FROM information_schema.columns ic
+                WHERE ic.table_schema = n.nspname
+                  AND ic.table_name = c.relname
+                  AND ic.column_name = 'tenant_id')
+ ORDER BY c.relname
+"""
+
+
+def isolation_problems(
+    user: str,
+    bypasses: bool,
+    tables: Sequence[tuple[str, bool, bool, bool]],
+) -> list[str]:
+    """Everything wrong with this database's tenant isolation, in words.
+
+    Pure, and separated from the probe for the usual reason: the part that can
+    be wrong in a way anyone notices is the judgement, not the two SELECTs, and
+    a judgement that needs a live Postgres to exercise is a judgement nobody
+    tests. Returns an empty list when isolation is sound.
+
+    Each `tables` row is `(name, rls_enabled, rls_forced, has_policy)`.
+    """
+    problems: list[str] = []
+    if bypasses:
+        problems.append(
+            f"runtime DB role {user!r} has BYPASSRLS, so no policy applies to it"
+        )
+    for name, enabled, forced, has_policy in tables:
+        missing = [
+            label
+            for label, ok in (
+                ("a tenant_isolation policy", has_policy),
+                ("ROW LEVEL SECURITY", enabled),
+                ("FORCE ROW LEVEL SECURITY", forced),
+            )
+            if not ok
+        ]
+        if missing:
+            problems.append(f"{name} is missing {' and '.join(missing)}")
+    return problems
+
+
+async def assert_runtime_rls_enforced() -> None:
+    """Refuse to start when the database cannot enforce tenant isolation.
+
+    Fail-closed isolation needs two things, and both are checked here because
+    either one alone buys nothing:
+
+    * the app connects as a **NOBYPASSRLS** role, so an un-pinned query returns
+      zero rows instead of every tenant's;
+    * every table carrying a `tenant_id` actually has the `tenant_isolation`
+      policy, with RLS enabled **and** FORCEd.
+
+    This used to log an error and carry on serving, which was the wrong stance.
+    The failure is invisible from outside: nothing errors, the app simply hands
+    one workspace another's data, so the only moment anyone would notice is
+    after the fact. `assert_auth_configured` already refuses to boot for the
+    neighbouring fail-open; this is the same argument.
+
+    A no-op off Postgres or with auth disabled — the SQLite demo and the test
+    suite are single-tenant. A probe that cannot RUN stays a warning: a
+    transient permission or network fault must not take the service down, and
+    "I could not check" is not the same claim as "I checked and it is broken".
     """
     if not settings.is_postgres or not settings.auth_enabled:
         return
     from sqlalchemy import text
+
+    from app.core.logging import get_logger
+
+    log = get_logger(__name__)
 
     try:
         async with engine.connect() as conn:
@@ -171,22 +255,36 @@ async def assert_runtime_rls_enforced() -> None:
                     )
                 )
             ).one()
+            tables = (await conn.execute(text(_TENANT_TABLE_AUDIT))).all()
     except Exception as exc:  # pragma: no cover - network/permission dependent
-        from app.core.logging import get_logger
-
-        get_logger(__name__).warning("could not verify RLS enforcement: %s", exc)
+        log.warning("could not verify RLS enforcement: %s", exc)
         return
 
-    from app.core.logging import get_logger
+    problems = isolation_problems(user, bypasses, tables)
 
-    log = get_logger(__name__)
-    if bypasses:
-        log.error(
-            "SECURITY: runtime DB role %r has BYPASSRLS — tenant isolation is NOT "
-            "enforced at the database layer (fail-OPEN). Point ELIGO_DATABASE_URL "
-            "at the NOBYPASSRLS app role and ELIGO_ADMIN_DATABASE_URL at the owner. "
-            "See DEPLOY.md.",
+    if not problems:
+        log.info(
+            "RLS enforced: runtime role %r is NOBYPASSRLS and all %d tenant "
+            "tables are policed (fail-closed).",
             user,
+            len(tables),
         )
-    else:
-        log.info("RLS enforced: runtime role %r is NOBYPASSRLS (fail-closed).", user)
+        return
+
+    detail = "; ".join(problems)
+    if settings.allow_insecure_rls:
+        log.error(
+            "SECURITY: serving with tenant isolation NOT enforced — %s. "
+            "Allowed only by ELIGO_ALLOW_INSECURE_RLS.",
+            detail,
+        )
+        return
+
+    raise TenantIsolationNotEnforced(
+        "refusing to start: the database cannot enforce tenant isolation — "
+        f"{detail}. Point ELIGO_DATABASE_URL at the NOBYPASSRLS app role and "
+        "ELIGO_ADMIN_DATABASE_URL at the owner, and give every tenant-scoped "
+        "table a tenant_isolation policy (migrations 0003 and 0005 show the "
+        "shape; DEPLOY.md covers the roles). ELIGO_ALLOW_INSECURE_RLS=true "
+        "overrides this and must never be set in production."
+    )
