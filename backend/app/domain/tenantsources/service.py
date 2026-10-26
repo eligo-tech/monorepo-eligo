@@ -69,6 +69,7 @@ def as_read(row: TenantSource) -> dict:
         "username": row.username,
         "status": row.status,
         "has_secret": bool(row.secret_encrypted),
+        "config": row.config or {},
         "import_scope": row.import_scope,
         "import_requested_at": row.import_requested_at,
         "last_run_at": row.last_run_at,
@@ -137,6 +138,10 @@ async def upsert_source(
         row.status = data.status
     if data.secret:
         row.secret_encrypted = secrets.encrypt(data.secret)
+    if data.config is not None:
+        # Replaced wholesale rather than merged: the form submits the full set
+        # it asked for, and a merge would make clearing a field impossible.
+        row.config = {k: v.strip() for k, v in data.config.items() if v.strip()}
     await session.commit()
     await session.refresh(row)
     return row

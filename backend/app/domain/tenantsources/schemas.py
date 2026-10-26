@@ -26,6 +26,10 @@ class TenantSourceRead(BaseModel):
     username: str
     status: str
     has_secret: bool
+    #: Which instance of the source this workspace is on. Not secret — a
+    #: hostname is not a credential, and the screen must show which one is
+    #: connected.
+    config: dict
     import_scope: str
     import_requested_at: dt.datetime | None
     last_run_at: dt.datetime | None
@@ -44,6 +48,10 @@ class TenantSourceWrite(BaseModel):
     secret: str | None = Field(default=None, min_length=1, max_length=512)
     label: str | None = Field(default=None, max_length=160)
     status: str | None = None
+    #: Instance settings, the keys the chosen connector declares in
+    #: `config_needs`. Absent leaves what is stored, so a recruiter fixing a
+    #: username does not have to re-enter the hostname.
+    config: dict[str, str] | None = None
 
 
 class ImportRequestWrite(BaseModel):

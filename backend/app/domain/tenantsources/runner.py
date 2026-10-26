@@ -68,7 +68,7 @@ async def run_one(row: TenantSource, *, with_details: bool = True) -> dict:
         # exist, only that the workspace chose one the registry has.
         connector = factory.get_connector(kind)
         export = await connector.fetch(
-            Credentials(username=username, secret=password),
+            Credentials(username=username, secret=password, config=row.config or {}),
             with_details=with_details and row.import_scope != "basic",
         )
         summary = await import_into(
@@ -122,12 +122,19 @@ async def run_pending(*, limit: int = DEFAULT_LIMIT, with_details: bool = True) 
         pending = await service.pending_imports(session, limit=limit)
         # Detach what the run needs; the session closes before the slow part.
         rows = [
+            # Every field `run_one` reads must be listed. `import_scope` was
+            # not, and a column default is applied on INSERT rather than on
+            # construction, so the copy carried None — which is `!= "basic"`,
+            # so a workspace that asked for the quick pass silently got the
+            # slow one. `config` would have failed the same way, loudly.
             TenantSource(
                 id=row.id,
                 tenant_id=row.tenant_id,
                 kind=row.kind,
                 username=row.username,
                 secret_encrypted=row.secret_encrypted,
+                import_scope=row.import_scope,
+                config=row.config,
             )
             for row in pending
         ]

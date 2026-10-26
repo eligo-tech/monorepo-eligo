@@ -49,6 +49,10 @@ def describe() -> list[dict]:
             "hint": getattr(s, "hint", ""),
             "mode": s.mode,
             "needs": list(getattr(s, "needs", ())),
+            # The non-secret half of the form: which instance of this system
+            # the workspace is on. Empty for a source with one address for
+            # everybody, so the screen draws nothing extra for those.
+            "config_needs": list(getattr(s, "config_needs", ())),
         }
         for _, s in sorted(_SOURCES.items())
     ]

@@ -850,6 +850,10 @@ export interface TenantSourceDTO {
   username: string
   status: string
   has_secret: boolean
+  /** Which instance of the source this workspace is on — the keys the
+   *  connector declares in `config_needs`. Not secret: a hostname is not a
+   *  credential, and the screen has to show which instance is connected. */
+  config: Record<string, string>
   /** What the next run will fetch — "full" walks every manager and candidate
    *  for their details and notes, "basic" takes the lists only (ELI-14). */
   import_scope: string
@@ -870,6 +874,10 @@ export interface AtsSourceDTO {
   mode: 'pull' | 'file'
   /** Which credential fields the form must ask for; empty for a file. */
   needs: string[]
+  /** Non-secret instance settings the form must ask for — which tenant of a
+   *  multi-tenant system this workspace is on. Empty for a source that has
+   *  one address for everybody, which is most of them. */
+  config_needs: string[]
 }
 
 export interface SourceCapabilitiesDTO {

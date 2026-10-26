@@ -28,6 +28,14 @@ import { Chip, Panel, SectionHeader } from '../ui/primitives'
 
 /** Fallback label for a connector the server lists but does not name. The
  *  UI deliberately knows no system by name: the registry does. */
+/** Human wording for the instance fields a connector asks for. These are
+ *  generic infrastructure words, not one vendor's vocabulary, and an
+ *  unknown key falls back to itself rather than being hidden. */
+const CONFIG_LABELS: Record<string, () => string> = {
+  realm: () => t('Realm / Mandant'),
+  host: () => t('Hostname der Instanz'),
+}
+
 const kindLabel = (kind: string, sources?: { key: string; label: string }[]) =>
   // The connector registry labels and describes itself in German
   // (backend `atsimport/connectors/`). Translate what we know, show what
@@ -63,6 +71,10 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
   const [kind, setKind] = useState('')
   const [username, setUsername] = useState('')
   const [secret, setSecret] = useState('')
+  // Which INSTANCE of the chosen system this workspace is on. The server
+  // says which keys to ask for; this screen does not know what a realm is
+  // and must not, or it would be naming one vendor's concepts again.
+  const [config, setConfig] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -81,7 +93,10 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
       const chosen = rows[0]?.kind ?? offered[0] ?? ''
       setKind((current) => current || chosen)
       const existing = rows.find((r) => r.kind === chosen)
-      if (existing) setUsername((u) => u || existing.username)
+      if (existing) {
+        setUsername((u) => u || existing.username)
+        setConfig((c) => (Object.keys(c).length ? c : { ...existing.config }))
+      }
     } catch {
       setSources([])
     }
@@ -100,14 +115,22 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
 
   async function save() {
     if (!username.trim()) return setError(t('Benutzername darf nicht leer sein.'))
+    // The run would fail anyway, but hours later and in a log nobody is
+    // watching. Refusing here is the same check at a useful moment.
+    if (configNeeds.some((key) => !(config[key] ?? '').trim()))
+      return setError(t('Bitte die eigene Instanz vollständig angeben.'))
     setBusy(true)
     setError(null)
     setNotice(null)
     try {
-      await api.saveTenantSource(kind, {
-        username: username.trim(),
-        ...(secret ? { secret } : {}),
-      })
+      const body: {
+        username: string
+        secret?: string
+        config?: Record<string, string>
+      } = { username: username.trim() }
+      if (secret) body.secret = secret
+      if (configNeeds.length) body.config = config
+      await api.saveTenantSource(kind, body)
       setSecret('')
       setNotice(t('Quelle gespeichert.'))
       await reload()
@@ -145,6 +168,10 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
   }
 
   const source = sources?.find((s) => s.kind === kind)
+  // What the chosen connector says it needs beyond a login. Empty for a
+  // system with one address for everybody, and then nothing is drawn.
+  const configNeeds =
+    caps?.sources?.find((s) => s.key === kind)?.config_needs ?? []
   const blocked = caps !== null && !caps.secrets_configured
   // The registry names the systems; this screen names none of them. One
   // list today reads as two sections because the two halves are genuinely
@@ -258,6 +285,26 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
                   placeholder={source?.has_secret ? t('•••••••• gespeichert') : ''}
                 />
               </div>
+
+              {configNeeds.length > 0 && (
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  {configNeeds.map((key) => (
+                    <TextInput
+                      key={key}
+                      label={CONFIG_LABELS[key]?.() ?? key}
+                      value={config[key] ?? ''}
+                      onChange={(v) => setConfig((c) => ({ ...c, [key]: v }))}
+                      placeholder={t('aus der Adresse Ihres Zugangs')}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {configNeeds.length > 0 && (
+                <p className="mt-3 text-[12px] leading-relaxed text-cockpit-faint">
+                  {t('Dieses System vergibt pro Kunde eine eigene Adresse. Ohne diese Angabe weiß der Import nicht, welche Instanz gemeint ist — geraten wird nicht, denn eine falsche Vorgabe wäre die Adresse eines anderen Kunden.')}
+                </p>
+              )}
 
               <p className="mt-3 text-[12px] leading-relaxed text-cockpit-faint">
                 {t('Das Passwort wird verschlüsselt gespeichert und nie wieder ausgeliefert — auch nicht an diesen Workspace. Der Import läuft als geplanter Lauf, nicht im Klick: Hunderte Abrufe gehören nicht in eine Browser-Anfrage, und so bleibt jede Datenerhebung protokolliert.')}
