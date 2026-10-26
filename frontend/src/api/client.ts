@@ -51,7 +51,7 @@ import type {
 } from './types'
 
 // Dev: '/api/v1' (Vite proxies to :8000). Prod: set VITE_API_BASE_URL to the
-// deployed backend, e.g. https://eligo-api.up.railway.app/api/v1
+// deployed backend, e.g. https://monorepo-eligo-production.up.railway.app/api/v1
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 // When Clerk auth is active a token getter is registered here (see

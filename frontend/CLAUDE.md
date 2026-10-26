@@ -88,11 +88,36 @@ provider later). A name is the only required field.
 
 ### Parked surfaces
 
-`src/features/{matching,pipeline,reporting}/`, `components/Sidebar.tsx` and
-`components/TopNav.tsx` are what remains of the previous light-themed four-tab CRM.
-They are **unrouted but still compiled** — kept so each can be restyled and
-re-added as a cockpit screen. Don't delete them, and don't import from them into
-`features/cockpit/`.
+What remains of the previous light-themed four-tab CRM. They are **unrouted but
+still compiled** — kept so each can be restyled and re-added as a cockpit
+screen. Don't delete them, and don't import from them into `features/cockpit/`.
+
+The inventory, in full, because a partial one invites exactly the wrong
+conclusion — every file below is reachable from no route, so "nothing imports
+it" is the normal state here, not evidence that it is dead:
+
+| parked | reached from |
+|---|---|
+| `features/matching/MatchingView.tsx` | nothing — entry point of its tab |
+| `features/pipeline/PipelineView.tsx` | nothing — entry point of its tab |
+| `features/reporting/ReportingView.tsx` | nothing — entry point of its tab |
+| `features/reporting/PieChart.tsx` | `ReportingView` |
+| `components/Sidebar.tsx`, `components/TopNav.tsx` | nothing — the old chrome |
+| `components/Breadcrumb.tsx` | `ReportingView` |
+| `data/pipeline.ts` | `PipelineView` |
+| `data/reporting.ts` | `ReportingView` |
+
+Three further files are parked *and* orphaned — nothing references them, not
+even the views above, and they are written against the legacy `brand.*` /
+`ink.*` / `accent.*` palette rather than the cockpit tokens:
+`components/ui/SkillBadge.tsx`, `components/ui/VerificationScore.tsx` and
+`features/cockpit/screens/PlaceholderScreen.tsx` (obsolete since every nav
+section acquired a real screen). They are the only genuine deletion candidates
+in `src/`; they are kept pending a decision, not by oversight.
+
+`src/i18n/coverage.test.ts` holds the same set in its `EXCLUDED` list and is the
+machine-checked copy — parked surfaces are deliberately not translated, so that
+list and this table must be changed together.
 
 `features/candidates/` is **gone** — it became `cockpit/screens/kandidaten/`
 (Kandidaten was the first surface converted). Its inputs moved to `ui/forms.tsx`;
