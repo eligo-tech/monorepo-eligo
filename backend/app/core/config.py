@@ -143,6 +143,23 @@ class Settings(BaseSettings):
     #: session; each mint is then logged with the org id.
     auto_provision_tenants: bool = False
 
+    #: Where to report unhandled exceptions, or nothing.
+    #:
+    #: Unset means the SDK is never initialised — no network client, no hooks,
+    #: no behaviour change. That is the default on purpose: a crash reporter is
+    #: the one component that reads every other component's data, so it is
+    #: opt-in per deployment rather than something a developer inherits by
+    #: running the scaffold.
+    #:
+    #: Points at a SELF-HOSTED collector (GlitchTip speaks the same protocol).
+    #: The product holds candidates' names, e-mail addresses, phone numbers and
+    #: salary expectations for tenants who are not us; sending that to a
+    #: third-party SaaS would make them a processor we would have to name, with
+    #: a DPA and an Art. 14 story. Keeping the collector inside the estate we
+    #: already run adds nobody. `observability.py` explains what is stripped
+    #: before anything leaves the process at all.
+    sentry_dsn: str | None = None
+
     #: Fernet key for secrets the record must be able to replay — today only a
     #: tenant's ATS password. Unset means credentials cannot be stored at all,
     #: which is the safe default (see `app/core/secrets.py`).

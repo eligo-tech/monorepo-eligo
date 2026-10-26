@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.auth import assert_auth_configured
 from app.core.database import assert_runtime_rls_enforced, create_all
 from app.core.logging import configure_logging, get_logger
+from app.core.observability import configure_error_reporting
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,10 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Create tables on startup (scaffold convenience; use Alembic in prod)."""
     configure_logging()
+    # Before the first request, so a failure during startup is reported too.
+    # No-op unless ELIGO_SENTRY_DSN is set; see `core/observability.py` for
+    # what is stripped before any event leaves the process.
+    configure_error_reporting()
     # Before anything is served: a Postgres database with auth off would hand
     # every anonymous caller the default tenant (see `assert_auth_configured`).
     assert_auth_configured()
