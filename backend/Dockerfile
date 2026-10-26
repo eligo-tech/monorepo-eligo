@@ -16,10 +16,15 @@ RUN apt-get update \
 # three different commits of it. A green CI run says nothing about a later
 # build unless both install the same thing.
 #
-# The lock is regenerated with:
+# Regenerate BOTH locks with (uv 0.10.7, the version CI pins):
 #   uv pip compile pyproject.toml --extra postgres --extra llm \
-#       --python-version 3.12 --output-file requirements.lock
-# and CI fails if it is out of step with pyproject.
+#       --python-version 3.12 --no-header -o requirements.lock
+#   uv pip compile pyproject.toml --extra postgres --extra llm --extra dev \
+#       --python-version 3.12 --no-header -o requirements-dev.lock
+#
+# `--no-header` is not cosmetic: uv writes the --output-file path into the
+# header, so a lock compiled to a temporary file never compares equal to the
+# committed one. The CI "Dependency locks" job fails if either is stale.
 COPY requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
 

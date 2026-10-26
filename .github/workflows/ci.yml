@@ -29,7 +29,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: backend/requirements-dev.lock
+          # Both, because the matrix installs from the lock on 3.12 and from
+          # pyproject on 3.11 — keying on one would leave the other's cache
+          # unaffected by a change to its own input.
+          cache-dependency-path: |
+            backend/pyproject.toml
+            backend/requirements-dev.lock
 
       - name: Install dependencies (locked — 3.12 mirrors production)
         if: matrix.python-version == '3.12'
@@ -54,6 +59,64 @@ jobs:
         env:
           ELIGO_DATABASE_URL: "sqlite+aiosqlite:///./ci.db"
         run: pytest -q
+
+  locks:
+    # The dependency locks are what makes a deploy reproducible, so whether
+    # they are current is its own question — not a side effect of the Postgres
+    # job, where it previously lived and had nothing to do with RLS.
+    name: Dependency locks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install uv (PINNED — see below)
+        # Pinned for the same reason everything else here is. `pipx run uv`
+        # fetches the newest uv on every run, and a resolver or output change
+        # would fail the comparison below with nothing actually wrong. The
+        # locks in the repository were produced by this exact version.
+        run: pip install uv==0.10.7
+
+      - name: Recompile both locks and compare
+        # `--no-header` matters: uv stamps the --output-file path into the
+        # header it writes, so comparing a lock compiled to /tmp against one
+        # committed as requirements.lock differed on line 2 every single time
+        # and the check could never pass.
+        run: |
+          uv pip compile pyproject.toml --extra postgres --extra llm \
+            --python-version 3.12 --no-header --quiet -o /tmp/prod.lock
+          uv pip compile pyproject.toml --extra postgres --extra llm --extra dev \
+            --python-version 3.12 --no-header --quiet -o /tmp/dev.lock
+          stale=0
+          # Both are compared before failing: short-circuiting reports one
+          # stale lock, you fix it, push, and discover the other.
+          diff -u requirements.lock /tmp/prod.lock || stale=1
+          diff -u requirements-dev.lock /tmp/dev.lock || stale=1
+          if [ "$stale" != 0 ]; then
+            echo "::error::a lock is stale — recompile both (command in backend/Dockerfile)"
+            exit 1
+          fi
+
+      - name: The lock that ships must agree with the lock that is tested
+        # CI installs requirements-dev.lock; the image installs
+        # requirements.lock. Nothing else makes those two agree, so a runtime
+        # pin could drift between what is tested and what deploys — which is
+        # the failure this whole change exists to prevent.
+        run: |
+          strip() { grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$1" | sed 's/[[:space:]]*$//' | sort -u; }
+          missing=$(comm -23 <(strip requirements.lock) <(strip requirements-dev.lock))
+          if [ -n "$missing" ]; then
+            echo "::error::these shipped pins are absent from the tested lock:"
+            echo "$missing"
+            exit 1
+          fi
+          echo "every shipped pin appears identically in the tested lock"
 
   rls:
     name: Backend · RLS on Postgres
@@ -113,20 +176,6 @@ jobs:
         run: |
           pip install -r requirements-dev.lock
           pip install --no-deps -e .
-
-      - name: Prove the locks still match pyproject
-        # Without this, a dependency added to pyproject would be installed in
-        # CI by the editable install and be missing from the image.
-        run: |
-          pipx run uv pip compile pyproject.toml --extra postgres --extra llm \
-            --python-version 3.12 --quiet --output-file /tmp/prod.lock
-          pipx run uv pip compile pyproject.toml --extra postgres --extra llm \
-            --extra dev --python-version 3.12 --quiet --output-file /tmp/dev.lock
-          diff -u requirements.lock /tmp/prod.lock && \
-          diff -u requirements-dev.lock /tmp/dev.lock || {
-            echo "::error::a lock is stale — recompile both (see Dockerfile header)"
-            exit 1
-          }
 
       - name: Create the schema
         # `create_all`, not `alembic upgrade head`: the migrations are written
