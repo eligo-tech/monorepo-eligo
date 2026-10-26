@@ -129,6 +129,24 @@ jobs:
           ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_app:ci_app_pw@localhost:5432/eligo
         run: pytest tests/test_rls_postgres.py -q
 
+      - name: Prove every tenant table is actually policed
+        # The startup guard, run as a CI gate. `apply_rls` derives its table
+        # list from the MODELS; this check derives it from the DATABASE, and
+        # the gap between those two is the failure it exists to catch — a
+        # table that `create_all` put there and no policy ever covered.
+        # Add a tenant-scoped table without a policy and this step fails,
+        # instead of the deploy coming up fail-open.
+        env:
+          ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_app:ci_app_pw@localhost:5432/eligo
+          ELIGO_AUTH_ENABLED: 'true'
+        run: |
+          python -c "
+          import asyncio
+          from app.core.database import assert_runtime_rls_enforced
+          asyncio.run(assert_runtime_rls_enforced())
+          print('every tenant table is enabled, forced and policed')
+          "
+
       - name: Report the final state
         if: always()
         env:
