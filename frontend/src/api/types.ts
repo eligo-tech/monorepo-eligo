@@ -94,6 +94,11 @@ export interface CandidateDTO {
 /** PATCH body for a manual recruiter edit — every field optional; only the
  *  fields present are applied. Mirrors backend CandidateUpdate. */
 export interface CandidateUpdatePayload {
+  /** The `updated_at` the editor was opened on. The server refuses the write
+   *  with 409 if somebody else has committed one of the same fields since;
+   *  omitting it means "write regardless", which is what the force-save path
+   *  and every non-interactive caller do. */
+  base_updated_at?: string
   full_name?: string
   email?: string | null
   phone?: string | null
