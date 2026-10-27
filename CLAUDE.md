@@ -89,6 +89,24 @@ It also carries the data classification table and the GDPR/SOC 2 obligation map,
 including what is **not** yet built — nothing here may be described to a customer
 as "GDPR compliant" or "SOC 2 compliant" until those gaps are closed.
 
+## How to work here — read `.agents/` before building anything
+
+[`.agents/`](.agents/README.md) holds nine process rules adapted from the
+Superpowers plugin to the defects this repository has actually shipped. They
+are binding for any change to `backend/app/`, `frontend/src/`,
+`backend/migrations/`, CI or deploy config.
+
+`.agents/00-using-superpowers.md` is injected automatically at session start by
+`.claude/hooks/session-start.sh`; it carries the dispatch table for the other
+eight. If hooks are disabled, read it yourself — first.
+
+Four gates are never skipped: **design approved before code** (01), **a failing
+test before a fix** (04), **evidence before "done"** (07), **review before
+merge** (06).
+
+This governs *how* you work. `ARCHITECTURE.md` governs *what is allowed to
+exist*, and is equally binding.
+
 ## Skills
 
 Repeatable procedures live in `.claude/skills/`. Invoke them rather than
