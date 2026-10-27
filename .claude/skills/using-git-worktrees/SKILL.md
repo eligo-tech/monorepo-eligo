@@ -1,6 +1,7 @@
 ---
 name: using-git-worktrees
-description: Isolated workspace per change. Load before touching files.
+description: Set up an isolated branch or worktree before editing anything. Use before the first edit of any change: branching from the latest origin/main, never re-pushing to a squash-merged branch, never staging with git add -A, and never committing under /data/.
+tools: Read, Bash
 ---
 
 # Branches and worktrees — never work on main

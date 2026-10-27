@@ -1,6 +1,7 @@
 ---
 name: requesting-code-review
-description: Review the implementation against the plan before merge.
+description: Review an implementation against its plan before merge. Use when code is written and tests are green but nothing is merged, and before opening or merging a pull request. Covers migrations, locks, tenant scope, error paths and i18n.
+tools: Read, Glob, Grep, Bash
 ---
 
 # Code review — against the plan, not against taste
@@ -16,7 +17,7 @@ Code written, tests green, not yet merged.
    each new table/column's row in the classification table.
 3. Re-read the **full** changed files, not the diff. A diff hides what it is
    adjacent to.
-4. Check the diff against the plan from `02-writing-plans`: anything in the
+4. Check the diff against the plan from `writing-plans`: anything in the
    diff that is not in the plan must be justified or removed.
 
 ## Checks this repo specifically needs

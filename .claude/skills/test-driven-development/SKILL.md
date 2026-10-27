@@ -1,6 +1,7 @@
 ---
 name: test-driven-development
-description: Red, green, refactor. Load for any new behaviour or bug fix.
+description: Red, green, refactor — write the failing test first and watch it fail for the reason you intend. Use for any new behaviour or bug fix, and whenever a fix must be proven rather than asserted, such as a security fix.
+tools: Read, Glob, Grep, Bash, Edit, Write
 ---
 
 # TDD — the test fails first, and you watch it fail

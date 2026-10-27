@@ -1,6 +1,7 @@
 ---
 name: brainstorming
-description: Turns a request into an approved design. Load before any creative or structural work.
+description: Turn a request into a design the user has approved, before any code exists. Use when the ask describes an outcome rather than an implementation, when the proposed implementation may not be the right one, or at the start of any new feature or structural change.
+tools: Read, Glob, Grep, Bash
 ---
 
 # Brainstorming — agree the shape before writing code
@@ -23,7 +24,7 @@ implementation and it is not obviously the right one.
 5. **Present the design** — what changes, what does not, what it costs, what it
    risks.
 6. **Wait for approval.** ← gate
-7. Then `02-writing-plans`.
+7. Then `writing-plans`.
 
 ## Prohibited
 - Writing implementation code before step 6.

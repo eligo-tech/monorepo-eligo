@@ -1,6 +1,7 @@
 ---
 name: finishing-a-development-branch
-description: Merge, PR, and cleanup. Load once the work is green and reviewed.
+description: Merge, pull request, and cleanup. Use once a change is green and reviewed: what the PR body must state, which CI gates must pass, squash merge, branch deletion, and the post-merge deploy check.
+tools: Read, Bash
 ---
 
 # Finishing — integrate without leaving debris
@@ -13,7 +14,7 @@ description: Merge, PR, and cleanup. Load once the work is green and reviewed.
 
 ## The PR body states
 1. What changed and **why** — the defect or the need, not the diff.
-2. The evidence: the commands run and what they printed (see `07`).
+2. The evidence: the commands run and what they printed (see `verification-before-completion`).
 3. What is deliberately **not** done, and why.
 4. Anything needed after merge (a Railway variable, a migration, a rotation).
 
