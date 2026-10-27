@@ -91,7 +91,25 @@ jobs:
         # header it writes, so comparing a lock compiled to /tmp against one
         # committed as requirements.lock differed on line 2 every single time
         # and the check could never pass.
+        #
+        # SEEDING the output file matters just as much, and for the opposite
+        # reason. `uv pip compile` reads an existing output file and treats
+        # its pins as preferences; compiling to an EMPTY /tmp path instead
+        # resolves everything fresh, to whatever is newest on PyPI right now.
+        # That made this job fail on unrelated PRs the moment any transitive
+        # dependency published — openai 3.39.0 -> 3.40.0 and pypdf 6.21.2 ->
+        # 6.21.3, roughly 20 hours after the locks were committed, turned a
+        # docs-only PR red. A check that goes red for reasons the author
+        # cannot act on is a check people learn to override.
+        #
+        # Copying the committed lock in first asks the question we actually
+        # mean: "does this lock still satisfy pyproject.toml?" — not "is this
+        # lock what a fresh resolution would produce today?". Verified to
+        # still catch a real stale lock: adding a dependency and raising a
+        # version floor both fail it.
         run: |
+          cp requirements.lock /tmp/prod.lock
+          cp requirements-dev.lock /tmp/dev.lock
           uv pip compile pyproject.toml --extra postgres --extra llm --extra monitoring \
             --python-version 3.12 --no-header --quiet -o /tmp/prod.lock
           uv pip compile pyproject.toml --extra postgres --extra llm --extra monitoring \
