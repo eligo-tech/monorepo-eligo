@@ -16,7 +16,7 @@ set -uo pipefail
 # mode worth engineering against: rules that quietly don't apply.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT="${CLAUDE_PROJECT_DIR:-${HERE%/.claude/hooks}}"
-RULE="$ROOT/.agents/00-using-superpowers.md"
+RULE="$ROOT/.claude/skills/using-superpowers/SKILL.md"
 EMPTY='{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":""}}'
 
 if [ ! -r "$RULE" ]; then
@@ -32,9 +32,10 @@ except Exception:
     body = ""
 if body:
     body = (
-        "The following project rules were loaded automatically from "
-        ".agents/00-using-superpowers.md. They are binding for this "
-        "repository and take precedence over default working habits.\n\n"
+        "The following project rules were loaded automatically from the "
+        "using-superpowers skill. They are binding for this repository and "
+        "take precedence over default working habits. The eight skills they "
+        "dispatch to are invocable by name.\n\n"
     ) + body
 json.dump({"hookSpecificOutput": {
     "hookEventName": "SessionStart",

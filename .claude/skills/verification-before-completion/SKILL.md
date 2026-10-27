@@ -1,6 +1,7 @@
 ---
 name: verification-before-completion
-description: Evidence before reporting success. Load before saying done, fixed, or working.
+description: Require evidence before reporting success. Use before writing done, fixed, working, deployed or verified, and before any claim about production behaviour — a claim names the command it ran and what that command printed.
+tools: Read, Glob, Grep, Bash
 ---
 
 # Verification — a claim names its evidence

@@ -1,14 +1,18 @@
 ---
 name: using-superpowers
-description: Bootstrap. Which rule applies to the work in front of you, and the gates that are never skipped.
-loads: every session (via .claude/hooks/session-start.sh)
+description: Bootstrap for feature work in this repository: the dispatch table naming which rule applies, and the four gates that are never skipped. Loaded automatically at session start by .claude/hooks/session-start.sh; invoke it directly to re-read the rules after a long session or a compaction.
+tools: Read, Glob, Grep
 ---
 
 # Start here
 
-Nine rules, adapted from the Superpowers plugin (`docs/setup/3_agent_use_2.pdf`)
+Nine skills, adapted from the Superpowers plugin (`docs/setup/3_agent_use_2.pdf`)
 to the defects **this** repository has actually shipped. Each one names the
 incident that bought it, because a rule without a scar gets argued away.
+
+This file is injected at every session start. **The other eight are skills:
+invoke them by name** (`brainstorming`, `test-driven-development`, …) — either
+because the table below says to, or because the user asks for one.
 
 **The rules are not advice. They are entry conditions.** A feature that skips
 one is not "done faster", it is untested, unverified, or unreviewed.
@@ -17,14 +21,14 @@ one is not "done faster", it is untested, unverified, or unreviewed.
 
 | If the work is… | Load |
 |---|---|
-| a vague ask, no agreed shape yet | `01-brainstorming` |
-| an agreed shape, no task list yet | `02-writing-plans` |
-| about to touch files | `03-using-git-worktrees` |
-| new behaviour or a bug fix | `04-test-driven-development` |
-| something is broken and the cause is unclear | `05-systematic-debugging` |
-| code written, not yet reviewed | `06-requesting-code-review` |
-| about to say "done" / "working" / "fixed" | `07-verification-before-completion` |
-| green and reviewed | `08-finishing-a-development-branch` |
+| a vague ask, no agreed shape yet | `brainstorming` |
+| an agreed shape, no task list yet | `writing-plans` |
+| about to touch files | `using-git-worktrees` |
+| new behaviour or a bug fix | `test-driven-development` |
+| something is broken and the cause is unclear | `systematic-debugging` |
+| code written, not yet reviewed | `requesting-code-review` |
+| about to say "done" / "working" / "fixed" | `verification-before-completion` |
+| green and reviewed | `finishing-a-development-branch` |
 
 Domain rules are separate and still binding: `ARCHITECTURE.md`,
 `backend/CLAUDE.md` §2, and `.claude/skills/architecture-review`. This file
@@ -33,13 +37,13 @@ governs *how* you work; those govern *what is allowed to exist*.
 ## The four gates — never skipped, never "just this once"
 
 1. **Design before code.** No implementation until the user approves a shape.
-   (`01`)
+   (`brainstorming`)
 2. **A failing test before a fix.** The test must fail for the stated reason
-   against the unfixed code, and you must have *seen* it fail. (`04`)
+   against the unfixed code, and you must have *seen* it fail. (`test-driven-development`)
 3. **Evidence before "done".** A claim of success names the command and quotes
    its output. "Should work", "looks right", and a green suite that never
-   exercised the path are not evidence. (`07`)
-4. **Review before merge.** Against the plan, not against vibes. (`06`)
+   exercised the path are not evidence. (`verification-before-completion`)
+4. **Review before merge.** Against the plan, not against vibes. (`requesting-code-review`)
 
 ## The two failure modes this repo keeps hitting
 
@@ -47,12 +51,12 @@ governs *how* you work; those govern *what is allowed to exist*.
 different ways in one session — "unfiltered cross-tenant DELETE", then "inert
 dead code", then finally the truth — because `git ls-files` showed nothing and
 nobody ran `ls`. The directory was gitignored and held 46 real CVs.
-→ Before describing what code does, read it and run it. `05`.
+→ Before describing what code does, read it and run it. `systematic-debugging`.
 
 **A check that cannot fail.** `GET /register → 200` was reported as
 "registration is open" four times. GlitchTip is an SPA; every unknown path
 returns 200 with the shell. The check could not distinguish open from closed.
-→ Before trusting a check, make it fail on purpose. `07`.
+→ Before trusting a check, make it fail on purpose. `verification-before-completion`.
 
 ## Scope
 

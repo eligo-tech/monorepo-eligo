@@ -1,12 +1,13 @@
 ---
 name: writing-plans
-description: Decomposes an approved design into concrete, verifiable tasks.
+description: Decompose an approved design into independently verifiable tasks. Use after a design is approved and before implementation begins, especially when a change spans several files, needs a migration, or crosses backend and frontend.
+tools: Read, Glob, Grep, Bash
 ---
 
 # Writing plans — tasks that can be checked off honestly
 
 ## Entry conditions
-A design the user approved (`01-brainstorming` step 6).
+A design the user approved (`brainstorming` step 6).
 
 ## Procedure
 1. Decompose into tasks that are each **independently verifiable**. A task you

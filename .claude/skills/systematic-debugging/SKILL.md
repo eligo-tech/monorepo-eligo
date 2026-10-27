@@ -1,6 +1,7 @@
 ---
 name: systematic-debugging
-description: Find the root cause before proposing a fix. Load whenever something is broken.
+description: Reproduce and explain before fixing. Use whenever something is broken, a test fails unexpectedly, CI goes red, or a result is surprising — including when the measurement itself may be the thing that is wrong.
+tools: Read, Glob, Grep, Bash, Edit
 ---
 
 # Systematic debugging — reproduce, then explain, then fix
@@ -12,7 +13,7 @@ description: Find the root cause before proposing a fix. Load whenever something
 3. **Form one hypothesis** that explains *all* of the symptoms. A hypothesis
    explaining some of them is the wrong one.
 4. **Test the hypothesis cheaply** before building on it.
-5. Only then fix — via `04-test-driven-development`.
+5. Only then fix — via `test-driven-development`.
 6. Ask what **class** of bug this is, and whether siblings exist.
 
 ## Prohibited
