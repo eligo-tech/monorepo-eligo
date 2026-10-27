@@ -25,6 +25,13 @@ RUN apt-get update \
 # `--no-header` is not cosmetic: uv writes the --output-file path into the
 # header, so a lock compiled to a temporary file never compares equal to the
 # committed one. The CI "Dependency locks" job fails if either is stale.
+#
+# Those commands compile IN PLACE, so uv reads the existing lock and keeps the
+# pins that still satisfy pyproject.toml — editing a dependency moves only
+# what it has to. To deliberately take newer releases, add `--upgrade` (or
+# `--upgrade-package NAME` for one). Nothing upgrades on its own: CI checks
+# that the lock still satisfies pyproject.toml, not that it matches whatever
+# PyPI published this morning.
 COPY requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
 
