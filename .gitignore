@@ -53,3 +53,10 @@ client_secret*.json
 # they are exactly what must never reach a commit. Push protection does not
 # look for this: it scans for credentials, not for other people's data.
 manager_notes_*.json
+
+# Local-only working files: personal agent setup (Codex), implementation plans
+# and parked strategy notes. Kept on disk, never committed — like /data/.
+/AGENTS.md
+/.agents/skills/
+/docs/plans/
+/docs/process_design/future_work.md
