@@ -46,7 +46,13 @@ describe('landing page claims', () => {
 
   it('states independence in the hero', () => {
     expect(src).toMatch(/Bootstrapped/)
-    expect(src).toMatch(/Built in Germany/)
+    expect(src).toMatch(/Built in Europe/)
+    expect(src).toMatch(/Gebaut in Europa/)
+  })
+
+  // Positioning is European and global, not Germany-only.
+  it('does not narrow the pitch to Germany', () => {
+    expect(src).not.toMatch(/Built in Germany|Gebaut in Deutschland|German recruiting|deutschen Personal/)
   })
 
   it('labels illustrative workflows as not customer results', () => {
