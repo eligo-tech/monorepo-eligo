@@ -110,6 +110,32 @@ def check_authorized_party(claims: dict) -> None:
         )
 
 
+class OAuthTokenRefused(Exception):
+    """An OAuth access token was presented where only a session token belongs."""
+
+
+def _refuse_oauth_access_token(header: dict, claims: dict) -> None:
+    """The REST API takes browser SESSION tokens, never OAuth access tokens.
+
+    Clerk signs both with the same key and issuer, and an OAuth token carries
+    no `azp`, which `check_authorized_party` skips — so without this a token
+    issued to an AI client (MCP connector) was a full REST credential, past
+    its scopes and every gate the MCP path is built around. Found by the MCP
+    spike, 2026-10-29.
+
+    Two markers, either one is enough: the RFC 9068 header `typ: at+jwt`
+    (which the RFC also allows as `application/at+jwt`), and a `client_id`
+    claim — the header is metadata, the claim is what makes the token an
+    OAuth grant. A Clerk session token carries neither.
+    """
+    typ = str(header.get("typ", "")).lower().removeprefix("application/")
+    if typ == "at+jwt" or "client_id" in claims:
+        raise OAuthTokenRefused(
+            "OAuth access token presented to the REST API; it only accepts "
+            "browser session tokens"
+        )
+
+
 def verify_token(token: str) -> dict:
     """Verify a Clerk session JWT and return its claims. Raises on any failure."""
     signing_key = _jwks_client().get_signing_key_from_jwt(token)
@@ -120,6 +146,7 @@ def verify_token(token: str) -> dict:
         issuer=_issuer(),
         options={"verify_aud": False, "require": ["exp", "iss"]},
     )
+    _refuse_oauth_access_token(jwt.get_unverified_header(token), claims)
     check_authorized_party(claims)
     return claims
 
