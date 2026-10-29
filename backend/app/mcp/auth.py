@@ -28,13 +28,21 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+class _NoIssuer(Exception):
+    """No Clerk issuer configured. PyJWT skips the `iss` check for issuer=None,
+    so without one we cannot tell Clerk's tokens from anyone's: refuse all."""
+
+
 def _decode(token: str) -> dict:
+    issuer = auth._issuer()
+    if not issuer:
+        raise _NoIssuer
     key = auth._jwks_client().get_signing_key_from_jwt(token)
     return jwt.decode(
         token,
         key.key,
         algorithms=["RS256"],
-        issuer=auth._issuer(),
+        issuer=issuer,
         audience=settings.mcp_resource_url,
         options={"require": ["exp", "iss", "sub", "aud"]},
     )

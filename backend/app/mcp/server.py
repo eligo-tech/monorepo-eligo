@@ -53,6 +53,38 @@ REQUIRED_SCOPES = ["user:org:read"]
 
 limiter = Limiter()
 
+#: What `/.well-known/oauth-protected-resource/mcp` advertises. Read once, at
+#: import, because the SDK builds that route then; `assert_mcp_configured`
+#: refuses to boot production when it would be the placeholder.
+AUTH_ISSUER = auth._issuer() or "https://invalid.example"
+
+
+class MCPMisconfigured(RuntimeError):
+    """MCP is switched on but cannot work: say so at boot, not per request."""
+
+
+def assert_mcp_configured() -> None:
+    """With MCP on in a real deployment, refuse to start on a config that fails silently.
+
+    Each of these otherwise shows up only as "every login fails" on the
+    client: a localhost or plain-http resource URL (every token's `aud` is
+    the real URL, so all are refused, and the metadata points Claude at
+    localhost), or no Clerk issuer (metadata advertises a placeholder).
+    """
+    if not settings.mcp_enabled or not settings.is_postgres:
+        return
+    url = urlparse(settings.mcp_resource_url)
+    if url.scheme != "https" or url.hostname in {"localhost", "127.0.0.1", "::1"}:
+        raise MCPMisconfigured(
+            f"ELIGO_MCP_RESOURCE_URL must be the public https URL users add in Claude, "
+            f"not {settings.mcp_resource_url!r}"
+        )
+    if not auth._issuer():
+        raise MCPMisconfigured(
+            "MCP needs the Clerk issuer (ELIGO_CLERK_ISSUER or a publishable key)"
+        )
+
+
 INSTRUCTIONS = (
     "Eligo Labs recruiting CRM — read-only access to the user's workspace: "
     "running processes, candidates, mandates, matches, reports and public market "
@@ -90,7 +122,9 @@ async def _run(spec: ActionSpec, args: dict[str, Any]) -> dict:
         try:
             await features.ensure_enabled(db, tenant_id=tenant.id, key="mcp")
         except features.FeatureDisabled as exc:
-            raise ToolError(f"AI access is not enabled for this workspace: {exc}") from None
+            raise ToolError(
+                f"AI access is not enabled for this workspace. Eligo says: {exc}"
+            ) from None
 
         actor = auth.Actor(
             tenant_id=tenant.id,
@@ -114,16 +148,19 @@ def _tool_for(spec: ActionSpec):
     """A function whose signature IS the action's input model, for the SDK's schema."""
 
     async def call(**kwargs: Any) -> dict:
-        return await _run(spec, {k: v for k, v in kwargs.items() if v is not None})
+        # Every argument, defaults included: the registry validates them again.
+        return await _run(spec, kwargs)
 
     params = [
         inspect.Parameter(
             name,
             inspect.Parameter.KEYWORD_ONLY,
             default=inspect.Parameter.empty if field.is_required() else field.default,
-            annotation=Annotated[field.annotation, Field(description=field.description)]
-            if field.description
-            else field.annotation,
+            # Constraints (ge/le …) travel with the type so the schema Claude
+            # sees states the bounds the registry will enforce.
+            annotation=Annotated[
+                (field.annotation, *field.metadata, Field(description=field.description))
+            ],
         )
         for name, field in spec.input.model_fields.items()
     ]
@@ -133,11 +170,13 @@ def _tool_for(spec: ActionSpec):
 
 
 def _transport_security() -> TransportSecuritySettings:
-    host = urlparse(settings.mcp_resource_url).netloc
+    """Only the resource host. Claude's connectors call from Anthropic's servers,
+    not from a browser, so no browser origin needs to be allowed."""
+    url = urlparse(settings.mcp_resource_url)
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=[host, "localhost:*", "127.0.0.1:*"],
-        allowed_origins=[f"https://{host}", "http://localhost:*", "https://claude.ai"],
+        allowed_hosts=[url.netloc],
+        allowed_origins=[f"{url.scheme}://{url.netloc}"],
     )
 
 
@@ -147,7 +186,7 @@ def build() -> MCPServer:
         instructions=INSTRUCTIONS,
         token_verifier=ClerkOAuthVerifier(),
         auth=AuthSettings(
-            issuer_url=auth._issuer() or "https://invalid.example",
+            issuer_url=AUTH_ISSUER,
             resource_server_url=settings.mcp_resource_url,
             required_scopes=REQUIRED_SCOPES,
             # The verifier checks `aud` itself (ADR 0003 §3.2).
@@ -171,3 +210,22 @@ asgi_app = server.streamable_http_app(
     json_response=True,
     transport_security=_transport_security(),
 )
+
+#: The only paths the MCP app answers. Exact, not a prefix mount: a Mount("/")
+#: wins over a FastAPI route whose path matched but whose method did not, and
+#: turned the API's 405s, trailing-slash redirects and JSON 404s into
+#: plain-text 404s.
+MCP_PATHS = frozenset({"/mcp", "/mcp/", "/.well-known/oauth-protected-resource/mcp"})
+
+
+class MCPRoutes:
+    """ASGI middleware: send the MCP paths to the MCP app, everything else on."""
+
+    def __init__(self, app) -> None:  # noqa: ANN001 — any ASGI app
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
+        if scope["type"] == "http" and scope["path"] in MCP_PATHS:
+            await asgi_app(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)

@@ -50,7 +50,17 @@ the organization, since the workspace is derived from `org_id` (ADR 0002).
 4. **Admission is read, never granted.** The MCP path maps `org_id` → an
    already admitted workspace, and refuses otherwise — even with
    `ELIGO_AUTO_PROVISION_TENANTS` on.
-5. **Changes need a human in Eligo.** AI clients get read actions first; later,
+   Admission, the `mcp` feature gate and the rate limit refuse with an MCP
+   **tool error** (HTTP 200, `isError`) carrying the reason, not HTTP 403/429:
+   a client shows the tool error's text to the user, while a bare 403 reads as
+   "connector broken". Authentication failures stay HTTP 401, missing scope 403.
+5. **Exact audience.** `aud` must equal `ELIGO_MCP_RESOURCE_URL` character for
+   character (PyJWT; the SDK's own resource check is off). A connector added as
+   `…/mcp/` is refused — add exactly the URL the docs give.
+6. **Which clients.** Any OAuth application in our Clerk instance is accepted;
+   with dynamic registration off, that is only the applications we created.
+   The receipt records `client_id`, so each read is attributable to one.
+7. **Changes need a human in Eligo.** AI clients get read actions first; later,
    *propose* actions that create a pending change a human confirms in the Eligo
    UI. A confirmation inside the AI client does not count: the server cannot
    tell a human's click from the model's call.

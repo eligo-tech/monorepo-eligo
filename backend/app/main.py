@@ -39,6 +39,8 @@ async def lifespan(app: FastAPI):
         logger.info("tables ensured (%s)", settings.safe_database_url)
     # Verify the runtime connection actually enforces RLS (fail-closed isolation).
     await assert_runtime_rls_enforced()
+    # MCP switched on with a config that would fail every login: refuse now.
+    mcp_server.assert_mcp_configured()
     logger.info("%s started in %s mode", settings.app_name, settings.env)
     # A mounted app's lifespan is not run by FastAPI; the MCP session manager
     # needs its task group, so it runs here, around the whole app.
@@ -82,7 +84,6 @@ async def root() -> dict[str, str]:
     }
 
 
-# `/mcp` and `/.well-known/oauth-protected-resource/mcp` (ADR 0003). Mounted at
-# the root because the metadata path is fixed by RFC 9728, and LAST, so every
-# FastAPI route above wins and the MCP app only sees what they do not match.
-app.mount("/", mcp_server.asgi_app)
+# `/mcp` and `/.well-known/oauth-protected-resource/mcp` (ADR 0003), dispatched
+# by exact path before anything else — see `MCPRoutes` for why not a mount.
+app.add_middleware(mcp_server.MCPRoutes)

@@ -1,7 +1,7 @@
 """Registry core: `Effect`, `@action`, `ActionContext`, `invoke`.
 
 The rule this file enforces: **an AI client (an agent actor) may only read.**
-Proposing a change comes later and still ends at a human (ADR 0003 §3.5);
+Proposing a change comes later and still ends at a human (ADR 0003 §3.7);
 committing and anything that leaves the system are never an agent's.
 The MCP server is generated from `agent_exposed()`, so what is refused here
 cannot be reached from Claude at all.

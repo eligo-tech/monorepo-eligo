@@ -254,3 +254,105 @@ async def test_calls_past_the_per_user_limit_are_refused(monkeypatch) -> None:
     assert third["isError"] is True and "limit" in _text(third).lower()
     # Another person in the same workspace is not affected.
     assert (await _call("reporting_funnel", token=_token(sub="user_2"))).get("isError") is not True
+
+
+# --- review fixes: the rest of the app is untouched, and misconfig is loud ----
+
+
+async def test_the_rest_api_keeps_its_own_405_redirect_and_json_404() -> None:
+    # A catch-all mount once turned these into plain-text 404s for the whole API.
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as client:
+        assert (await client.delete("/api/v1/health")).status_code == 405
+        redirect = await client.get("/api/v1/health/")
+        assert redirect.status_code == 307
+        missing = await client.get("/nope")
+        assert missing.status_code == 404 and missing.json() == {"detail": "Not Found"}
+
+
+async def test_the_metadata_names_the_issuer_the_server_was_built_with() -> None:
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as client:
+        meta = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
+    assert [s.rstrip("/") for s in meta["authorization_servers"]] == [mcp.AUTH_ISSUER.rstrip("/")]
+
+
+async def test_a_token_from_another_issuer_or_key_is_401(monkeypatch) -> None:
+    assert (await _rpc("tools/list", token=_token(iss="https://evil.example"))).status_code == 401
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = int(time.time())
+    forged = jwt.encode(
+        {
+            "iss": ISSUER,
+            "sub": "user_1",
+            "org_id": ORG,
+            "aud": RESOURCE,
+            "exp": now + 300,
+            "client_id": "x",
+            "scope": "user:org:read",
+        },
+        other_key,
+        algorithm="RS256",
+        headers={"typ": "at+jwt"},
+    )
+    assert (await _rpc("tools/list", token=forged)).status_code == 401
+
+
+async def test_with_no_known_issuer_every_token_is_refused(monkeypatch) -> None:
+    # PyJWT skips the issuer check when given issuer=None; we must not.
+    monkeypatch.setattr(auth, "_issuer", lambda: None)
+    assert (await _rpc("tools/list", token=_token())).status_code == 401
+
+
+async def test_a_token_without_the_org_scope_is_403() -> None:
+    assert (await _rpc("tools/list", token=_token(scope="openid"))).status_code == 403
+
+
+async def test_malformed_and_out_of_range_input_are_tool_errors() -> None:
+    await _admit()
+    assert (await _call("candidates_get", {"candidate_id": "not-a-uuid"}))["isError"] is True
+    assert (await _call("candidates_list", {"limit": 1000}))["isError"] is True
+
+
+async def test_the_input_schema_carries_the_bounds() -> None:
+    response = await _rpc("tools/list", token=_token())
+    tools = {t["name"]: t for t in response.json()["result"]["tools"]}
+    limit = tools["candidates_list"]["inputSchema"]["properties"]["limit"]
+    assert limit.get("maximum") == 100 and limit.get("minimum") == 1
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"mcp_resource_url": "http://localhost:8000/mcp"},
+        {"mcp_resource_url": "http://api.example/mcp"},
+    ],
+)
+def test_production_refuses_to_start_with_a_local_or_plain_http_resource(
+    monkeypatch, overrides
+) -> None:
+    monkeypatch.setattr(type(settings), "is_postgres", property(lambda self: True))
+    for key, value in overrides.items():
+        monkeypatch.setattr(settings, key, value)
+    with pytest.raises(mcp.MCPMisconfigured):
+        mcp.assert_mcp_configured()
+
+
+def test_production_refuses_to_start_without_an_issuer(monkeypatch) -> None:
+    monkeypatch.setattr(type(settings), "is_postgres", property(lambda self: True))
+    monkeypatch.setattr(settings, "mcp_resource_url", "https://api.example/mcp")
+    monkeypatch.setattr(auth, "_issuer", lambda: None)
+    with pytest.raises(mcp.MCPMisconfigured):
+        mcp.assert_mcp_configured()
+
+
+def test_control_a_sound_production_config_starts(monkeypatch) -> None:
+    monkeypatch.setattr(type(settings), "is_postgres", property(lambda self: True))
+    monkeypatch.setattr(settings, "mcp_resource_url", "https://api.example/mcp")
+    mcp.assert_mcp_configured()
+    # And switched off, nothing is checked: a deploy without MCP is unaffected.
+    monkeypatch.setattr(settings, "mcp_enabled", False)
+    monkeypatch.setattr(auth, "_issuer", lambda: None)
+    mcp.assert_mcp_configured()
