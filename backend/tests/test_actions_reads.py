@@ -20,9 +20,11 @@ from app.actions.core import REGISTRY, ActionContext, ActionNotFound
 from app.core.auth import RECRUITER, Actor
 from app.core.database import SessionLocal
 from app.domain.candidates.models import Candidate
+from app.domain.common.enums import ReceiptAction
 from app.domain.hub.models import HubCompany, HubJobPosting
 from app.domain.jobs.models import Job
 from app.domain.pipeline.models import Application
+from app.domain.verification import service as verification
 
 SECRETS = {
     "email": "anna.marker@secret.example",
@@ -97,6 +99,21 @@ async def seeded() -> dict:
                 last_seen_at=now,
             )
         )
+        # A real change history, shaped as `verify_and_commit` writes it: the
+        # WRITE summary names the value ("write email='…'"). Without this the
+        # leak test could not see what the provenance list carries.
+        for field in ("email", "phone", "salary"):
+            await verification.append_receipt(
+                s,
+                tenant_id=a,
+                agent="recruiter",
+                action=ReceiptAction.WRITE,
+                subject_type="candidate",
+                subject_id=str(anna.id),
+                verified=True,
+                summary=f"write {field}={SECRETS[field]!r}",
+                payload={"field": field, "source": "recruiter"},
+            )
         await s.commit()
         return {
             "a": a,
@@ -189,3 +206,10 @@ async def test_pipeline_shows_the_process(seeded) -> None:
     [process] = out["processes"]
     assert process["job_title"] == "Senior Data Engineer"
     assert [c["candidate_name"] for c in process["candidates"]] == ["Anna Schmidt"]
+    # The receipt must be able to answer "which AI reads touched Anna?"
+    assert {"type": "candidate", "id": str(seeded["anna"]), "url": None} in out["sources"]
+
+
+async def test_provenance_names_the_field_not_the_value(seeded) -> None:
+    out = await _call("candidates.get", seeded["a"], {"candidate_id": str(seeded["anna"])})
+    assert {p["field"] for p in out["provenance"]} == {"email", "phone", "salary"}

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import enum
 import types
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,6 +20,8 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import ADMIN, RECRUITER, Actor
+from app.core.context import ActorRef, current_actor_var
+from app.core.database import current_tenant_var
 from app.domain.common.enums import ReceiptAction
 
 
@@ -169,8 +172,6 @@ class Registry:
         if AGENT_EFFECTS & {Effect.COMMIT, Effect.EXTERNAL}:
             raise CatalogViolation("an agent may never commit or reach outside")
         for spec in self.all():
-            if spec.agent_exposed and spec.effect is Effect.EXTERNAL:
-                raise CatalogViolation(f"{spec.name}: external action exposed to agents")
             hit = _wraps_ingestion(spec.handler)
             if hit:
                 raise CatalogViolation(
@@ -193,11 +194,47 @@ class Registry:
         try:
             parsed = spec.input.model_validate(args)
         except ValidationError as exc:
-            raise ActionInputInvalid(f"{name}: {exc}") from exc
-        out = await spec.handler(ctx, parsed)
-        if ctx.actor.kind != "human":
-            await _receipt_agent_read(ctx, spec, parsed, out)
-        return out
+            # Location and reason only: pydantic's own text echoes the input,
+            # which may be a person's details, into logs and crash reports.
+            problems = "; ".join(
+                f"{'.'.join(map(str, e['loc'])) or 'input'}: {e['msg']}"
+                for e in exc.errors(include_input=False, include_url=False)
+            )
+            raise ActionInputInvalid(f"{name}: {problems}") from None
+        # Pin the workspace and the person for everything below: RLS re-reads
+        # `current_tenant_var` at the start of every transaction (the handler's
+        # commit and the receipt's open new ones), and receipts written deeper
+        # down read `current_actor_var`. So no caller can get this wrong.
+        tenant_token = current_tenant_var.set(str(ctx.actor.tenant_id))
+        actor_token = current_actor_var.set(
+            ActorRef(user_id=ctx.actor.user_id, name=ctx.actor.name)
+        )
+        try:
+            out = await spec.handler(ctx, parsed)
+            if ctx.actor.kind != "human":
+                await _receipt_agent_read(ctx, spec, parsed, out)
+            return out
+        finally:
+            current_actor_var.reset(actor_token)
+            current_tenant_var.reset(tenant_token)
+
+
+def _receipt_args(args: BaseModel) -> dict[str, Any]:
+    """The arguments as the ledger may keep them: names always, values only if not free text.
+
+    Receipts cannot be erased (GDPR Art. 17) and an AI client will search for a
+    person by name, so a free-text value is recorded as "given", never as
+    itself. Ids, numbers and booleans are references, not personal data.
+    """
+    kept: dict[str, Any] = {}
+    for key, value in args.model_dump(mode="python").items():
+        if value is None:
+            continue
+        if isinstance(value, (bool, int, float, uuid.UUID)):
+            kept[key] = str(value) if isinstance(value, uuid.UUID) else value
+        else:
+            kept[key] = "(given)"
+    return kept
 
 
 async def _receipt_agent_read(
@@ -221,7 +258,7 @@ async def _receipt_agent_read(
         payload={
             "tool": spec.name,
             "client_id": ctx.actor.client_id,
-            "args": args.model_dump(mode="json"),
+            "args": _receipt_args(args),
             "returned_count": len(returned),
             "returned": returned[:_RECEIPT_MAX_IDS],
         },

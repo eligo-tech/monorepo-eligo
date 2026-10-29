@@ -52,6 +52,8 @@ async def processes(ctx: ActionContext, args: NoArgs) -> ProcessList:
                 )
             )
             sources.append(Source(type="process", id=str(c["application_id"])))
+            # Named per person, so the receipt answers "which AI reads touched me?"
+            sources.append(Source(type="candidate", id=str(c["candidate_id"])))
         out.append(
             ProcessOut(
                 job_id=g["job_id"],

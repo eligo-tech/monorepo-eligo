@@ -32,9 +32,9 @@ async def for_job(ctx: ActionContext, args: ForJobArgs) -> MatchList:
         raise ActionNotFound(f"job {args.job_id}")
     criteria = matching.active_criteria(job)
     # Only those that PASSED the hard filters — never include_rejected.
-    results = (await matching.match_job(ctx.session, job_id=job.id, tenant_id=tenant_id))[
-        : args.limit
-    ]
+    results = (
+        await matching.match_job(ctx.session, job_id=job.id, tenant_id=tenant_id, record=False)
+    )[: args.limit]
     out: list[MatchOut] = []
     for r in results:
         person = await candidates.get_candidate(

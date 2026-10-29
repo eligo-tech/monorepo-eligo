@@ -41,16 +41,13 @@ def test_the_real_catalog_passes_its_guards() -> None:
     REGISTRY.check()
 
 
-def test_an_external_action_is_never_exposed_to_an_agent() -> None:
-    assert all(s.effect is not Effect.EXTERNAL for s in REGISTRY.agent_exposed())
-    reg = core.Registry()
-
-    @reg.action("bad.send", effect=Effect.EXTERNAL, description="x", input=_Args)
-    async def _send(ctx, args):
-        return None
-
-    # Registered fine (a human-only external action is allowed to exist) …
-    assert "bad.send" not in {s.name for s in reg.agent_exposed()}
+def test_widening_agent_effects_to_external_or_commit_is_refused(monkeypatch) -> None:
+    # The one switch that would expose sends or writes to Claude. Flip it and
+    # the catalog must refuse to load.
+    for bad in (Effect.EXTERNAL, Effect.COMMIT):
+        monkeypatch.setattr(core, "AGENT_EFFECTS", frozenset({Effect.READ, bad}))
+        with pytest.raises(core.CatalogViolation):
+            REGISTRY.check()
 
 
 async def _calls_ingest(ctx, args):
@@ -160,3 +157,75 @@ async def test_a_real_action_called_by_an_agent_is_receipted() -> None:
         )
     [receipt] = await _receipts(tenant)
     assert receipt.subject_id == "candidates.list"
+
+
+async def test_matching_for_job_leaves_exactly_one_receipt() -> None:
+    from app.domain.jobs.models import Job
+
+    tenant = uuid.uuid4()
+    async with SessionLocal() as s:
+        job = Job(tenant_id=tenant, title="Mandate")
+        s.add(job)
+        await s.commit()
+        await REGISTRY.invoke(
+            "matching.for_job",
+            ActionContext(session=s, actor=_actor(tenant, "agent")),
+            {"job_id": str(job.id)},
+        )
+    [receipt] = await _receipts(tenant)
+    assert receipt.action == ReceiptAction.READ
+
+
+async def test_free_text_arguments_never_enter_the_ledger() -> None:
+    # Receipts cannot be erased (GDPR Art. 17), and an AI client will search
+    # for a person by name. Names of arguments are kept; free-text values not.
+    tenant = uuid.uuid4()
+    async with SessionLocal() as s:
+        await REGISTRY.invoke(
+            "candidates.list",
+            ActionContext(session=s, actor=_actor(tenant, "agent")),
+            {"skill": "Anna Schmidt", "city": "Geheimdorf"},
+        )
+    [receipt] = await _receipts(tenant)
+    text = str(receipt.payload) + receipt.summary
+    assert "Anna Schmidt" not in text and "Geheimdorf" not in text
+    assert set(receipt.payload["args"]) >= {"skill", "city"}
+
+
+async def test_invoke_pins_the_actors_workspace(reg) -> None:
+    from app.core.database import current_tenant_var
+
+    seen = {}
+
+    @reg.action("t.where", effect=Effect.READ, description="x", input=_Args)
+    async def _where(ctx, args):
+        seen["tenant"] = current_tenant_var.get()
+        return _Result(sources=[Source(type="workspace", id="w")])
+
+    tenant = uuid.uuid4()
+    token = current_tenant_var.set(None)
+    try:
+        async with SessionLocal() as s:
+            await reg.invoke("t.where", ActionContext(session=s, actor=_actor(tenant, "agent")), {})
+        assert seen["tenant"] == str(tenant)
+        assert current_tenant_var.get() is None  # restored afterwards
+    finally:
+        current_tenant_var.reset(token)
+
+
+async def test_invalid_input_is_not_echoed_in_the_error(reg) -> None:
+    class _Strict(BaseModel):
+        limit: int
+
+    @reg.action("t.strict", effect=Effect.READ, description="x", input=_Strict)
+    async def _strict(ctx, args):
+        return _Result(sources=[Source(type="workspace", id="w")])
+
+    async with SessionLocal() as s:
+        with pytest.raises(core.ActionInputInvalid) as raised:
+            await reg.invoke(
+                "t.strict",
+                ActionContext(session=s, actor=_actor(uuid.uuid4(), "agent")),
+                {"limit": "anna.marker@secret.example"},
+            )
+    assert "anna.marker" not in str(raised.value)

@@ -55,10 +55,15 @@ class CandidateSummary(BaseModel):
 
 
 class ProvenanceEntry(BaseModel):
+    """Which field changed, when, by whom, from what source — never the value.
+
+    The ledger's WRITE summary reads "write email='…'", so carrying it would
+    send the very contact data the rest of this file keeps out.
+    """
+
     at: dt.datetime | None = None
     actor: str | None = None
     field: str | None = None
-    summary: str | None = None
     source: str | None = None
 
 
