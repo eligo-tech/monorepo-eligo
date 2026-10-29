@@ -101,6 +101,17 @@ class Settings(BaseSettings):
     interviewer_enabled: bool = False
     interviewer_allowed_tenants: str = ""
 
+    # --- MCP server (AI clients such as Claude read the workspace) -------
+    # Same three gates as above: operator switch, allowlist, admin consent
+    # (feature "mcp" in `domain/features`). See ADR 0003.
+    mcp_enabled: bool = False
+    mcp_allowed_tenants: str = ""
+    #: The exact URL users add in Claude. Tokens must carry it as `aud`;
+    #: a token minted for any other URL is refused (ADR 0003 §3.2).
+    mcp_resource_url: str = "http://localhost:8000/mcp"
+    #: Tool calls per user per minute. In-process: correct for one instance.
+    mcp_rate_limit_per_minute: int = 60
+
     # --- Information hub (public-source ingestion) -----------------------
     # Identify the crawler honestly: Nominatim and most public APIs require a
     # real User-Agent with a contact route, and it is what makes a rate-limit

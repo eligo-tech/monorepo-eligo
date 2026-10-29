@@ -76,7 +76,31 @@ als Hochrisiko-System (Anhang III). Als Betreiber tragen Sie Pflichten zur
 menschlichen Aufsicht und Information der Kandidaten.
 """
 
+MCP_TERMS = """\
+KI-Zugriff (MCP) — Bedingungen für Ihren Workspace
+
+Mit der Aktivierung bestätigen Sie als Administrator:
+1. Mitglieder Ihres Workspace können ihre Daten aus einem KI-Assistenten
+   (z. B. Claude) abfragen. Die abgefragten Daten — Namen, Profile,
+   Prozesse — gehen dabei an den Anbieter dieses Assistenten.
+2. Mit diesem Anbieter haben Sie einen Auftragsverarbeitungsvertrag
+   (Art. 28 DSGVO) bzw. nutzen ihn nur im Rahmen eines solchen.
+3. Der Zugriff ist nur lesend. Kontaktdaten, Gehälter, Notizen und
+   Lebenslauf-Texte werden nicht übermittelt.
+4. Jede Abfrage wird im Prüfprotokoll Ihres Workspace festgehalten:
+   wer, wann, mit welchem Assistenten, welche Datensätze.
+5. Sie können den Zugriff jederzeit wieder deaktivieren; er endet sofort.
+"""
+
 FEATURES: dict[str, FeatureDef] = {
+    "mcp": FeatureDef(
+        key="mcp",
+        label="KI-Zugriff (MCP)",
+        terms_version="2026-10-29",
+        terms=MCP_TERMS,
+        switch=lambda: settings.mcp_enabled,
+        allowlist=lambda: settings.mcp_allowed_tenants,
+    ),
     "interviewer": FeatureDef(
         key="interviewer",
         label="KI-Interview-Assistent",
