@@ -31,13 +31,48 @@ async def list_candidates(
     return list(result.scalars().all())
 
 
+async def filter_candidates(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    skill: str | None = None,
+    city: str | None = None,
+    available_within_weeks: int | None = None,
+    limit: int = 50,
+) -> tuple[list[Candidate], int]:
+    """Candidates matching every filter given, and how many matched in total.
+
+    Filters run over the WHOLE pool before the limit — filtering a capped page
+    answers "the Berlin ones among the first hundred" (the ELI-7 mistake).
+    In Python, because `skills` is a JSON list and a portable JSON-contains
+    does not exist across SQLite and Postgres; a workspace pool is thousands
+    of rows, not millions. An unknown availability never passes that filter.
+    """
+    rows = (
+        await session.execute(
+            select(Candidate).where(Candidate.tenant_id == tenant_id).order_by(Candidate.full_name)
+        )
+    ).scalars()
+    want_skill = skill.strip().lower() if skill else None
+    want_city = city.strip().lower() if city else None
+    hits = [
+        c
+        for c in rows
+        if (not want_skill or want_skill in {str(s).strip().lower() for s in c.skills or []})
+        and (not want_city or want_city in {(c.city or "").lower(), (c.location or "").lower()})
+        and (
+            available_within_weeks is None
+            or (c.availability_weeks is not None and c.availability_weeks <= available_within_weeks)
+        )
+    ]
+    return hits[:limit], len(hits)
+
+
 async def count_candidates(session: AsyncSession, *, tenant_id: uuid.UUID) -> int:
     """How many the tenant has, independent of any page."""
     return int(
         await session.scalar(
-            select(func.count())
-            .select_from(Candidate)
-            .where(Candidate.tenant_id == tenant_id)
+            select(func.count()).select_from(Candidate).where(Candidate.tenant_id == tenant_id)
         )
         or 0
     )
@@ -55,9 +90,7 @@ async def get_candidate(
     return result.scalar_one_or_none()
 
 
-async def create_candidate(
-    session: AsyncSession, *, data: CandidateCreate
-) -> Candidate:
+async def create_candidate(session: AsyncSession, *, data: CandidateCreate) -> Candidate:
     """Write a new candidate from the whole payload.
 
     Built from `model_dump` rather than a hand-written field list. The list
@@ -81,9 +114,7 @@ async def create_candidate(
 
 
 # Columns declared NOT NULL — a manual edit must not blank these out.
-_NON_NULLABLE = frozenset(
-    {"full_name", "salary_currency", "work_permit", "focus_areas", "skills"}
-)
+_NON_NULLABLE = frozenset({"full_name", "salary_currency", "work_permit", "focus_areas", "skills"})
 
 # The fields both scores are measured over. One list, so "70% vollständig"
 # and "40% verifiziert" are shares of the same thing and can be compared.
@@ -162,9 +193,7 @@ async def verified_share(
             EnrichmentRecord.committed.is_(True),
         )
     )
-    evidenced = {
-        field for field, source in rows if field in _KEY_FIELDS and is_evidence(source)
-    }
+    evidenced = {field for field, source in rows if field in _KEY_FIELDS and is_evidence(source)}
     return round(len(evidenced) / len(_KEY_FIELDS), 4)
 
 
@@ -195,8 +224,7 @@ class ConcurrentEdit(Exception):
     def __init__(self, fields: list[str]) -> None:
         self.fields = fields
         super().__init__(
-            "changed by someone else since this record was opened: "
-            + ", ".join(fields)
+            "changed by someone else since this record was opened: " + ", ".join(fields)
         )
 
 
@@ -232,10 +260,7 @@ async def _fields_changed_since(
     # right on its own; normalising here keeps the two dialects answering the
     # same question. A naive value is taken as UTC, which is what every
     # timestamp this codebase stores already is (see `pipeline.as_utc`).
-    since = (
-        since.astimezone(dt.UTC) if since.tzinfo is not None
-        else since.replace(tzinfo=dt.UTC)
-    )
+    since = since.astimezone(dt.UTC) if since.tzinfo is not None else since.replace(tzinfo=dt.UTC)
     rows = await session.execute(
         select(EnrichmentRecord.field)
         .where(
@@ -273,14 +298,12 @@ async def update_candidate(
     `_fields_changed_since`. A patch that leaves that baseline unset is
     written unconditionally, which is what every non-cockpit caller does.
     """
-    candidate = await get_candidate(
-        session, tenant_id=tenant_id, candidate_id=candidate_id
-    )
+    candidate = await get_candidate(session, tenant_id=tenant_id, candidate_id=candidate_id)
     if candidate is None:
         return None
 
-    detail = f"manual edit via recruiter UI ({editor})" if editor else (
-        "manual edit via recruiter UI"
+    detail = (
+        f"manual edit via recruiter UI ({editor})" if editor else ("manual edit via recruiter UI")
     )
     changes = patch.model_dump(exclude_unset=True, mode="json")
     # Control, not content: it names the version this edit was composed
@@ -377,9 +400,7 @@ def _norm_company(name: str) -> str:
     return " ".join(cleaned.split())
 
 
-async def competing_employers(
-    session: AsyncSession, *, tenant_id: uuid.UUID
-) -> list[dict]:
+async def competing_employers(session: AsyncSession, *, tenant_id: uuid.UUID) -> list[dict]:
     """Who else is interviewing this tenant's candidates — a sales signal.
 
     `data/examples/metadata_quailfication.txt` asks where a candidate's other

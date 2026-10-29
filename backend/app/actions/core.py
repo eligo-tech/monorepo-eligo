@@ -49,6 +49,14 @@ class ActionInputInvalid(ValueError):
     """The arguments do not match the action's input model."""
 
 
+class ActionNotFound(LookupError):
+    """The record does not exist in the caller's workspace.
+
+    Deliberately the same answer for "never existed" and "belongs to another
+    workspace": telling the two apart would confirm that a foreign id is real.
+    """
+
+
 @dataclass(frozen=True)
 class ActionContext:
     """Who is calling, and the session their workspace is pinned on."""
