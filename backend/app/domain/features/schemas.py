@@ -20,6 +20,8 @@ class FeatureStatus(BaseModel):
     terms: str
     accepted_by: str | None = None
     accepted_at: dt.datetime | None = None
+    #: The address to paste into an AI client, for a feature that has one.
+    connect_url: str | None = None
 
 
 class FeatureConsentWrite(BaseModel):

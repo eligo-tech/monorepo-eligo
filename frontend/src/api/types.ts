@@ -939,6 +939,25 @@ export interface MeDTO {
   role_known: boolean
 }
 
+/** A gated feature as `GET /features` reports it (backend `domain/features`). */
+export interface FeatureStatusDTO {
+  key: string
+  /** German, from the server; rendered through `t()`. */
+  label: string
+  /** The operator released it for this workspace. */
+  available: boolean
+  /** Available AND an admin accepted the current terms. */
+  enabled: boolean
+  reason: string | null
+  terms_version: string
+  /** The binding German text the admin accepts. */
+  terms: string
+  accepted_by: string | null
+  accepted_at: string | null
+  /** For a feature reached from outside Eligo: the exact address to connect to. */
+  connect_url: string | null
+}
+
 /** One line of a record's change history, from the receipt ledger. */
 export interface HistoryEntryDTO {
   at: string

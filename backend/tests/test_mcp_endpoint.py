@@ -197,6 +197,8 @@ async def test_without_admin_consent_the_call_is_refused() -> None:
     result = await _call("pipeline_processes")
     assert result["isError"] is True
     assert "zustimmen" in _text(result)
+    # …and says where: a new user cannot guess there is a settings section.
+    assert "Einstellungen → KI-Funktionen" in _text(result)
 
 
 async def test_the_operator_switch_closes_it_for_everyone(monkeypatch) -> None:
@@ -356,3 +358,15 @@ def test_control_a_sound_production_config_starts(monkeypatch) -> None:
     monkeypatch.setattr(settings, "mcp_enabled", False)
     monkeypatch.setattr(auth, "_issuer", lambda: None)
     mcp.assert_mcp_configured()
+
+
+async def test_the_settings_screen_gets_the_exact_connect_address() -> None:
+    """The settings screen shows the address to paste into Claude. It must be
+    the one `aud` is checked against (ADR 0003 §3.5), so it comes from the
+    server, never rebuilt in the browser — a trailing slash would be refused."""
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        rows = {f["key"]: f for f in (await client.get("/api/v1/features")).json()}
+    assert rows["mcp"]["connect_url"] == settings.mcp_resource_url
+    assert rows["interviewer"]["connect_url"] is None

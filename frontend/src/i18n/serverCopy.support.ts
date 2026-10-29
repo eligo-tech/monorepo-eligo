@@ -44,6 +44,8 @@ export function serverCopy(): ServerString[] {
   // ELI-15: the KPI definitions live in Python because the backend decides
   // what is countable. Their labels reach `t()` as `t(kpi.label)`.
   const kpiDefs = read(backend('app', 'domain', 'activity', 'kpis.py'))
+  // Feature names and why a feature is off, on the settings screen.
+  const features = read(backend('app', 'domain', 'features', 'service.py'))
 
   const out: ServerString[] = []
   const push = (source: string, values: string[]) => {
@@ -60,6 +62,8 @@ export function serverCopy(): ServerString[] {
   push('kpis.py label', all(kpiDefs, /^\s*label="([^"]+)"/gm))
   push('kpis.py source', all(kpiDefs, /^\s*source="([^"]+)"/gm))
   push('kpis.py reason', all(kpiDefs, /^\s*unavailable_because="([^"]+)"/gm))
+  push('features label', all(features, /^\s*label="([^"]+)"/gm))
+  push('features reason', all(features, /^\s*reason="([^"]+)"/gm))
   return out
 }
 

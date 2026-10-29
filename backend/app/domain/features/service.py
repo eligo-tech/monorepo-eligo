@@ -51,6 +51,8 @@ class FeatureDef:
     terms: str
     switch: Callable[[], bool]
     allowlist: Callable[[], str]
+    #: Where a client connects, for a feature reached from outside Eligo.
+    connect_url: Callable[[], str | None] = lambda: None
 
 
 INTERVIEWER_TERMS = """\
@@ -100,6 +102,8 @@ FEATURES: dict[str, FeatureDef] = {
         terms=MCP_TERMS,
         switch=lambda: settings.mcp_enabled,
         allowlist=lambda: settings.mcp_allowed_tenants,
+        # The exact address `aud` is checked against (ADR 0003 §3.5).
+        connect_url=lambda: settings.mcp_resource_url,
     ),
     "interviewer": FeatureDef(
         key="interviewer",
@@ -152,6 +156,7 @@ async def status(
         "label": defn.label,
         "terms_version": defn.terms_version,
         "terms": defn.terms,
+        "connect_url": defn.connect_url(),
     }
     if not defn.switch():
         return FeatureStatus(

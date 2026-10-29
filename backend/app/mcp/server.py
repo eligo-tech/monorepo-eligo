@@ -123,7 +123,9 @@ async def _run(spec: ActionSpec, args: dict[str, Any]) -> dict:
             await features.ensure_enabled(db, tenant_id=tenant.id, key="mcp")
         except features.FeatureDisabled as exc:
             raise ToolError(
-                f"AI access is not enabled for this workspace. Eligo says: {exc}"
+                f"AI access is not enabled for this workspace. Eligo says: {exc} "
+                "A workspace admin switches it on in Eligo under "
+                "Einstellungen → KI-Funktionen."
             ) from None
 
         actor = auth.Actor(

@@ -30,6 +30,8 @@ describe('copy the backend sends', () => {
     expect(kinds).toContain('spec.py field label')
     expect(kinds).toContain('connector label')
     expect(kinds).toContain('connector hint')
+    expect(kinds).toContain('features label')
+    expect(kinds).toContain('features reason')
     expect(copy.length).toBeGreaterThan(40)
   })
 

@@ -41,6 +41,7 @@ import type {
   ImportPreviewDTO,
   ImportResultDTO,
   MeDTO,
+  FeatureStatusDTO,
   NoticeCapabilityDTO,
   SourceCapabilitiesDTO,
   TenantSourceDTO,
@@ -699,6 +700,18 @@ export const api = {
     }),
 
   // ── This workspace's own data sources ──
+  // ── Gated features (AI access, interview assistant) ──
+  features: () => request<FeatureStatusDTO[]>('/features'),
+  /** Accept the terms the admin was SHOWN: the server refuses (409) if the
+   *  version changed in the meantime. */
+  acceptFeature: (key: string, termsVersion: string) =>
+    request<FeatureStatusDTO>(`/features/${key}/consent`, {
+      method: 'POST',
+      body: JSON.stringify({ terms_version: termsVersion }),
+    }),
+  revokeFeature: (key: string) =>
+    request<FeatureStatusDTO>(`/features/${key}/consent`, { method: 'DELETE' }),
+
   tenantSources: () => request<TenantSourceDTO[]>('/tenant-sources'),
   sourceCapabilities: () =>
     request<SourceCapabilitiesDTO>('/tenant-sources/capabilities'),
