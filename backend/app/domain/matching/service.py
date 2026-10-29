@@ -251,12 +251,18 @@ async def match_job(
     tenant_id: uuid.UUID,
     include_rejected: bool = False,
     persist: bool = False,
+    record: bool = True,
 ) -> list[MatchResult]:
     """Match the tenant's candidate pool against one job, ranked best-first.
 
     Records an ``ASSERT`` receipt for the matching run (agents/services that
-    surface candidates leave a trace in the append-only ledger).
+    surface candidates leave a trace in the append-only ledger) and commits.
+    ``record=False`` skips both, for a caller that writes its own receipt in
+    the same transaction — the action registry's READ receipt for an AI client.
     """
+    if persist and not record:
+        # Persisting needs the commit that `record=False` skips.
+        raise ValueError("persist=True requires record=True")
     job = (
         await session.execute(
             select(Job).where(Job.tenant_id == tenant_id, Job.id == job_id)
@@ -298,6 +304,9 @@ async def match_job(
                     ranker=result.ranker,
                 )
             )
+
+    if not record:
+        return results
 
     await verification_service.append_receipt(
         session,

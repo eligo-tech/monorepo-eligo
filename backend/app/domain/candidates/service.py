@@ -31,6 +31,43 @@ async def list_candidates(
     return list(result.scalars().all())
 
 
+async def filter_candidates(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    skill: str | None = None,
+    city: str | None = None,
+    available_within_weeks: int | None = None,
+    limit: int = 50,
+) -> tuple[list[Candidate], int]:
+    """Candidates matching every filter given, and how many matched in total.
+
+    Filters run over the WHOLE pool before the limit — filtering a capped page
+    answers "the Berlin ones among the first hundred" (the ELI-7 mistake).
+    In Python, because `skills` is a JSON list and a portable JSON-contains
+    does not exist across SQLite and Postgres; a workspace pool is thousands
+    of rows, not millions. An unknown availability never passes that filter.
+    """
+    rows = (
+        await session.execute(
+            select(Candidate).where(Candidate.tenant_id == tenant_id).order_by(Candidate.full_name)
+        )
+    ).scalars()
+    want_skill = skill.strip().lower() if skill else None
+    want_city = city.strip().lower() if city else None
+    hits = [
+        c
+        for c in rows
+        if (not want_skill or want_skill in {str(s).strip().lower() for s in c.skills or []})
+        and (not want_city or want_city in {(c.city or "").lower(), (c.location or "").lower()})
+        and (
+            available_within_weeks is None
+            or (c.availability_weeks is not None and c.availability_weeks <= available_within_weeks)
+        )
+    ]
+    return hits[:limit], len(hits)
+
+
 async def count_candidates(session: AsyncSession, *, tenant_id: uuid.UUID) -> int:
     """How many the tenant has, independent of any page."""
     return int(
