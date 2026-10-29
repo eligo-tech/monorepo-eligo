@@ -225,7 +225,7 @@ function Banner({ L, onClose, onEnterApp }: { L: Lfn; onClose: () => void; onEnt
   return (
     <div style={{ background: C.surface, color: C.onNavy3, fontSize: 12.5, fontWeight: 600, textAlign: 'center', padding: '9px 44px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
       <span className="lp-pulse" style={{ width: 7, height: 7, borderRadius: '50%', background: C.teal }} />
-      {L('Wir suchen Design-Partner unter deutschen Personalagenturen.', 'We are looking for design partners among German recruiting agencies.')}
+      {L('Wir suchen Design-Partner unter Personalagenturen.', 'We are looking for design partners among recruiting agencies.')}
       <a href="#" onClick={(e) => { e.preventDefault(); onEnterApp() }} style={{ color: C.navy, fontWeight: 700, borderBottom: `1px solid ${C.teal}` }}>
         {L('Gespräch vereinbaren', 'Talk to us')} →
       </a>
@@ -300,7 +300,7 @@ function Hero({ L, onEnterApp }: { L: Lfn; onEnterApp: () => void }) {
               <span style={{ color: C.tealBorder }}>·</span>
               <span>{L('Unabhängig', 'Independent')}</span>
               <span style={{ color: C.tealBorder }}>·</span>
-              <span>{L('Gebaut in Deutschland', 'Built in Germany')}</span>
+              <span>{L('Gebaut in Europa', 'Built in Europe')}</span>
             </span>
             <h1 className="lp-h1" style={{ fontSize: 54, fontWeight: 800, lineHeight: 1.03, letterSpacing: '-1.7px', color: C.navy, margin: '22px 0 0' }}>
               {L('Recruiting, betrieben von Agenten.', 'Recruiting, run by agents.')}
@@ -873,7 +873,7 @@ function FinalCta({ L, onEnterApp }: { L: Lfn; onEnterApp: () => void }) {
           <Btn variant="ghost" onClick={onEnterApp}>{L('Anmelden', 'Log in')}</Btn>
         </div>
         <p style={{ fontFamily: MONO, fontSize: 11.5, color: C.t3, marginTop: 24, letterSpacing: '0.3px' }}>
-          Bootstrapped · {L('Unabhängig', 'Independent')} · {L('Gebaut in Deutschland', 'Built in Germany')}
+          Bootstrapped · {L('Unabhängig', 'Independent')} · {L('Gebaut in Europa, für Teams weltweit', 'Built in Europe, for teams everywhere')}
         </p>
       </div>
     </section>
@@ -939,7 +939,7 @@ function Footer({ L }: { L: Lfn }) {
           <span>© 2026 Eligo Labs. {L('Alle Rechte vorbehalten.', 'All rights reserved.')}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.teal }} />
-            Bootstrapped · {L('Gebaut in Deutschland', 'Built in Germany')}
+            Bootstrapped · {L('Gebaut in Europa, für Teams weltweit', 'Built in Europe, for teams everywhere')}
           </span>
         </div>
       </div>
