@@ -26,9 +26,6 @@
 .lp h1, .lp h2 { text-wrap: balance; }
 .lp p { text-wrap: pretty; }
 
-/* The pull-quote keeps a distinct voice, but from the cockpit's own stack. */
-.lp-serif { font-family: var(--font-ui); font-weight: 300; letter-spacing: -0.2px; }
-
 @keyframes lp-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.7); } }
 @keyframes lp-floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 .lp-pulse { animation: lp-pulse 1.6s ease-in-out infinite; }
@@ -39,24 +36,57 @@
 .lp-btn-dark:hover { background: #a9d6b4 !important; }
 .lp-btn-teal:hover { background: #a9d6b4 !important; }
 .lp-btn-ghost:hover { border-color: #86c69a !important; }
-.lp-agentcard { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
-.lp-agentcard:hover { border-color: rgba(134, 198, 154, 0.45) !important; box-shadow: 0 12px 32px rgba(0,0,0,.45); transform: translateY(-2px); }
+.lp-hovercard { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.lp-hovercard:hover { border-color: rgba(134, 198, 154, 0.45) !important; box-shadow: 0 12px 32px rgba(0,0,0,.45); transform: translateY(-2px); }
+.lp-tab:hover { color: #e8e8e3 !important; }
+.lp-tab:focus-visible, .lp button:focus-visible, .lp a:focus-visible, .lp summary:focus-visible { outline: 2px solid #86c69a; outline-offset: 2px; }
+
+/* Grid columns may shrink below their content (mocks are wide). */
+.lp-split > *, .lp-hero-grid > *, .lp-compliance-grid > * { min-width: 0; }
+
+/* Anchored sections land below the sticky nav. */
+.lp section[id] { scroll-margin-top: 76px; }
+
+/* Tabs scroll sideways instead of overflowing, at any width. */
+.lp-tabs { overflow-x: auto; scrollbar-width: none; }
+.lp-tabs::-webkit-scrollbar { display: none; }
+
+/* Tab panel swap. */
+@keyframes lp-fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.lp-fadein { animation: lp-fadein .28s ease-out; }
+
+/* FAQ accordion. */
+.lp-faq summary::-webkit-details-marker { display: none; }
+.lp-faq-chev { transition: transform .2s ease; }
+.lp-faq[open] .lp-faq-chev { transform: rotate(180deg); }
+.lp-faq[open] { border-color: rgba(134, 198, 154, 0.35) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-pulse, .lp-floaty, .lp-fadein { animation: none; }
+  .lp-hovercard:hover { transform: none; }
+}
 .lp-footlink:hover { color: #e8e8e3; }
 
 /* Responsive */
 @media (max-width: 980px) {
   .lp-hero-grid, .lp-split { grid-template-columns: 1fr !important; gap: 40px !important; }
-  .lp-split-mock { order: -1; }
   .lp-h1 { font-size: 40px !important; letter-spacing: -1px !important; }
-  .lp-grid-4 { grid-template-columns: 1fr 1fr !important; }
+  .lp-grid-3 { grid-template-columns: 1fr 1fr !important; }
   .lp-compliance-grid { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 760px) {
   .lp-nav-links, .lp-nav-secondary { display: none !important; }
   .lp-h1 { font-size: 34px !important; }
-  .lp-grid-4, .lp-stats, .lp-footer-grid, .lp-chip-grid { grid-template-columns: 1fr 1fr !important; }
+  .lp-footer-grid, .lp-chip-grid { grid-template-columns: 1fr 1fr !important; }
+  .lp-grid-3 { grid-template-columns: 1fr !important; }
   .lp-h2 { font-size: 30px !important; }
+  .lp-tabs { justify-content: flex-start !important; }
+  .lp-controls-card { padding: 28px 22px !important; }
+  [role="tabpanel"].lp-split { padding: 22px !important; }
+  .lp-why { display: none; }
+  .lp-field { grid-template-columns: 1fr auto !important; }
+  .lp-field > :first-child { grid-column: 1 / -1; }
 }
 @media (max-width: 520px) {
-  .lp-grid-4, .lp-stats, .lp-footer-grid { grid-template-columns: 1fr !important; }
+  .lp-footer-grid, .lp-chip-grid { grid-template-columns: 1fr !important; }
 }
