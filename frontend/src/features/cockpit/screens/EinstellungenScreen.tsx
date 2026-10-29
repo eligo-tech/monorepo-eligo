@@ -22,6 +22,7 @@ import { CheckCircle2, Database, Loader2, Trash2 } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { MeDTO, SourceCapabilitiesDTO, TenantSourceDTO } from '@/api/types'
 import { isAdmin } from '../useMe'
+import { AiFeaturesPanel } from './AiFeaturesPanel'
 import { FileImportPanel } from './FileImportPanel'
 import { Button, TextInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
@@ -375,6 +376,19 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
             </dl>
           )}
         </Panel>
+      </section>
+
+      {/* AI features are switched on HERE, by the workspace admin accepting
+          the terms — never by an operator on the customer's behalf, because
+          the customer is the one whose data reaches the AI vendor. */}
+      <section className="space-y-5">
+        <SectionHeader
+          id="section-ki"
+          index="03"
+          title={t('KI-Funktionen')}
+          hint={t('Aus, bis ein Administrator zustimmt')}
+        />
+        <AiFeaturesPanel admin={admin} />
       </section>
     </div>
   )
