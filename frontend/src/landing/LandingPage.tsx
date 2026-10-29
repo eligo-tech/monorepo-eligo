@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import {
   ShieldCheck,
   Target,
@@ -110,7 +110,8 @@ export function LandingPage({ onEnterApp }: { onEnterApp: () => void }) {
 type Lfn = (de: string, en: string) => string
 
 function scrollToId(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  document.getElementById(id)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
 }
 
 function Logo() {
@@ -208,6 +209,15 @@ function CheckBullet({ lead, text }: { lead: string; text: string }) {
   )
 }
 
+/** Mockups show invented sample data; say so, on a page that sells evidence. */
+function ExampleTag({ L }: { L: Lfn }) {
+  return (
+    <span style={{ marginLeft: 'auto', fontFamily: MONO, fontSize: 10, color: C.t3, border: `1px dashed ${C.line2}`, borderRadius: 20, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+      {L('Beispieldaten', 'Example data')}
+    </span>
+  )
+}
+
 const card: CSSProperties = { background: C.surface, border: `1px solid ${C.line2}`, borderRadius: 18 }
 
 // ── 1. Banner ──────────────────────────────────────────────────────────────
@@ -299,8 +309,8 @@ function Hero({ L, onEnterApp }: { L: Lfn; onEnterApp: () => void }) {
             </h1>
             <p style={{ fontSize: 17, lineHeight: 1.6, color: C.t1, maxWidth: 520, margin: '20px 0 0' }}>
               {L(
-                'Eligo Labs liest Lebensläufe, matcht Kandidaten auf Rollen und prüft jede Aussage gegen ihre Quelle — bevor Sie sie sehen. Die Entscheidung bleibt bei Ihnen.',
-                'Eligo Labs reads CVs, matches candidates to roles and checks every claim against its source — before you see it. The decision stays with you.',
+                'Eligo Labs liest Lebensläufe, matcht Kandidaten auf Rollen und prüft jede Agenten-Aussage gegen ihre Quelle, bevor sie in den Datensatz gelangt. Die Einstellungsentscheidung bleibt bei Ihnen.',
+                'Eligo Labs reads CVs, matches candidates to roles and checks every agent claim against its source before it reaches the record. The hiring decision stays with you.',
               )}
             </p>
             <div style={{ display: 'flex', gap: 14, margin: '28px 0 0', flexWrap: 'wrap' }}>
@@ -341,9 +351,7 @@ function HeroMock({ L }: { L: Lfn }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
               <Layers size={17} color={C.tealDeep} />
               <span style={{ fontSize: 13.5, fontWeight: 800 }}>{L('Belegte Analyse', 'Sourced analysis')}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: C.tealDeep, background: C.tealTint, borderRadius: 20, padding: '3px 9px' }}>
-                {L('Jede Aussage belegt', 'Every claim sourced')}
-              </span>
+              <ExampleTag L={L} />
             </div>
             <p style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: 1.5, color: C.t2 }}>
               {L('Senior Backend-Engineer, 7 Jahre, zuletzt in einem Berliner Fintech. Starke Go/Python-Basis, belegte Skalierungserfahrung.', 'Senior Backend Engineer, 7 years, most recently at a Berlin fintech. Strong Go/Python base, sourced scaling experience.')}
@@ -412,8 +420,8 @@ function Intro({ L }: { L: Lfn }) {
           eyebrow={L('Das Prinzip', 'The idea')}
           title={L('Zwei Arten von Kontext. Sauber getrennt.', 'Two kinds of context. Kept apart.')}
           sub={L(
-            'Agenten arbeiten mit dem öffentlichen Markt und Ihren eigenen Daten — aber sie schreiben nichts direkt. Sie schlagen vor; die Verifikation prüft; Menschen entscheiden.',
-            'Agents work with the public market and your own data — but they write nothing directly. They propose; verification checks; people decide.',
+            'Agenten arbeiten mit dem öffentlichen Markt und Ihren eigenen Daten — aber sie schreiben nichts direkt. Sie schlagen vor, die Verifikation prüft, und die Einstellungsentscheidung trifft Ihr Team.',
+            'Agents work with the public market and your own data — but they write nothing directly. They propose, verification checks, and your team makes the hiring decision.',
           )}
         />
         <div style={{ display: 'grid', gap: 14 }}>
@@ -440,7 +448,7 @@ function Intro({ L }: { L: Lfn }) {
 function Platform({ L }: { L: Lfn }) {
   const products: { icon: ReactNode; t: string; b: string; s: StatusKind }[] = [
     { icon: <FileText size={20} />, t: L('Dokumenten-Lesen', 'Document reading'), s: 'live', b: L('Lebensläufe und Gesprächsnotizen werden zu strukturierten Feldern — jedes mit Quelle und Konfidenz.', 'CVs and call transcripts become structured fields — each with its source and confidence.') },
-    { icon: <Target size={20} />, t: 'Matching', s: 'live', b: L('Muss-Kriterien in deterministischem Code, dann ein Ranking mit Begründung pro Treffer.', 'Must-haves checked in deterministic code, then a ranking with a reason for every hit.') },
+    { icon: <Target size={20} />, t: 'Matching', s: 'live', b: L('Muss-Kriterien in deterministischem Code, dann ein Ranking mit Begründung pro Treffer (heute heuristisch).', 'Must-haves checked in deterministic code, then a ranking with a reason for every hit (heuristic today).') },
     { icon: <ShieldCheck size={20} />, t: L('Verifikation & Quittungen', 'Verification & receipts'), s: 'live', b: L('Jede Agenten-Aussage wird gegen die Quelle geprüft und in einer verketteten Quittung festgehalten.', 'Every agent claim is re-checked against its source and recorded in a hash-chained receipt.') },
     { icon: <Upload size={20} />, t: L('ATS-Import', 'ATS import'), s: 'live', b: L('Bestehende Kandidaten per Datei oder CSV übernehmen. Eligo arbeitet neben Ihrem ATS, nicht statt ihm.', 'Bring existing candidates in by file or CSV. Eligo works alongside your ATS, not instead of it.') },
     { icon: <MessagesSquare size={20} />, t: L('Vorqualifizierung', 'Pre-screen'), s: 'pilot', b: L('Ein strukturiertes Vorgespräch mit Einwilligung des Kandidaten; die Antworten landen belegt im Profil.', 'A structured pre-screen with the candidate’s consent; answers land in the profile with their evidence.') },
@@ -490,7 +498,7 @@ function HowItWorks({ L }: { L: Lfn }) {
     {
       n: '03', tab: L('Prüfen', 'Verify'), s: 'live',
       title: L('Geprüft, bevor es jemand sieht.', 'Checked before anyone sees it.'),
-      body: L('Vor jedem Schreibvorgang prüft eine Nachbedingung die Aussage erneut gegen die Quelle. Das Ergebnis wird als verkettete Quittung abgelegt; Unsicheres wird zur Prüfung markiert.', 'Before every write, a postcondition re-checks the claim against its source. The result is filed as a hash-chained receipt; anything uncertain is flagged for review.'),
+      body: L('Bevor ein Agenten-Vorschlag geschrieben wird, prüft eine Nachbedingung die Aussage erneut gegen die Quelle. Das Ergebnis wird als verkettete Quittung abgelegt; Unsicheres wird zur Prüfung markiert.', 'Before an agent’s proposal is written, a postcondition re-checks the claim against its source. The result is filed as a hash-chained receipt; anything uncertain is flagged for review.'),
       bullets: [[L('Nur anhängend', 'Append-only'), L('Quittungen werden nie überschrieben.', 'receipts are never overwritten.')], [L('Nachprüfbar', 'Checkable'), L('die Kette lässt sich jederzeit verifizieren.', 'the chain can be verified at any time.')]],
       mock: <ReceiptCard L={L} />,
     },
@@ -511,6 +519,15 @@ function HowItWorks({ L }: { L: Lfn }) {
   ]
   const [active, setActive] = useState(0)
   const step = steps[active]
+  // WAI-ARIA tabs: one tab in the tab order, arrows/Home/End move between them.
+  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const last = steps.length - 1
+    const next = { ArrowRight: active === last ? 0 : active + 1, ArrowLeft: active === 0 ? last : active - 1, Home: 0, End: last }[e.key]
+    if (next === undefined) return
+    e.preventDefault()
+    setActive(next)
+    document.getElementById(`lp-tab-${steps[next].n}`)?.focus()
+  }
   return (
     <section id="how-it-works" style={{ ...container, padding: '96px 28px 24px' }}>
       <SectionHead
@@ -523,7 +540,11 @@ function HowItWorks({ L }: { L: Lfn }) {
           <button
             key={s.n}
             role="tab"
+            id={`lp-tab-${s.n}`}
             aria-selected={i === active}
+            aria-controls="lp-step-panel"
+            tabIndex={i === active ? 0 : -1}
+            onKeyDown={onTabKey}
             onClick={() => setActive(i)}
             className="lp-tab"
             style={{
@@ -540,7 +561,7 @@ function HowItWorks({ L }: { L: Lfn }) {
           </button>
         ))}
       </div>
-      <div key={step.n} role="tabpanel" className="lp-fadein lp-split" style={{ ...card, marginTop: 20, padding: 36, display: 'grid', gridTemplateColumns: '1fr 1.05fr', gap: 44, alignItems: 'center' }}>
+      <div key={step.n} role="tabpanel" id="lp-step-panel" aria-labelledby={`lp-tab-${step.n}`} tabIndex={0} className="lp-fadein lp-split" style={{ ...card, marginTop: 20, padding: 36, display: 'grid', gridTemplateColumns: '1fr 1.05fr', gap: 44, alignItems: 'center' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontFamily: MONO, fontSize: 40, fontWeight: 600, color: C.tealBorder, letterSpacing: '-1px', lineHeight: 1 }}>{step.n}</span>
@@ -578,7 +599,7 @@ function ExtractMock({ L }: { L: Lfn }) {
   ]
   return (
     <div style={{ ...card, background: C.raised, padding: 16 }}>
-      <MockHead icon={<FileText size={16} color={C.tealDeep} />} title={L('Extrahierte Felder', 'Extracted fields')} right={<span style={{ fontFamily: MONO, fontSize: 10.5, color: C.t3 }}>Lebenslauf.pdf</span>} />
+      <MockHead icon={<FileText size={16} color={C.tealDeep} />} title={L('Extrahierte Felder', 'Extracted fields')} right={<ExampleTag L={L} />} />
       <div style={{ display: 'grid', gap: 6 }}>
         {fields.map(([k, v, src, conf]) => (
           <div key={k} className="lp-field" style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr auto', gap: 10, alignItems: 'center', border: `1px solid ${C.line}`, borderRadius: 10, padding: '9px 12px', fontSize: 12.5 }}>
@@ -601,12 +622,13 @@ function MatchMock({ L }: { L: Lfn }) {
   ] as const
   return (
     <div style={{ ...card, background: C.raised, padding: 16 }}>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
         {filters.map((f) => (
           <span key={f} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: MONO, fontSize: 10.5, color: C.tealDeep, border: `1px solid ${C.tealBorder}`, borderRadius: 20, padding: '3px 9px' }}>
             <Check size={11} /> {f}
           </span>
         ))}
+        <ExampleTag L={L} />
       </div>
       <div style={{ display: 'grid', gap: 8 }}>
         {rows.map(([score, color, company, role, why]) => (
@@ -631,7 +653,7 @@ function MatchMock({ L }: { L: Lfn }) {
 
 function ReceiptCard({ L }: { L: Lfn }) {
   const steps = [
-    ['1', L('GELESEN', 'READ'), L('Lebenslauf.pdf, Abschnitt „Payments".', 'CV.pdf, section “Payments”.'), false],
+    ['1', L('GELESEN', 'READ'), L('Lebenslauf.pdf, Abschnitt „Payments“.', 'CV.pdf, section “Payments”.'), false],
     ['2', L('BEHAUPTET', 'ASSERTED'), L('Skaliertes Zahlungssystem auf 4 Mio. Nutzer.', 'Scaled payment system to 4M users.'), false],
     ['3', L('VERIFIZIERT', 'VERIFIED'), L('Kennzahl im Quelltext belegt (Zeile 214).', 'Figure found in the source text (line 214).'), true],
     ['4', L('GESCHRIEBEN', 'WRITTEN'), L('Als Stärke markiert, Beleg verlinkt.', 'Marked as a strength, evidence linked.'), true],
@@ -641,7 +663,7 @@ function ReceiptCard({ L }: { L: Lfn }) {
       <MockHead
         icon={<IconTile size={30} bg={C.tealTint} color={C.tealDeep}><FileText size={15} /></IconTile>}
         title={L('Verifikations-Quittung', 'Verification receipt')}
-        right={<span style={{ fontSize: 11, fontWeight: 700, color: C.tealDeep, background: C.tealTint, borderRadius: 20, padding: '4px 10px' }}>✓ {L('Verifiziert', 'Verified')}</span>}
+        right={<span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><ExampleTag L={L} /><span style={{ fontSize: 11, fontWeight: 700, color: C.tealDeep, background: C.tealTint, borderRadius: 20, padding: '4px 10px' }}>✓ {L('Verifiziert', 'Verified')}</span></span>}
       />
       <div style={{ display: 'grid', gap: 4, margin: '6px 0 14px' }}>
         {steps.map(([n, title, body, done]) => (
@@ -656,7 +678,7 @@ function ReceiptCard({ L }: { L: Lfn }) {
       </div>
       <div style={{ background: C.inset, borderRadius: 10, padding: '11px 13px', display: 'grid', gap: 7 }}>
         {[
-          [L('Quelle', 'Source'), 'Lebenslauf.pdf'],
+          [L('Quelle', 'Source'), L('Lebenslauf.pdf', 'CV.pdf')],
           [L('Konfidenz', 'Confidence'), '0.91'],
           [L('Vorgänger', 'Previous'), 'sha256:3a90…c41d'],
           ['Hash', 'sha256:77c1…be9a'],
@@ -678,7 +700,7 @@ function PrescreenMock({ L }: { L: Lfn }) {
   ]
   return (
     <div style={{ ...card, background: C.raised, padding: 16 }}>
-      <MockHead icon={<MessagesSquare size={16} color={C.amberText} />} title={L('Vorgespräch', 'Pre-screen')} right={<span style={{ fontFamily: MONO, fontSize: 10.5, color: C.tealDeep }}>✓ {L('Einwilligung erteilt', 'Consent given')}</span>} />
+      <MockHead icon={<MessagesSquare size={16} color={C.amberText} />} title={L('Vorgespräch', 'Pre-screen')} right={<span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ fontFamily: MONO, fontSize: 10.5, color: C.tealDeep }}>✓ {L('Einwilligung', 'Consent')}</span><ExampleTag L={L} /></span>} />
       <div style={{ display: 'grid', gap: 10 }}>
         {qa.map(([q, a]) => (
           <div key={q} style={{ display: 'grid', gap: 6 }}>
@@ -703,7 +725,7 @@ function ClaudeMock({ L }: { L: Lfn }) {
         <span style={{ marginLeft: 8, fontSize: 10.5, color: C.t3 }}>{L('Entwurf · noch nicht verfügbar', 'Design preview · not available yet')}</span>
       </div>
       <div style={{ padding: 16, fontSize: 12, lineHeight: 1.7 }}>
-        <div style={{ color: C.t3 }}>&gt; {L('Welche Kandidaten im Mandat „Backend Berlin" haben eine offene Prüfung?', 'Which candidates in the “Backend Berlin” mandate have an open review?')}</div>
+        <div style={{ color: C.t3 }}>&gt; {L('Welche Kandidaten im Mandat „Backend Berlin“ haben eine offene Prüfung?', 'Which candidates in the “Backend Berlin” mandate have an open review?')}</div>
         <div style={{ color: C.t1, marginTop: 10 }}>{L('2 Kandidaten:', '2 candidates:')}</div>
         <div style={{ color: C.navy }}>· Julia Schmidt — <span style={{ color: C.amberText }}>{L('Lücke 2019–2020', 'gap 2019–2020')}</span></div>
         <div style={{ color: C.navy }}>· Tomás Ruiz — <span style={{ color: C.amberText }}>{L('Gehalt aus Notiz, Konfidenz 0.62', 'salary from note, confidence 0.62')}</span></div>
@@ -720,9 +742,9 @@ function Workflows({ L }: { L: Lfn }) {
       tag: L('Mandat', 'Mandate'),
       title: L('Vom Briefing zur Shortlist', 'From intake call to shortlist'),
       steps: [
-        L('Gesprächsnotiz wird gelesen; Muss-Kriterien werden vorgeschlagen.', 'The call note is read; must-haves are proposed.'),
-        L('Sie bestätigen die Kriterien — sie werden zu Code-Filtern.', 'You confirm the criteria — they become code filters.'),
-        L('Passende Kandidaten erscheinen mit Begründung und Belegen.', 'Matching candidates appear with a reason and evidence.'),
+        L('Sie legen die Muss-Kriterien im Mandat fest: Arbeitserlaubnis, Standort, Gehaltsband.', 'You set the must-haves on the mandate: work permit, location, salary band.'),
+        L('Deterministischer Code filtert jeden Kandidaten heraus, der eines verfehlt.', 'Deterministic code filters out every candidate who misses one.'),
+        L('Der Rest wird gerankt, jeder mit einer Begründung in einem Satz.', 'The rest are ranked, each with a one-line reason.'),
       ],
     },
     {
@@ -740,7 +762,7 @@ function Workflows({ L }: { L: Lfn }) {
       steps: [
         L('Der nächtliche Lauf liest öffentliche Stellenanzeigen ein.', 'The nightly run ingests public job ads.'),
         L('Jede Anzeige behält ihre Quell-URL.', 'Every ad keeps its source URL.'),
-        L('Morgens sehen Sie, welche Rollen zu Ihren Kandidaten passen.', 'In the morning you see which roles fit your candidates.'),
+        L('Morgens sind die neuen Rollen mit Quelle im Hub durchsuchbar.', 'In the morning the new roles are searchable in the hub, with their source.'),
       ],
     },
   ]
@@ -774,8 +796,8 @@ function Workflows({ L }: { L: Lfn }) {
 // ── 8. Systems & controls ──────────────────────────────────────────────────
 function Controls({ L }: { L: Lfn }) {
   const controls: [string, string][] = [
-    [L('Für die DSGVO gebaut', 'Built for GDPR'), L('Herkunft an jedem Feld, Quittungen, menschliche Freigabe.', 'Provenance on every field, receipts, human approval.')],
-    [L('KI-VO · menschliche Aufsicht', 'AI Act · human oversight'), L('Agenten schlagen vor; Menschen entscheiden.', 'Agents propose; people decide.')],
+    [L('Herkunft & Quittungen', 'Provenance & receipts'), L('Quelle und Konfidenz an jedem extrahierten Feld.', 'Source and confidence on every extracted field.')],
+    [L('KI-VO · menschliche Aufsicht', 'AI Act · human oversight'), L('Agenten schlagen vor; Unsicheres wird zur Prüfung markiert.', 'Agents propose; uncertain claims are flagged for review.')],
     [L('Mandantentrennung', 'Tenant isolation'), L('Row-Level-Security in der Datenbank, standardmäßig geschlossen.', 'Row-level security in the database, closed by default.')],
     [L('Nur anhängendes Protokoll', 'Append-only log'), L('Jede Agenten-Aktion als verkettete Quittung.', 'Every agent action as a hash-chained receipt.')],
     [L('Harte Kriterien im Code', 'Hard criteria in code'), L('Kein Modell entscheidet über Arbeitserlaubnis oder Gehalt.', 'No model decides work permit or salary.')],
@@ -783,7 +805,7 @@ function Controls({ L }: { L: Lfn }) {
   ]
   return (
     <section id="controls" style={{ ...container, padding: '96px 28px 24px' }}>
-      <div style={{ position: 'relative', ...card, borderRadius: 22, padding: '44px 46px', overflow: 'hidden' }}>
+      <div className="lp-controls-card" style={{ position: 'relative', ...card, borderRadius: 22, padding: '44px 46px', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -100, right: -80, width: 380, height: 380, borderRadius: '50%', background: 'radial-gradient(circle, rgba(134,198,154,0.12), transparent 70%)', pointerEvents: 'none' }} />
         <div className="lp-compliance-grid" style={{ position: 'relative', display: 'grid', gridTemplateColumns: '0.85fr 1.15fr', gap: 40, alignItems: 'center' }}>
           <SectionHead
@@ -813,9 +835,9 @@ function Faq({ L }: { L: Lfn }) {
   const qa: [string, string][] = [
     [L('Ersetzt Eligo mein ATS?', 'Does Eligo replace my ATS?'), L('Nein. Sie importieren Ihre Kandidaten per Datei oder CSV; Eligo liest, matcht und prüft daneben.', 'No. You import candidates by file or CSV; Eligo reads, matches and checks alongside it.')],
     [L('Wer trifft die Einstellungsentscheidung?', 'Who makes the hiring decision?'), L('Immer ein Mensch. Agenten schlagen nur vor, und rechtlich harte Kriterien prüft deterministischer Code, kein Modell.', 'Always a person. Agents only propose, and legally hard criteria are checked by deterministic code, not a model.')],
-    [L('Was heißt „jede Aussage belegt"?', 'What does “every claim sourced” mean?'), L('Bevor eine Agenten-Aussage im Datensatz landet, wird sie gegen die Quelle geprüft und als Quittung abgelegt. Unsicheres wird zur Prüfung markiert statt geschrieben.', 'Before an agent claim reaches the record, it is checked against its source and filed as a receipt. Anything uncertain is flagged for review instead of written.')],
-    [L('Ist Eligo DSGVO-zertifiziert?', 'Is Eligo GDPR-certified?'), L('Wir bauen dafür — Herkunft, Quittungen, menschliche Aufsicht, Mandantentrennung. Ein Zertifikat behaupten wir erst, wenn ein Audit es bestätigt; die offenen Punkte nennen wir Ihnen im Gespräch.', 'We build for it — provenance, receipts, human oversight, tenant isolation. We will claim a certification only once an audit confirms it, and we will walk you through the open items on a call.')],
-    [L('Warum bootstrapped?', 'Why bootstrapped?'), L('Weil Ihre Kandidatendaten nicht unser Produkt sind. Ohne Investorendruck bauen wir in dem Tempo, das Verifikation braucht — und verdienen an der Software, nicht an Daten.', 'Because your candidates’ data is not our product. Without investor pressure we build at the pace verification needs — and earn from the software, not from data.')],
+    [L('Was heißt „jede Aussage belegt“?', 'What does “every claim sourced” mean?'), L('Bevor eine Agenten-Aussage im Datensatz landet, wird sie gegen die Quelle geprüft und als Quittung abgelegt. Unsicheres wird zur Prüfung markiert statt geschrieben.', 'Before an agent claim reaches the record, it is checked against its source and filed as a receipt. Anything uncertain is flagged for review instead of written.')],
+    [L('Wie steht Eligo zur DSGVO?', 'Where does Eligo stand on GDPR?'), L('Wir nennen Eligo noch nicht konform. Gebaut sind Herkunft an jedem Feld, nur anhängende Quittungen und Mandantentrennung in der Datenbank; die offenen Punkte gehen wir mit Ihnen im Gespräch durch.', 'We don’t call Eligo compliant yet. What is built: provenance on every field, append-only receipts and tenant isolation in the database. We will walk you through the open items on a call.')],
+    [L('Warum bootstrapped?', 'Why bootstrapped?'), L('Weil Ihre Kandidatendaten nicht unser Produkt sind. Ohne Investorendruck bauen wir in dem Tempo, das Verifikation braucht — und verdienen an der Software, nie an Daten.', 'Because your candidates’ data is not our product. Without investor pressure we build at the pace verification needs — and we make money from the software, never from data.')],
   ]
   return (
     <section id="faq" style={{ ...container, maxWidth: 880, padding: '96px 28px 40px' }}>
@@ -863,7 +885,7 @@ function Footer({ L }: { L: Lfn }) {
   // A link with a destination and one without are different promises. In
   // Germany "Impressum" and "Datenschutz" must resolve, and Google will not let
   // an OAuth app leave testing without a privacy policy it can fetch. Product
-  // links scroll to their section; the rest stay inert until their pages exist.
+  // links scroll to their section. No About/Blog/Careers until those pages exist.
   const cols: [string, { label: string; href?: string; id?: string }[]][] = [
     [
       L('Produkt', 'Product'),
@@ -874,7 +896,6 @@ function Footer({ L }: { L: Lfn }) {
         { label: 'FAQ', id: 'faq' },
       ],
     ],
-    [L('Unternehmen', 'Company'), [L('Über uns', 'About'), 'Blog', L('Karriere', 'Careers'), L('Kontakt', 'Contact')].map((label) => ({ label }))],
     [
       L('Rechtliches', 'Legal'),
       [
@@ -886,11 +907,11 @@ function Footer({ L }: { L: Lfn }) {
   return (
     <footer style={{ background: C.surface, color: C.onNavy }}>
       <div style={{ ...container, padding: '52px 28px 34px' }}>
-        <div className="lp-footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 36 }}>
+        <div className="lp-footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 36 }}>
           <div>
             <Logo />
             <p style={{ fontSize: 12.5, lineHeight: 1.6, color: C.onNavy, maxWidth: 260, marginTop: 14 }}>
-              {L('KI-native Recruiting-Plattform. Schmale Agenten, belegte Aussagen, menschliche Freigabe.', 'AI-native recruiting platform. Narrow agents, sourced claims, human approval.')}
+              {L('KI-native Recruiting-Plattform. Schmale Agenten, belegte Aussagen, Einstellungsentscheidungen beim Menschen.', 'AI-native recruiting platform. Narrow agents, sourced claims, hiring decisions kept human.')}
             </p>
           </div>
           {cols.map(([h, items]) => (
@@ -900,7 +921,7 @@ function Footer({ L }: { L: Lfn }) {
                 {items.map(({ label, href, id }) => (
                   <a
                     key={label}
-                    href={id ? `#${id}` : (href ?? '#')}
+                    href={id ? `#${id}` : href}
                     onClick={id ? (e) => { e.preventDefault(); scrollToId(id) } : undefined}
                     className="lp-footlink"
                     style={{ fontSize: 12.5, color: C.onNavy }}

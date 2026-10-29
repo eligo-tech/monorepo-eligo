@@ -11,23 +11,26 @@
 
 import { describe, expect, it } from 'vitest'
 
-const src = Object.values(
-  import.meta.glob('./LandingPage.tsx', { query: '?raw', import: 'default', eager: true }),
-)[0] as string
+// A renamed file makes this import fail to resolve, which fails the suite.
+import src from './LandingPage.tsx?raw'
 
 describe('landing page claims', () => {
   const forbidden: [string, RegExp][] = [
-    ['invented stat: time-to-shortlist', /−48%|-48%/],
-    ['invented stat: match accuracy', /Match-Genauigkeit|Match accuracy/],
+    ['invented stat: time-to-shortlist', /[−-]\s?48\s?%/],
+    ['invented stat: match accuracy', /Match-Genauigkeit|Match accuracy/i],
     ['invented stat: 24/7', /24\/7/],
-    ['testimonial from a non-customer', /Maren Kaltenbach|Peer Ventures/],
-    ['"Trusted by" logos of non-customers', /Trusted by|Im Einsatz bei|Doctolib|Celonis|Bitpanda/],
-    ['certification we do not hold', /ISO 27001/],
-    ['"GDPR-compliant" (ARCHITECTURE.md forbids it)', /GDPR-compliant|DSGVO-konform/],
-    ['unmeasured onboarding time', /15 minutes|15 Minuten/],
-    ['sourcing agent is not built', /Sourcing-Agent|sources, verifies and matches/],
-    ['enrichment agent is not built', /Fills gaps in contact/],
-    ['EU hosting is unverified for the backend', /EU-hosted|EU-gehostet|stays in the EU|bleiben in der EU/],
+    ['testimonial from a non-customer', /Maren Kaltenbach|Peer Ventures/i],
+    ['"Trusted by" logos of non-customers', /Trusted by|Im Einsatz bei|\bN26\b|Doctolib|Celonis|Bitpanda/i],
+    ['certification we do not hold', /ISO\s?27001|SOC\s?2|certified|zertifiziert/i],
+    ['"GDPR compliant" (ARCHITECTURE.md forbids it)', /GDPR[\s-]?compliant|DSGVO[\s-]?konform|Built for GDPR|Für die DSGVO gebaut/i],
+    ['unmeasured onboarding time', /15\s?minutes|15\s?Minuten/i],
+    ['sourcing agent is not built', /Sourcing-Agent|sources, verifies and matches/i],
+    ['enrichment agent is not built', /Fills gaps in contact/i],
+    ['EU hosting is unverified for the backend', /EU[\s-]?hosted|EU[\s-]?gehostet|hosted in the EU|in der EU gehostet|stays in the EU|bleiben in der EU/i],
+    ['receipts are hash-chained, not signed', /cryptographic(ally)?\s+sign|kryptografisch|Signatur\b/i],
+    // Verification commits automatically; human review is only a flag.
+    ['no human approval step exists', /human approval|menschliche Freigabe|people decide|Menschen entscheiden/i],
+    ['verification does not cover imports or manual edits', /Before every write|Vor jedem Schreibvorgang/i],
   ]
   it.each(forbidden)('does not claim: %s', (_name, re) => {
     expect(src).not.toMatch(re)
