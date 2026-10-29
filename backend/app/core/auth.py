@@ -249,6 +249,13 @@ class Actor:
     #: treated as a recruiter — least privilege — and the UI says why, rather
     #: than leaving somebody to wonder which button disappeared.
     role_known: bool
+    #: "human" for a browser session; "agent" for an AI client acting for the
+    #: user over OAuth (MCP). An agent may only call read actions — see
+    #: `app.actions.core.Registry.invoke`.
+    kind: str = "human"
+    #: The OAuth client an agent came through (e.g. the Claude Code app in
+    #: Clerk). None for a person in the browser.
+    client_id: str | None = None
 
     @property
     def is_admin(self) -> bool:
