@@ -51,14 +51,28 @@ async def list_applications(
 
 
 async def get_application(
-    session: AsyncSession, *, tenant_id: uuid.UUID, application_id: uuid.UUID
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    application_id: uuid.UUID,
+    lock: bool = False,
 ) -> Application | None:
-    result = await session.execute(
-        select(Application).where(
-            Application.tenant_id == tenant_id,
-            Application.id == application_id,
-        )
+    """`lock=True` holds the process row until the transaction ends.
+
+    Every write to a process's steps takes it, and so does confirming an AI
+    proposal from before it reads "what the client saw" until it commits. That
+    makes the two serialise: a recruiter's decision lands either before the
+    confirm reads (→ the proposal is stale) or after it commits (→ the later
+    decision stands). Without it a confirm could overwrite an "out" set in the
+    gap. No-op on SQLite.
+    """
+    query = select(Application).where(
+        Application.tenant_id == tenant_id,
+        Application.id == application_id,
     )
+    if lock:
+        query = query.with_for_update()
+    result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -310,7 +324,7 @@ async def set_step(
         raise ValueError(f"unknown outcome {outcome}")
 
     app = await get_application(
-        session, tenant_id=tenant_id, application_id=application_id
+        session, tenant_id=tenant_id, application_id=application_id, lock=True
     )
     if app is None:
         raise ValueError("application not found")
@@ -402,7 +416,7 @@ async def add_step(
         raise ValueError("label too long")
 
     app = await get_application(
-        session, tenant_id=tenant_id, application_id=application_id
+        session, tenant_id=tenant_id, application_id=application_id, lock=True
     )
     if app is None:
         raise ValueError("application not found")
@@ -456,7 +470,7 @@ async def remove_step(
     which the step editor already does and the history already records.
     """
     app = await get_application(
-        session, tenant_id=tenant_id, application_id=application_id
+        session, tenant_id=tenant_id, application_id=application_id, lock=True
     )
     if app is None:
         raise ValueError("application not found")

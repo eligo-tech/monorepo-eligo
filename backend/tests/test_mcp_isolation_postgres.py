@@ -162,3 +162,78 @@ async def test_a_step_with_dates_confirms_on_postgres_without_false_staleness() 
             assert step.outcome == "pass" and step.done_at is not None
     finally:
         current_tenant_var.reset(token)
+
+
+async def test_a_confirm_cannot_overwrite_a_human_decision_made_while_it_runs(monkeypatch) -> None:
+    """The review's race, on real Postgres with two live sessions.
+
+    Confirm reads "what Claude saw", then writes. A recruiter who marks the
+    candidate "out" in between must not be overwritten by Claude's "pass".
+    The confirm holds the process row locked from before its read to its
+    commit, and a human step write takes the same lock — so the recruiter's
+    write lands AFTER the confirm, and the later decision stands.
+    """
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.core.database import SessionLocal, current_tenant_var
+    from app.domain.jobs.models import Job
+    from app.domain.pipeline import service as pipeline
+    from app.domain.pipeline.models import Application, ProcessStep
+    from app.domain.proposals import service as proposals
+
+    suffix = uuid.uuid4().hex[:8]
+    org = f"org_race_{suffix}"
+    tenant = await _workspace(org, f"Rita {suffix}")
+    async with AdminSessionLocal() as s:
+        await s.execute(text(_PIN), {"t": str(tenant)})
+        cand = (await s.execute(select(Candidate).where(Candidate.tenant_id == tenant))).scalars().first()
+        job = Job(tenant_id=tenant, title="Lead")
+        s.add(job)
+        await s.flush()
+        app = Application(tenant_id=tenant, candidate_id=cand.id, job_id=job.id)
+        s.add(app)
+        await s.commit()
+        app_id = app.id
+
+    made = await _call("pipeline_propose_step",
+                       {"application_id": str(app_id), "step_key": "interview", "outcome": "pass"},
+                       token=_token(org_id=org))
+    assert made.get("isError") is not True, made
+    pid = uuid.UUID(made["structuredContent"]["id"])
+
+    async def recruiter_marks_out() -> None:
+        current_tenant_var.set(str(tenant))
+        async with SessionLocal() as s:
+            await pipeline.set_step(s, tenant_id=tenant, application_id=app_id,
+                                    step_key="interview", outcome="out", actor="Recruiter")
+
+    human: asyncio.Task | None = None
+    read, apply = proposals.APPLIERS["step"]
+
+    async def read_then_let_the_human_in(session, tenant_id, args):
+        nonlocal human
+        seen = await read(session, tenant_id, args)
+        human = asyncio.create_task(recruiter_marks_out())
+        # Give the recruiter every chance to land inside the gap. With the
+        # lock they block here until the confirm commits.
+        await asyncio.wait({human}, timeout=1.5)
+        return seen
+
+    monkeypatch.setitem(proposals.APPLIERS, "step", (read_then_let_the_human_in, apply))
+
+    token = current_tenant_var.set(str(tenant))
+    try:
+        async with SessionLocal() as s:
+            try:
+                await proposals.confirm(s, tenant_id=tenant, proposal_id=pid, user_id="u", name="A")
+            except proposals.ProposalStale:
+                pass  # also acceptable: the human was first and the proposal refused
+        assert human is not None
+        await human
+        async with SessionLocal() as s:
+            step = await s.scalar(select(ProcessStep).where(ProcessStep.application_id == app_id))
+        assert step.outcome == "out", "Claude's confirm overwrote the recruiter's later decision"
+    finally:
+        current_tenant_var.reset(token)

@@ -12,7 +12,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import Actor, get_current_actor
+from app.core.auth import Actor, get_current_actor, get_ingest_tenant
 from app.core.database import get_db
 from app.domain.proposals import service
 from app.domain.proposals.models import AgentProposal
@@ -73,6 +73,14 @@ async def _decide(action, proposal_id: uuid.UUID, actor: Actor, db: AsyncSession
         await db.rollback()
         raise _refuse(status.HTTP_409_CONFLICT, "unapplicable", "could not be applied") from exc
     return _read(row)
+
+
+@router.post("/maintenance/expire")
+async def expire(_: uuid.UUID = Depends(get_ingest_tenant)) -> dict[str, int]:
+    """Expire proposals older than 7 days in every workspace and erase their
+    text and names. MACHINE ONLY: run nightly by `.github/workflows/tenant-imports.yml`;
+    declared in `tests/test_operator_endpoints.py`, which refuses a user session."""
+    return await service.expire_all()
 
 
 @router.post("/{proposal_id}/confirm", response_model=ProposalRead)
