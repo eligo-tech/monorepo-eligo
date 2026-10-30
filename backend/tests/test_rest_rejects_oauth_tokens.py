@@ -114,3 +114,17 @@ def test_the_rest_api_answers_401_to_an_oauth_token() -> None:
     )
     assert response.status_code == 401
     assert "OAuth access token" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("action", ["confirm", "decline"])
+def test_an_ai_client_cannot_decide_a_proposal(action: str) -> None:
+    # PR 4: the token Claude holds must not reach the one door that applies a
+    # proposal. Named explicitly rather than inherited from the global check.
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.post(
+        f"/api/v1/proposals/00000000-0000-0000-0000-000000000001/{action}",
+        headers={"Authorization": f"Bearer {_oauth_token()}"},
+    )
+    assert response.status_code == 401

@@ -45,7 +45,11 @@ READS = [
     "reporting.overview",
     "reporting.funnel",
     "market.postings",
+    "proposals.list",
 ]
+
+#: PR 4: what an agent may propose. Covered in test_actions_proposals.py.
+PROPOSES = ["notes.propose_candidate_note", "pipeline.propose_step"]
 
 
 @pytest.fixture
@@ -152,8 +156,8 @@ def _args(name: str, seeded: dict) -> dict:
     }.get(name, {})
 
 
-def test_the_catalog_is_exactly_the_approved_reads() -> None:
-    assert {s.name for s in REGISTRY.agent_exposed()} == set(READS)
+def test_the_catalog_is_exactly_the_approved_reads_and_proposals() -> None:
+    assert {s.name for s in REGISTRY.agent_exposed()} == set(READS) | set(PROPOSES)
 
 
 @pytest.mark.parametrize("name", READS)

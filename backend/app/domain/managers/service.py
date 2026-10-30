@@ -399,6 +399,8 @@ async def log_candidate_interaction(
     tenant_id: uuid.UUID,
     candidate_id: uuid.UUID,
     payload: ManagerInteractionCreate,
+    actor_user_id: str | None = None,
+    actor_name: str | None = None,
 ) -> ManagerInteraction | None:
     """Record one touch on a candidate. None when the candidate is not ours.
 
@@ -423,6 +425,8 @@ async def log_candidate_interaction(
         interaction_type=normalise_interaction_type(payload.interaction_type),
         occurred_at=payload.occurred_at or dt.datetime.now(dt.UTC),
         summary=payload.summary,
+        actor_user_id=actor_user_id,
+        actor_name=actor_name,
     )
     session.add(interaction)
     await session.commit()

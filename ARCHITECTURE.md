@@ -120,6 +120,13 @@ Unchanged from `backend/CLAUDE.md` §2.1. Ingestion into the corpus is *not* an
 agent commit (it asserts nothing about anyone's record). The crossing that owes
 a receipt is adoption of a corpus company into a tenant's `companies`.
 
+An AI client's **proposal** (MCP, ADR 0003 §3.7) is not routed through
+`verify_and_commit` either, and that is deliberate: confirming it is a *human*
+edit, made by a person clicking in Eligo, so it runs the same domain write a
+manual edit runs, attributed to that person, with a WRITE receipt naming who
+asked, through which client, and who confirmed. The AI client itself only
+ever creates a pending row in `agent_proposals`.
+
 ---
 
 ## 2. Data classification
@@ -133,6 +140,7 @@ the model is wrong.
 | **Tenant overlay** | tracked/prospect flags, notes, adoption link | `hub_company_link` | yes | no |
 | **Tenant record** | clients, mandates, pipeline | `companies`, `jobs`, `applications` | yes | no |
 | **Personal data** | candidates, managers/contacts (incl. anything enriched or tenant-sourced) | `candidates`, `managers` | yes | **yes** |
+| **Personal data (transient)** | changes an AI client proposed, waiting for a person: candidate name in the title, a drafted note | `agent_proposals` | yes | **yes** — free text erased on every decision and on expiry |
 | **Audit** | receipts, enrichment records | `receipts`, `enrichment_records` | yes | references only |
 
 ---
@@ -147,7 +155,7 @@ apart at the schema level.
 |---|---|---|
 | **Art. 5(1)(b)** purpose limitation | each source adapter records why it exists and what it may be used for | ⚠ adapters have docstrings, no machine-readable purpose |
 | **Art. 5(1)(c)** minimisation | corpus holds persons only as a public source published them (RULE 2); raw payloads pruned | ⚠ `hub_job_postings.raw` retains full source records indefinitely |
-| **Art. 5(1)(e)** storage limitation | postings deactivate + expire; observations have a retention window | ❌ not implemented — no retention job |
+| **Art. 5(1)(e)** storage limitation | postings deactivate + expire; observations have a retention window | ❌ not implemented — no retention job. `agent_proposals` erases its free text on decision and on expiry, but expiry is applied on the workspace's next proposal action, so an idle workspace keeps expired text until then |
 | **Art. 6(1)(f)** lawful basis | documented Legitimate Interest Assessment per source | ❌ not written |
 | **Art. 14** third-party collection notice | any *person* ingested from a public source flags an Art. 14 duty | ✅ `agents/enrichment.py`; must extend to `managers` |
 | **Art. 15/16** access & rectification | provenance per field, so we can say where a value came from | ✅ `EnrichmentRecord`, `hub_observations`, `resolution_basis` |

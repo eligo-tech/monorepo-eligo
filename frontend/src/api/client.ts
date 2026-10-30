@@ -42,6 +42,7 @@ import type {
   ImportResultDTO,
   MeDTO,
   FeatureStatusDTO,
+  ProposalDTO,
   NoticeCapabilityDTO,
   SourceCapabilitiesDTO,
   TenantSourceDTO,
@@ -700,6 +701,15 @@ export const api = {
     }),
 
   // ── This workspace's own data sources ──
+  // ── What an AI client proposed, waiting for a human ──
+  proposals: (pendingOnly = true) =>
+    request<ProposalDTO[]>(`/proposals${pendingOnly ? '?pending_only=true' : ''}`),
+  /** Applies it as you. 409 when the record changed since it was proposed. */
+  confirmProposal: (id: string) =>
+    request<ProposalDTO>(`/proposals/${id}/confirm`, { method: 'POST' }),
+  declineProposal: (id: string) =>
+    request<ProposalDTO>(`/proposals/${id}/decline`, { method: 'POST' }),
+
   // ── Gated features (AI access, interview assistant) ──
   features: () => request<FeatureStatusDTO[]>('/features'),
   /** Accept the terms the admin was SHOWN: the server refuses (409) if the

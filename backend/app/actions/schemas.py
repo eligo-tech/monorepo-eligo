@@ -174,3 +174,44 @@ class PostingOut(BaseModel):
 
 class PostingList(_Out):
     postings: list[PostingOut]
+
+
+class ProposalOut(_Out):
+    """A change an AI client proposed. Applied only when a human confirms it in Eligo."""
+
+    id: uuid.UUID
+    kind: str
+    #: pending · confirmed · declined · stale · expired
+    status: str
+    title: str
+    created_at: dt.datetime
+    expires_at: dt.datetime
+    decided_at: dt.datetime | None = None
+    #: What the client should tell the user.
+    next_step: str
+
+    @classmethod
+    def from_row(cls, row) -> ProposalOut:  # noqa: ANN001 — AgentProposal
+        from app.domain.proposals import service as proposals
+
+        status = proposals.effective_status(row)
+        return cls(
+            id=row.id,
+            kind=row.kind,
+            status=status,
+            title=row.title,
+            created_at=row.created_at,
+            expires_at=proposals.expires_at(row),
+            decided_at=row.decided_at,
+            next_step=(
+                "Nothing has changed yet. Ask the user to confirm it in Eligo "
+                "(the 'Vorschläge' / 'Proposals' button at the top); it expires after 7 days."
+                if status == "pending"
+                else f"This proposal is {status}."
+            ),
+            sources=[Source(type="proposal", id=str(row.id))],
+        )
+
+
+class ProposalList(_Out):
+    proposals: list[ProposalOut]

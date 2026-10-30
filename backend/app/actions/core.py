@@ -1,8 +1,10 @@
 """Registry core: `Effect`, `@action`, `ActionContext`, `invoke`.
 
-The rule this file enforces: **an AI client (an agent actor) may only read.**
-Proposing a change comes later and still ends at a human (ADR 0003 §3.7);
-committing and anything that leaves the system are never an agent's.
+The rule this file enforces: **an AI client (an agent actor) may read and
+propose — never write.** A PROPOSE handler returns a `ProposalDraft`; this
+registry stores it as a pending proposal that a human confirms in Eligo
+(ADR 0003 §3.7). Committing and anything that leaves the system are never an
+agent's.
 The MCP server is generated from `agent_exposed()`, so what is refused here
 cannot be reached from Claude at all.
 """
@@ -17,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import ADMIN, RECRUITER, Actor
@@ -38,8 +41,8 @@ class Effect(str, enum.Enum):
     EXTERNAL = "external"
 
 
-#: What an agent may call. PROPOSE joins this set in PR 4, not before.
-AGENT_EFFECTS = frozenset({Effect.READ})
+#: What an agent may call.
+AGENT_EFFECTS = frozenset({Effect.READ, Effect.PROPOSE})
 
 
 class UnknownAction(LookupError):
@@ -64,6 +67,21 @@ class CatalogViolation(RuntimeError):
 _INGESTION_EXACT = frozenset({"ingest", "deactivate_stale_postings"})
 _INGESTION_PREFIX = "fetch_missing_"
 
+#: Names a PROPOSE handler may not use: the session's write calls, SQL write
+#: constructs, every domain function a confirm would run, and the ledger. A
+#: propose handler READS (to snapshot what it saw) and returns a draft; the
+#: registry stores the draft. Static, like the ingestion check below — so it
+#: fails closed on innocent uses too (`set.add`, `dict.update`): such a handler
+#: refuses to load. Write it another way. What a static scan cannot see (an
+#: attribute set on a loaded record, raw SQL) the runtime guard in `invoke`
+#: refuses.
+_WRITE_NAMES = frozenset({
+    "add", "add_all", "commit", "flush", "delete", "merge", "insert", "update",
+    "set_step", "add_step", "remove_step", "move_stage", "transition_status",
+    "set_assessment", "log_interaction", "log_candidate_interaction",
+    "verify_and_commit", "append_receipt", "create", "confirm", "decline",
+})
+
 #: Most ids a receipt lists; the count is always exact.
 _RECEIPT_MAX_IDS = 500
 
@@ -85,6 +103,14 @@ def _wraps_ingestion(handler: Handler) -> str | None:
         if name in _INGESTION_EXACT or name.startswith(_INGESTION_PREFIX):
             return name
     return None
+
+
+def _writes(handler: Handler) -> str | None:
+    code = getattr(handler, "__code__", None)
+    if code is None:
+        return None
+    hits = _names_used(code) & _WRITE_NAMES
+    return min(hits) if hits else None
 
 
 class ActionNotFound(LookupError):
@@ -172,6 +198,13 @@ class Registry:
         if AGENT_EFFECTS & {Effect.COMMIT, Effect.EXTERNAL}:
             raise CatalogViolation("an agent may never commit or reach outside")
         for spec in self.all():
+            if spec.effect is Effect.PROPOSE:
+                wrote = _writes(spec.handler)
+                if wrote:
+                    raise CatalogViolation(
+                        f"{spec.name}: a propose handler uses {wrote!r} — it may only "
+                        "read and return a ProposalDraft; a human confirms in Eligo"
+                    )
             hit = _wraps_ingestion(spec.handler)
             if hit:
                 raise CatalogViolation(
@@ -210,7 +243,13 @@ class Registry:
             ActorRef(user_id=ctx.actor.user_id, name=ctx.actor.name)
         )
         try:
-            out = await spec.handler(ctx, parsed)
+            if spec.effect is Effect.PROPOSE:
+                out = await _run_read_only(ctx, spec, parsed)
+            else:
+                out = await spec.handler(ctx, parsed)
+            if spec.effect is Effect.PROPOSE:
+                # The proposal's own receipt replaces the read receipt.
+                return await _store_proposal(ctx, spec, out)
             if ctx.actor.kind != "human":
                 await _receipt_agent_read(ctx, spec, parsed, out)
             return out
@@ -266,6 +305,50 @@ async def _receipt_agent_read(
         actor_name=ctx.actor.name,
     )
     await ctx.session.commit()
+
+
+async def _run_read_only(ctx: ActionContext, spec: ActionSpec, args: BaseModel) -> Any:
+    """Run a PROPOSE handler with every write refused while it runs.
+
+    Two holes the static check cannot close: a statement that is not a SELECT
+    (raw SQL included) is refused as it executes, and an object the handler
+    added, changed or deleted is refused before the registry's own commit
+    could carry it into the record.
+    """
+    sync_session = ctx.session.sync_session
+
+    def _refuse_writes(state) -> None:  # noqa: ANN001 — ORMExecuteState
+        if not state.is_select:
+            raise CatalogViolation(f"{spec.name}: a propose handler ran a write")
+
+    event.listen(sync_session, "do_orm_execute", _refuse_writes)
+    try:
+        out = await spec.handler(ctx, args)
+    finally:
+        event.remove(sync_session, "do_orm_execute", _refuse_writes)
+    if ctx.session.new or ctx.session.dirty or ctx.session.deleted:
+        await ctx.session.rollback()
+        raise CatalogViolation(f"{spec.name}: a propose handler changed a record")
+    return out
+
+
+async def _store_proposal(ctx: ActionContext, spec: ActionSpec, draft: Any) -> Any:
+    """Turn a PROPOSE handler's draft into a pending proposal. The only write."""
+    from app.actions.schemas import ProposalOut
+    from app.domain.proposals import service as proposals
+
+    if not isinstance(draft, proposals.ProposalDraft):
+        raise CatalogViolation(f"{spec.name}: a propose handler must return a ProposalDraft")
+    row = await proposals.create(
+        ctx.session,
+        tenant_id=ctx.actor.tenant_id,
+        draft=draft,
+        tool=spec.name,
+        asked_by_user_id=ctx.actor.user_id,
+        asked_by_name=ctx.actor.name,
+        client_id=ctx.actor.client_id,
+    )
+    return ProposalOut.from_row(row)
 
 
 #: The one registry the application uses. Tests build their own.

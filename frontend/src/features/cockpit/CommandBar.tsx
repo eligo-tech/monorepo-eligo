@@ -11,6 +11,7 @@ import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react'
 import { authEnabled } from '@/auth/config'
 import { Figure, SegmentedControl } from './ui/primitives'
 import { SectionPicker, type SectionOption } from './SectionPicker'
+import { ProposalsButton } from './proposals/ProposalsButton'
 import type { ScreenKey } from './CockpitShell'
 import { cn } from '@/lib/cn'
 import type { MeDTO } from '@/api/types'
@@ -98,6 +99,8 @@ export function CommandBar({
             is no datalauf queue in the backend yet — so the count carries its
             provenance marker rather than passing as measured. */}
         <div className="flex shrink-0 items-center gap-2">
+          {/* What Claude proposed, waiting for a person. Hidden when empty. */}
+          <ProposalsButton />
           <span className="flex items-center gap-2 rounded-xl border border-gold-600/45 bg-gold-800/25 px-3 py-1.5 text-[13px] text-gold-300">
             <span className="h-[7px] w-[7px] rounded-full bg-gold-400" />
             {t('Datenlauf fällig ·')} <Figure figure={status.pendingChanges} />{' '}

@@ -38,11 +38,13 @@ from app.actions.core import (
     ActionInputInvalid,
     ActionNotFound,
     ActionSpec,
+    Effect,
 )
 from app.core import auth
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.domain.features import service as features
+from app.domain.proposals import service as proposals
 from app.domain.tenants import service as tenants
 from app.mcp.auth import ClerkOAuthVerifier
 from app.mcp.ratelimit import Limiter, RateLimited
@@ -86,11 +88,14 @@ def assert_mcp_configured() -> None:
 
 
 INSTRUCTIONS = (
-    "Eligo Labs recruiting CRM — read-only access to the user's workspace: "
-    "running processes, candidates, mandates, matches, reports and public market "
-    "postings. Every answer lists its sources; cite them. Matches are "
-    "recommendations for a human, never decisions. Contact data, salaries and "
-    "notes are not available through this connection."
+    "Eligo Labs recruiting CRM — the user's workspace: running processes, "
+    "candidates, mandates, matches, reports and public market postings. Every "
+    "answer lists its sources; cite them. Matches are recommendations for a "
+    "human, never decisions. Contact data, salaries and notes are not available "
+    "through this connection. You may PROPOSE a process-step update or a "
+    "candidate note; nothing changes until a person confirms it in Eligo. Say "
+    "so plainly — never tell the user a change was made. Rejecting a candidate, "
+    "deleting and sending are not available."
 )
 
 
@@ -141,6 +146,8 @@ async def _run(spec: ActionSpec, args: dict[str, Any]) -> dict:
             out = await REGISTRY.invoke(spec.name, ActionContext(session=db, actor=actor), args)
         except ActionNotFound as exc:
             raise ToolError(f"Not found in this workspace: {exc}") from None
+        except proposals.TooManyPending as exc:
+            raise ToolError(str(exc)) from None
         except (ActionForbidden, ActionInputInvalid) as exc:
             raise ToolError(str(exc)) from None
     return out.model_dump(mode="json")
@@ -200,7 +207,13 @@ def build() -> MCPServer:
             _tool_for(spec),
             name=tool_name(spec.name),
             description=spec.description,
-            annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+            # A read is "safe to run"; a proposal creates a pending row — not
+            # read-only, never destructive, and a repeat is a second proposal.
+            annotations=ToolAnnotations(
+                readOnlyHint=spec.effect is Effect.READ,
+                destructiveHint=False,
+                idempotentHint=spec.effect is Effect.READ,
+            ),
         )
     return srv
 

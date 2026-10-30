@@ -65,3 +65,100 @@ async def test_each_user_sees_only_their_own_workspace() -> None:
         names = [c["full_name"] for c in result["structuredContent"]["candidates"]]
         assert f"{mine} {suffix}" in names, f"{org} saw nothing — workspace not pinned"
         assert f"{theirs} {suffix}" not in names, f"{org} saw the other workspace"
+
+
+async def test_a_proposal_stays_in_the_workspace_that_made_it() -> None:
+    """PR 4: workspace A's proposal is invisible to B and cannot be decided by B.
+
+    Created through /mcp as A's AI client; read and confirmed as B on the
+    runtime role. On Postgres, B's pinned transaction must see zero of A's rows
+    (RLS), not merely be filtered by the service's WHERE clause.
+    """
+    from sqlalchemy import select
+
+    from app.core.database import SessionLocal, current_tenant_var
+    from app.domain.proposals import service as proposals
+    from app.domain.proposals.models import AgentProposal
+
+    suffix = uuid.uuid4().hex[:8]
+    org_a, org_b = f"org_pa_{suffix}", f"org_pb_{suffix}"
+    tenant_a = await _workspace(org_a, f"Clara {suffix}")
+    tenant_b = await _workspace(org_b, f"Dirk {suffix}")
+
+    listed = await _call("candidates_list", {"limit": 100}, token=_token(org_id=org_a))
+    [clara] = [c for c in listed["structuredContent"]["candidates"]
+               if c["full_name"] == f"Clara {suffix}"]
+    made = await _call("notes_propose_candidate_note",
+                       {"candidate_id": clara["id"], "text": "Start im März"},
+                       token=_token(org_id=org_a))
+    assert made.get("isError") is not True, made
+    proposal_id = uuid.UUID(made["structuredContent"]["id"])
+
+    token = current_tenant_var.set(str(tenant_b))
+    try:
+        async with SessionLocal() as s:
+            # Raw query, no tenant filter: only RLS stands between B and A's row.
+            seen = (await s.execute(select(AgentProposal.id))).scalars().all()
+            assert proposal_id not in seen
+            with pytest.raises(proposals.ProposalNotFound):
+                await proposals.confirm(s, tenant_id=tenant_b, proposal_id=proposal_id,
+                                        user_id="intruder", name="B")
+    finally:
+        current_tenant_var.reset(token)
+
+    # Control: A's own pinned session sees it.
+    token = current_tenant_var.set(str(tenant_a))
+    try:
+        async with SessionLocal() as s:
+            assert proposal_id in (await s.execute(select(AgentProposal.id))).scalars().all()
+    finally:
+        current_tenant_var.reset(token)
+
+
+async def test_a_step_with_dates_confirms_on_postgres_without_false_staleness() -> None:
+    """The snapshot is compared as text. On Postgres the step's timestamps come
+    back through asyncpg, so a step that already HAS a date is the case that
+    could be wrongly refused as stale. Proposed over /mcp, confirmed as A."""
+    import datetime as dt
+
+    from sqlalchemy import select
+
+    from app.core.database import SessionLocal, current_tenant_var
+    from app.domain.jobs.models import Job
+    from app.domain.pipeline import service as pipeline
+    from app.domain.pipeline.models import Application, ProcessStep
+    from app.domain.proposals import service as proposals
+
+    suffix = uuid.uuid4().hex[:8]
+    org = f"org_ps_{suffix}"
+    tenant = await _workspace(org, f"Eva {suffix}")
+    async with AdminSessionLocal() as s:
+        await s.execute(text(_PIN), {"t": str(tenant)})
+        cand = (await s.execute(select(Candidate).where(Candidate.tenant_id == tenant))).scalars().first()
+        job = Job(tenant_id=tenant, title="Lead")
+        s.add(job)
+        await s.flush()
+        app = Application(tenant_id=tenant, candidate_id=cand.id, job_id=job.id)
+        s.add(app)
+        await s.commit()
+        app_id = app.id
+        await s.execute(text(_PIN), {"t": str(tenant)})
+        await pipeline.set_step(s, tenant_id=tenant, application_id=app_id, step_key="interview",
+                                scheduled_at=dt.datetime(2026, 11, 3, 9, 0, tzinfo=dt.UTC))
+
+    made = await _call("pipeline_propose_step",
+                       {"application_id": str(app_id), "step_key": "interview",
+                        "done_at": "2026-11-03T10:30:00+01:00", "outcome": "pass"},
+                       token=_token(org_id=org))
+    assert made.get("isError") is not True, made
+    pid = uuid.UUID(made["structuredContent"]["id"])
+
+    token = current_tenant_var.set(str(tenant))
+    try:
+        async with SessionLocal() as s:
+            row = await proposals.confirm(s, tenant_id=tenant, proposal_id=pid, user_id="u", name="A")
+            assert row.status == "confirmed"
+            step = await s.scalar(select(ProcessStep).where(ProcessStep.application_id == app_id))
+            assert step.outcome == "pass" and step.done_at is not None
+    finally:
+        current_tenant_var.reset(token)

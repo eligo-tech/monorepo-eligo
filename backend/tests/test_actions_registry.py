@@ -88,13 +88,15 @@ async def test_wrong_role_is_refused(registry) -> None:
     assert await registry.invoke("t.admin_read", _ctx(_actor(role=ADMIN)), {})
 
 
-@pytest.mark.parametrize("effect", [Effect.PROPOSE, Effect.COMMIT, Effect.EXTERNAL])
-async def test_an_agent_may_not_call_anything_but_a_read(registry, effect) -> None:
+@pytest.mark.parametrize("effect", [Effect.COMMIT, Effect.EXTERNAL])
+async def test_an_agent_may_not_commit_or_reach_outside(registry, effect) -> None:
+    # PR 4: an agent may read and PROPOSE (test_actions_proposals.py); a write
+    # or anything leaving the system stays refused.
     with pytest.raises(core.ActionForbidden):
         await registry.invoke(f"t.{effect.value}", _ctx(_actor(kind="agent")), {})
 
 
-@pytest.mark.parametrize("effect", [Effect.PROPOSE, Effect.COMMIT])
+@pytest.mark.parametrize("effect", [Effect.COMMIT])
 async def test_a_human_may_call_non_read_actions(registry, effect) -> None:
     # Control for the test above: the refusal is about the agent, not the effect.
     assert await registry.invoke(f"t.{effect.value}", _ctx(_actor()), {})
@@ -113,6 +115,6 @@ def test_a_name_registers_once(registry) -> None:
             return {}
 
 
-def test_agent_exposed_lists_reads_only(registry) -> None:
+def test_agent_exposed_lists_reads_and_proposals_only(registry) -> None:
     names = {spec.name for spec in registry.agent_exposed()}
-    assert names == {"t.read", "t.admin_read"}
+    assert names == {"t.read", "t.admin_read", "t.propose"}
