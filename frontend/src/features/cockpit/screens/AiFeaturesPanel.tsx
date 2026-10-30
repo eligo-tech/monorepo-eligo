@@ -139,7 +139,7 @@ function FeatureRow({
         <button
           type="button"
           onClick={() => setShowTerms(true)}
-          className="mt-3 text-[13px] text-lav-300 underline-offset-2 hover:underline"
+          className="mt-3 text-[13px] text-lav-400 underline-offset-2 hover:underline"
         >
           {t('Bedingungen anzeigen')}
         </button>

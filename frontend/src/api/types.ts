@@ -958,6 +958,29 @@ export interface FeatureStatusDTO {
   connect_url: string | null
 }
 
+/** A change an AI client proposed (backend `domain/proposals`). Applied only
+ *  when somebody in the workspace confirms it here. */
+export interface ProposalDTO {
+  id: string
+  /** "step" | "candidate_note" */
+  kind: string
+  /** pending · confirmed · declined · stale · expired */
+  status: string
+  title: string
+  tool: string
+  /** The state the AI client saw. */
+  before: Record<string, unknown>
+  /** What confirming applies. */
+  after: Record<string, unknown>
+  reason: string | null
+  asked_by_name: string | null
+  client_id: string | null
+  created_at: string
+  expires_at: string
+  decided_by_name: string | null
+  decided_at: string | null
+}
+
 /** One line of a record's change history, from the receipt ledger. */
 export interface HistoryEntryDTO {
   at: string

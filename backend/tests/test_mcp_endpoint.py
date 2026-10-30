@@ -370,3 +370,78 @@ async def test_the_settings_screen_gets_the_exact_connect_address() -> None:
         rows = {f["key"]: f for f in (await client.get("/api/v1/features")).json()}
     assert rows["mcp"]["connect_url"] == settings.mcp_resource_url
     assert rows["interviewer"]["connect_url"] is None
+
+
+# --- PR 4: propose tools ------------------------------------------------------
+
+
+async def test_only_reads_are_marked_read_only() -> None:
+    """Claude shows a read-only hint as "safe to run". A propose tool creates a
+    proposal, so it must not claim that — and nothing is destructive."""
+    response = await _rpc("tools/list", token=_token())
+    hints = {t["name"]: t["annotations"] for t in response.json()["result"]["tools"]}
+    assert hints["pipeline_processes"]["readOnlyHint"] is True
+    for name in ("pipeline_propose_step", "notes_propose_candidate_note"):
+        assert hints[name]["readOnlyHint"] is False
+        assert hints[name]["destructiveHint"] is False
+
+
+async def test_no_tool_can_confirm_or_decline() -> None:
+    response = await _rpc("tools/list", token=_token())
+    names = " ".join(t["name"] for t in response.json()["result"]["tools"])
+    for word in ("confirm", "decline", "reject", "delete", "apply"):
+        assert word not in names
+
+
+async def test_a_proposal_over_mcp_is_pending_and_changes_nothing() -> None:
+    from app.domain.managers.models import ManagerInteraction
+
+    tenant_id = await _admit()
+    async with SessionLocal() as s:
+        cand = Candidate(tenant_id=tenant_id, full_name="Mia Muster")
+        s.add(cand)
+        await s.commit()
+        cand_id = cand.id
+    result = await _call(
+        "notes_propose_candidate_note", {"candidate_id": str(cand_id), "text": "Start im März"}
+    )
+    assert result.get("isError") is not True, result
+    assert result["structuredContent"]["status"] == "pending"
+    assert "Eligo" in result["structuredContent"]["next_step"]
+    async with SessionLocal() as s:
+        notes = (await s.execute(
+            select(ManagerInteraction).where(ManagerInteraction.tenant_id == tenant_id)
+        )).scalars().all()
+    assert notes == []
+
+
+async def test_too_many_open_proposals_is_a_readable_tool_error(monkeypatch) -> None:
+    from app.domain.proposals import service as proposals
+
+    monkeypatch.setattr(proposals, "MAX_PENDING_PER_USER", 0)
+    tenant_id = await _admit()
+    async with SessionLocal() as s:
+        cand = Candidate(tenant_id=tenant_id, full_name="Mia Muster")
+        s.add(cand)
+        await s.commit()
+        cand_id = cand.id
+    result = await _call(
+        "notes_propose_candidate_note", {"candidate_id": str(cand_id), "text": "x"}
+    )
+    assert result["isError"] is True
+    assert "confirm or decline" in _text(result)
+
+
+async def test_consent_to_the_read_only_terms_does_not_cover_proposals() -> None:
+    """The 2026-10-29 terms said "nur lesend". Proposing needs the new version."""
+    async with SessionLocal() as s:
+        tenant = await tenants.get_or_create(s, clerk_org_id=ORG, name="Admitted GmbH")
+        await s.commit()
+        from app.domain.features.models import TenantFeatureConsent
+
+        s.add(TenantFeatureConsent(tenant_id=tenant.id, feature="mcp",
+                                   terms_version="2026-10-29", accepted_by="Admin"))
+        await s.commit()
+    result = await _call("pipeline_processes")
+    assert result["isError"] is True and "erneut zustimmen" in _text(result)
+    assert "VORSCHLAGEN" in features.FEATURES["mcp"].terms

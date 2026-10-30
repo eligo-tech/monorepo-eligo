@@ -64,6 +64,14 @@ the organization, since the workspace is derived from `org_id` (ADR 0002).
    *propose* actions that create a pending change a human confirms in the Eligo
    UI. A confirmation inside the AI client does not count: the server cannot
    tell a human's click from the model's call.
+   *Built (PR 4, 2026-10-30):* a propose tool returns a draft the registry
+   stores in `agent_proposals` (RLS, migration 0044) with a receipt; the
+   catalog refuses at load any propose handler that names a write. Confirm and
+   decline exist only on the REST API (`/proposals/{id}/confirm|decline`),
+   which refuses OAuth tokens (§3.3); any workspace member may decide.
+   Confirm re-reads what the client saw and refuses a stale proposal;
+   proposals expire after 7 days. Rejection, deletion and sending are not
+   tools. The `mcp` terms moved to version 2026-10-30 to say so.
 
 ## 4. Rejected
 

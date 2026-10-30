@@ -87,8 +87,12 @@ Mit der Aktivierung bestätigen Sie als Administrator:
    Prozesse — gehen dabei an den Anbieter dieses Assistenten.
 2. Mit diesem Anbieter haben Sie einen Auftragsverarbeitungsvertrag
    (Art. 28 DSGVO) bzw. nutzen ihn nur im Rahmen eines solchen.
-3. Der Zugriff ist nur lesend. Kontaktdaten, Gehälter, Notizen und
-   Lebenslauf-Texte werden nicht übermittelt.
+3. Der Assistent kann lesen und Änderungen VORSCHLAGEN (einen
+   Prozessschritt, eine Notiz zu einem Kandidaten). Nichts davon wird
+   übernommen, bevor ein Mitglied Ihres Workspace es in Eligo bestätigt.
+   Absagen, Löschen und Versenden sind über den Assistenten nicht möglich.
+   Kontaktdaten, Gehälter, Notizen und Lebenslauf-Texte werden nicht
+   übermittelt.
 4. Jede Abfrage wird im Prüfprotokoll Ihres Workspace festgehalten:
    wer, wann, mit welchem Assistenten, welche Datensätze.
 5. Sie können den Zugriff jederzeit wieder deaktivieren; er endet sofort.
@@ -98,7 +102,9 @@ FEATURES: dict[str, FeatureDef] = {
     "mcp": FeatureDef(
         key="mcp",
         label="KI-Zugriff (MCP)",
-        terms_version="2026-10-29",
+        # 2026-10-30: read → read + propose (PR 4). A new version, so every
+        # workspace that accepted "nur lesend" must accept again.
+        terms_version="2026-10-30",
         terms=MCP_TERMS,
         switch=lambda: settings.mcp_enabled,
         allowlist=lambda: settings.mcp_allowed_tenants,
