@@ -55,3 +55,23 @@ jobs:
           python -m scripts.tenant_imports \
             --limit "${{ github.event.inputs.limit || '3' }}" \
             ${{ github.event.inputs.no_details == 'true' && '--no-details' || '' }}
+
+      - name: Expire AI proposals
+        # Proposals older than 7 days lose their text and the candidate's name
+        # in every workspace (GDPR Art. 5(1)(e)) — nightly, not only when
+        # somebody next uses the workspace. Machine credential only.
+        if: always()
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os, sys, httpx
+          r = httpx.post(
+              os.environ["ELIGO_API_BASE"].rstrip("/") + "/proposals/maintenance/expire",
+              headers={"Authorization": "Bearer " + os.environ["ELIGO_INGEST_TOKEN"]},
+              timeout=60,
+          )
+          print(r.status_code, r.text)
+          sys.exit(0 if r.is_success else 1)
+          PY

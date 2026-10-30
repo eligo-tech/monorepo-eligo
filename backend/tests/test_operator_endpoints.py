@@ -39,6 +39,8 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     # decrypts that workspace's password, so it is machine-only for the same
     # fail-closed reason.
     ("POST", "/tenant-sources/run-imports"),
+    # Erases expired AI proposals in every workspace (GDPR Art. 5(1)(e)).
+    ("POST", "/proposals/maintenance/expire"),
 }
 
 _TOKEN = "t" * 44

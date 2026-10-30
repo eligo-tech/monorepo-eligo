@@ -35,6 +35,10 @@ MAX_PENDING_PER_USER = 20
 #: After this a proposal is about a world that has moved on.
 LIFETIME = dt.timedelta(days=7)
 
+#: What a decided or expired proposal is called once the person's name is
+#: gone. The receipts keep the record references; the row keeps no name.
+KIND_LABEL = {"step": "Prozessschritt", "candidate_note": "Notiz"}
+
 PENDING, CONFIRMED, DECLINED, STALE, EXPIRED = (
     "pending", "confirmed", "declined", "stale", "expired",
 )
@@ -173,6 +177,18 @@ async def _note_apply(
         raise ProposalStale("the candidate is no longer in this workspace")
 
 
+async def _lock_subject(session: AsyncSession, tenant_id: uuid.UUID, kind: str, args: dict) -> None:
+    """Lock what a confirm is about. Steps: the process row, which every human
+    step write also locks (`pipeline.get_application(lock=True)`). Notes only
+    append, so there is nothing to overwrite and nothing to lock."""
+    if kind == "step":
+        from app.domain.pipeline import service as pipeline
+
+        await pipeline.get_application(
+            session, tenant_id=tenant_id, application_id=uuid.UUID(args["application_id"]), lock=True
+        )
+
+
 APPLIERS: dict[str, tuple[Snapshot, Apply]] = {
     "step": (_step_snapshot, _step_apply),
     "candidate_note": (_note_snapshot, _note_apply),
@@ -292,12 +308,12 @@ async def list_proposals(
     return list((await session.execute(query)).scalars())
 
 
-async def _purge_expired(session: AsyncSession, tenant_id: uuid.UUID) -> None:
-    """Close what has expired and erase its free text (GDPR Art. 5(1)(e)).
+async def _purge_expired(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    """Close what has expired and erase its free text and name (GDPR Art. 5(1)(e)).
 
-    Runs on every proposal write in the workspace — no scheduler needed for a
-    table this small. A workspace that never proposes again keeps its expired
-    text until then; ARCHITECTURE.md lists that gap.
+    Runs on every proposal write in the workspace AND nightly for every
+    workspace (`expire_all`, called by the scheduler), so nothing waits for a
+    user to come back.
     """
     cutoff = dt.datetime.now(dt.UTC) - LIFETIME
     rows = (
@@ -313,6 +329,38 @@ async def _purge_expired(session: AsyncSession, tenant_id: uuid.UUID) -> None:
         row.status = EXPIRED
         row.args = _erased(row.args)
         row.reason = None
+        row.title = KIND_LABEL.get(row.kind, row.kind)
+    return len(rows)
+
+
+async def expire_all() -> dict[str, int]:
+    """Expire proposals in every workspace. MACHINE ONLY — the nightly job.
+
+    Finds the workspaces with something to expire on the admin connection,
+    then purges each one on a session pinned to that workspace, so the write
+    itself runs under that workspace's RLS like any other.
+    """
+    from app.core.database import AdminSessionLocal, current_tenant_var
+
+    cutoff = dt.datetime.now(dt.UTC) - LIFETIME
+    async with AdminSessionLocal() as session:
+        tenants = (
+            await session.execute(
+                select(AgentProposal.tenant_id)
+                .where(AgentProposal.status == PENDING, AgentProposal.created_at <= cutoff)
+                .distinct()
+            )
+        ).scalars().all()
+    expired = 0
+    for tenant_id in tenants:
+        token = current_tenant_var.set(str(tenant_id))
+        try:
+            async with AdminSessionLocal() as session:
+                expired += await _purge_expired(session, tenant_id)
+                await session.commit()
+        finally:
+            current_tenant_var.reset(token)
+    return {"workspaces": len(tenants), "expired": expired}
 
 
 def _erased(args: dict) -> dict:
@@ -358,6 +406,9 @@ async def _claim(
             # lives in the record, a declined or stale one should not live on.
             args=_erased(row.args),
             reason=None,
+            # The candidate's name leaves with the decision; the receipt keeps
+            # the record ids for the audit trail.
+            title=KIND_LABEL.get(row.kind, row.kind),
         )
         .execution_options(synchronize_session=False)
     )
@@ -405,6 +456,9 @@ async def confirm(
     await _purge_expired(session, tenant_id)
     row = await _open(session, tenant_id, proposal_id)
     args = dict(row.args)  # kept before the claim erases the text
+    # Hold the record from before the read until the commit, so a human write
+    # cannot land between "still as Claude saw it" and the write.
+    await _lock_subject(session, tenant_id, row.kind, args)
     read, apply = APPLIERS[row.kind]
     current = await read(session, tenant_id, args)
     if current is None or current != row.snapshot:

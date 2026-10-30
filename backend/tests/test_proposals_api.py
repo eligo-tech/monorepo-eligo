@@ -253,3 +253,38 @@ async def test_refusals_carry_a_code_and_never_echo_input(api) -> None:
     await api.post(f"/api/v1/proposals/{pid}/confirm")
     again = await api.post(f"/api/v1/proposals/{pid}/confirm")
     assert again.status_code == 409 and again.json()["detail"]["code"] == "closed"
+
+
+# --- retention (review 2026-10-31) --------------------------------------------
+
+
+@pytest.mark.parametrize("decision", ["confirm", "decline"])
+async def test_a_decided_proposal_keeps_no_name(api, decision) -> None:
+    pid, _ = await _step_proposal()
+    await api.post(f"/api/v1/proposals/{pid}/{decision}")
+    async with SessionLocal() as s:
+        row = await s.get(AgentProposal, uuid.UUID(pid))
+    assert "Anna" not in row.title  # the receipt keeps the references
+
+
+async def test_the_nightly_job_expires_proposals_in_every_workspace() -> None:
+    """Without a user coming back: the scheduler's call alone erases them."""
+    from app.domain.proposals import service as proposals
+
+    other = uuid.uuid4()
+    ids = []
+    for tenant in (TENANT, other):
+        cand_id, _ = await _process(tenant)
+        ids.append(uuid.UUID(await _propose("notes.propose_candidate_note",
+                                            {"candidate_id": str(cand_id), "text": "alt"}, tenant=tenant)))
+    async with SessionLocal() as s:
+        for pid in ids:
+            (await s.get(AgentProposal, pid)).created_at = dt.datetime.now(dt.UTC) - dt.timedelta(days=8)
+        await s.commit()
+
+    done = await proposals.expire_all()
+    assert done["expired"] >= 2
+    async with SessionLocal() as s:
+        for pid in ids:
+            row = await s.get(AgentProposal, pid)
+            assert row.status == "expired" and row.args.get("text") is None and "Anna" not in row.title
