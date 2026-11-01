@@ -238,19 +238,154 @@ jobs:
         env:
           ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_app:ci_app_pw@localhost:5432/eligo
           ELIGO_AUTH_ENABLED: 'true'
-        run: |
-          python -c "
-          import asyncio
-          from app.core.database import assert_runtime_rls_enforced
-          asyncio.run(assert_runtime_rls_enforced())
-          print('every tenant table is enabled, forced and policed')
-          "
+        # The strict check, not the startup guard: the guard treats "could
+        # not connect" as a warning, so this step used to pass when the app
+        # role could not even log in.
+        run: python -m scripts.check_rls_enforced
 
       - name: Report the final state
         if: always()
         env:
           ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
         run: python -m scripts.apply_rls --status
+
+  upgrade:
+    name: Backend · upgrade from main
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # Every other job builds a FRESH schema (`create_all` + `stamp head`).
+    # Production is never fresh: the Dockerfile runs `alembic upgrade head`
+    # against the schema the previous deploy left. Until this job, the first
+    # time a migration met that schema was the Railway deploy (review
+    # 2026-10-31, #3).
+    #
+    # So: build the schema as the TARGET (main, i.e. production) has it, put
+    # rows in it, then upgrade it with this PR's code. Each failure below was
+    # proven by a probe migration before the job was committed:
+    #   - NOT NULL column without a default  → fails only because of the rows
+    #   - a downgrade that does not run      → fails the rollback step
+    #   - a new tenant table without policy  → fails the policed check
+    #   - models that the migrations disagree with → fails the drift check
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eligo_owner
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: eligo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U eligo_owner -d eligo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
+      ELIGO_ADMIN_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
+      # The explicit-target override (migrations/env.py); fill_every_table
+      # refuses to run without it.
+      ALEMBIC_DATABASE_URL: postgresql+asyncpg://eligo_owner:ci@localhost:5432/eligo
+      ELIGO_DB_APP_ROLE: eligo_app
+      ELIGO_DB_APP_ROLE_PASSWORD: ci_app_pw
+      ELIGO_DB_SSL: 'false'
+      ELIGO_AUTH_ENABLED: 'false'
+      ELIGO_LLM_PROVIDER: heuristic
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # the base commit has to be checked out beside this one
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.lock
+
+      - name: Install the locked dependencies
+        run: |
+          pip install -r requirements-dev.lock
+          pip install --no-deps -e .
+
+      - name: Check out the base (what production runs)
+        # A PR run checks out the merge commit; its first parent is exactly
+        # the main it was merged onto. Not `origin/main`: that is fetched when
+        # the run starts, so a re-run after main gained a migration would
+        # stamp a revision this tree does not have. A push to main is
+        # compared with the commit before it — the previous deploy.
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then BASE=$(git rev-parse HEAD^1); else BASE=$BEFORE; fi
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE"
+          git -C "$RUNNER_TEMP/base" log --oneline -1
+
+      - name: Build the schema as the base builds it
+        # Run from the base's directory, so `app` and `migrations` resolve to
+        # the BASE code (cwd is first on sys.path; alembic.ini prepends `.`),
+        # not to this PR's editable install.
+        working-directory: ${{ runner.temp }}/base/backend
+        run: |
+          python -c "import asyncio; from app.core.database import create_all; asyncio.run(create_all())"
+          alembic stamp head
+          heads=$(alembic heads | awk '{print $1}')
+          if [ "$(echo "$heads" | wc -l)" != 1 ]; then
+            echo "::error::the base has more than one migration head: $heads"; exit 1
+          fi
+          echo "BASE_HEAD=$heads" >> "$GITHUB_ENV"
+
+      - name: Put a row in every table
+        # This PR's script, reading the base schema by reflection.
+        run: python -m scripts.fill_every_table
+
+      - name: Apply RLS as the base had it
+        # Only here, never after the upgrade: Railway runs `alembic upgrade
+        # head` and nothing else, so a new table's policy has to come from its
+        # own migration. Re-running apply_rls afterwards would hide exactly
+        # the 0041 failure.
+        working-directory: ${{ runner.temp }}/base/backend
+        run: python -m scripts.apply_rls
+
+      - name: Upgrade with this PR's migrations (what the deploy runs)
+        id: upgrade
+        run: |
+          alembic upgrade head
+          alembic current
+
+      - name: Roll the new migrations back and forward again
+        run: |
+          alembic downgrade "$BASE_HEAD"
+          alembic upgrade head
+
+      - name: Every tenant table is still policed
+        env:
+          ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_app:ci_app_pw@localhost:5432/eligo
+          ELIGO_AUTH_ENABLED: 'true'
+        # The strict check, not the startup guard: the guard treats "could
+        # not connect" as a warning, so this step used to pass when the app
+        # role could not even log in.
+        run: python -m scripts.check_rls_enforced
+
+      - name: Isolation holds on the upgraded database
+        env:
+          ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_app:ci_app_pw@localhost:5432/eligo
+        run: pytest tests/test_rls_postgres.py tests/test_mcp_isolation_postgres.py -q
+
+      - name: The upgraded schema matches the models
+        # What this catches: a PR whose migrations and model changes disagree.
+        # What it cannot: drift that is already on main — the base schema is
+        # built by `create_all` from main's models, so an older migration
+        # that disagreed with its model is rebuilt from the model here.
+        # Last, and run even when an RLS step above failed, so one failure
+        # does not hide the other. Skipped when the upgrade itself failed:
+        # a half-migrated schema would only print noise.
+        if: ${{ !cancelled() && steps.upgrade.outcome == 'success' }}
+        run: python -m scripts.schema_drift
 
   frontend:
     name: Frontend · typecheck & build

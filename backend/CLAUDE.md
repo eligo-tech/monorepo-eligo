@@ -14,7 +14,7 @@ codebase. If a change violates one of these, it is wrong by definition.
 |-----------|--------------------------------------------|
 | **Separation of concerns** | The six layers below, and the per-domain file split (§3): `router` (HTTP only) → `service` (business logic, **no FastAPI imports**) → `models` (persistence) → `schemas` (wire contracts). A router never contains business logic; a service never touches `Request`/`Response`. |
 | **Encapsulation** | Business logic lives *inside* a domain's `service.py`; other layers call it, never its internals. Persistence is reached only through services — routers and agents never build queries. The write path is sealed: agents **cannot** call `session.add`/`commit`; the *only* door to the record is `verification.verify_and_commit` (§2.1). |
-| **Abstraction / dependency inversion** | Volatile details sit behind stable interfaces: the `CVExtractor` **protocol** + `factory.py` (OpenAI today, any provider tomorrow — callers depend on the interface, not OpenAI); the `AtsConnector` protocol + `atsimport/factory.py` (**no vendor may be named outside `atsimport/connectors/`** — the importer takes the source key as data, the settings screen reads the registry); `JSONList`/`JSONDict` **portable column types** (JSONB on Postgres, TEXT on SQLite) so domain code never branches on the DB; the laufwise gate expresses checks as declarative predicates, not inline `if`s. Providers/DBs are injected via `settings`, not hard-wired. |
+| **Abstraction / dependency inversion** | Volatile details sit behind stable interfaces: the `CVExtractor` **protocol** + `factory.py` (OpenAI today, any provider tomorrow — callers depend on the interface, not OpenAI); the `AtsConnector` protocol + `atsimport/factory.py` (**no vendor may be named outside `atsimport/connectors/`** — the importer takes the source key as data, the settings screen reads the registry); `JSONDict`/`JSONBDict` **portable column types** (json/jsonb on Postgres, TEXT on SQLite — see `common/types.py` for which to use) so domain code never branches on the DB; the laufwise gate expresses checks as declarative predicates, not inline `if`s. Providers/DBs are injected via `settings`, not hard-wired. |
 | **Single source of truth** | The field set is defined once in `CV_FIELDS` (labels, order, schema enum all derive from it); the model registry (`registry.py`) is the one place every table is listed; design tokens live once in the frontend's `tailwind.config.js`. Add a thing in one place, not three. |
 | **Single responsibility** | One module = one job. Extraction (`documents/extraction`), grounding/verification (`gate.py`, `verification/`), matching hard-filters vs. LLM ranking (§2.2) are separate units with narrow I/O contracts, each independently testable. |
 | **Fail-closed / least surprise** | Unverifiable or low-confidence output never enters the record silently — it routes to review (§2.4) or is dropped with a receipt. Tenant isolation defaults on (RLS). Missing LLM/provider degrades to the heuristic fallback rather than 500-ing. |
@@ -262,8 +262,11 @@ Three domain facts worth knowing before you add a field:
   `profile_summary`, `interview_availability`, `other_processes` and
   `other_process_companies`.
 
-Portable column types are in `common/types.py`: `JSONDict`/`JSONList` map to
-`JSONB` on Postgres and TEXT on SQLite. Embeddings are JSON lists in the
+Portable column types are in `common/types.py`: `JSONDict`/`JSONList` are
+`json` on Postgres, `JSONBDict`/`JSONBList` are `jsonb`, both TEXT on SQLite.
+Production has both; a new column uses the type its migration creates.
+`scripts/schema_drift.py` (CI job "Backend · upgrade from main") fails when
+a PR's migrations and its model changes disagree. Embeddings are JSON lists in the
 scaffold; swap to a `pgvector` `Vector` column in the Postgres profile.
 
 ---

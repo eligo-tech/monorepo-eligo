@@ -20,7 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
-from app.domain.common.types import JSONDict
+from app.domain.common.types import JSONBDict
 
 
 class AgentProposal(Base, IDMixin, TenantMixin, TimestampMixin):
@@ -36,10 +36,10 @@ class AgentProposal(Base, IDMixin, TenantMixin, TimestampMixin):
     #: What a human reads in the list: "Anna Beispiel · COC Lead — Interviewtermin".
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     #: The validated arguments the applier runs with on confirm.
-    args: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    args: Mapped[dict] = mapped_column(JSONBDict, default=dict, nullable=False)
     #: What the client saw when it proposed. Confirm re-reads it and refuses
     #: when it changed — a proposal is about a state, not a blind write.
-    snapshot: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSONBDict, default=dict, nullable=False)
     #: Claude's stated reason, shown to the confirmer. Erased on decline.
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 

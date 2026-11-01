@@ -19,7 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
-from app.domain.common.types import JSONDict
+from app.domain.common.types import JSONBDict, JSONDict
 
 
 class TenantSource(Base, IDMixin, TenantMixin, TimestampMixin):
@@ -75,7 +75,7 @@ class TenantSource(Base, IDMixin, TenantMixin, TimestampMixin):
     #: `secret_encrypted`: a hostname is not a credential, and a recruiter
     #: needs to see which instance is connected. Empty for a source that has
     #: one address for everybody.
-    config: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    config: Mapped[dict] = mapped_column(JSONBDict, default=dict, nullable=False)
 
     #: Set when the workspace asks for an import; cleared when one runs. This
     #: single field is the whole request queue, and it is idempotent: asking

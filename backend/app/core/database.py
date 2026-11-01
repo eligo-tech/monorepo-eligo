@@ -161,6 +161,15 @@ class TenantIsolationNotEnforced(RuntimeError):
 #: Three properties, because any two without the third are worthless: the
 #: policy exists, RLS is enabled, and it is FORCEd (without FORCE the table
 #: owner silently bypasses every policy on it).
+#: Who the runtime role is, and whether RLS applies to it at all. A SUPERUSER
+#: skips every policy whatever `rolbypassrls` says, so both count as bypass —
+#: checking `rolbypassrls` alone passed a superuser as "NOBYPASSRLS"
+#: (found 2026-11-01 by running the CI gate as the owner).
+_ROLE_BYPASS_QUERY = (
+    "SELECT current_user, "
+    "(SELECT rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user)"
+)
+
 _TENANT_TABLE_AUDIT = """
 SELECT c.relname,
        c.relrowsecurity,
@@ -198,7 +207,7 @@ def isolation_problems(
     problems: list[str] = []
     if bypasses:
         problems.append(
-            f"runtime DB role {user!r} has BYPASSRLS, so no policy applies to it"
+            f"runtime DB role {user!r} has BYPASSRLS or is a superuser, so no policy applies to it"
         )
     for name, enabled, forced, has_policy in tables:
         missing = [
@@ -247,14 +256,7 @@ async def assert_runtime_rls_enforced() -> None:
 
     try:
         async with engine.connect() as conn:
-            user, bypasses = (
-                await conn.execute(
-                    text(
-                        "SELECT current_user, "
-                        "(SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user)"
-                    )
-                )
-            ).one()
+            user, bypasses = (await conn.execute(text(_ROLE_BYPASS_QUERY))).one()
             tables = (await conn.execute(text(_TENANT_TABLE_AUDIT))).all()
     except Exception as exc:  # pragma: no cover - network/permission dependent
         log.warning("could not verify RLS enforcement: %s", exc)
