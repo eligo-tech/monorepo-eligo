@@ -13,6 +13,8 @@ state, never over model text.
 
 from __future__ import annotations
 
+import asyncio
+
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -183,7 +185,9 @@ async def extract_cv(
     tenant_id: uuid.UUID,
     persist: bool,
 ) -> CVExtractionResult:
-    text = parser.pdf_to_text(content)
+    # Off the event loop: PDF parsing and the (synchronous) LLM call take
+    # seconds, and on the loop they stall every other request on this worker.
+    text = await asyncio.to_thread(parser.pdf_to_text, content)
     notes: list[str] = []
     review_items: list[str] = []
 
@@ -201,7 +205,7 @@ async def extract_cv(
         )
 
     # ── Extract (vendor-neutral, single call) → confidence-gate via the agent.
-    extracted, raw_sections, extractor_name = _run_extractor(text)
+    extracted, raw_sections, extractor_name = await asyncio.to_thread(_run_extractor, text)
     notes.append(f"extracted via {extractor_name}")
 
     # ── Anti-hallucination: drop any role/education not grounded in the CV text,
@@ -343,7 +347,7 @@ async def extract_transcript(
     if candidate is None:
         raise PreconditionFailed("candidate not found")
 
-    text = _document_text(content, content_type)
+    text = await asyncio.to_thread(_document_text, content, content_type)
     notes: list[str] = []
     review_items: list[str] = []
 
@@ -353,7 +357,7 @@ async def extract_transcript(
         reason = next((o.reason for o in pre if not o.ok), "precondition failed")
         raise PreconditionFailed(reason or "precondition failed")
 
-    extracted, extractor_name = _run_qualification_extractor(text)
+    extracted, extractor_name = await asyncio.to_thread(_run_qualification_extractor, text)
     notes.append(f"gelesen via {extractor_name}")
     if not extracted:
         review_items.append(
