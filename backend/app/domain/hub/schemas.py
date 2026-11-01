@@ -303,8 +303,13 @@ class IngestRequest(BaseModel):
     published_since_days: Literal[0, 1, 7, 14, 28] | None = None
     page: int = Field(default=1, ge=1)
     size: int = Field(default=100, ge=1, le=100)
-    # Staffing agencies are competitors, not leads — excluded unless asked for.
-    include_staffing: bool = False
+    # Must stay False. True would ingest agencies stamped as employers, i.e.
+    # into every recruiter-facing view; agencies come in via `segment`. No
+    # caller ever set it — kept only so an old request body fails loudly.
+    include_staffing: Literal[False] = False
+    # Which advertisers this slice asks for. "private_recruiter" feeds the
+    # agency finder; those rows never appear in a recruiter-facing view.
+    segment: Literal["employer", "private_recruiter"] = "employer"
     # Reuse a recent fetch of this exact slice instead of hitting the source
     # again. The corpus is shared, so the first caller pays the network cost and
     # everyone else gets the answer for free — which is what keeps N recruiters

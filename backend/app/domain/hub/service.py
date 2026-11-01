@@ -41,6 +41,7 @@ from app.domain.hub.spelling import (
 )
 from app.domain.hub.adapters.base import SourceAdapter, SourcedPosting, SourceQuery
 from app.domain.hub.models import (
+    EMPLOYER,
     HubCompany,
     HubCompanyLink,
     HubJobPosting,
@@ -94,8 +95,7 @@ def query_key(request: IngestRequest) -> str:
     key, which is what lets the second one reuse the first one's fetch.
     `page` is part of the key on purpose: page 2 is a different question.
     """
-    material = json.dumps(
-        {
+    fields = {
             "source": request.source,
             "what": (request.what or "").strip().lower() or None,
             "where": (request.where or "").strip().lower() or None,
@@ -105,9 +105,12 @@ def query_key(request: IngestRequest) -> str:
             "page": request.page,
             "size": request.size,
             "include_staffing": request.include_staffing,
-        },
-        sort_keys=True,
-    )
+    }
+    # Only a non-default segment joins the fingerprint, so every existing
+    # employer observation keeps its key and stays reusable.
+    if request.segment != EMPLOYER:
+        fields["segment"] = request.segment
+    material = json.dumps(fields, sort_keys=True)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -189,8 +192,10 @@ async def ingest(
         page=request.page,
         size=request.size,
         include_staffing=request.include_staffing,
+        segment=request.segment,
     )
     result = await adapter.fetch(query)
+    segment = request.segment
 
     observation = HubObservation(
         source=result.source,
@@ -245,7 +250,12 @@ async def ingest(
                 )
             )
             continue
-        accepted.append((posting, identity[0], identity[1]))
+        basis, dedupe = identity
+        if segment != EMPLOYER:
+            # Own namespace: "Die Autobahn GmbH des Bundes" named in an agency's
+            # ad must not resolve onto the employer's row.
+            dedupe = f"pav:{dedupe}"
+        accepted.append((posting, basis, dedupe))
 
     # --- merge companies -------------------------------------------------
     # One query for every company in the batch rather than one per posting: a
@@ -281,6 +291,7 @@ async def ingest(
                 industry=sourced.industry,
                 suspected_natural_person=looks_like_natural_person(sourced.name),
                 source=result.source,
+                kind=segment,
                 first_seen_at=now,
                 last_seen_at=now,
             )
@@ -361,6 +372,7 @@ async def ingest(
                     source_url=posting.source_url,
                     external_id=posting.external_id,
                     content_hash=content_hash,
+                    segment=segment,
                     first_seen_at=now,
                     last_seen_at=now,
                     is_active=True,
@@ -852,6 +864,18 @@ def _paginate(stmt: Select, *, limit: int, offset: int) -> Select:
     return stmt.limit(limit).offset(offset)
 
 
+# Every recruiter-facing read is about EMPLOYERS. Agencies (the agency finder's
+# leads) live in the same tables and must stay invisible here — they are each
+# customer's competitors. One predicate per table, applied on every read path;
+# `tests/test_hub_segment.py` walks the routes to prove none forgot it.
+def _employer_company():
+    return HubCompany.kind == EMPLOYER
+
+
+def _employer_posting():
+    return HubJobPosting.segment == EMPLOYER
+
+
 async def list_companies(
     session: AsyncSession,
     *,
@@ -866,7 +890,7 @@ async def list_companies(
     That ordering is the point of the hub: a recruiter wants whoever has the most
     open roles right now, not an alphabetical register extract.
     """
-    stmt = select(HubCompany)
+    stmt = select(HubCompany).where(_employer_company())
     if q:
         needle = f"%{normalize_company_name(q) or q.lower()}%"
         stmt = stmt.where(
@@ -885,14 +909,18 @@ async def list_companies(
 
 
 async def count_companies(session: AsyncSession) -> int:
-    return (await session.scalar(select(func.count(HubCompany.id)))) or 0
+    return (
+        await session.scalar(select(func.count(HubCompany.id)).where(_employer_company()))
+    ) or 0
 
 
 async def get_company(
-    session: AsyncSession, *, hub_company_id: uuid.UUID
+    session: AsyncSession, *, hub_company_id: uuid.UUID, kind: str = EMPLOYER
 ) -> HubCompany | None:
+    """One corpus company of the given kind. An agency asked for through the
+    employer path is simply not found — the caller answers 404."""
     return await session.scalar(
-        select(HubCompany).where(HubCompany.id == hub_company_id)
+        select(HubCompany).where(HubCompany.id == hub_company_id, HubCompany.kind == kind)
     )
 
 
@@ -906,8 +934,9 @@ async def list_postings(
     active_only: bool = True,
     limit: int = 50,
     offset: int = 0,
+    segment: str = EMPLOYER,
 ) -> list[HubJobPosting]:
-    stmt = select(HubJobPosting)
+    stmt = select(HubJobPosting).where(HubJobPosting.segment == segment)
     if hub_company_id is not None:
         stmt = stmt.where(HubJobPosting.hub_company_id == hub_company_id)
     if q:
@@ -944,21 +973,25 @@ async def corpus_stats(session: AsyncSession) -> dict:
     no number.
     """
     postings_active = select(func.count(HubJobPosting.id)).where(
-        HubJobPosting.is_active.is_(True)
+        HubJobPosting.is_active.is_(True), _employer_posting()
     )
     return {
-        "companies": (await session.scalar(select(func.count(HubCompany.id)))) or 0,
+        "companies": (
+            await session.scalar(select(func.count(HubCompany.id)).where(_employer_company()))
+        ) or 0,
         # Distinct EMPLOYERS, collapsing the one-row-per-site fragmentation that
         # `name_place` identity produces (Netto has a row per store postcode).
         "employers": (
             await session.scalar(
-                select(func.count(func.distinct(HubCompany.normalized_name)))
+                select(func.count(func.distinct(HubCompany.normalized_name))).where(
+                    _employer_company()
+                )
             )
         ) or 0,
         "hiring": (
             await session.scalar(
                 select(func.count(HubCompany.id)).where(
-                    HubCompany.open_postings_count > 0
+                    HubCompany.open_postings_count > 0, _employer_company()
                 )
             )
         ) or 0,
@@ -966,7 +999,7 @@ async def corpus_stats(session: AsyncSession) -> dict:
         "cities": (
             await session.scalar(
                 select(func.count(func.distinct(HubCompany.city))).where(
-                    HubCompany.city.is_not(None)
+                    HubCompany.city.is_not(None), _employer_company()
                 )
             )
         ) or 0,
@@ -976,20 +1009,22 @@ async def corpus_stats(session: AsyncSession) -> dict:
         "suspected_personal_data": (
             await session.scalar(
                 select(func.count(HubCompany.id)).where(
-                    HubCompany.suspected_natural_person.is_(True)
+                    HubCompany.suspected_natural_person.is_(True), _employer_company()
                 )
             )
         ) or 0,
         "unverified_identity": (
             await session.scalar(
                 select(func.count(HubCompany.id)).where(
-                    HubCompany.resolution_basis == "name_place"
+                    HubCompany.resolution_basis == "name_place", _employer_company()
                 )
             )
         ) or 0,
         "sources": (
             await session.scalar(
-                select(func.count(func.distinct(HubCompany.source)))
+                select(func.count(func.distinct(HubCompany.source))).where(
+                    _employer_company()
+                )
             )
         ) or 0,
         "last_ingest_at": await session.scalar(
@@ -1007,14 +1042,20 @@ async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
     """
     regions = await session.execute(
         select(HubJobPosting.region, func.count(HubJobPosting.id))
-        .where(HubJobPosting.is_active.is_(True), HubJobPosting.region.is_not(None))
+        .where(
+            HubJobPosting.is_active.is_(True),
+            HubJobPosting.region.is_not(None),
+            _employer_posting(),
+        )
         .group_by(HubJobPosting.region)
         .order_by(func.count(HubJobPosting.id).desc())
     )
     fields = await session.execute(
         select(HubJobPosting.berufsfeld, func.count(HubJobPosting.id))
         .where(
-            HubJobPosting.is_active.is_(True), HubJobPosting.berufsfeld.is_not(None)
+            HubJobPosting.is_active.is_(True),
+            HubJobPosting.berufsfeld.is_not(None),
+            _employer_posting(),
         )
         .group_by(HubJobPosting.berufsfeld)
         .order_by(func.count(HubJobPosting.id).desc())
@@ -1060,6 +1101,7 @@ def _companies_matching(term: str):
     """
     needle = f"%{term}%"
     return select(HubCompany.id).where(
+        _employer_company(),
         or_(
             func.lower(HubCompany.name).like(needle),
             func.lower(HubCompany.city).like(needle),
@@ -1233,6 +1275,7 @@ async def _term_hits(session: AsyncSession, term: str) -> int:
         select(literal(1))
         .where(
             HubJobPosting.is_active.is_(True),
+            _employer_posting(),
             func.lower(HubJobPosting.title).like(needle),
         )
         .limit(_HIT_CAP)
@@ -1241,10 +1284,11 @@ async def _term_hits(session: AsyncSession, term: str) -> int:
     names = (
         select(literal(1))
         .where(
+            _employer_company(),
             or_(
                 func.lower(HubCompany.name).like(needle),
                 func.lower(HubCompany.city).like(needle),
-            )
+            ),
         )
         .limit(_HIT_CAP)
         .subquery()
@@ -1268,7 +1312,10 @@ async def _nearest_known_word(session: AsyncSession, term: str) -> str | None:
     """
     if session.bind is None or session.bind.dialect.name != "postgresql":
         return None
-    for column in (HubJobPosting.title, HubCompany.name):
+    for column, own_kind in (
+        (HubJobPosting.title, _employer_posting()),
+        (HubCompany.name, _employer_company()),
+    ):
         folded = func.lower(column)
         rows = await session.execute(
             # `term <<% text` is pg_trgm's "is this word a close match for some
@@ -1276,7 +1323,7 @@ async def _nearest_known_word(session: AsyncSession, term: str) -> str | None:
             # serve it with the column on the right — which is why the term is
             # a literal on the left rather than the other way round.
             select(column)
-            .where(literal(term).op("<<%")(folded))
+            .where(literal(term).op("<<%")(folded), own_kind)
             .order_by(func.word_similarity(literal(term), folded).desc())
             .limit(20)
         )
@@ -1382,7 +1429,7 @@ async def _search_candidates(
     Returns the candidate id select, the parsed terms, the per-term company-name
     hits, the per-term ad-text hits, and the posting-side filters.
     """
-    candidates = select(HubCompany.id)
+    candidates = select(HubCompany.id).where(_employer_company())
 
     # EVERY word must match SOMEWHERE — the query is a set of terms, not a
     # phrase. Matching `%python entwickler%` literally required the two words to
@@ -1404,6 +1451,7 @@ async def _search_candidates(
 
     if terms:
         by_company = select(HubCompany.id).where(
+            _employer_company(),
             *[
                 or_(
                     func.lower(HubCompany.name).like(f"%{term}%"),
@@ -1424,6 +1472,7 @@ async def _search_candidates(
         # that made this unservable by any index.
         by_role = select(HubJobPosting.hub_company_id).where(
             HubJobPosting.is_active.is_(True),
+            _employer_posting(),
             *[
                 _term_matches(term, name_hits[term], description_hits.get(term))
                 for term in terms
@@ -1449,7 +1498,7 @@ async def _search_candidates(
         candidates = candidates.where(
             HubCompany.id.in_(
                 select(HubJobPosting.hub_company_id).where(
-                    HubJobPosting.is_active.is_(True), *posting_filters
+                    HubJobPosting.is_active.is_(True), _employer_posting(), *posting_filters
                 )
             )
         )
@@ -1508,7 +1557,7 @@ def _role_match(
     worse than no count.
     """
     hits = description_hits or {}
-    match: list = [HubJobPosting.is_active.is_(True), *posting_filters]
+    match: list = [HubJobPosting.is_active.is_(True), _employer_posting(), *posting_filters]
     match.extend(
         _term_matches(term, name_hits[term], hits.get(term)) for term in terms
     )
@@ -1676,7 +1725,7 @@ async def search_employers(
             HubCompany.city,
             HubCompany.resolution_basis,
             HubCompany.website_domain,
-        ).where(HubCompany.normalized_name.in_(names))
+        ).where(HubCompany.normalized_name.in_(names), _employer_company())
     )
     cities: dict[str, list[str]] = {}
     basis: dict[str, str] = {}
@@ -1726,7 +1775,7 @@ async def search_employers(
         )
         .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
         # The SAME predicate that produced the count above.
-        .where(HubCompany.normalized_name.in_(names), *role_match)
+        .where(HubCompany.normalized_name.in_(names), _employer_company(), *role_match)
         .subquery()
     )
     role_stmt = (
@@ -1876,6 +1925,7 @@ async def adopt_company(
     hub_company_id: uuid.UUID,
     actor: str | None = None,
     manager: dict | None = None,
+    kind: str = EMPLOYER,
 ) -> tuple[Company, HubCompanyLink, object | None]:
     """Take a corpus company into this tenant's system-of-record.
 
@@ -1898,9 +1948,7 @@ async def adopt_company(
     """
     from app.domain.managers.models import Manager
 
-    hub_company = await session.scalar(
-        select(HubCompany).where(HubCompany.id == hub_company_id)
-    )
+    hub_company = await get_company(session, hub_company_id=hub_company_id, kind=kind)
     if hub_company is None:
         raise ValueError(f"no corpus company {hub_company_id}")
 
@@ -2058,17 +2106,25 @@ CONTACT_EVIDENCE_LIMIT = 5
 
 
 async def _sibling_company_ids(
-    session: AsyncSession, *, normalized_name: str
+    session: AsyncSession, *, normalized_name: str, kind: str = EMPLOYER
 ) -> list[uuid.UUID]:
-    """Every corpus row of one employer — one row per site under `name_place`."""
+    """Every corpus row of one employer — one row per site under `name_place`.
+
+    Same kind only: an agency row that shares a client's name is not a site."""
     rows = await session.execute(
-        select(HubCompany.id).where(HubCompany.normalized_name == normalized_name)
+        select(HubCompany.id).where(
+            HubCompany.normalized_name == normalized_name, HubCompany.kind == kind
+        )
     )
     return list(rows.scalars().all())
 
 
 async def company_contacts(
-    session: AsyncSession, *, tenant_id: uuid.UUID, hub_company_id: uuid.UUID
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    hub_company_id: uuid.UUID,
+    kind: str = EMPLOYER,
 ) -> dict | None:
     """The people an employer's public ads name as contacts, with evidence.
 
@@ -2084,10 +2140,12 @@ async def company_contacts(
     from app.domain.hub.schemas import ba_detail_url
     from app.domain.managers.models import Manager
 
-    anchor = await get_company(session, hub_company_id=hub_company_id)
+    anchor = await get_company(session, hub_company_id=hub_company_id, kind=kind)
     if anchor is None:
         return None
-    ids = await _sibling_company_ids(session, normalized_name=anchor.normalized_name)
+    ids = await _sibling_company_ids(
+        session, normalized_name=anchor.normalized_name, kind=kind
+    )
 
     rows = (
         await session.execute(

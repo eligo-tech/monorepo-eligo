@@ -14,12 +14,20 @@ Two properties shape everything downstream:
     therefore decided by `resolution.identity_key`, never by the string.
   * ``zeitarbeit``/``pav`` exclude temp agencies and private recruiters. Left on,
     roughly 45% of a metro area's postings are staffing firms — competitors, not
-    leads — so `SourceQuery.include_staffing` defaults to False.
+    leads — so `SourceQuery.include_staffing` defaults to False. For Eligo's
+    OWN sales they are exactly the leads: `SourceQuery.segment =
+    "private_recruiter"` asks for `pav=true` only (temp agencies stay out), and
+    those rows never reach a recruiter-facing view (`models.EMPLOYER`).
 
 Caveat worth carrying: this endpoint is the real one the agency's own Jobbörse
 uses and its client id has been publicly documented for years, but it is
 community-documented (bundesAPI/jobsuche-api) rather than a contractual open-data
-product with an SLA. Fine to build on; not something to assume is guaranteed.
+product with an SLA. Not something to assume is guaranteed.
+
+Terms of use: the BA Nutzungsbedingungen 2a(3) prohibit robots/spiders and
+using the interfaces to extract content for data collection and analysis. The
+product owner accepted that risk on 2026-11-02 and continues as-is; it is not
+resolved. Never describe BA-derived data as licensed or resellable.
 """
 
 from __future__ import annotations
@@ -246,7 +254,12 @@ class BundesagenturAdapter:
             # `IngestRequest` constrains the type so a bad window cannot reach
             # here, but a wrong value would silently cost a full crawl.
             params["veroeffentlichtseit"] = query.published_since_days
-        if not query.include_staffing:
+        if query.segment == "private_recruiter":
+            # Private recruiters only. Temp agencies stay out (decision
+            # 2026-11-02); the two sets are disjoint at posting level.
+            params["pav"] = "true"
+            params["zeitarbeit"] = "false"
+        elif not query.include_staffing:
             params["zeitarbeit"] = "false"
             params["pav"] = "false"
         params.update(query.params)

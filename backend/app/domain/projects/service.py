@@ -13,7 +13,7 @@ import uuid
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.hub.models import HubCompany, HubCompanyLink, HubJobPosting
+from app.domain.hub.models import EMPLOYER, HubCompany, HubCompanyLink, HubJobPosting
 from app.domain.managers.models import Manager
 from app.domain.projects.models import Project, ProjectCompany
 from app.domain.projects.schemas import (
@@ -133,7 +133,9 @@ async def _employer_rollup(
     sites = (
         await session.execute(
             select(HubCompany.id, HubCompany.normalized_name, HubCompany.city).where(
-                HubCompany.normalized_name.in_(names)
+                HubCompany.normalized_name.in_(names),
+                # An agency row sharing a client's name is not one of its sites.
+                HubCompany.kind == EMPLOYER,
             )
         )
     ).all()
@@ -389,7 +391,11 @@ async def add_companies(
     known = set(
         (
             await session.execute(
-                select(HubCompany.id).where(HubCompany.id.in_(hub_company_ids))
+                select(HubCompany.id).where(
+                    HubCompany.id.in_(hub_company_ids),
+                    # Projects hold employers. An agency id is treated as unknown.
+                    HubCompany.kind == EMPLOYER,
+                )
             )
         ).scalars()
     )
