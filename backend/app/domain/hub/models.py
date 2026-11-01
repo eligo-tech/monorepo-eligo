@@ -60,6 +60,15 @@ from app.core.database import Base
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
 from app.domain.common.types import JSONBDict, JSONDict
 
+# Which kind of advertiser a corpus row is. Stamped at ingest from the QUERY
+# that returned it — the source's listing records carry no flag of their own.
+#: An end employer. Every recruiter-facing view shows only these.
+EMPLOYER = "employer"
+#: A private recruiting agency (Bundesagentur `pav=true`): a LEAD for Eligo's
+#: own sales (the agency finder), a competitor to every customer.
+PRIVATE_RECRUITER = "private_recruiter"
+SEGMENTS = (EMPLOYER, PRIVATE_RECRUITER)
+
 
 class HubObservation(Base, IDMixin, TimestampMixin):
     """One retrieval from a public source. Append-only evidence anchor.
@@ -169,6 +178,13 @@ class HubCompany(Base, IDMixin, TimestampMixin):
 
     # --- corpus bookkeeping ----------------------------------------------
     source: Mapped[str] = mapped_column(String(60), nullable=False)
+    # EMPLOYER or PRIVATE_RECRUITER. Agencies resolve in their own identity
+    # namespace (`dedupe_key` prefixed "pav:"), because a pav ad's `firma` is
+    # sometimes the client — so an agency's ad can never attach to, or count
+    # towards, an employer row, and every posting shares its company's kind.
+    kind: Mapped[str] = mapped_column(
+        String(30), default=EMPLOYER, server_default=EMPLOYER, nullable=False, index=True
+    )
     # Denormalized BD signal: how many of this company's postings are still open.
     # Maintained on ingest so the "who is hiring hardest" list is a plain query.
     open_postings_count: Mapped[int] = mapped_column(
@@ -274,6 +290,12 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     source: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     external_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Always equal to the company's `kind`. Denormalized because the search
+    # predicates are deliberately single-table (see `service._companies_matching`):
+    # filtering postings through a join to companies would cost the indexes.
+    segment: Mapped[str] = mapped_column(
+        String(30), default=EMPLOYER, server_default=EMPLOYER, nullable=False
+    )
 
     # When the ad text was last REQUESTED — set whether or not text came back.
     #

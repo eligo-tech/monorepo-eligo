@@ -39,6 +39,10 @@ class SourceQuery:
     # Staffing agencies and private recruiters are *competitors*, not leads —
     # excluded by default so the corpus is end-employers.
     include_staffing: bool = False
+    # "employer" (default) or "private_recruiter". A private-recruiter query
+    # asks for agencies ONLY — the agency finder's leads — and overrides
+    # `include_staffing`.
+    segment: str = "employer"
     # Adapter-specific escape hatch (an ATS board token, a feed URL, ...).
     params: dict[str, Any] = field(default_factory=dict)
 
