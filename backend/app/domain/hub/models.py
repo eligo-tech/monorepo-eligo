@@ -58,7 +58,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
-from app.domain.common.types import JSONDict
+from app.domain.common.types import JSONBDict, JSONDict
 
 
 class HubObservation(Base, IDMixin, TimestampMixin):
@@ -102,7 +102,7 @@ class HubObservation(Base, IDMixin, TimestampMixin):
     )
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    payload: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONBDict, default=dict, nullable=False)
 
 
 class HubCompany(Base, IDMixin, TimestampMixin):
@@ -174,7 +174,7 @@ class HubCompany(Base, IDMixin, TimestampMixin):
     open_postings_count: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
     )
-    bd_signals: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    bd_signals: Mapped[dict] = mapped_column(JSONBDict, default=dict, nullable=False)
 
     first_seen_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

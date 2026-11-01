@@ -31,7 +31,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 from app.domain.common.enums import ConfidenceSource, owes_art14_notice
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
-from app.domain.common.types import JSONList
+from app.domain.common.types import JSONBList
 
 
 class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
@@ -79,8 +79,8 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     country: Mapped[str | None] = mapped_column(String(120), nullable=True)
     #: What the person is open to — "Looks for: Contract".
     looks_for: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    skills: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
-    tags: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    skills: Mapped[list] = mapped_column(JSONBList, default=list, nullable=False)
+    tags: Mapped[list] = mapped_column(JSONBList, default=list, nullable=False)
     #: Taken from the source rather than derived from `interactions`: the source
     #: knows about contact that predates anything we imported, and recomputing
     #: it from our own rows would quietly move the date backwards.
