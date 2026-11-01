@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -310,6 +312,7 @@ async def parse_spec(
         )
 
     extractor = jobspec.get_job_spec_extractor()
-    spec = extractor.extract(text, document_title)
+    # Off the event loop: the LLM call is synchronous and takes seconds.
+    spec = await asyncio.to_thread(extractor.extract, text, document_title)
     return JobSpecProposal(**spec.as_dict(), source_url=source_url)
 
