@@ -3,16 +3,21 @@
 
     python -m scripts.schema_drift
 
-Compares the connected database (`settings.admin_url`, or
-`ALEMBIC_DATABASE_URL` when set — the same target `alembic` uses) with the
-ORM metadata, using Alembic's autogenerate comparison. Exit 0 on no
-difference, 1 with every difference printed.
+Compares the database named by `ALEMBIC_DATABASE_URL` with the ORM
+metadata, using Alembic's autogenerate comparison. Exit 0 on no difference,
+1 with every difference printed.
 
 Why it exists: production is built by `alembic upgrade head`, a fresh database
 by `create_all`. Nothing checked that the two produce the same schema, and on
 2026-11-01 they did not — `JSONDict` made `json` columns where the migrations
-had made `jsonb`. The CI job "Backend · upgrade from main" runs this against
-a database that was migrated, which is the shape production has.
+had made `jsonb`. The CI job "Backend · upgrade from main" runs this after
+upgrading main's schema with the PR's migrations, so it catches a PR whose
+migrations and model changes disagree. It cannot see drift already on main:
+that schema is built by `create_all`, from the models. The json/jsonb drift
+was found by running it on a schema the migrations had built.
+
+Refuses without `ALEMBIC_DATABASE_URL`: on a developer machine the default
+target is production (see migrations/env.py).
 """
 
 from __future__ import annotations
@@ -26,7 +31,6 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.core.config import settings
 from app.core.database import Base
 from app.domain import registry  # noqa: F401 — imports every model onto Base.metadata
 
@@ -37,7 +41,10 @@ def _diff(sync_conn) -> list:  # noqa: ANN001
 
 
 async def main() -> int:
-    url = os.environ.get("ALEMBIC_DATABASE_URL") or settings.admin_url
+    url = os.environ.get("ALEMBIC_DATABASE_URL")
+    if not url:
+        print("refusing: set ALEMBIC_DATABASE_URL to the database to compare", file=sys.stderr)
+        return 2
     engine = create_async_engine(url)
     try:
         async with engine.connect() as conn:

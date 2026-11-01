@@ -11,8 +11,9 @@ This converts a column ONLY where it is still `json`. On production, read
 other 24 JSON columns stay `json` on purpose; `receipts.payload` among them,
 because `jsonb` reorders keys and the receipt ledger is hash-chained.
 
-No downgrade: going back to `json` would re-create the mismatch this fixes,
-and production never had these columns as `json`.
+No downgrade. Going back to `json` would re-create the mismatch this fixes,
+and production never had these columns as `json`. The CI rollback step
+therefore proves nothing for this revision: both directions leave `jsonb`.
 
 Revision ID: 0045
 Revises: 0044
@@ -21,7 +22,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0045"
@@ -47,18 +47,17 @@ def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return  # SQLite stores both as TEXT; there is nothing to convert.
+    # One server-side block, so `alembic upgrade --sql` emits it too.
     for table, column in _COLUMNS:
-        current = bind.execute(
-            sa.text(
-                "SELECT data_type FROM information_schema.columns "
-                "WHERE table_schema = current_schema() AND table_name = :t AND column_name = :c"
-            ),
-            {"t": table, "c": column},
-        ).scalar()
-        if current == "json":
-            op.execute(
-                f'ALTER TABLE "{table}" ALTER COLUMN "{column}" TYPE jsonb USING "{column}"::jsonb'
-            )
+        op.execute(
+            f"""DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_schema = current_schema() AND table_name = '{table}'
+                AND column_name = '{column}' AND data_type = 'json') THEN
+    ALTER TABLE "{table}" ALTER COLUMN "{column}" TYPE jsonb USING "{column}"::jsonb;
+  END IF;
+END $$"""
+        )
 
 
 def downgrade() -> None:

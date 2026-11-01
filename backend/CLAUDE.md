@@ -266,7 +266,7 @@ Portable column types are in `common/types.py`: `JSONDict`/`JSONList` are
 `json` on Postgres, `JSONBDict`/`JSONBList` are `jsonb`, both TEXT on SQLite.
 Production has both; a new column uses the type its migration creates.
 `scripts/schema_drift.py` (CI job "Backend · upgrade from main") fails when
-the migrated schema and the models disagree. Embeddings are JSON lists in the
+a PR's migrations and its model changes disagree. Embeddings are JSON lists in the
 scaffold; swap to a `pgvector` `Vector` column in the Postgres profile.
 
 ---

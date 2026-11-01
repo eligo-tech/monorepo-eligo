@@ -30,6 +30,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import create_async_engine
 
 SKIP = {"alembic_version"}
+_UNKNOWN = object()
 
 
 def _value(table: str, col):  # noqa: ANN001, ANN202
@@ -57,7 +58,7 @@ def _value(table: str, col):  # noqa: ANN001, ANN202
     if isinstance(t, types.String):  # String, Text, VARCHAR(n)
         text = f"fill-{table}-{col.name}"
         return text[: t.length] if t.length else text
-    raise TypeError(f"{table}.{col.name}: no dummy value for type {t!r}")
+    return _UNKNOWN
 
 
 def _fill(sync_conn) -> list[str]:  # noqa: ANN001
@@ -83,7 +84,15 @@ def _fill(sync_conn) -> list[str]:  # noqa: ANN001
                 continue  # the database fills it — that default is part of what we test
             if col.autoincrement is True and col.primary_key:
                 continue
-            row[col.name] = _value(table.name, col)
+            value = _value(table.name, col)
+            if value is _UNKNOWN:
+                if col.nullable:
+                    continue  # NULL — still a row for the migration to meet
+                raise TypeError(
+                    f"{table.name}.{col.name}: fill_every_table has no dummy value for "
+                    f"{col.type!r}. Add one in scripts/fill_every_table.py:_value."
+                )
+            row[col.name] = value
         result = sync_conn.execute(insert(table).values(**row).returning(*table.columns))
         inserted[table.name] = dict(result.mappings().one())
         done.append(table.name)

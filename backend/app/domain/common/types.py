@@ -13,8 +13,8 @@ Two families, because production has both and the models must say which:
 
 Until 2026-11-01 this module claimed ``JSON`` "maps to native JSONB on
 Postgres". It does not, and a database built by ``create_all`` silently
-differed from one built by migrations. ``scripts/schema_drift.py`` now fails
-CI on any such difference.
+differed from one built by migrations. ``scripts/schema_drift.py`` found it,
+and now fails CI when a PR's migrations and models disagree.
 
 Embeddings note: on Postgres the ``pgvector`` extension provides a real
 ``Vector`` column for similarity search. The scaffold stores embeddings as a
