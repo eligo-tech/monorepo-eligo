@@ -33,7 +33,7 @@ from sqlalchemy import Select, and_, case, func, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.domain.hub import gate
+from app.domain.hub import gate, suppression
 from app.domain.hub.spelling import (
     closest_word,
     has_other_spelling,
@@ -196,6 +196,7 @@ async def ingest(
     )
     result = await adapter.fetch(query)
     segment = request.segment
+    rules = await suppression.load(session)
 
     observation = HubObservation(
         source=result.source,
@@ -222,9 +223,15 @@ async def ingest(
     now = dt.datetime.now(dt.UTC)
     rejected: list[RejectedRecord] = []
     accepted: list[tuple[SourcedPosting, str, str]] = []  # posting, basis, key
+    suppressed = 0
 
     # --- postcondition: per record --------------------------------------
     for posting in result.postings:
+        # The opt-out list first, so a refused record never reaches `rejected`
+        # — that list names the company, and naming it re-publishes it.
+        if rules.blocks_company(posting.company.name):
+            suppressed += 1
+            continue
         ok, reason = gate.check_posting(posting, now=now)
         if not ok:
             rejected.append(
@@ -377,7 +384,8 @@ async def ingest(
                     last_seen_at=now,
                     is_active=True,
                     payload=HubPostingPayload(
-                        raw=posting.raw, description=posting.description
+                        raw=rules.redact_json(posting.raw),
+                        description=rules.redact(posting.description),
                     ),
                 )
             )
@@ -404,7 +412,7 @@ async def ingest(
             row.title = posting.title
             if row.payload is None:
                 row.payload = HubPostingPayload()
-            row.payload.description = posting.description
+            row.payload.description = rules.redact(posting.description)
             row.occupation = posting.occupation
             row.employment_type = posting.employment_type
             row.location_text = posting.location_text
@@ -418,7 +426,7 @@ async def ingest(
             row.posted_at = posting.posted_at
             row.source_url = posting.source_url
             row.content_hash = content_hash
-            row.payload.raw = posting.raw
+            row.payload.raw = rules.redact_json(posting.raw)
         postings_updated += 1
 
     await session.flush()
@@ -459,11 +467,18 @@ async def ingest(
         )
     ]
     notes.append(landed.as_note())
+    if suppressed:
+        notes.append(f"✗ {suppressed} record(s) refused: company on the opt-out list")
+        # On the observation too: it is the durable record of this retrieval.
+        observation.note = "; ".join(
+            filter(None, [observation.note, f"suppressed={suppressed}"])
+        )[:500]
+        await session.commit()
     if rejected:
         notes.append(f"✗ {len(rejected)} record(s) rejected by postconditions")
 
     logger.info(
-        "hub ingest source=%s fetched=%d companies=+%d/~%d postings=+%d/~%d rejected=%d",
+        "hub ingest source=%s fetched=%d companies=+%d/~%d postings=+%d/~%d rejected=%d suppressed=%d",
         result.source,
         len(result.postings),
         companies_created,
@@ -471,6 +486,7 @@ async def ingest(
         postings_created,
         postings_updated,
         len(rejected),
+        suppressed,
     )
 
     return IngestSummary(
@@ -484,6 +500,7 @@ async def ingest(
         postings_updated=postings_updated,
         posting_external_ids_created=posting_external_ids_created,
         rejected=rejected,
+        suppressed=suppressed,
         notes=notes,
         shard_plan=shard_plan,
     )
@@ -619,6 +636,7 @@ async def fetch_missing_descriptions(
     from app.domain.hub.adapters.bundesagentur import SourceUnreachable
 
     rows = (await session.execute(stmt.limit(limit))).scalars().all()
+    rules = await suppression.load(session)
     stored = empty = attempted = 0
     unreachable = False
     for row in rows:
@@ -643,7 +661,7 @@ async def fetch_missing_descriptions(
         if text:
             if row.payload is None:
                 row.payload = HubPostingPayload()
-            row.payload.description = text
+            row.payload.description = rules.redact(text)
             stored += 1
         else:
             empty += 1
@@ -752,6 +770,7 @@ async def fetch_missing_partner_pages(
         )
     ).scalars().all()
 
+    rules = await suppression.load(session)
     stored = failed = skipped = 0
     for row in rows:
         page = await fetcher.fetch(row.source_url)
@@ -777,7 +796,7 @@ async def fetch_missing_partner_pages(
                 row.payload = HubPostingPayload()
             # Belt and braces: the fetcher already strips control characters,
             # but a NUL reaching Postgres fails the entire batch.
-            row.payload.source_page_text = strip_control(page.text)
+            row.payload.source_page_text = rules.redact(strip_control(page.text))
             row.payload.source_page_url = (page.final_url or row.source_url)[:1000]
             row.payload.source_page_observation_id = observation.id
             stored += 1
@@ -2146,6 +2165,7 @@ async def company_contacts(
     ids = await _sibling_company_ids(
         session, normalized_name=anchor.normalized_name, kind=kind
     )
+    rules = await suppression.load(session)
 
     rows = (
         await session.execute(
@@ -2183,7 +2203,9 @@ async def company_contacts(
             ),
             ("quelle", page_text, page_url or posting.source_url),
         ]
-        texts = [(origin, text, url) for origin, text, url in texts if text]
+        # Backstop: a text stored before a suppression and missed by its
+        # clean-up still never names the person.
+        texts = [(origin, rules.redact(text), url) for origin, text, url in texts if text]
         if not texts:
             continue
         with_text += 1

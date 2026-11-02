@@ -213,7 +213,8 @@ These are enforced in code. Do not route around them.
   LinkedIn/XING) never enters `hub_*` — it lives in `managers`/`candidates` with
   the Art. 14 flow. See ARCHITECTURE.md RULE 2.
 - Erasure in a re-ingesting system needs a **suppression list, not a delete**: the
-  next crawl re-inserts a deleted row. See ARCHITECTURE.md §3 — not yet built.
+  next crawl re-inserts a deleted row. Built as `hub_suppressions`
+  (`domain/hub/suppression.py`); every new corpus writer must consult it. See ARCHITECTURE.md §3.
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing

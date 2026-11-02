@@ -174,6 +174,14 @@ async def main() -> None:
         await conn.execute(text("DROP POLICY IF EXISTS tenants_app_all ON tenants"))
         await conn.execute(text("CREATE POLICY tenants_app_all ON tenants USING (true) WITH CHECK (true)"))
         print("  ✓ tenants: permissive app policy (pre-auth org→tenant lookup)")
+        # The opt-out list: the app reads it, only the owner writes it. Not
+        # FORCEd — that would refuse the owner too (see migration 0047).
+        await conn.execute(text("ALTER TABLE hub_suppressions ENABLE ROW LEVEL SECURITY"))
+        await conn.execute(text("DROP POLICY IF EXISTS suppressions_read ON hub_suppressions"))
+        await conn.execute(text(
+            "CREATE POLICY suppressions_read ON hub_suppressions FOR SELECT USING (true)"
+        ))
+        print("  ✓ hub_suppressions: app may read, never write")
     # Isolated + best-effort: keep it away from the statements above.
     await _grant_role_membership_best_effort(eng)
     print("\nRow-Level Security is ON. Every query must set app.current_tenant.")

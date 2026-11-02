@@ -174,8 +174,10 @@ wrong.
 
 - **Erasure needs a suppression list, not a DELETE.** In a re-ingesting system
   the next crawl re-inserts a deleted row. A tombstone keyed on the same
-  deterministic identity must be checked as an ingest **precondition**. Not yet
-  built — flag any change that assumes deletion works.
+  deterministic identity must be checked as an ingest **precondition**. Built
+  as `hub_suppressions` (`app/domain/hub/suppression.py`): flag any NEW write
+  of ad text or company rows into `hub_*` that does not go through
+  `suppression.load(...)` — `redact` for text, `blocks_company` for records.
 - **Retention.** `hub_job_postings.raw` accumulates source payloads indefinitely;
   stale postings need pruning (GDPR Art. 5(1)(e)). Not yet built.
 - **Provenance.** Every corpus row must trace to a `hub_observations` row. A new

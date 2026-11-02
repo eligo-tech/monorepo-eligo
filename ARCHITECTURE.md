@@ -159,7 +159,7 @@ apart at the schema level.
 | **Art. 6(1)(f)** lawful basis | documented Legitimate Interest Assessment per source | ❌ not written |
 | **Art. 14** third-party collection notice | any *person* ingested from a public source flags an Art. 14 duty | ✅ `agents/enrichment.py`; must extend to `managers` |
 | **Art. 15/16** access & rectification | provenance per field, so we can say where a value came from | ✅ `EnrichmentRecord`, `hub_observations`, `resolution_basis` |
-| **Art. 17/21** erasure & objection | **a suppression list, not a delete** — see below | ❌ not implemented |
+| **Art. 17/21** erasure & objection | **a suppression list, not a delete** — see below | ⚠ corpus only: `hub_suppressions` by company name and by person name; no VAT/register/domain keys yet, tenant records handled per workspace, no request log |
 | **Art. 22** human oversight of decisions | hard filters deterministic; LLM only ranks | ✅ `matching/service.py` |
 | **Art. 28** processors | inventory of sub-processors + DPAs (Railway, Supabase, Vercel, OpenAI) | ❌ not written |
 | **Art. 30** records of processing | source inventory: what we fetch, how often, on what basis | ⚠ `hub_observations` is the evidence; no RoPA document |
@@ -172,14 +172,25 @@ Deleting a corpus row does not satisfy an erasure or objection request: **the
 next scheduled crawl re-inserts it.** Erasure in a re-ingesting system requires a
 tombstone that ingestion consults.
 
-Required: a `hub_suppressions` table keyed by the same deterministic identity as
-the corpus (`dedupe_key`, VAT, register number, or normalized domain), carrying
-the reason (`erasure` | `objection` | `legal`) and the date. The ingest gate must
-check it as a **precondition** and refuse the record, leaving an observation note
-so the refusal is auditable.
+Built (migration 0047, `app/domain/hub/suppression.py`): `hub_suppressions`
+holds a scope, a key and the reason (`erasure` | `objection` | `legal`), with
+its date.
 
-This is the single most important missing piece for GDPR, because it is the one
-that cannot be retrofitted by a script — it must live in the ingest path.
+- **company** — keyed by the normalized company name, so it covers every site
+  and both employer and agency rows. Ingest refuses the record before the gate,
+  counts it in the summary and on the observation note, and never names it.
+- **person** — keyed by the folded full name. The name (full form, "Frau
+  <Surname>", and personal e-mail addresses) is cut from every ad text before
+  it is stored — ingest, the description pass, the partner-page pass — and the
+  contacts read redacts again as a backstop.
+- **writes** — only `scripts/hub_suppress.py` on the owner connection, which
+  also removes what is already stored. The app role may read the list and is
+  refused every write by a SELECT-only policy (proved in
+  `tests/test_rls_postgres.py`).
+
+Still missing: VAT / register / domain keys (they arrive with the Impressum
+adapter), a log of the requests themselves, and tenant records — a tenant's
+`companies` / `managers` rows are its own and are handled in that workspace.
 
 ---
 
@@ -222,7 +233,8 @@ job measures and prints its own coverage every run rather than assuming it.
 
 **Not built, and required before this handles real customer data:**
 
-1. `hub_suppressions` + a precondition in the ingest gate (Art. 17/21)
+1. The rest of Art. 17/21: identifier-keyed suppressions (VAT, register,
+   domain) and a request log. The corpus opt-out list itself is built (§3).
 2. Retention/pruning of `raw` payloads and stale postings (Art. 5(1)(e))
 3. A written LIA + RoPA + sub-processor list (Art. 6/28/30)
 4. **Sending** the Art. 14 notice. The tracking exists — `managers` carries
