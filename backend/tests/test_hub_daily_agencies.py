@@ -49,6 +49,9 @@ def _source(fields: dict[str, int], seen: list[dict]):
     """A fake API: every page returns the requested field's postings."""
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/hub/agencies/refresh"):
+            seen.append({"refresh": True})
+            return httpx.Response(200, json={"profiles": 7, "agency": 5, "unclear": 1, "client": 1})
         body = json.loads(request.content)
         seen.append(body)
         field = body.get("berufsfeld")
@@ -124,6 +127,7 @@ async def _run_main(monkeypatch, argv: list[str], fields: dict[str, int]) -> tup
     monkeypatch.setenv("ELIGO_INGEST_TOKEN", "t")
     monkeypatch.delenv("ELIGO_HUB_REGIONS", raising=False)
     monkeypatch.setattr(sys, "argv", ["hub_daily", *argv])
+    _run_main.seen = seen  # type: ignore[attr-defined]
     code = await hub_daily.main()
     return code, [b for b in seen if "source" in b]  # ingest calls only
 
@@ -307,3 +311,46 @@ async def test_source_down_during_the_agency_pass_still_gives_employers_their_ad
     assert called == ["descriptions"]
     assert any(line.startswith("ok: ") for line in lines), lines
     assert any(line.startswith("agencies FAILED: source unreachable") for line in lines), lines
+
+
+async def test_the_profiles_are_rebuilt_after_the_agency_pass(monkeypatch) -> None:
+    code, _ = await _run_main(
+        monkeypatch, ["--agencies-only", "--since", "1", "--delay", "0"], {"A": 50}
+    )
+    seen = _run_main.seen  # type: ignore[attr-defined]
+    assert code == 0
+    assert seen[-1] == {"refresh": True}
+
+
+async def test_no_rebuild_when_the_agency_pass_is_off(monkeypatch) -> None:
+    await _run_main(
+        monkeypatch,
+        ["--no-agencies", "--no-descriptions", "--partner-pages", "0", "--no-profiles", "--delay", "0"],
+        {"A": 50},
+    )
+    assert {"refresh": True} not in _run_main.seen  # type: ignore[attr-defined]
+
+
+def test_a_failed_profile_rebuild_is_red() -> None:
+    code, message = agency_verdict(
+        {"available": 100, "total": 100, "failures": [], "cap_exceeded": None, "refresh_failed": "500"},
+        min_coverage=90,
+    )
+    assert code == 1 and "profiles" in message
+
+
+async def test_the_rebuild_runs_after_tonights_ad_text(monkeypatch) -> None:
+    # Otherwise tonight's new agencies are judged without their text.
+    from scripts import hub_daily
+
+    order: list[str] = []
+
+    async def descriptions(*a, **k):
+        refreshed = {"refresh": True} in _run_main.seen  # type: ignore[attr-defined]
+        order.append("descriptions after refresh" if refreshed else "descriptions")
+        return {"attempted": 0, "stored": 0, "empty": 0, "with_description": 0, "active_postings": 0}
+
+    monkeypatch.setattr(hub_daily, "_fetch_descriptions", descriptions)
+    await _run_main(monkeypatch, ["--partner-pages", "0", "--no-profiles", "--delay", "0"], {"A": 50})
+    assert order == ["descriptions"]
+    assert {"refresh": True} in _run_main.seen  # type: ignore[attr-defined]

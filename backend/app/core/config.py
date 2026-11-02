@@ -106,6 +106,12 @@ class Settings(BaseSettings):
     # (feature "mcp" in `domain/features`). See ADR 0003.
     mcp_enabled: bool = False
     mcp_allowed_tenants: str = ""
+
+    # --- Agency finder (Eligo's own business development) ----------------
+    # Comma-separated tenant UUIDs that may see private recruiters as leads.
+    # FAIL-CLOSED: empty means NOBODY — the opposite of the allowlists above.
+    # Agencies are competitors to every customer; set Eligo's own workspace.
+    agency_finder_tenants: str = ""
     #: The exact URL users add in Claude. Tokens must carry it as `aud`;
     #: a token minted for any other URL is refused (ADR 0003 §3.2).
     mcp_resource_url: str = "http://localhost:8000/mcp"

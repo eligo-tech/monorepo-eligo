@@ -575,6 +575,9 @@ def agency_verdict(result: dict, *, min_coverage: float) -> tuple[int, str]:
     """The employer rule (`run_verdict`), plus: a cap breach is always red."""
     if result.get("cap_exceeded"):
         return 1, f"FAILED: agencies — shard cap exceeded: {result['cap_exceeded']}"
+    if result.get("refresh_failed"):
+        # The crawl may be complete, but the list Eligo works from is stale.
+        return 1, f"FAILED: agency profiles not rebuilt — {result['refresh_failed']}"
     code, message = run_verdict(
         source_down=None,
         failures=result["failures"],
@@ -908,7 +911,6 @@ async def main() -> int:
                     f"    +{agencies['companies']} Agenturen · +{agencies['postings']} Rollen · "
                     f"coverage {agencies['available']}/{agencies['total']}"
                 )
-
         # --- ad text for what people actually search -----------------------
         if source_down and args.descriptions:
             print("  Anzeigentexte: übersprungen — Quelle nicht erreichbar")
@@ -927,6 +929,23 @@ async def main() -> int:
                 failures.append("descriptions")
         elif args.descriptions:
             print("  Anzeigentexte: keine neuen Rollen in diesem Lauf")
+
+        # --- agency finder: rebuild the ranked list ------------------------
+        # After the ad text, so tonight's new agencies are judged with theirs;
+        # even after a partial pass, so the list reflects what the corpus holds.
+        if args.agencies and not agency_down:
+            try:
+                response = await client.post("/hub/agencies/refresh")
+                response.raise_for_status()
+                r = response.json()
+                print(
+                    f"    Agenturprofile: {r['profiles']} "
+                    f"({r['agency']} Agentur · {r['unclear']} unklar · {r['client']} Kunde)"
+                )
+            except Exception as exc:
+                print(f"  agency profile refresh FAILED: {exc}", file=sys.stderr)
+                if agencies is not None:
+                    agencies["refresh_failed"] = str(exc)
 
         # --- partner-board pages: where the named contact often is ----------
         if args.partner_pages > 0:

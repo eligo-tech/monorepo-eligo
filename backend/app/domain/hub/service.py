@@ -229,7 +229,7 @@ async def ingest(
     for posting in result.postings:
         # The opt-out list first, so a refused record never reaches `rejected`
         # — that list names the company, and naming it re-publishes it.
-        if rules.blocks_company(posting.company.name):
+        if rules.blocks_company(posting.company.name, kind=segment):
             suppressed += 1
             continue
         ok, reason = gate.check_posting(posting, now=now)
@@ -2144,8 +2144,13 @@ async def company_contacts(
     tenant_id: uuid.UUID,
     hub_company_id: uuid.UUID,
     kind: str = EMPLOYER,
+    company_ids: list[uuid.UUID] | None = None,
 ) -> dict | None:
     """The people an employer's public ads name as contacts, with evidence.
+
+    `company_ids` overrides the sites read: the agency finder folds an
+    agency's branches by `agency_rank.group_key`, which differs from the
+    normalized-name siblings used for employers.
 
     Reads ad texts already in the corpus — no fetch, so this is a presentation
     read under ARCHITECTURE.md RULE 1, and RULE 2 allows a person as a public
@@ -2162,7 +2167,7 @@ async def company_contacts(
     anchor = await get_company(session, hub_company_id=hub_company_id, kind=kind)
     if anchor is None:
         return None
-    ids = await _sibling_company_ids(
+    ids = company_ids or await _sibling_company_ids(
         session, normalized_name=anchor.normalized_name, kind=kind
     )
     rules = await suppression.load(session)

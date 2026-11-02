@@ -331,3 +331,63 @@ async def test_contacts_drop_a_suppressed_person_even_from_an_unredacted_text() 
     assert response.status_code == 200
     assert "Wolter" not in response.text
     assert "Dziobek" in response.text
+
+
+async def test_an_agency_opt_out_covers_every_branch() -> None:
+    # Agencies publish per branch: "Brunel GmbH NL Essen", "… NL Braunschweig".
+    # An objection from the firm covers all of them, now and at every crawl.
+    async with SessionLocal() as s:
+        for city, ext in (("Essen", "p-1"), ("Braunschweig", "p-2")):
+            await service.ingest(
+                s,
+                adapter=_Replay(_result(f"Brunel GmbH NL {city}", ext)),
+                request=IngestRequest(segment=PRIVATE_RECRUITER),
+            )
+    outcome = await _suppress("company", "Brunel GmbH NL Essen")
+    assert outcome["key"] == "brunel nl essen"
+    assert outcome["companies_deleted"] == 2
+    async with SessionLocal() as s:
+        summary = await service.ingest(
+            s,
+            adapter=_Replay(_result("Brunel GmbH NL Hannover", "p-3")),
+            request=IngestRequest(segment=PRIVATE_RECRUITER),
+        )
+    assert summary.suppressed == 1 and await _count(HubCompany) == 0
+
+
+def test_a_company_called_office_is_not_cut_short() -> None:
+    assert suppression.company_key("Home Office Solutions GmbH") == "home office solutions"
+
+
+async def test_an_employer_opt_out_never_reaches_a_separate_employer() -> None:
+    # "Lebenshilfe (Kreis Viersen)" and "Lebenshilfe (Kreis Kleve)" are two
+    # legal entities. Folding is for agency branches only.
+    async with SessionLocal() as s:
+        for name, ext in (("Lebenshilfe (Kreis Viersen) gGmbH", "e-1"), ("Lebenshilfe (Kreis Kleve) gGmbH", "e-2")):
+            await service.ingest(s, adapter=_Replay(_result(name, ext)), request=IngestRequest())
+    outcome = await _suppress("company", "Lebenshilfe (Kreis Viersen) gGmbH")
+    assert outcome["companies_deleted"] == 1
+    async with SessionLocal() as s:
+        names = (await s.execute(select(HubCompany.name))).scalars().all()
+    assert names == ["Lebenshilfe (Kreis Kleve) gGmbH"]
+
+
+@pytest.mark.parametrize(
+    "name, key",
+    [
+        ("Mein Standort GmbH", "mein standort"),
+        ("Die Filiale GmbH", "die filiale"),
+        ("(BAP) Personal GmbH", "bap personal"),
+        ("Lebenshilfe (Kreis Viersen) gGmbH", "lebenshilfe kreis viersen"),
+        ("Brunel GmbH NL Essen", "brunel"),
+        ("OPTIPER GmbH - Niederlassung Plauen", "optiper"),
+    ],
+)
+def test_only_a_real_branch_suffix_is_cut(name: str, key: str) -> None:
+    from app.domain.hub.agency_rank import group_key
+
+    assert group_key(name) == key
+
+
+def test_an_employer_key_is_its_exact_normalized_name() -> None:
+    assert suppression.company_key("Klinikum Musterstadt Standort Nord") == "klinikum musterstadt standort nord"

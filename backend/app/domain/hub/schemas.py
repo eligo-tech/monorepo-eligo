@@ -431,3 +431,48 @@ class CompanyContacts(BaseModel):
     #: Coverage, so "no contacts" can be told apart from "no ad texts yet".
     postings_scanned: int
     postings_with_text: int
+
+
+# ---------------------------------------------------------------------------
+# Agency finder (Eligo's own leads — allowlisted workspaces only)
+# ---------------------------------------------------------------------------
+
+
+class AgencyReason(BaseModel):
+    """One signal behind a verdict or a score, with its evidence."""
+
+    code: str
+    points: int | None = None
+    evidence: dict = Field(default_factory=dict)
+
+
+class AgencyProfileRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    group_key: str
+    name: str
+    primary_company_id: uuid.UUID
+    verdict: str
+    score: int
+    open_postings: int
+    new_28d: int
+    branches: int
+    region: str | None
+    city: str | None
+    fields: dict[str, int]
+    reasons: list[AgencyReason]
+    refreshed_at: dt.datetime
+
+
+class AgencyPage(BaseModel):
+    items: list[AgencyProfileRead]
+    limit: int
+    offset: int
+
+
+class AgencyDetail(BaseModel):
+    profile: AgencyProfileRead
+    branches: list[HubCompanyRead]
+    postings: list[HubJobPostingRead]
+    contacts: CompanyContacts
