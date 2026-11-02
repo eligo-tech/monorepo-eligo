@@ -22,6 +22,7 @@ from app.domain.pipeline import models as pipeline_models  # noqa: F401
 from app.domain.tenantsources import models as tenantsources_models  # noqa: F401
 from app.domain.projects import models as project_models  # noqa: F401
 from app.domain.proposals import models as proposal_models  # noqa: F401
+from app.domain.erasure import models as erasure_models  # noqa: F401
 from app.domain.searches import models as saved_search_models  # noqa: F401
 from app.domain.tenants import models as tenant_models  # noqa: F401
 from app.domain.verification import models as verification_models  # noqa: F401

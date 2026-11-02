@@ -70,6 +70,9 @@ class ManagerInteractionRead(BaseModel):
 
 
 class ManagerCreate(BaseModel):
+    #: The person was erased here on request and has since come back of their
+    #: own accord. Without it, adding someone erased is refused (409).
+    override_suppression: bool = False
     company_id: uuid.UUID
     full_name: str = Field(min_length=1, max_length=200)
     first_name: str | None = None

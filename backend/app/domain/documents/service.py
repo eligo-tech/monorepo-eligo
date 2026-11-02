@@ -184,6 +184,7 @@ async def extract_cv(
     content: bytes,
     tenant_id: uuid.UUID,
     persist: bool,
+    override_suppression: bool = False,
 ) -> CVExtractionResult:
     # Off the event loop: PDF parsing and the (synchronous) LLM call take
     # seconds, and on the loop they stall every other request on this worker.
@@ -252,9 +253,9 @@ async def extract_cv(
             reason = next((o.reason for o in persist_pre if not o.ok), "persist precondition failed")
             raise PreconditionFailed(reason or "persist precondition failed")
 
-        created = await candidates_service.create_candidate(
-            session, data=_build_candidate(tenant_id, extracted, sections)
-        )
+        data = _build_candidate(tenant_id, extracted, sections)
+        data.override_suppression = override_suppression
+        created = await candidates_service.create_candidate(session, data=data)
         candidate_id = created.id
         agent_result = await agent.run(
             DocumentExtractionInput(

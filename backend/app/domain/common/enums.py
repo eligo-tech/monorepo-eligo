@@ -72,12 +72,15 @@ class ConfidenceSource(str, enum.Enum):
 
 
 class ReceiptAction(str, enum.Enum):
-    """The four verifiable agent actions recorded in the append-only ledger."""
+    """The verifiable actions recorded in the append-only ledger."""
 
     READ = "read"
     ASSERT = "assert"
     VERIFY = "verify"
     WRITE = "write"
+    #: An erasure (GDPR Art. 17). Its payload lists every receipt it blacked
+    #: out, with that receipt's hash — the only licence the trigger accepts.
+    ERASE = "erase"
 
 
 class WorkPermitStatus(str, enum.Enum):

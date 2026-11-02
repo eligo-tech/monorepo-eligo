@@ -58,14 +58,24 @@ def _api_routes(router):
                 yield from _api_routes(inner)
 
 
+def _dependency_names(dependant) -> set[str]:
+    """Every dependency, however deeply nested: a guard that wraps
+    `get_current_actor` (e.g. an admin check with its own message)
+    authenticates exactly as well as the bare one."""
+    names: set[str] = set()
+    for dep in dependant.dependencies:
+        call = getattr(dep, "call", None)
+        if call is not None:
+            # Security schemes (HTTPBearer) are instances, not functions.
+            names.add(getattr(call, "__name__", type(call).__name__))
+        names |= _dependency_names(dep)
+    return names
+
+
 def _open_routes(app) -> set[tuple[str, str]]:
     found: set[tuple[str, str]] = set()
     for route in _api_routes(app):
-        names = {
-            dep.call.__name__
-            for dep in route.dependant.dependencies
-            if getattr(dep, "call", None) is not None
-        }
+        names = _dependency_names(route.dependant)
         if names & _AUTH_DEPENDENCIES:
             continue
         for method in route.methods - {"HEAD", "OPTIONS"}:

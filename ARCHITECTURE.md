@@ -142,6 +142,8 @@ the model is wrong.
 | **Tenant overlay** | tracked/prospect flags, notes, adoption link | `hub_company_link` | yes | no |
 | **Tenant record** | clients, mandates, pipeline | `companies`, `jobs`, `applications` | yes | no |
 | **Personal data** | candidates, managers/contacts (incl. anything enriched or tenant-sourced) | `candidates`, `managers` | yes | **yes** |
+| **Tenant record (accountability)** | that an erasure request was handled: when asked, when done, by whom, counts | `erasure_requests` | yes | no — names nobody, not even the erased row's id |
+| **Personal data (pseudonymous)** | HMAC fingerprints of an erased person's import ids and e-mails, so the next import does not re-create them | `tenant_suppressions` | yes | **yes, while the key exists** — kept because honouring the request needs it (Art. 17(3)(b)); lifted, never deleted |
 | **Personal data (transient)** | changes an AI client proposed, waiting for a person: candidate name in the title, a drafted note | `agent_proposals` | yes | **yes** — text and name erased on every decision and nightly after 7 days |
 | **Provenance** | each proposed field value, its source, confidence and the postcondition reasons | `enrichment_records` | yes | **yes** — the value itself; deletable, so an erasure removes it. Trade-off, deliberate: values and reasons here are not tamper-evident (the chain names the record, not its content) — erasable and tamper-evident cannot both hold for the same text |
 | **Audit** | receipts | `receipts` | yes | references only — field names and record ids, never a value or an address (`tests/test_receipts_hold_no_personal_data.py`). ⚠ Receipts written before 2026-11-02 still carry values in `summary`/`payload` (`write email='…'`, Art. 14 recipient); they are immutable, and erasure will black them out |
@@ -162,7 +164,7 @@ apart at the schema level.
 | **Art. 6(1)(f)** lawful basis | documented Legitimate Interest Assessment per source | ❌ not written |
 | **Art. 14** third-party collection notice | any *person* ingested from a public source flags an Art. 14 duty | ✅ `agents/enrichment.py`; must extend to `managers` |
 | **Art. 15/16** access & rectification | provenance per field, so we can say where a value came from | ✅ `EnrichmentRecord`, `hub_observations`, `resolution_basis` |
-| **Art. 17/21** erasure & objection | **a suppression list, not a delete** — see below | ⚠ corpus only: `hub_suppressions` by company name and by person name; no VAT/register/domain keys yet, tenant records handled per workspace, no request log |
+| **Art. 17/21** erasure & objection | **a suppression list, not a delete** — see below | ⚠ corpus: `hub_suppressions` by company and person name, no VAT/register/domain keys yet. Workspace: erasure of a candidate or contact with suppression, receipt blackout and request log (`domain/erasure/`, 0049) — no UI yet, backups not covered |
 | **Art. 22** human oversight of decisions | hard filters deterministic; LLM only ranks | ✅ `matching/service.py` |
 | **Art. 28** processors | inventory of sub-processors + DPAs (Railway, Supabase, Vercel, OpenAI) | ❌ not written |
 | **Art. 30** records of processing | source inventory: what we fetch, how often, on what basis | ⚠ `hub_observations` is the evidence; no RoPA document |
@@ -191,15 +193,31 @@ its date.
   refused every write by a SELECT-only policy (proved in
   `tests/test_rls_postgres.py`).
 
-Still missing: VAT / register / domain keys (they arrive with the Impressum
-adapter), a log of the requests themselves, and **tenant records**. Today a
-workspace cannot erase a candidate or a contact at all, and if it could, the
-nightly ATS import would re-create them (it matches on `(source,
-external_id)`). Designed 2026-11-02: an erasure action per workspace (admins
-only) that removes the person and everything attached, a per-workspace
-suppression list keyed on fingerprints of their import ids and e-mails that
-the import checks first, blackout of their old receipts, and a request log.
-First step built: new receipts hold no personal values (see the Audit row).
+**Inside a workspace** (migration 0049, `app/domain/erasure/`). The
+workspace is the controller and decides; an admin carries it out.
+
+- **erase** — `POST /erasure/candidates/{id}` or `/erasure/managers/{id}`,
+  admins only, the name typed to confirm. One transaction removes the person
+  and every row that refers to them (CVs, processes and their steps,
+  assessments, match results, notices, notes, interviews, provenance, AI
+  proposals). A contact's mandates stay and lose the link.
+- **receipts** — every receipt naming the person or one of those rows is
+  blacked out (backend/CLAUDE.md §2.1); one ERASE receipt lists them with
+  their hashes, and the chain still verifies.
+- **suppression** — `tenant_suppressions` holds HMAC fingerprints (key:
+  `ELIGO_SUPPRESSION_KEY`) of their import ids, including merged duplicates,
+  and their e-mail. The ATS import skips and counts a match before creating
+  anyone, and refuses to run in a workspace with erasures if the key is
+  missing. Adding the person again by hand is refused (409, with the date
+  they asked) unless the recruiter confirms they came back; that lifts only
+  the e-mail fingerprint, so the old ATS record stays out.
+- **log** — `erasure_requests`: when asked, when done, by whom, how much.
+
+Not covered, by design or not yet: copies outside the database (Supabase
+backups for their retention period, exports already downloaded, the person
+in the customer's own ATS — the import cannot delete there), the public
+corpus (operator step, above), VAT/register/domain corpus keys (Impressum
+adapter), and the UI (next).
 
 ---
 
@@ -242,8 +260,9 @@ job measures and prints its own coverage every run rather than assuming it.
 
 **Not built, and required before this handles real customer data:**
 
-1. The rest of Art. 17/21: identifier-keyed suppressions (VAT, register,
-   domain) and a request log. The corpus opt-out list itself is built (§3).
+1. The rest of Art. 17/21: identifier-keyed corpus suppressions (VAT,
+   register, domain) and the erasure UI. Corpus opt-outs and workspace
+   erasure are built (§3).
 2. Retention/pruning of `raw` payloads and stale postings (Art. 5(1)(e))
 3. A written LIA + RoPA + sub-processor list (Art. 6/28/30)
 4. **Sending** the Art. 14 notice. The tracking exists — `managers` carries

@@ -34,6 +34,7 @@ Copy `.env.example` → `.env`. Everything is prefixed `ELIGO_`. The default
 |---|---|
 | `ELIGO_AUTH_ENABLED=true` | With auth off, every anonymous request is served as the **default tenant** — real data, read and write, to whoever asks. The app now **refuses to start** in that configuration against Postgres (`ELIGO_ALLOW_INSECURE_NO_AUTH=true` overrides it for a local database you own). |
 | `ELIGO_SECRET_KEY` | Fernet key encrypting the credentials workspaces store for their own sources. Unset means no workspace can connect its ATS at all — storing a password in the clear is not the fallback. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Rotating it invalidates every stored credential, and each workspace is told so in plain words. |
+| `ELIGO_SUPPRESSION_KEY` | HMAC key for the erasure suppression list (GDPR Art. 17/21): an erased person's import ids and e-mail are kept only as fingerprints under it, so the next import does not re-create them. Unset: erasure answers 503, and an import refuses to run in a workspace that already has erasures. At least 32 characters; generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`. **Never rotate it**: a new key leaves every existing fingerprint unmatched. |
 
 ## Onboarding a workspace's own data
 

@@ -218,6 +218,18 @@ class Settings(BaseSettings):
     # default tenant; set it explicitly once more than one tenant exists.
     ingest_tenant_id: UUID | None = None
 
+    # --- Erasure (GDPR Art. 17/21) ---------------------------------------
+    # Key for the suppression list's fingerprints: an erased person's import
+    # ids and e-mails are kept only as HMAC-SHA256 under this key, so the list
+    # can stop the next import without holding the values. UNSET: erasure is
+    # refused (503) and an import refuses to run in a workspace that already
+    # has suppressions, rather than silently letting erased people back in.
+    # NEVER rotate it casually: a new key makes every existing fingerprint
+    # unmatched. Never logged.
+    #
+    # Generate one with:  python -c "import secrets; print(secrets.token_urlsafe(32))"
+    suppression_key: str | None = None
+
     # --- CORS ------------------------------------------------------------
     # NoDecode stops pydantic-settings from JSON-parsing the env value at the
     # source level (which would reject a plain/comma-separated string before the
@@ -265,6 +277,18 @@ class Settings(BaseSettings):
     #: text in a stranger's inbox is read by nobody. This one IS the cockpit's
     #: public site — unlike `notice_link_base_url`, which must be the API.
     notice_privacy_url: str = "https://eligolabs.com/datenschutz/"
+
+    @field_validator("suppression_key")
+    @classmethod
+    def _reject_weak_suppression_key(cls, value: str | None) -> str | None:
+        """A short key makes the fingerprints guessable — e-mails are a small,
+        enumerable space, and the key is the only thing standing in the way."""
+        if value is not None and len(value.strip()) < 32:
+            raise ValueError(
+                "ELIGO_SUPPRESSION_KEY must be at least 32 characters; generate one "
+                'with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
+        return value.strip() if value else None
 
     @field_validator("ingest_token")
     @classmethod

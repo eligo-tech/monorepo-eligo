@@ -2041,6 +2041,17 @@ async def adopt_company(
 
     created_manager = None
     if manager and (manager.get("full_name") or "").strip():
+        # A contact this workspace erased is not brought back by adopting the
+        # ad that names them. The company is still adopted; the person is not.
+        from app.domain.erasure import service as erasure
+
+        try:
+            await erasure.guard_readd(
+                session, tenant_id=tenant_id, email=manager.get("email"), override=False
+            )
+        except erasure.Suppressed:
+            manager = None
+    if manager and (manager.get("full_name") or "").strip():
         created_manager = Manager(
             tenant_id=tenant_id,
             company_id=company.id,

@@ -57,8 +57,19 @@ These are enforced in code. Do not route around them.
 - `Receipt`s are **append-only and hash-chained per tenant**, enforced by the
   DATABASE and not by convention: triggers refuse UPDATE and DELETE for every
   connection including the owner (attached to the table in `models.py`, so both
-  `create_all` and Alembic install them), and migration 0014 additionally
-  revokes both privileges from the runtime role.
+  `create_all` and Alembic install them). Migration 0014 revokes DELETE from
+  the runtime role; UPDATE was re-granted by 0024 because a foreign key needs
+  it, so for UPDATE the trigger is the only guard.
+- **One update is allowed, and only one: an erasure's blackout** (GDPR Art.
+  17, migration 0049). Summary → `BLACKOUT_SUMMARY`, payload →
+  `{"erased_by": <ERASE receipt id>}`, every other column unchanged, and only
+  when an ERASE receipt in the same workspace lists that receipt. `verify_chain`
+  accepts a blacked-out row only if its ERASE receipt names it with that exact
+  hash. Change the trigger in `models.py` AND in a new migration —
+  `tests/test_receipt_blackout.py` fails when they differ.
+- New receipts hold **references only** — field names and record ids, never a
+  value, an address or free text that may quote one. The value lives on
+  `enrichment_records`, which an erasure deletes.
 - Position is explicit. `chain_index` is a per-tenant sequence and
   `UNIQUE (tenant_id, chain_index)` is what makes the chain single-headed:
   reading the head and inserting is not atomic, so concurrent appends would
@@ -215,6 +226,10 @@ These are enforced in code. Do not route around them.
 - Erasure in a re-ingesting system needs a **suppression list, not a delete**: the
   next crawl re-inserts a deleted row. Built as `hub_suppressions`
   (`domain/hub/suppression.py`); every new corpus writer must consult it. See ARCHITECTURE.md §3.
+- The same holds inside a workspace: `domain/erasure/` erases a candidate or a
+  contact and writes `tenant_suppressions` (HMAC under `ELIGO_SUPPRESSION_KEY`).
+  **Every new path that creates a candidate or a manager must call
+  `erasure.guard_readd` (by hand) or `erasure.import_guard` (bulk).**
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing

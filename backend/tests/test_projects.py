@@ -478,3 +478,68 @@ async def test_unassigned_route(corpus) -> None:
         listed = await client.get("/api/v1/projects/unassigned")
         assert listed.status_code == 200
         assert [c["name"] for c in listed.json()] == ["Zalando SE"]
+
+
+# --------------------------------------------------------------------------
+# A contact this workspace erased (GDPR Art. 17) is not re-created here
+# --------------------------------------------------------------------------
+
+
+async def _erased_contact(monkeypatch, email: str) -> None:
+    from app.core.config import settings
+    from app.domain.companies.models import Company
+    from app.domain.erasure import service as erasure
+
+    monkeypatch.setattr(settings, "suppression_key", "k" * 40)
+    async with SessionLocal() as s:
+        company = Company(tenant_id=TENANT, name=f"Alt {uuid.uuid4()}")
+        s.add(company)
+        await s.flush()
+        old = Manager(tenant_id=TENANT, company_id=company.id, full_name="Corina Freund", email=email)
+        s.add(old)
+        await s.flush()
+        await erasure.erase_manager(
+            s, tenant_id=TENANT, manager_id=old.id, confirm_name="Corina Freund", reason="erasure",
+            requested_on=dt.date(2026, 11, 2), actor_user_id="u", actor_name="A",
+        )
+        await s.commit()
+
+
+async def test_an_erased_contact_added_to_a_project_is_refused_and_nothing_is_adopted(
+    corpus, monkeypatch
+) -> None:
+    from app.domain.erasure import service as erasure
+    from app.domain.hub.models import HubCompanyLink
+
+    email = f"corina.{uuid.uuid4().hex[:6]}@mgm.de"
+    await _erased_contact(monkeypatch, email)
+    project_id = await _project()
+    async with SessionLocal() as s:
+        await service.add_companies(s, tenant_id=TENANT, project_id=project_id, hub_company_ids=[corpus["mgm"]])
+        with pytest.raises(erasure.Suppressed):
+            await service.add_contact(
+                s, tenant_id=TENANT, project_id=project_id, hub_company_id=corpus["mgm"],
+                payload=AddContactRequest(full_name="Corina F.", email=email.upper()),
+            )
+        await s.rollback()
+        link = await s.scalar(select(HubCompanyLink).where(
+            HubCompanyLink.tenant_id == TENANT, HubCompanyLink.hub_company_id == corpus["mgm"]))
+        assert link is None or link.company_id is None
+        manager = await service.add_contact(
+            s, tenant_id=TENANT, project_id=project_id, hub_company_id=corpus["mgm"],
+            payload=AddContactRequest(full_name="Corina F.", email=email, override_suppression=True),
+        )
+    assert manager.full_name == "Corina F."
+
+
+async def test_adopting_an_ad_skips_a_contact_this_workspace_erased(corpus, monkeypatch) -> None:
+    email = f"corina.{uuid.uuid4().hex[:6]}@zalando.de"
+    await _erased_contact(monkeypatch, email)
+    async with SessionLocal() as s:
+        company, _, manager = await hub_service.adopt_company(
+            s, tenant_id=TENANT, hub_company_id=corpus["zalando"],
+            manager={"full_name": "Corina Freund", "email": email,
+                     "source": ConfidenceSource.PUBLIC_WEB.value, "source_detail": "https://x"},
+        )
+    assert company is not None  # the company is still adopted
+    assert manager is None      # the person is not

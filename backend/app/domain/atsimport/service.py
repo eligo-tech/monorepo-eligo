@@ -35,6 +35,7 @@ from app.domain.common.enums import (
     normalise_job_status,
 )
 from app.domain.companies.models import Company
+from app.domain.erasure import service as erasure
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
 
@@ -68,6 +69,10 @@ class ImportSummary:
     jobs_without_company: int = 0
     jobs_without_manager: int = 0
     notes_created: int = 0
+    #: New people the source still has but this workspace erased (GDPR Art.
+    #: 17/21). Counted, never named — naming them would undo the erasure.
+    managers_suppressed: int = 0
+    candidates_suppressed: int = 0
 
     def as_dict(self) -> dict[str, int]:
         return dataclasses.asdict(self)
@@ -110,6 +115,9 @@ async def import_export(
     jobs = export.jobs
     candidates = export.candidates
     summary = ImportSummary()
+    # Before anything is written: who was erased here. Refuses the whole run
+    # when the workspace has erasures and the key to check them is missing.
+    guard = await erasure.import_guard(session, tenant_id)
 
     # --- companies ---------------------------------------------------------
     existing_companies = await _by_external_id(
@@ -176,6 +184,11 @@ async def import_export(
             "facebook_url": record.facebook_url,
         }
         row = existing_managers.get(record.external_id)
+        if row is None and guard.blocks(
+            source=source, external_id=record.external_id, email=record.email
+        ):
+            summary.managers_suppressed += 1
+            continue
         if row is None:
             row = Manager(
                 tenant_id=tenant_id,
@@ -322,6 +335,11 @@ async def import_export(
     )
     for record in candidates or []:
         row = existing_candidates.get(record.external_id)
+        if row is None and guard.blocks(
+            source=source, external_id=record.external_id, email=record.email
+        ):
+            summary.candidates_suppressed += 1
+            continue
         # Written on create AND on update: the first import ran before the
         # detail pass existed, so the rows it made carry a name and a title and
         # nothing else. Re-running must fill them in rather than decide they

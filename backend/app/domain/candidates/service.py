@@ -104,6 +104,14 @@ async def create_candidate(
     and were discarded here on the way to the row.
     """
     tenant_id = data.tenant_id or settings.default_tenant_id
+    # Somebody this workspace erased (GDPR Art. 17) is not re-created by
+    # hand without the recruiter saying they came back. Covers the CV upload
+    # too, which creates through here.
+    from app.domain.erasure import service as erasure
+
+    await erasure.guard_readd(
+        session, tenant_id=tenant_id, email=data.email, override=data.override_suppression
+    )
     values = data.model_dump(exclude_none=True)
     values.pop("tenant_id", None)
     # The schema carries a few fields the row does not; dropping them here

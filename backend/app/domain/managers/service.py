@@ -191,6 +191,11 @@ async def create_manager(
     itself is perfectly valid for the writer's own tenant.
     """
     await _own_company(session, tenant_id=tenant_id, company_id=payload.company_id)
+    from app.domain.erasure import service as erasure
+
+    await erasure.guard_readd(
+        session, tenant_id=tenant_id, email=payload.email, override=payload.override_suppression
+    )
 
     manager = Manager(
         tenant_id=tenant_id,

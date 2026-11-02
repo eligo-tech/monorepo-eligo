@@ -79,6 +79,9 @@ class CandidateBase(BaseModel):
 class CandidateCreate(CandidateBase):
     tenant_id: uuid.UUID | None = None
     merged_identities: list[str] = Field(default_factory=list)
+    #: The person was erased here on request and has since come back of their
+    #: own accord. Without it, adding someone erased is refused (409).
+    override_suppression: bool = False
 
 
 class CandidateUpdate(BaseModel):
