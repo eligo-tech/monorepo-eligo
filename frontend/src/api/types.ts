@@ -988,6 +988,8 @@ export interface HistoryEntryDTO {
   agent: string
   field: string | null
   summary: string
+  /** What the field became; null once its provenance record was erased. */
+  value: string | null
   source: string | null
 }
 

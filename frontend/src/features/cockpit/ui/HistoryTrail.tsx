@@ -39,12 +39,10 @@ function when(iso: string): string {
   })
 }
 
-/** `write current_title='Lead Engineer'` → `Lead Engineer`. The field name is
- *  shown separately, so repeating it in the line is noise. */
+/** The value comes from the server, which reads it from the provenance record
+ *  — receipts no longer carry it. Null means that record was erased. */
 function value(entry: HistoryEntryDTO): string {
-  const match = /^write\s+[\w.]+=(.*)$/.exec(entry.summary)
-  const raw = match ? match[1] : entry.summary
-  return raw.replace(/^['"]|['"]$/g, '')
+  return entry.value ?? t('gelöscht')
 }
 
 export function HistoryTrail({

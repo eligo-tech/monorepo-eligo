@@ -409,6 +409,7 @@ export const EN: Record<string, string> = {
   'Gehörst du zu einer anderen Organisation? Wechsle dorthin:': 'Do you belong to a different organisation? Switch to it:',
   'Gelernte Abschlusschance — noch kein Signal-Store': 'Learned close probability — no signal store yet',
   'Gelesen — bitte prüfen, die Anzeige ist die Quelle, nicht die Wahrheit.': 'Read it — please check: the advert is the source, not the truth.',
+  'gelöscht': 'erased',
   'Genannt auf der Partnerseite der Anzeige': 'Named on the ad\'s partner page',
   'Genannt im Anzeigentext der Bundesagentur': 'Named in the Federal Employment Agency ad text',
   'Gesagt von': 'Said by',

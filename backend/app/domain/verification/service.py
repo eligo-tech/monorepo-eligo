@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -306,8 +307,20 @@ async def verify_and_commit(
     if ok and not confident:
         reason_text = f"low confidence ({change.confidence:.2f}); {reason_text}"
 
+    # The ledger holds REFERENCES, never personal values (ARCHITECTURE.md,
+    # "Audit"). It is append-only and hash-chained, so a value written into it
+    # could never be erased. The value and the free-text reasons — which can
+    # quote a value ("vorhandener Wert '…'") — live on the provenance record,
+    # which can be; the receipts name that record by id.
+    record_id = uuid.uuid4()
+    outcome = (
+        "auto-committed" if committed
+        else "routed to human review" if ok
+        else "postcondition failed"
+    )
     verify_payload: dict[str, Any] = {
         "field": change.field,
+        "record_id": str(record_id),
         "confidence": change.confidence,
         "source": change.source.value,
         "postconditions_ok": ok,
@@ -324,11 +337,12 @@ async def verify_and_commit(
         subject_type=change.entity_type,
         subject_id=str(change.entity_id),
         verified=ok,
-        summary=f"verify {change.field}: {reason_text}",
+        summary=f"verify {change.field}: {outcome}",
         payload=verify_payload,
     )
 
     record = EnrichmentRecord(
+        id=record_id,
         tenant_id=change.tenant_id,
         entity_type=change.entity_type,
         entity_id=change.entity_id,
@@ -339,6 +353,7 @@ async def verify_and_commit(
         confidence=change.confidence,
         committed=committed,
         needs_human_review=needs_human_review,
+        reason=reason_text,
         receipt_id=verify_receipt.id,
     )
     session.add(record)
@@ -350,7 +365,8 @@ async def verify_and_commit(
             await apply_hook(session, change)
         write_payload: dict[str, Any] = {
             "field": change.field,
-            "value": change.proposed_value,
+            # The value is read from this record by `history_for`.
+            "record_id": str(record_id),
             # The provenance travels with the WRITE, not only the VERIFY:
             # the history a recruiter reads lists what was written, and
             # "who said so" is half of what makes a line worth reading.
@@ -367,7 +383,7 @@ async def verify_and_commit(
             subject_type=change.entity_type,
             subject_id=str(change.entity_id),
             verified=True,
-            summary=f"write {change.field}={change.proposed_value!r}",
+            summary=f"write {change.field}",
             payload=write_payload,
         )
 
@@ -438,6 +454,19 @@ async def verify_chain(
     return True, "chain intact"
 
 
+_LEGACY_WRITE = re.compile(r"^write\s+[\w.]+=(.*)$", re.DOTALL)
+
+
+def _legacy_value(summary: str) -> str | None:
+    """Receipts written before 2026-11-02 carry the value in the summary
+    (`write current_title='Lead Engineer'`). They are immutable, so their
+    history keeps reading it from there."""
+    match = _LEGACY_WRITE.match(summary or "")
+    if not match:
+        return None
+    return match.group(1).strip("'\"")
+
+
 async def history_for(
     session: AsyncSession,
     *,
@@ -471,9 +500,27 @@ async def history_for(
         )
     ).scalars()
 
+    rows = list(rows)
+    record_ids = [
+        uuid.UUID(r.payload["record_id"]) for r in rows if (r.payload or {}).get("record_id")
+    ]
+    values: dict[str, str | None] = {}
+    if record_ids:
+        found = await session.execute(
+            select(EnrichmentRecord.id, EnrichmentRecord.proposed_value).where(
+                EnrichmentRecord.tenant_id == tenant_id, EnrichmentRecord.id.in_(record_ids)
+            )
+        )
+        values = {str(i): v for i, v in found.all()}
+
     history: list[dict] = []
     for row in rows:
         payload = row.payload or {}
+        if "record_id" in payload:
+            # Erased record → None: the change happened, its value is gone.
+            value = values.get(payload["record_id"])
+        else:
+            value = _legacy_value(row.summary)
         history.append(
             {
                 "at": row.created_at,
@@ -483,6 +530,7 @@ async def history_for(
                 "agent": row.agent,
                 "field": payload.get("field"),
                 "summary": row.summary,
+                "value": value,
                 "source": payload.get("source"),
             }
         )

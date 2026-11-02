@@ -178,7 +178,8 @@ async def test_a_change_names_the_person_and_shows_up_in_the_history() -> None:
     entry = history[0]
     assert entry["actor"] == "T. Bauer"
     assert entry["field"] == "current_title"
-    assert "Lead Engineer" in entry["summary"]
+    # The value comes from the provenance record, not the receipt summary.
+    assert entry["value"] == "Lead Engineer"
     assert entry["source"] == "human_verified"
 
 
@@ -203,7 +204,7 @@ async def test_the_history_is_newest_first_and_stays_in_its_tenant() -> None:
             s, tenant_id=uuid.uuid4(), entity_type="candidate", entity_id=candidate_id
         )
 
-    assert "Zuletzt" in mine[0]["summary"]
+    assert [h["value"] for h in mine] == ["Zuletzt", "Dann", "Erst"]
     assert len(mine) == 3
     assert theirs == []
 

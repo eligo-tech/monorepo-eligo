@@ -236,12 +236,14 @@ async def send(
             subject_type="candidate_notice",
             subject_id=str(notice.id),
             verified=False,
-            summary=f"Art.-14-Benachrichtigung an {notice.email} fehlgeschlagen",
+            # No address and no provider error: the ledger cannot be erased,
+            # and a provider's error text often quotes the recipient. Both
+            # stay on the notice row (`email`, `failure_reason`), which can.
+            summary="Art.-14-Benachrichtigung fehlgeschlagen",
             payload={
                 "candidate_id": str(notice.candidate_id),
                 "actor": notice.requested_by,
                 "actor_user_id": notice.requested_by_user_id,
-                "error": notice.failure_reason,
             },
         )
         await session.commit()
@@ -263,7 +265,8 @@ async def send(
         # The provider accepted it. That is what is being attested — not that
         # it was delivered, and not that it was read.
         verified=True,
-        summary=f"Art.-14-Benachrichtigung an {notice.email} versandt",
+        # The address is on the notice row; the receipt names the notice.
+        summary="Art.-14-Benachrichtigung versandt",
         payload={
             "candidate_id": str(notice.candidate_id),
             "actor": notice.requested_by,
