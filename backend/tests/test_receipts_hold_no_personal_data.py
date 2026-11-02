@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import uuid
 
+import pytest
+
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
@@ -150,6 +152,62 @@ async def test_a_value_whose_record_was_erased_shows_nothing() -> None:
     assert [h["value"] for h in history] == [None]
 
 
+async def test_a_cleared_field_is_not_reported_as_erased() -> None:
+    """None means "the record is gone". A field set to nothing is a change
+    whose value is empty — the history must not call it an erasure."""
+    await create_all()
+    tenant, entity = uuid.uuid4(), uuid.uuid4()
+    async with SessionLocal() as s:
+        change = _change(tenant, entity, SECRET).model_copy(update={"proposed_value": None})
+        await verification.verify_and_commit(s, change=change, agent="test")
+        await s.commit()
+        history = await verification.history_for(
+            s, tenant_id=tenant, entity_type="candidate", entity_id=entity
+        )
+    assert [h["value"] for h in history] == [""]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("it's \"x\"", "it's \"x\""),
+        ("a\nb", "a\nb"),
+        ('"quoted"', '"quoted"'),
+        (None, ""),
+    ],
+)
+async def test_an_old_receipt_shows_its_value_exactly(raw, expected) -> None:
+    """Old WRITE receipts carry the raw value in `payload.value` and its repr in
+    the summary. The raw value wins; the repr is only a fallback."""
+    await create_all()
+    tenant, entity = uuid.uuid4(), uuid.uuid4()
+    async with SessionLocal() as s:
+        await verification.append_receipt(
+            s,
+            tenant_id=tenant,
+            agent="recruiter",
+            action=ReceiptAction.WRITE,
+            subject_type="candidate",
+            subject_id=str(entity),
+            verified=True,
+            summary=f"write notes={raw!r}",
+            payload={"field": "notes", "value": raw, "source": "human_verified"},
+        )
+        await s.commit()
+        history = await verification.history_for(
+            s, tenant_id=tenant, entity_type="candidate", entity_id=entity
+        )
+    assert [h["value"] for h in history] == [expected]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("it's \"x\"", "it's \"x\""), ("a\nb", "a\nb"), ('"quoted"', '"quoted"'), (None, "")],
+)
+def test_the_summary_fallback_undoes_the_repr(raw, expected) -> None:
+    assert verification._legacy_value(f"write notes={raw!r}") == expected
+
+
 # --- Art. 14 notices ---------------------------------------------------------
 
 
@@ -167,7 +225,7 @@ class _Refuser:
         raise EmailRejected(f"Resend 422: invalid recipient {to}")
 
 
-async def _notice_receipts(monkeypatch, sender) -> list[Receipt]:
+async def _notice_receipts(monkeypatch, sender, expect_status: int) -> list[Receipt]:
     await create_all()
     monkeypatch.setattr(notices, "get_email_sender", lambda cfg=None: sender)
     async with SessionLocal() as s:
@@ -178,22 +236,23 @@ async def _notice_receipts(monkeypatch, sender) -> list[Receipt]:
     from app.main import app
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
-        await c.post(f"{settings.api_v1_prefix}/candidates/{cid}/notices")
+        resp = await c.post(f"{settings.api_v1_prefix}/candidates/{cid}/notices")
+    assert resp.status_code == expect_status, resp.text
     async with SessionLocal() as s:
-        return list(
-            (
-                await s.execute(select(Receipt).where(Receipt.subject_type == "candidate_notice"))
-            ).scalars()
-        )
+        rows = (
+            await s.execute(select(Receipt).where(Receipt.subject_type == "candidate_notice"))
+        ).scalars()
+        # Only this candidate's receipts: the SQLite file is shared across tests.
+        return [r for r in rows if r.payload.get("candidate_id") == str(cid)]
 
 
 async def test_a_sent_notice_receipt_does_not_name_the_recipient(monkeypatch) -> None:
-    rows = await _notice_receipts(monkeypatch, _Sender())
-    assert rows
+    rows = await _notice_receipts(monkeypatch, _Sender(), 201)
+    assert [r.verified for r in rows] == [True]
     assert all(SECRET not in _text(r) for r in rows), [_text(r) for r in rows]
 
 
 async def test_a_failed_notice_receipt_does_not_carry_the_provider_error(monkeypatch) -> None:
-    rows = await _notice_receipts(monkeypatch, _Refuser())
-    assert rows
+    rows = await _notice_receipts(monkeypatch, _Refuser(), 502)
+    assert [r.verified for r in rows] == [False]
     assert all(SECRET not in _text(r) for r in rows), [_text(r) for r in rows]

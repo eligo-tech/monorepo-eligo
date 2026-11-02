@@ -57,7 +57,8 @@ class CandidateSummary(BaseModel):
 class ProvenanceEntry(BaseModel):
     """Which field changed, when, by whom, from what source — never the value.
 
-    The ledger's WRITE summary reads "write email='…'", so carrying it would
+    Receipts written before 2026-11-02 read "write email='…'" in their summary,
+    and the history now also returns the value itself; carrying either would
     send the very contact data the rest of this file keeps out.
     """
 

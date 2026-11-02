@@ -14,6 +14,7 @@ real in code, not just documentation.
 
 from __future__ import annotations
 
+import ast
 import datetime as dt
 import hashlib
 import json
@@ -457,14 +458,27 @@ async def verify_chain(
 _LEGACY_WRITE = re.compile(r"^write\s+[\w.]+=(.*)$", re.DOTALL)
 
 
-def _legacy_value(summary: str) -> str | None:
-    """Receipts written before 2026-11-02 carry the value in the summary
+def _legacy_value(summary: str) -> str:
+    """Receipts written before 2026-11-02 carry the value's repr in the summary
     (`write current_title='Lead Engineer'`). They are immutable, so their
-    history keeps reading it from there."""
+    history keeps reading it. A cleared field (`=None`) is "" — not None,
+    which means "erased"."""
     match = _LEGACY_WRITE.match(summary or "")
     if not match:
+        return ""
+    raw = match.group(1)
+    try:
+        value = ast.literal_eval(raw)
+    except (ValueError, SyntaxError):
+        return raw
+    return "" if value is None else str(value)
+
+
+def _record_ref(payload: dict) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(payload["record_id"])) if payload.get("record_id") else None
+    except ValueError:
         return None
-    return match.group(1).strip("'\"")
 
 
 async def history_for(
@@ -501,24 +515,27 @@ async def history_for(
     ).scalars()
 
     rows = list(rows)
-    record_ids = [
-        uuid.UUID(r.payload["record_id"]) for r in rows if (r.payload or {}).get("record_id")
-    ]
-    values: dict[str, str | None] = {}
+    record_ids = [ref for r in rows if (ref := _record_ref(r.payload or {}))]
+    values: dict[uuid.UUID, str | None] = {}
     if record_ids:
         found = await session.execute(
             select(EnrichmentRecord.id, EnrichmentRecord.proposed_value).where(
                 EnrichmentRecord.tenant_id == tenant_id, EnrichmentRecord.id.in_(record_ids)
             )
         )
-        values = {str(i): v for i, v in found.all()}
+        values = dict(found.all())
 
     history: list[dict] = []
     for row in rows:
         payload = row.payload or {}
-        if "record_id" in payload:
-            # Erased record → None: the change happened, its value is gone.
-            value = values.get(payload["record_id"])
+        ref = _record_ref(payload)
+        if ref is not None:
+            # No record → None: the change happened, its value was erased.
+            # A record whose value is empty is a cleared field → "".
+            value = (values[ref] or "") if ref in values else None
+        elif "value" in payload:
+            # Old receipts also carried the raw value; it beats the repr.
+            value = "" if payload["value"] is None else str(payload["value"])
         else:
             value = _legacy_value(row.summary)
         history.append(

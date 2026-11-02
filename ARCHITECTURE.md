@@ -141,7 +141,7 @@ the model is wrong.
 | **Tenant record** | clients, mandates, pipeline | `companies`, `jobs`, `applications` | yes | no |
 | **Personal data** | candidates, managers/contacts (incl. anything enriched or tenant-sourced) | `candidates`, `managers` | yes | **yes** |
 | **Personal data (transient)** | changes an AI client proposed, waiting for a person: candidate name in the title, a drafted note | `agent_proposals` | yes | **yes** — text and name erased on every decision and nightly after 7 days |
-| **Provenance** | each proposed field value, its source, confidence and the postcondition reasons | `enrichment_records` | yes | **yes** — the value itself; deletable, so an erasure removes it |
+| **Provenance** | each proposed field value, its source, confidence and the postcondition reasons | `enrichment_records` | yes | **yes** — the value itself; deletable, so an erasure removes it. Trade-off, deliberate: values and reasons here are not tamper-evident (the chain names the record, not its content) — erasable and tamper-evident cannot both hold for the same text |
 | **Audit** | receipts | `receipts` | yes | references only — field names and record ids, never a value or an address (`tests/test_receipts_hold_no_personal_data.py`). ⚠ Receipts written before 2026-11-02 still carry values in `summary`/`payload` (`write email='…'`, Art. 14 recipient); they are immutable, and erasure will black them out |
 
 ---
