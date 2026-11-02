@@ -988,6 +988,9 @@ export interface HistoryEntryDTO {
   agent: string
   field: string | null
   summary: string
+  /** What the field became; null once its provenance record was erased, ""
+   *  for a cleared field. Absent from a backend older than 2026-11-02. */
+  value?: string | null
   source: string | null
 }
 

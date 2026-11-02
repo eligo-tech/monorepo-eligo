@@ -125,6 +125,10 @@ class EnrichmentRecord(Base, IDMixin, TenantMixin, TimestampMixin):
     needs_human_review: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    #: Why it was committed or routed to review — the postcondition reasons.
+    #: Here, not on the receipt: a reason is free text and can quote a value
+    #: ("vorhandener Wert '…'"), and this row can be erased; a receipt cannot.
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Link to the receipt that recorded the verify/write decision.
     receipt_id: Mapped[uuid.UUID | None] = mapped_column(

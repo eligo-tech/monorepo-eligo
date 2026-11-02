@@ -61,6 +61,7 @@ class EnrichmentRecordRead(BaseModel):
     confidence: float
     committed: bool
     needs_human_review: bool
+    reason: str | None = None
     receipt_id: uuid.UUID | None
     created_at: dt.datetime
 
@@ -84,5 +85,9 @@ class HistoryEntryRead(BaseModel):
     agent: str
     field: str | None = None
     summary: str
+    #: What the field became. Read from the provenance record the receipt
+    #: names (or, for receipts before 2026-11-02, from the summary). None once
+    #: that record was erased — the change happened, its value is gone.
+    value: str | None = None
     #: "human_verified", "llm_extraction", … — how the value was established.
     source: str | None = None

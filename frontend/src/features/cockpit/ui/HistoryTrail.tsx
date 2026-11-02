@@ -39,12 +39,17 @@ function when(iso: string): string {
   })
 }
 
-/** `write current_title='Lead Engineer'` → `Lead Engineer`. The field name is
- *  shown separately, so repeating it in the line is noise. */
-function value(entry: HistoryEntryDTO): string {
-  const match = /^write\s+[\w.]+=(.*)$/.exec(entry.summary)
-  const raw = match ? match[1] : entry.summary
-  return raw.replace(/^['"]|['"]$/g, '')
+/** The value comes from the server, which reads it from the provenance record
+ *  — receipts no longer carry it. Only `null` means that record was erased;
+ *  `undefined` is a backend that predates the field (Vercel can deploy before
+ *  Railway), and that must not read as an erasure on every line. */
+export function historyValue(entry: HistoryEntryDTO): string {
+  if (entry.value === null) return t('gelöscht')
+  if (entry.value === undefined) {
+    const match = /^write\s+[\w.]+=(.*)$/.exec(entry.summary)
+    return (match ? match[1] : entry.summary).replace(/^['"]|['"]$/g, '')
+  }
+  return entry.value === '' ? '—' : entry.value
 }
 
 export function HistoryTrail({
@@ -103,7 +108,7 @@ export function HistoryTrail({
                   </span>
                 )}
                 <span className="min-w-0 flex-1 truncate text-cockpit-dim">
-                  {value(entry)}
+                  {historyValue(entry)}
                 </span>
                 {entry.source && entry.source !== 'human_verified' && (
                   <span className="font-mono text-[11px] text-gold-300">
