@@ -32,6 +32,14 @@ on:
         default: "1"
         type: choice
         options: ["0", "1", "7", "14", "28"]
+      agencies_only:
+        # The agency-finder backfill: since=28 + this. Skips the employer
+        # sweep, ad text and partner pages — 45k postings of detail calls would
+        # outlast the timeout; the hub-descriptions workflow owns that backlog.
+        description: "Only the private-recruiter pass (backfill)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   # Never let a slow run overlap the next night's.
@@ -43,7 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     # The listing delta is quick, but every newly inserted posting then gets one
     # deliberately paced detail request. At ~11k new roles/day this is roughly
-    # 75 minutes; leave room for upstream variance without overlapping tomorrow.
+    # 75 minutes, plus ~35 for ~5k new private-recruiter ads (measured
+    # 2026-11-02); leave room for upstream variance without overlapping tomorrow.
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v5
@@ -61,6 +70,11 @@ jobs:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
           ELIGO_HUB_REGIONS: ${{ github.event.inputs.regions || vars.ELIGO_HUB_REGIONS }}
+          AGENCIES_ONLY: ${{ github.event.inputs.agencies_only }}
         run: |
+          extra=()
+          if [ "$AGENCIES_ONLY" = "true" ]; then
+            extra=(--agencies-only --no-descriptions --partner-pages 0)
+          fi
           python -m scripts.hub_daily \
-            --since "${{ github.event.inputs.since || '1' }}"
+            --since "${{ github.event.inputs.since || '1' }}" "${extra[@]}"
