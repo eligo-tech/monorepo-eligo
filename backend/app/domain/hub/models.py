@@ -401,3 +401,36 @@ class HubPostingPayload(Base, TimestampMixin):
     posting: Mapped["HubJobPosting"] = relationship(
         "HubJobPosting", back_populates="payload"
     )
+
+
+#: What a suppression covers.
+SUPPRESS_COMPANY = "company"  # every row of that normalized name, every kind
+SUPPRESS_PERSON = "person"  # that full name, in every stored ad text
+SUPPRESSION_SCOPES = (SUPPRESS_COMPANY, SUPPRESS_PERSON)
+#: Why. Erasure = GDPR Art. 17, objection = Art. 21, legal = any other duty.
+SUPPRESSION_REASONS = ("erasure", "objection", "legal")
+
+
+class HubSuppression(Base, IDMixin, TimestampMixin):
+    """The opt-out list: who the corpus must never hold again.
+
+    A DELETE alone does not erase anything here — the corpus re-ingests every
+    night and the source still publishes the record. This row is the tombstone
+    that every write into the corpus checks (`suppression.py`).
+
+    `key` is deliberately the minimum needed to recognise the record again: the
+    normalized company name, or the folded full name ("katrin wolter"). No
+    address, no reason text, no requester contact — those belong in the
+    request log outside this database.
+
+    Shared like the corpus it guards — no `tenant_id`. Readable by the app role,
+    writable only by the owner connection (`scripts/hub_suppress.py`); the
+    migration enforces that with a SELECT-only policy.
+    """
+
+    __tablename__ = "hub_suppressions"
+    __table_args__ = (UniqueConstraint("scope", "key", name="uq_hub_suppression_scope_key"),)
+
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    key: Mapped[str] = mapped_column(String(300), nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)

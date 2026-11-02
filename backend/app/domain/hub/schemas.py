@@ -350,6 +350,9 @@ class IngestSummary(BaseModel):
     # corpus rows merely because they still lack text.
     posting_external_ids_created: list[str] = Field(default_factory=list)
     rejected: list[RejectedRecord] = Field(default_factory=list)
+    # Records refused because the company is on the opt-out list. A count, not
+    # a list: naming them would re-publish exactly who asked to be left out.
+    suppressed: int = 0
     # The gate's verdicts, in runbook order — the verification trace.
     notes: list[str] = Field(default_factory=list)
     # How the source says this result set divides — the crawler's shard plan,

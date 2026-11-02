@@ -218,3 +218,39 @@ async def test_the_app_role_is_not_the_table_owner() -> None:
         )
         me = await s.scalar(text("select current_user"))
     assert owner != me, f"the app connects as the table owner ({me})"
+
+
+# ── the opt-out list ──────────────────────────────────────────────────────
+
+
+async def test_the_app_can_read_the_opt_out_list_but_never_write_it() -> None:
+    """Only the owner connection (`scripts/hub_suppress.py`) adds or lifts a
+    suppression. A request handler that could delete a row would un-erase a
+    person with the next crawl."""
+    from app.domain.hub.models import HubSuppression
+
+    key = f"ci probe {uuid.uuid4().hex[:8]}"
+    async with AdminSessionLocal() as s:
+        s.add(HubSuppression(scope="person", key=key, reason="legal"))
+        await s.commit()
+    try:
+        async with SessionLocal() as s:
+            seen = await s.scalar(text("SELECT count(*) FROM hub_suppressions WHERE key = :k"), {"k": key})
+            deleted = await s.execute(text("DELETE FROM hub_suppressions WHERE key = :k"), {"k": key})
+            await s.commit()
+        assert seen == 1
+        assert deleted.rowcount == 0  # the row is invisible to DELETE
+        with pytest.raises(ProgrammingError, match="row-level security"):
+            async with SessionLocal() as s:
+                await s.execute(
+                    text(
+                        "INSERT INTO hub_suppressions (id, scope, key, reason, created_at, updated_at) "
+                        "VALUES (:id, 'person', 'x y', 'legal', now(), now())"
+                    ),
+                    {"id": uuid.uuid4()},
+                )
+                await s.commit()
+    finally:
+        async with AdminSessionLocal() as s:
+            await s.execute(text("DELETE FROM hub_suppressions WHERE key = :k"), {"k": key})
+            await s.commit()
