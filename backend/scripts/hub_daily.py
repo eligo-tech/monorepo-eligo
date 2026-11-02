@@ -84,6 +84,17 @@ workspace watches first, one page per posting, robots.txt respected and paced
 per host. Each page is attempted once, so the backlog drains night by night
 instead of being re-read.
 
+**Private recruiters run as their own pass** (agency finder, docs/plans/
+info_hub.md Phase 0a). After the employer sweep and saved searches, the same
+delta is read again with `segment=private_recruiter` (`pav=true`): leads for
+Eligo's own sales, never shown to a customer. Sharded by berufsfeld like the
+employers, with one difference — a field over the 10,000 cap FAILS the night
+instead of being split by Bundesland, because a silently short field reads as
+"no agencies there". Measured 2026-11-02: 4,905 postings in one day, 45,002 in
+28 days over 132 fields, largest 3,610. It prints its own coverage line and
+has its own verdict. The one-off backfill is
+`--agencies-only --since 28 --no-descriptions --partner-pages 0`.
+
 Exits non-zero if any shard fails, so the scheduler's own failure notification
 is the monitoring (SOC 2 CC7.2).
 """
@@ -138,6 +149,65 @@ BUNDESLAENDER = [
 ]
 
 
+async def _post_ingest(
+    client: httpx.AsyncClient,
+    payload: dict,
+    *,
+    unreachable: dict[str, int],
+    label: str,
+) -> dict:
+    """One `POST /hub/ingest`, retried. A slice is idempotent, so re-sending is safe."""
+    for attempt in range(_PAGE_ATTEMPTS):
+        response = await client.post("/hub/ingest", json=payload)
+        # 422 + "unreachable" is the API saying the SOURCE did not answer,
+        # not that this request was wrong. Worth one more try — transport
+        # failures are often transient — but counted, so a source that is
+        # genuinely down ends the sweep instead of being retried per shard.
+        if response.status_code == 422 and "unreachable" in response.text:
+            unreachable["streak"] += 1
+            if unreachable["streak"] >= _UNREACHABLE_STREAK:
+                raise SourceDown(
+                    f"{unreachable['streak']} pages in a row: "
+                    f"{response.json().get('detail', response.text)[:120]}"
+                )
+            if attempt < _PAGE_ATTEMPTS - 1:
+                wait = min(2**attempt * 5, 60)
+                print(
+                    f"    {label}: source unreachable — retrying in {wait}s",
+                    file=sys.stderr,
+                )
+                await asyncio.sleep(wait)
+                continue
+            # Out of attempts on this page: fail the shard the ordinary way.
+            response.raise_for_status()
+        if response.status_code == 200 or response.status_code == 201:
+            unreachable["streak"] = 0
+        try:
+            response.raise_for_status()
+            return response.json()
+        except Exception as exc:
+            # The same failure the description batches already handle: a
+            # request that outlives the hosting proxy comes back 5xx even
+            # though every upstream call succeeded. On 2026-09-07 exactly
+            # one shard — "Immobilienwirtschaft und Facility-Management" —
+            # went quiet for 62s and then 500'd, and with no retry here that
+            # single cut-off failed the whole nightly run: the sweep had
+            # already reached 100.1% coverage and still exited 1.
+            #
+            # A crawl slice is idempotent (upserts keyed on the source id),
+            # so re-sending one is safe and costs the source one more page.
+            if attempt == _PAGE_ATTEMPTS - 1:
+                raise
+            wait = min(2**attempt * 5, 60)
+            print(
+                f"    {label} failed ({type(exc).__name__}: {exc}) — "
+                f"retrying in {wait}s",
+                file=sys.stderr,
+            )
+            await asyncio.sleep(wait)
+    raise AssertionError("unreachable: the last attempt raises")
+
+
 async def _ingest_region(
     client: httpx.AsyncClient,
     *,
@@ -151,6 +221,7 @@ async def _ingest_region(
     primary: bool = False,
     created_external_ids: set[str] | None = None,
     unreachable: dict[str, int] | None = None,
+    segment: str | None = None,
 ) -> dict[str, int]:
     totals = {
         "pages": 0, "fetched": 0, "companies": 0, "postings": 0, "updated": 0,
@@ -162,76 +233,29 @@ async def _ingest_region(
     unreachable = {"streak": 0} if unreachable is None else unreachable
 
     for page in range(1, min(max_pages, _PAGE_CEILING) + 1):
-        summary = None
-        for attempt in range(_PAGE_ATTEMPTS):
-            response = await client.post(
-                "/hub/ingest",
-                json={
-                    "source": "bundesagentur",
-                    # Passed to the source's full-text parameter, which reaches
-                    # posting descriptions the corpus does not store.
-                    "what": what,
-                    "berufsfeld": berufsfeld,
-                    "where": region,
-                    "radius_km": radius_km,
-                    "published_since_days": since_days,
-                    "page": page,
-                    "size": 100,
-                    # No max_age_minutes: the scheduled job wants the real
-                    # thing, never a cached answer. Freshness reuse exists for
-                    # retries.
-                },
-            )
-            # 422 + "unreachable" is the API saying the SOURCE did not answer,
-            # not that this request was wrong. Worth one more try — transport
-            # failures are often transient — but counted, so a source that is
-            # genuinely down ends the sweep instead of being retried per shard.
-            if response.status_code == 422 and "unreachable" in response.text:
-                unreachable["streak"] += 1
-                if unreachable["streak"] >= _UNREACHABLE_STREAK:
-                    raise SourceDown(
-                        f"{unreachable['streak']} pages in a row: "
-                        f"{response.json().get('detail', response.text)[:120]}"
-                    )
-                if attempt < _PAGE_ATTEMPTS - 1:
-                    wait = min(2**attempt * 5, 60)
-                    print(
-                        f"    page {page}: source unreachable — retrying in {wait}s",
-                        file=sys.stderr,
-                    )
-                    await asyncio.sleep(wait)
-                    continue
-                # Out of attempts on this page: fail the shard the ordinary
-                # way. Breaking out here left `summary` unset and the loop
-                # below walked into an AttributeError.
-                response.raise_for_status()
-            if response.status_code == 200 or response.status_code == 201:
-                unreachable["streak"] = 0
-            try:
-                response.raise_for_status()
-                summary = response.json()
-                break
-            except Exception as exc:
-                # The same failure the description batches already handle: a
-                # request that outlives the hosting proxy comes back 5xx even
-                # though every upstream call succeeded. On 2026-09-07 exactly
-                # one shard — "Immobilienwirtschaft und Facility-Management" —
-                # went quiet for 62s and then 500'd, and with no retry here that
-                # single cut-off failed the whole nightly run: the sweep had
-                # already reached 100.1% coverage and still exited 1.
-                #
-                # A crawl slice is idempotent (upserts keyed on the source id),
-                # so re-sending one is safe and costs the source one more page.
-                if attempt == _PAGE_ATTEMPTS - 1:
-                    raise
-                wait = min(2**attempt * 5, 60)
-                print(
-                    f"    page {page} failed ({type(exc).__name__}: {exc}) — "
-                    f"retrying in {wait}s",
-                    file=sys.stderr,
-                )
-                await asyncio.sleep(wait)
-
+        summary = await _post_ingest(
+            client,
+            {
+                "source": "bundesagentur",
+                # Passed to the source's full-text parameter, which reaches
+                # posting descriptions the corpus does not store.
+                "what": what,
+                "berufsfeld": berufsfeld,
+                "where": region,
+                "radius_km": radius_km,
+                "published_since_days": since_days,
+                "page": page,
+                "size": 100,
+                # Omitted for employers, so their requests stay byte-for-
+                # byte what they were.
+                **({"segment": segment} if segment else {}),
+                # No max_age_minutes: the scheduled job wants the real
+                # thing, never a cached answer. Freshness reuse exists for
+                # retries.
+            },
+            unreachable=unreachable,
+            label=f"page {page}",
+        )
         if created_external_ids is not None:
             created_external_ids.update(summary.get("posting_external_ids_created", []))
         if page == 1 and primary:
@@ -248,6 +272,10 @@ async def _ingest_region(
                 f"(smaller --since, or shard by PLZ).",
                 file=sys.stderr,
             )
+            if segment:
+                raise ShardCapExceeded(
+                    f"{berufsfeld or region}: {summary['total_available']} results"
+                )
 
         totals["pages"] += 1
         totals["fetched"] += summary["fetched"]
@@ -275,6 +303,11 @@ async def _ingest_region(
                 f"{(total or 0) - page * 100} results unread",
                 file=sys.stderr,
             )
+            if segment:
+                raise ShardCapExceeded(
+                    f"{berufsfeld or region}: stopped at the {page}-page cap, "
+                    f"{(total or 0) - page * 100} unread"
+                )
         if delay:
             # A free public service is not a load test.
             await asyncio.sleep(delay)
@@ -423,6 +456,135 @@ def run_verdict(
     return 0, f"ok: {pct:.1f}% coverage"
 
 
+# ---------------------------------------------------------------------------
+# Private recruiters — the agency finder's leads (docs/plans/info_hub.md 0a)
+# ---------------------------------------------------------------------------
+
+PRIVATE_RECRUITER = "private_recruiter"
+
+
+class ShardCapExceeded(Exception):
+    """A shard of the agency pass cannot be read whole."""
+
+
+def agency_shards(*, total: int, shard_plan: list[dict]) -> list[str]:
+    """The berufsfeld fields to read, or ShardCapExceeded.
+
+    Always by field, even when the whole delta would fit one query: a posting
+    learns its field only from the shard that fetched it, and the field mix is
+    a ranking signal for agencies.
+
+    Unlike the employer sweep there is no Bundesland fallback. `wo=` loses
+    whole states, and for leads a silently short field reads as "no agencies
+    there". Fail the night instead and narrow `--since`.
+    """
+    if not total:
+        return []
+    if not shard_plan:
+        raise ShardCapExceeded(f"{total} postings but the source gave no field facets")
+    over = [f"{e['value']} ({e['count']})" for e in shard_plan if e["count"] > _RESULT_CEILING]
+    if over:
+        raise ShardCapExceeded(
+            f"over the {_RESULT_CEILING} cap: {', '.join(over)} — use a smaller --since"
+        )
+    return [e["value"] for e in shard_plan]
+
+
+async def agency_pass(
+    client: httpx.AsyncClient,
+    *,
+    since: int,
+    max_pages: int,
+    delay: float,
+    created_external_ids: set[str],
+    unreachable: dict[str, int] | None = None,
+    retry_wait: float = 30.0,
+) -> dict:
+    """Ingest every private-recruiter posting in the window, field by field.
+
+    Returns what the coverage verdict needs: `available` (what the source said
+    each shard held), `total` (the nationwide pav figure), failed shards, and
+    `cap_exceeded` when the window cannot be read whole — in which case nothing
+    beyond the probe page is fetched.
+    """
+    unreachable = {"streak": 0} if unreachable is None else unreachable
+    result: dict = {"available": 0, "total": 0, "failures": [], "cap_exceeded": None,
+                    "postings": 0, "companies": 0}
+    body = await _post_ingest(
+        client,
+        {
+            "source": "bundesagentur",
+            "segment": PRIVATE_RECRUITER,
+            "published_since_days": since,
+            "page": 1,
+            "size": 100,
+        },
+        unreachable=unreachable,
+        label="Agenturen probe",
+    )
+    created_external_ids.update(body.get("posting_external_ids_created", []))
+    result["total"] = body.get("total_available") or 0
+    try:
+        fields = agency_shards(total=result["total"], shard_plan=body.get("shard_plan") or [])
+    except ShardCapExceeded as exc:
+        result["cap_exceeded"] = str(exc)
+        return result
+
+    async def read(field: str) -> dict[str, int]:
+        return await _ingest_region(
+            client,
+            region=None,
+            radius_km=0,
+            since_days=since,
+            max_pages=max_pages,
+            delay=delay,
+            berufsfeld=field,
+            primary=True,
+            created_external_ids=created_external_ids,
+            unreachable=unreachable,
+            segment=PRIVATE_RECRUITER,
+        )
+
+    failed: list[str] = []
+    for attempt in (1, 2):  # a second ask recovers most dropped connections
+        if attempt == 2:
+            await asyncio.sleep(retry_wait)
+        todo, failed = (fields if attempt == 1 else failed), []
+        for field in todo:
+            try:
+                totals = await read(field)
+            except SourceDown:
+                raise
+            except ShardCapExceeded as exc:
+                result["cap_exceeded"] = str(exc)
+                return result
+            except Exception as exc:
+                print(f"    Agenturen · {field} FAILED: {exc}", file=sys.stderr)
+                failed.append(field)
+                continue
+            result["available"] += totals["available"]
+            result["postings"] += totals["postings"]
+            result["companies"] += totals["companies"]
+        if not failed:
+            break
+    result["failures"] = failed
+    return result
+
+
+def agency_verdict(result: dict, *, min_coverage: float) -> tuple[int, str]:
+    """The employer rule (`run_verdict`), plus: a cap breach is always red."""
+    if result.get("cap_exceeded"):
+        return 1, f"FAILED: agencies — shard cap exceeded: {result['cap_exceeded']}"
+    code, message = run_verdict(
+        source_down=None,
+        failures=result["failures"],
+        reached=result["available"],
+        national_total=result["total"],
+        min_coverage=min_coverage,
+    )
+    return code, f"agencies {message}"
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -498,7 +660,26 @@ async def main() -> int:
         "open, so sweeping after one would close live vacancies. Only run this "
         "after a pass that re-sees everything currently listed.",
     )
+    parser.add_argument(
+        "--no-agencies",
+        dest="agencies",
+        action="store_false",
+        help="skip the private-recruiter pass (agency finder leads)",
+    )
+    parser.add_argument(
+        "--agencies-only",
+        action="store_true",
+        help="run ONLY the private-recruiter pass — the backfill: "
+        "`--agencies-only --since 28 --no-descriptions --partner-pages 0`",
+    )
     args = parser.parse_args()
+    if args.agencies_only:
+        # Nothing but the agency pass. A stale sweep after a run that saw no
+        # employer would close every employer posting, and ad text for a
+        # 28-day window (~45k detail calls) would outlast the workflow; the
+        # hub-descriptions workflow owns that backlog.
+        args.agencies, args.profiles, args.descriptions = True, False, False
+        args.partner_pages, args.stale_days = 0, 0
 
     base = os.environ.get("ELIGO_API_BASE", "").rstrip("/")
     token = os.environ.get("ELIGO_INGEST_TOKEN", "")
@@ -514,6 +695,8 @@ async def main() -> int:
     )
     scope = "Deutschland" if regions == BUNDESLAENDER else f"{len(regions)} shard(s)"
 
+    if args.agencies_only:
+        regions, scope = [], "nur Agenturen"
     print(f"nightly corpus refresh · {scope} · delta {args.since}d")
     grand = {
         "pages": 0, "fetched": 0, "companies": 0, "postings": 0, "updated": 0,
@@ -530,24 +713,25 @@ async def main() -> int:
     ) as client:
         # One unfiltered page: ingests normally AND yields the nationwide total,
         # which is the denominator for the coverage report below.
-        try:
-            probe = await client.post(
-                "/hub/ingest",
-                json={
-                    "source": "bundesagentur",
-                    "published_since_days": args.since,
-                    "page": 1,
-                    "size": 100,
-                },
-            )
-            probe.raise_for_status()
-            body = probe.json()
-            created_external_ids.update(body.get("posting_external_ids_created", []))
-            national_total = body.get("total_available") or 0
-            shard_plan = body.get("shard_plan") or []
-        except Exception as exc:
-            print(f"  probe failed: {exc}", file=sys.stderr)
-            shard_plan = []
+        shard_plan: list[dict] = []
+        if not args.agencies_only:  # no employer probe when the sweep is off
+            try:
+                probe = await client.post(
+                    "/hub/ingest",
+                    json={
+                        "source": "bundesagentur",
+                        "published_since_days": args.since,
+                        "page": 1,
+                        "size": 100,
+                    },
+                )
+                probe.raise_for_status()
+                body = probe.json()
+                created_external_ids.update(body.get("posting_external_ids_created", []))
+                national_total = body.get("total_available") or 0
+                shard_plan = body.get("shard_plan") or []
+            except Exception as exc:
+                print(f"  probe failed: {exc}", file=sys.stderr)
 
         source_down: str | None = None
         # One counter for the whole night: the source is either answering or
@@ -694,6 +878,37 @@ async def main() -> int:
                 except Exception as exc:
                     print(f"  mark-crawled failed: {exc}", file=sys.stderr)
 
+        # --- private recruiters: the agency finder's leads -----------------
+        # Before the ad text, so new agency postings get theirs tonight too.
+        agencies: dict | None = None
+        # Kept apart from `source_down`: the source failing during THIS pass
+        # must not skip the employers' ad text or retries, nor turn a complete
+        # employer sweep into "source unreachable".
+        agency_down: str | None = source_down
+        if args.agencies and not source_down:
+            print("  Agenturen (private Arbeitsvermittlung)")
+            try:
+                agencies = await agency_pass(
+                    client,
+                    since=args.since,
+                    max_pages=args.max_pages,
+                    delay=args.delay,
+                    created_external_ids=created_external_ids,
+                    unreachable=unreachable,
+                )
+            except SourceDown as exc:
+                print(f"  SOURCE DOWN (Agenturen): {exc}", file=sys.stderr)
+                agency_down = str(exc)
+            except Exception as exc:
+                print(f"  agency pass FAILED: {exc}", file=sys.stderr)
+                agencies = {"available": 0, "total": 0, "failures": ["agencies"],
+                            "cap_exceeded": None, "postings": 0, "companies": 0}
+            if agencies:
+                print(
+                    f"    +{agencies['companies']} Agenturen · +{agencies['postings']} Rollen · "
+                    f"coverage {agencies['available']}/{agencies['total']}"
+                )
+
         # --- ad text for what people actually search -----------------------
         if source_down and args.descriptions:
             print("  Anzeigentexte: übersprungen — Quelle nicht erreichbar")
@@ -776,11 +991,12 @@ async def main() -> int:
                 print(f"    erholt: {', '.join(recovered)}")
                 failures = [f for f in failures if f not in recovered]
 
-    print(
-        f"pages {grand['pages']} · geprüft {grand['fetched']} · "
-        f"+{grand['companies']} Unternehmen · +{grand['postings']} Rollen · "
-        f"~{grand['updated']} bekannt"
-    )
+    if not args.agencies_only:
+        print(
+            f"pages {grand['pages']} · geprüft {grand['fetched']} · "
+            f"+{grand['companies']} Unternehmen · +{grand['postings']} Rollen · "
+            f"~{grand['updated']} bekannt"
+        )
     if national_total:
         pct = grand["available"] / national_total * 100
         line = (
@@ -800,16 +1016,24 @@ async def main() -> int:
             f"Bundesland, whose `wo=` lookup loses some states",
             file=sys.stdout if pct >= 95 else sys.stderr,
         )
-    verdict, message = run_verdict(
-        source_down=source_down,
-        failures=failures,
-        reached=grand["available"],
-        national_total=national_total,
-        min_coverage=args.min_coverage,
-    )
-    print(message, file=sys.stderr if verdict else sys.stdout)
+    verdict = 0
+    if not args.agencies_only:
+        verdict, message = run_verdict(
+            source_down=source_down,
+            failures=failures,
+            reached=grand["available"],
+            national_total=national_total,
+            min_coverage=args.min_coverage,
+        )
+        print(message, file=sys.stderr if verdict else sys.stdout)
+    if args.agencies:
+        if agency_down or agencies is None:
+            code, message = 1, f"agencies FAILED: source unreachable — {agency_down}"
+        else:
+            code, message = agency_verdict(agencies, min_coverage=args.min_coverage)
+        print(message, file=sys.stderr if code else sys.stdout)
+        verdict = max(verdict, code)
     return verdict
-    return 0
 
 
 if __name__ == "__main__":
