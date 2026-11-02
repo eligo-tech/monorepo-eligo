@@ -137,6 +137,8 @@ the model is wrong.
 | Class | Contains | Where | Tenant-scoped | Personal data |
 |---|---|---|---|---|
 | **Public corpus** | company identity, address, postings, fetch evidence, persons as named by a public source | `hub_companies`, `hub_job_postings`, `hub_observations` | no | **only as published, with provenance** (RULE 2) |
+| **Corpus, derived** | the agency finder's ranked agencies: verdict, score, evidence counts, company mail domains — rebuilt nightly, readable only by `agency_finder_tenants` (fail-closed) | `hub_agency_profiles` | no | **as the corpus**: a sole trader's trading name, as published; removed with the company by the opt-out list |
+| **Opt-out list** | normalized company names, folded person names, reason | `hub_suppressions` | no | **minimal** — only what is needed to recognise the record again; app role read-only |
 | **Tenant overlay** | tracked/prospect flags, notes, adoption link | `hub_company_link` | yes | no |
 | **Tenant record** | clients, mandates, pipeline | `companies`, `jobs`, `applications` | yes | no |
 | **Personal data** | candidates, managers/contacts (incl. anything enriched or tenant-sourced) | `candidates`, `managers` | yes | **yes** |

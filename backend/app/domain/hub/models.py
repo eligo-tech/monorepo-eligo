@@ -58,7 +58,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
-from app.domain.common.types import JSONBDict, JSONDict
+from app.domain.common.types import JSONBDict, JSONDict, JSONList
 
 # Which kind of advertiser a corpus row is. Stamped at ingest from the QUERY
 # that returned it — the source's listing records carry no flag of their own.
@@ -434,3 +434,42 @@ class HubSuppression(Base, IDMixin, TimestampMixin):
     scope: Mapped[str] = mapped_column(String(20), nullable=False)
     key: Mapped[str] = mapped_column(String(300), nullable=False)
     reason: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
+class HubAgencyProfile(Base, IDMixin, TimestampMixin):
+    """One private-recruiting agency, as the agency finder ranks it.
+
+    DERIVED, not observed: rebuilt in full by the nightly job
+    (`POST /hub/agencies/refresh`, machine-only) from the `private_recruiter`
+    corpus rows — every branch of one agency folded into one profile
+    (`agency_rank.group_key`). Reads are a plain select; the heavy part (every
+    agency ad text) runs in the cron, not in a request (ARCHITECTURE.md RULE 1:
+    a cron writes, presentation reads).
+
+    `reasons` holds the verdict's and the score's evidence: counts, posting
+    ids, company mail domains. Contact names stay in the ad texts, where the
+    opt-out list redacts them; `name` can be a sole trader's trading name, as
+    the corpus holds it, and goes with the company on a company opt-out.
+
+    Shared corpus, no tenant_id; visible only to workspaces on the
+    `agency_finder_tenants` allowlist. `company_ids` is a plain list rather
+    than a foreign key so that the opt-out list can delete a company without
+    touching this table; reads re-check that the companies still exist.
+    """
+
+    __tablename__ = "hub_agency_profiles"
+
+    group_key: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    primary_company_id: Mapped[uuid.UUID] = mapped_column(Uuid(), nullable=False)
+    company_ids: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    verdict: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    score: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    open_postings: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_28d: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    region: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: berufsfeld → open postings, for the field filter and the mix.
+    fields: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    reasons: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    refreshed_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)

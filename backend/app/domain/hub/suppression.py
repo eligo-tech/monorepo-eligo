@@ -73,7 +73,12 @@ _EMAIL_TAIL = r"@[\w-]+(?:\.[\w-]+)+"
 
 
 def company_key(name: str) -> str:
-    """The same blocking key ingest compares: every site, every legal form."""
+    """The blocking key: the normalized name — every site, every legal form.
+
+    Agency branches are covered at match time (`blocks_company`,
+    `_remove_company`), never by widening this key: widening it for employers
+    would reach separate legal entities that share a prefix.
+    """
     key = normalize_company_name(name)
     if not key:
         raise ValueError(f"{name!r} normalizes to nothing — not a company name")
@@ -165,8 +170,24 @@ class Suppressions:
         parts = [p for key in self.persons for p in _person_patterns(key)]
         return re.compile("|".join(f"(?:{p})" for p in parts), re.IGNORECASE)
 
-    def blocks_company(self, name: str | None) -> bool:
-        return bool(self.companies) and normalize_company_name(name) in self.companies
+    @functools.cached_property
+    def _agency_roots(self) -> frozenset[str]:
+        from app.domain.hub.agency_rank import group_key
+
+        return frozenset(group_key(k) for k in self.companies)
+
+    def blocks_company(self, name: str | None, *, kind: str = "employer") -> bool:
+        """The exact firm, at every site. For a private recruiter also every
+        branch of it: an objection from "Brunel GmbH NL Essen" is Brunel's."""
+        if not self.companies:
+            return False
+        if normalize_company_name(name) in self.companies:
+            return True
+        if kind == "private_recruiter":
+            from app.domain.hub.agency_rank import group_key
+
+            return group_key(name) in self._agency_roots
+        return False
 
     def redact(self, text: str | None) -> str | None:
         if not text or self._pattern is None:
@@ -244,7 +265,25 @@ async def suppress(
 async def _remove_company(session: AsyncSession, key: str) -> dict[str, int]:
     from app.domain.projects.models import ProjectCompany
 
-    company_ids = select(HubCompany.id).where(HubCompany.normalized_name == key)
+    from app.domain.hub.agency_rank import group_key
+    from app.domain.hub.models import PRIVATE_RECRUITER
+
+    # The firm at every site, any kind — and, for private recruiters only,
+    # every branch that folds onto the same agency ("brunel nl essen",
+    # "brunel nl braunschweig"). Employers are never folded.
+    root = group_key(key)
+    rows = await session.execute(
+        select(HubCompany.id, HubCompany.name, HubCompany.normalized_name, HubCompany.kind).where(
+            or_(HubCompany.normalized_name == key, HubCompany.normalized_name.like(f"{root}%"))
+        )
+    )
+    ids = [
+        row.id
+        for row in rows
+        if row.normalized_name == key
+        or (row.kind == PRIVATE_RECRUITER and group_key(row.name) == root)
+    ]
+    company_ids = select(HubCompany.id).where(HubCompany.id.in_(ids))
     posting_ids = select(HubJobPosting.id).where(HubJobPosting.hub_company_id.in_(company_ids))
     # Children first: SQLite enforces no cascades, and the order is the same
     # one Postgres would need without them.
@@ -260,7 +299,14 @@ async def _remove_company(session: AsyncSession, key: str) -> dict[str, int]:
     memberships = await session.execute(
         delete(ProjectCompany).where(ProjectCompany.hub_company_id.in_(company_ids))
     )
-    companies = await session.execute(delete(HubCompany).where(HubCompany.normalized_name == key))
+    companies = await session.execute(delete(HubCompany).where(HubCompany.id.in_(ids)))
+    # The agency finder's derived profile goes with it, not at the next
+    # nightly rebuild.
+    from app.domain.hub.models import HubAgencyProfile
+
+    await session.execute(
+        delete(HubAgencyProfile).where(HubAgencyProfile.group_key.in_({key, root}))
+    )
     return {
         "companies_deleted": companies.rowcount or 0,
         "postings_deleted": postings.rowcount or 0,

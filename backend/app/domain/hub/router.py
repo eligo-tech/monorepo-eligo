@@ -23,6 +23,9 @@ from app.domain.searches import service as searches_service
 from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
     AdoptCompanyRequest,
+    AgencyDetail,
+    AgencyPage,
+    AgencyProfileRead,
     AdoptCompanyResult,
     CompanyContacts,
     HubJobPostingHit,
@@ -543,3 +546,131 @@ async def ingest_slice(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, f"ingest precondition failed: {exc}"
         ) from exc
+
+
+# --------------------------------------------------------------------------
+# Agency finder — Eligo's own business development
+# --------------------------------------------------------------------------
+# Private recruiters are competitors to every customer. These routes answer
+# only the workspaces on `agency_finder_tenants`, and 404 — not 403 — to
+# everyone else, so their existence is not advertised either.
+
+
+def require_agency_finder(tenant_id: uuid.UUID = Depends(get_current_tenant)) -> uuid.UUID:
+    from app.core.config import settings
+
+    allowed = {p.strip() for p in settings.agency_finder_tenants.split(",") if p.strip()}
+    if str(tenant_id) not in allowed:  # empty allowlist: nobody
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    return tenant_id
+
+
+def _profile_read(profile) -> AgencyProfileRead:
+    return AgencyProfileRead.model_validate(
+        {
+            **{c: getattr(profile, c) for c in AgencyProfileRead.model_fields if c != "branches"},
+            "branches": len(profile.company_ids),
+        }
+    )
+
+
+@router.post("/agencies/refresh")
+async def refresh_agency_profiles(
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Rebuild the agency finder's profiles from the corpus. Machine-only
+    (RULE 1): the nightly job calls it after the private-recruiter pass."""
+    from app.domain.hub import agencies
+
+    return await agencies.refresh_profiles(db)
+
+
+@router.get("/agencies", response_model=AgencyPage)
+async def list_agencies(
+    verdict: list[str] = Query(default=["agency", "unclear"]),
+    region: str | None = None,
+    berufsfeld: str | None = None,
+    include_chains: bool = Query(default=False, description="firms over 50 open ads"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    _tenant_id: uuid.UUID = Depends(get_current_tenant),
+    _allowed: uuid.UUID = Depends(require_agency_finder),
+    db: AsyncSession = Depends(get_db),
+) -> AgencyPage:
+    """Agencies as leads, best first. Clients are hidden unless asked for."""
+    from app.domain.hub import agencies
+
+    rows = await agencies.list_profiles(
+        db,
+        verdicts=verdict,
+        region=region,
+        berufsfeld=berufsfeld,
+        include_chains=include_chains,
+        limit=limit,
+        offset=offset,
+    )
+    return AgencyPage(items=[_profile_read(r) for r in rows], limit=limit, offset=offset)
+
+
+@router.get("/agencies/{agency_id}", response_model=AgencyDetail)
+async def get_agency(
+    agency_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    _allowed: uuid.UUID = Depends(require_agency_finder),
+    db: AsyncSession = Depends(get_db),
+) -> AgencyDetail:
+    """One agency: its branches, its ads, and the contacts its ads name."""
+    from app.domain.hub import agencies
+
+    profile = await agencies.get_profile(db, agency_id)
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    detail = await agencies.profile_detail(db, tenant_id=tenant_id, profile=profile)
+    return AgencyDetail(
+        profile=_profile_read(profile),
+        branches=[HubCompanyRead.model_validate(b) for b in detail["branches"]],
+        postings=[HubJobPostingRead.model_validate(p) for p in detail["postings"]],
+        contacts=CompanyContacts.model_validate(detail["contacts"]),
+    )
+
+
+@router.post(
+    "/agencies/{agency_id}/adopt",
+    response_model=AdoptCompanyResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def adopt_agency(
+    agency_id: uuid.UUID,
+    payload: AdoptCompanyRequest | None = None,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    _allowed: uuid.UUID = Depends(require_agency_finder),
+    db: AsyncSession = Depends(get_db),
+) -> AdoptCompanyResult:
+    """Take an agency into this workspace's CRM as a lead — the same gated,
+    receipted crossing as adopting an employer."""
+    from app.domain.hub import agencies
+    from app.domain.hub.models import PRIVATE_RECRUITER
+
+    profile = await agencies.get_profile(db, agency_id)
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    try:
+        company, link, manager = await service.adopt_company(
+            db,
+            tenant_id=tenant_id,
+            hub_company_id=profile.primary_company_id,
+            manager=payload.manager.model_dump() if payload and payload.manager else None,
+            kind=PRIVATE_RECRUITER,
+        )
+    except service.AlreadyAdopted as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"already adopted as company {exc}") from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return AdoptCompanyResult(
+        company_id=company.id,
+        company_name=company.name,
+        hub_company_id=link.hub_company_id,
+        manager_id=manager.id if manager else None,
+        art14_outstanding=bool(manager and manager.art14_outstanding),
+    )
