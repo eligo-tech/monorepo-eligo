@@ -577,6 +577,7 @@ async def fetch_missing_descriptions(
     priority_terms: list[str] | None = None,
     external_ids: list[str] | None = None,
     delay: float = 0.3,
+    segment: str | None = None,
 ) -> dict[str, int]:
     """Fill in ad text for postings that have none, most useful first.
 
@@ -611,6 +612,8 @@ async def fetch_missing_descriptions(
         HubJobPosting.description_fetched_at.is_(None),
         HubJobPosting.source == adapter.name,
     )
+    if segment is not None:
+        stmt = stmt.where(HubJobPosting.segment == segment)
     if external_ids is not None:
         # Exact run scope supplied by the nightly coordinator. Do not let its
         # description pass drift into the historical backlog when some new

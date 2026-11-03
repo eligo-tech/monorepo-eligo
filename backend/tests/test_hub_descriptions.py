@@ -310,3 +310,42 @@ async def test_an_outage_stops_the_pass_without_retiring_the_postings(postings) 
             )
         ).scalars().all()
     assert stamped == []
+
+
+async def test_a_segment_scoped_pass_reads_only_that_segments_ads(postings) -> None:
+    """The agency backfill skipped ad text: on 2026-11-03, 776 of 44,922
+    private-recruiter ads had any. Domain discovery needs it, so the backlog
+    pass can be pointed at agencies alone."""
+    async with SessionLocal() as s:
+        row = await s.scalar(select(HubJobPosting).where(HubJobPosting.external_id == "no-text-2"))
+        row.segment = "private_recruiter"
+        await s.commit()
+        adapter = _Adapter({"no-text-2": "Unser Mandant …"})
+        result = await service.fetch_missing_descriptions(
+            s, adapter=adapter, limit=10, delay=0, segment="private_recruiter"
+        )
+    assert adapter.calls == ["no-text-2"]
+    assert result["stored"] == 1
+
+
+async def test_the_endpoint_passes_the_segment_through(postings, monkeypatch) -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.config import settings
+    from app.main import app
+
+    seen: dict = {}
+
+    async def fake(session, **kw):
+        seen.update(kw)
+        return {"attempted": 0, "stored": 0, "empty": 0, "source_unreachable": False}
+
+    monkeypatch.setattr(service, "fetch_missing_descriptions", fake)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        r = await c.post(
+            "/api/v1/hub/descriptions/fetch?limit=5",
+            json={"segment": "private_recruiter"},
+            headers={"Authorization": f"Bearer {settings.ingest_token}"},
+        )
+    assert r.status_code == 200, r.text
+    assert seen["segment"] == "private_recruiter"

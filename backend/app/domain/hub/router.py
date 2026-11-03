@@ -467,6 +467,7 @@ async def fetch_descriptions(
         db, adapter=get_source_adapter("bundesagentur"), limit=limit,
         priority_terms=terms,
         external_ids=payload.external_ids if payload else None,
+        segment=payload.segment if payload else None,
     )
     return {**result, **await service.descriptions_progress(db)}
 

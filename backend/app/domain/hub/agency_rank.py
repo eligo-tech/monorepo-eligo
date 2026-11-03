@@ -39,7 +39,7 @@ _SITE_TOKENS = {
     "niederlassung", "zweigniederlassung", "nl", "standort", "filiale",
     "geschaeftsstelle",
 }
-_STAFFING_NAME = re.compile(
+STAFFING_NAME = _STAFFING_NAME = re.compile(
     r"personal|personnel|perso|recruit|consult|beratung|vermittlung|search|"
     r"headhunt|talent|karriere|staffing|career|resources|experts?\b|placement|"
     r"agentur|zeitarbeit|\bhr\b|\bjobs?\b|\btemp\b|human",

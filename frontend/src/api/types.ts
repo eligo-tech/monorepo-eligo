@@ -1131,7 +1131,20 @@ export interface AgencyProfileDTO {
   /** berufsfeld → open ads */
   fields: Record<string, number>
   reasons: AgencyReasonDTO[]
+  /** UNVERIFIED — the agency's likely website, from its own ads, best first. */
+  website_candidates: WebsiteCandidateDTO[]
   refreshed_at: string
+}
+
+export interface WebsiteCandidateDTO {
+  domain: string
+  /** Ads that name this domain. */
+  ads: number
+  /** The domain carries a distinctive word of the firm's name. */
+  name_match: boolean
+  /** Named like a known employer — probably the agency's client. */
+  likely_client: boolean
+  posting_ids: string[]
 }
 
 export interface AgencyPageDTO {

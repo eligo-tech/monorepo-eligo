@@ -472,4 +472,8 @@ class HubAgencyProfile(Base, IDMixin, TimestampMixin):
     #: berufsfeld → open postings, for the field filter and the mix.
     fields: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
     reasons: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    #: The agency's likely website, from its own ads — UNVERIFIED candidates
+    #: (`domains.py`), best first, each with its example ads. Never copied to
+    #: `hub_companies.website_domain`: only the Impressum naming the firm does.
+    website_candidates: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
     refreshed_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)

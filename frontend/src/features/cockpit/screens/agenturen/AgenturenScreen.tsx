@@ -331,6 +331,38 @@ function AgencyDetail({ id, onClose }: { id: string; onClose: () => void }) {
 
       <div className="space-y-2">
         <h4 className="font-mono text-[12px] uppercase tracking-[0.08em] text-cockpit-faint">
+          {t('Website (unbestätigt)')}
+        </h4>
+        {profile.website_candidates.length === 0 ? (
+          <p className="text-[13px] text-cockpit-faint">{t('Keine Domain in den Anzeigentexten.')}</p>
+        ) : (
+          <ul className="space-y-1 text-[13px]">
+            {profile.website_candidates.map((c) => (
+              <li key={c.domain} className="flex flex-wrap items-baseline gap-2">
+                <a
+                  href={`https://${c.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-cockpit-text hover:underline"
+                >
+                  {c.domain}
+                </a>
+                <span className="font-mono text-[12px] text-cockpit-faint">
+                  {c.ads === 1 ? t('1 Anzeige') : t('{n} Anzeigen', { n: num(c.ads) })}
+                </span>
+                {c.name_match && <Chip tone="mint">{t('Name passt')}</Chip>}
+                {c.likely_client && <Chip tone="gold">{t('vermutlich Kunde')}</Chip>}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-[12px] text-cockpit-faint">
+          {t('Aus den Anzeigen gelesen, nicht geprüft — bestätigt erst ein Impressum, das die Firma nennt.')}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="font-mono text-[12px] uppercase tracking-[0.08em] text-cockpit-faint">
           {t('Standorte ({n})', { n: branches.length })}
         </h4>
         <ul className="space-y-1 text-[13px] text-cockpit-dim">
