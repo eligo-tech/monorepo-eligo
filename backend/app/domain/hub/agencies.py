@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.domain.hub import agency_rank
+from app.domain.hub import domains as site_domains
 from app.domain.hub.models import (
     EMPLOYER,
     PRIVATE_RECRUITER,
@@ -127,8 +128,9 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
 
     # Ad texts: the heavy part, streamed. This is why it runs in the cron.
     name_of = {row.id: row.name for row in companies}
+    seen_domains: dict[str, dict[str, dict]] = collections.defaultdict(dict)
     texts = await session.stream(
-        select(HubJobPosting.hub_company_id, HubPostingPayload.description)
+        select(HubJobPosting.hub_company_id, HubJobPosting.id, HubPostingPayload.description)
         .join(HubPostingPayload, HubPostingPayload.hub_job_posting_id == HubJobPosting.id)
         .where(
             HubJobPosting.segment == PRIVATE_RECRUITER,
@@ -137,10 +139,11 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
         )
         .execution_options(yield_per=_BATCH)
     )
-    async for company_id, body in texts:
+    async for company_id, posting_id, body in texts:
         key = group_of.get(company_id)
         if key is None:
             continue
+        site_domains.collect(seen_domains[key], posting_id, body)
         signals, domains = agency_rank.text_signals(body, name_of[company_id])
         if "client_phrase" in signals:
             facts[key].phrase_postings += 1
@@ -165,6 +168,27 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
             for key in group_by_name[name]:
                 facts[key].employer_overlap = True
 
+    # Website candidates. A domain named like a known employer is likely the
+    # client's ("autobahn.de" in an agency's ad for Die Autobahn GmbH).
+    labels = {d.split(".")[0] for seen in seen_domains.values() for d in seen}
+    variants = sorted(
+        {
+            prefix + v
+            for label in labels
+            for v in (label, label.replace("-", " "))
+            for prefix in ("", "die ", "der ", "das ")
+        }
+    )
+    employer_labels: set[str] = set()
+    for start in range(0, len(variants), _BATCH):
+        found = await session.execute(
+            select(HubCompany.normalized_name).where(
+                HubCompany.kind == EMPLOYER,
+                HubCompany.normalized_name.in_(variants[start : start + _BATCH]),
+            )
+        )
+        employer_labels |= {name for (name,) in found}
+
     await session.execute(delete(HubAgencyProfile))
     verdicts: collections.Counter = collections.Counter()
     for key, f in facts.items():
@@ -186,13 +210,28 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
                 city=primary.city,
                 fields=dict(f.fields),
                 reasons=why + score_why,
+                website_candidates=site_domains.rank(
+                    seen_domains.get(key, {}),
+                    firm_names=f.names,
+                    employer_names=employer_labels,
+                    own_names={key, *(r.normalized_name for r in rows)},
+                ),
                 refreshed_at=now,
             )
         )
         verdicts[verdict] += 1
     await session.commit()
-    logger.info("agency profiles rebuilt: %d (%s)", len(facts), dict(verdicts))
-    return {"profiles": len(facts), **{v: verdicts.get(v, 0) for v in agency_rank.VERDICTS}}
+    with_site = sum(1 for k in facts if seen_domains.get(k))
+    logger.info(
+        "agency profiles rebuilt: %d (%s), website candidates for %d",
+        len(facts), dict(verdicts), with_site,
+    )
+    return {
+        "profiles": len(facts),
+        **{v: verdicts.get(v, 0) for v in agency_rank.VERDICTS},
+        # Measured every night, per the plan: how far domain discovery reaches.
+        "with_website_candidate": with_site,
+    }
 
 
 # ---------------------------------------------------------------------------

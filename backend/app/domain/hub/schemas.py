@@ -14,7 +14,7 @@ from typing import Literal
 
 from urllib.parse import quote
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.domain.common.enums import ConfidenceSource
 
@@ -364,10 +364,21 @@ class DescriptionFetchRequest(BaseModel):
     """Optional exact scope for a description batch.
 
     Omit the body for the deliberate/manual backlog pass. The nightly job sends
-    only IDs returned as newly created by its own ingest calls.
+    only IDs returned as newly created by its own ingest calls. `segment`
+    narrows a backlog pass to one kind of advertiser — the agency backfill
+    stored no ad text, and domain discovery needs it.
     """
 
-    external_ids: list[str] = Field(min_length=1, max_length=25)
+    external_ids: list[str] | None = Field(default=None, min_length=1, max_length=25)
+    segment: Literal["employer", "private_recruiter"] | None = None
+
+    @model_validator(mode="after")
+    def _scoped(self) -> "DescriptionFetchRequest":
+        # A body that names no scope is a caller bug (it meant "these ids" and
+        # sent none) — refuse it rather than start a backlog pass.
+        if self.external_ids is None and self.segment is None:
+            raise ValueError("give external_ids or segment, or send no body")
+        return self
 
 
 # --------------------------------------------------------------------------
@@ -462,6 +473,8 @@ class AgencyProfileRead(BaseModel):
     city: str | None
     fields: dict[str, int]
     reasons: list[AgencyReason]
+    #: Unverified — the agency's likely website from its own ads.
+    website_candidates: list[dict] = Field(default_factory=list)
     refreshed_at: dt.datetime
 
 

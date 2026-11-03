@@ -260,3 +260,28 @@ async def test_pages_come_from_the_database_in_order(eligo) -> None:
     assert len(first) == len(second) == 2
     assert not {a["id"] for a in first} & {a["id"] for a in second}
     assert len(logistik) == 5
+
+
+async def test_website_candidates_are_ranked_on_the_profile_and_never_written_to_the_company() -> None:
+    await _seed()
+    async with SessionLocal() as s:
+        row = await s.scalar(select(HubCompany).where(HubCompany.name.like("Zebrafink%Leipzig")))
+        await _posting(s, row, "Disponent", "Logistik", "Mehr unter https://www.finest-jobs.com/x und https://stepstone.de/y")
+        await s.commit()
+    await _refresh()
+    async with SessionLocal() as s:
+        zebra = await s.scalar(select(HubAgencyProfile).where(HubAgencyProfile.group_key == "zebrafink personalberatung"))
+        domains = (await s.execute(select(HubCompany.website_domain).where(HubCompany.kind == PRIVATE_RECRUITER))).scalars().all()
+    assert [c["domain"] for c in zebra.website_candidates] == ["zebrafink-personal.de"]
+    best = zebra.website_candidates[0]
+    assert best["name_match"] is True and best["ads"] == 1 and len(best["posting_ids"]) == 1
+    # Unverified: PR7's Impressum check is what may set a website.
+    assert set(domains) == {None}
+
+
+async def test_the_list_carries_the_candidates(eligo) -> None:
+    await _seed()
+    await _refresh()
+    async with _client() as c:
+        item = (await c.get("/api/v1/hub/agencies")).json()["items"][0]
+    assert item["website_candidates"][0]["domain"] == "zebrafink-personal.de"

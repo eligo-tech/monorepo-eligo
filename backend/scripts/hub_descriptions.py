@@ -57,6 +57,13 @@ async def main() -> int:
         action="store_true",
         help="keep going until every active posting has been attempted",
     )
+    parser.add_argument(
+        "--segment",
+        choices=["employer", "private_recruiter"],
+        default=None,
+        help="only this kind of advertiser. The agency backfill stored no ad "
+        "text, and the agency finder's website discovery reads it.",
+    )
     args = parser.parse_args()
 
     base = os.environ.get("ELIGO_API_BASE", "").rstrip("/")
@@ -88,7 +95,8 @@ async def main() -> int:
             for attempt in range(_MAX_BATCH_ATTEMPTS):
                 try:
                     response = await client.post(
-                        f"/hub/descriptions/fetch?limit={args.batch}"
+                        f"/hub/descriptions/fetch?limit={args.batch}",
+                        json={"segment": args.segment} if args.segment else None,
                     )
                     response.raise_for_status()
                     result = response.json()

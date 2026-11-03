@@ -129,3 +129,11 @@ describe('the probe tolerates one hiccup', () => {
     expect([ok, calls]).toEqual([false, 1])
   })
 })
+
+describe('website candidates', () => {
+  it('an older backend without the field shows none instead of crashing', async () => {
+    const { websiteCandidates } = await import('./agencyCopy')
+    expect(websiteCandidates({} as never)).toEqual([])
+    expect(websiteCandidates({ website_candidates: [{ domain: 'a.de' }] } as never)).toEqual([{ domain: 'a.de' }])
+  })
+})
