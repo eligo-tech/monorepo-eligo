@@ -127,17 +127,31 @@ def upgrade() -> None:
                 f"USING ({_PREDICATE}) WITH CHECK ({_PREDICATE})"
             )
         op.execute(FUNCTION)
-        # Insert-only log, lift-only suppressions for the app role(s). Frozen
-        # here rather than imported, like the trigger function above.
-        for role in _app_roles(bind):
-            for statement in (
-                f'REVOKE UPDATE, DELETE, TRUNCATE ON erasure_requests FROM "{role}"',
-                f'REVOKE UPDATE, DELETE, TRUNCATE ON tenant_suppressions FROM "{role}"',
-                f'GRANT SELECT, INSERT ON erasure_requests, tenant_suppressions TO "{role}"',
+        # Insert-only log, lift-only suppressions. Frozen here rather than
+        # imported, like the trigger function above.
+        #
+        # REVOKE from every role that can write receipts — on Supabase that
+        # includes the platform's own anon / authenticated / service_role,
+        # which its default privileges give full rights on every new table
+        # (read 2026-11-03). GRANT only to the application role: never hand
+        # the public API roles anything new.
+        roles = _app_roles(bind)
+        for role in roles:
+            op.execute(f'REVOKE UPDATE, DELETE, TRUNCATE ON erasure_requests FROM "{role}"')
+            op.execute(f'REVOKE UPDATE, DELETE, TRUNCATE ON tenant_suppressions FROM "{role}"')
+        for role in (r for r in roles if r not in _PLATFORM_ROLES):
+            op.execute(f'GRANT SELECT, INSERT ON erasure_requests, tenant_suppressions TO "{role}"')
+            op.execute(
                 f'GRANT UPDATE (lifted_at, lifted_by_user_id, lifted_by_name, updated_at) '
-                f'ON tenant_suppressions TO "{role}"',
-            ):
-                op.execute(statement)
+                f'ON tenant_suppressions TO "{role}"'
+            )
+
+
+#: Supabase's own roles. Revoked from, never granted to.
+_PLATFORM_ROLES = frozenset({
+    "anon", "authenticated", "service_role", "authenticator", "postgres",
+    "supabase_admin", "dashboard_user", "pgbouncer",
+})
 
 
 def _app_roles(bind) -> list[str]:  # noqa: ANN001

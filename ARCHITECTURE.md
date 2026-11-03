@@ -212,9 +212,13 @@ workspace is the controller and decides; an admin carries it out.
   carries out erasures, so a stolen app credential can erase too — what it
   cannot do is erase unseen. Every blackout needs an ERASE receipt (chained,
   never removable) backed by an `erasure_requests` row (insert-only for the
-  app role); `verify_chain` reports an ERASE receipt without one. A
-  blacked-out row's other columns are no longer under any hash: someone with
-  DDL rights who drops the trigger could change them undetected.
+  app role); `verify_chain` reports an ERASE receipt without one. A forgery
+  that also writes its own log row is **visible** in `GET /erasure/requests`
+  and can never be removed, but nothing **detects** it as fake. The same holds
+  for lifting a suppression: the app role may, it is recorded (`lifted_at`,
+  `lifted_by_*`), nothing alerts on it yet. A blacked-out row's other columns
+  are no longer under any hash: someone with DDL rights who drops the trigger
+  could change them undetected.
 - **suppression** — `tenant_suppressions` holds HMAC fingerprints (key:
   `ELIGO_SUPPRESSION_KEY`) of their import id (`source:external_id`, plus
   `merged_identities` should anything ever fill it) and their e-mail. The
