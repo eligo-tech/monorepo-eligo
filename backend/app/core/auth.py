@@ -337,6 +337,17 @@ async def _admitted_tenant(db: AsyncSession, *, org_id: str, org_name: str | Non
     )
 
 
+def _counted(actor: "Actor") -> "Actor":
+    """Every authenticated REST request passes here once: count it."""
+    from app.core import ratelimit
+
+    try:
+        ratelimit.REST.check(ratelimit.actor_key(actor))
+    except ratelimit.RateLimited as exc:
+        raise ratelimit.refuse(exc) from None
+    return actor
+
+
 def _remembered(actor: Actor) -> Actor:
     """Publish the actor for code that is never handed one.
 
@@ -366,7 +377,7 @@ async def get_current_actor(
     if not settings.auth_enabled:
         current_tenant_var.set(str(settings.default_tenant_id))
         await _set_tenant_guc(db, settings.default_tenant_id)
-        return _remembered(
+        return _counted(_remembered(
             Actor(
                 tenant_id=settings.default_tenant_id,
                 user_id=None,
@@ -374,7 +385,7 @@ async def get_current_actor(
                 role=ADMIN,
                 role_known=False,
             )
-        )
+        ))
 
     if creds is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
@@ -396,7 +407,7 @@ async def get_current_actor(
     await _set_tenant_guc(db, tenant.id)  # pin the in-flight transaction too
 
     role, known = _role(claims)
-    return _remembered(
+    return _counted(_remembered(
         Actor(
             tenant_id=tenant.id,
             user_id=claims.get("sub"),
@@ -404,7 +415,7 @@ async def get_current_actor(
             role=role,
             role_known=known,
         )
-    )
+    ))
 
 
 async def get_current_tenant(actor: Actor = Depends(get_current_actor)) -> uuid.UUID:

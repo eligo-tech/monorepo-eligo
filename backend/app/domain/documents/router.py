@@ -17,6 +17,7 @@ from fastapi import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ratelimit import paid_ai_quota
 from app.core.auth import get_current_tenant
 from app.core.database import get_db
 from app.domain.common.enums import DocumentKind
@@ -29,7 +30,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-@router.post("/extract-cv", response_model=CVExtractionResult)
+@router.post("/extract-cv", response_model=CVExtractionResult, dependencies=[Depends(paid_ai_quota)])
 async def extract_cv(
     file: UploadFile = File(...),
     persist: bool = Query(
@@ -162,7 +163,7 @@ async def download_document(
     )
 
 
-@router.post("/extract-transcript", response_model=CVExtractionResult)
+@router.post("/extract-transcript", response_model=CVExtractionResult, dependencies=[Depends(paid_ai_quota)])
 async def extract_transcript(
     file: UploadFile = File(...),
     candidate_id: uuid.UUID = Form(...),

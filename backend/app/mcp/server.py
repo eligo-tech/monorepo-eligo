@@ -47,13 +47,13 @@ from app.domain.features import service as features
 from app.domain.proposals import service as proposals
 from app.domain.tenants import service as tenants
 from app.mcp.auth import ClerkOAuthVerifier
-from app.mcp.ratelimit import Limiter, RateLimited
+from app.core.ratelimit import MCP as limiter
+from app.core.ratelimit import RateLimited
 
 #: Asking for this scope is what makes Clerk's consent screen show the
 #: organization selector, so the token carries `org_id`.
 REQUIRED_SCOPES = ["user:org:read"]
 
-limiter = Limiter()
 
 #: What `/.well-known/oauth-protected-resource/mcp` advertises. Read once, at
 #: import, because the SDK builds that route then; `assert_mcp_configured`

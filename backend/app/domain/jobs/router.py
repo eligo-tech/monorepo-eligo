@@ -9,6 +9,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ratelimit import paid_ai_quota
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.common.enums import InteractionType
@@ -266,7 +267,7 @@ async def copy_job(
     return JobRead.model_validate(row)
 
 
-@router.post("/parse-spec", response_model=JobSpecProposal)
+@router.post("/parse-spec", response_model=JobSpecProposal, dependencies=[Depends(paid_ai_quota)])
 async def parse_spec(
     payload: JobSpecRequest,
     actor: Actor = Depends(get_current_actor),
