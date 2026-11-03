@@ -226,7 +226,7 @@ jobs:
         env:
           ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_app:ci_app_pw@localhost:5432/eligo
         # The MCP path too: two workspaces through /mcp, as the runtime role.
-        run: pytest tests/test_rls_postgres.py tests/test_mcp_isolation_postgres.py tests/test_receipt_blackout_postgres.py tests/test_erasure_postgres.py -q
+        run: pytest tests/test_rls_postgres.py tests/test_mcp_isolation_postgres.py tests/test_receipt_blackout_postgres.py tests/test_erasure_postgres.py tests/test_public_api_roles_postgres.py -q
 
       - name: Prove every tenant table is actually policed
         # The startup guard, run as a CI gate. `apply_rls` derives its table
@@ -374,7 +374,7 @@ jobs:
       - name: Isolation holds on the upgraded database
         env:
           ELIGO_DATABASE_URL: postgresql+asyncpg://eligo_app:ci_app_pw@localhost:5432/eligo
-        run: pytest tests/test_rls_postgres.py tests/test_mcp_isolation_postgres.py tests/test_receipt_blackout_postgres.py tests/test_erasure_postgres.py -q
+        run: pytest tests/test_rls_postgres.py tests/test_mcp_isolation_postgres.py tests/test_receipt_blackout_postgres.py tests/test_erasure_postgres.py tests/test_public_api_roles_postgres.py -q
 
       - name: The upgraded schema matches the models
         # What this catches: a PR whose migrations and model changes disagree.
