@@ -82,3 +82,83 @@ async def test_the_guard_is_a_no_op_off_postgres():
     from app.core.database import assert_runtime_rls_enforced
 
     await assert_runtime_rls_enforced()
+
+
+# --- the probe that cannot run (review 2026-10-31 #5) -------------------------
+#
+# Before: a probe that could not RUN logged a warning and the app served
+# anyway — "I could not check" was treated as "fine". In production that is
+# the one answer the guard must never give. It now retries, then refuses.
+
+
+class _Result:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def one(self):
+        return self._rows[0]
+
+    def all(self):
+        return self._rows
+
+
+class _Conn:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def execute(self, statement):
+        if "current_user" in str(statement):
+            return _Result([("eligo_app", False)])
+        return _Result(ALL_GOOD)
+
+
+class _FlakyEngine:
+    """Fails `failures` times, then connects."""
+
+    def __init__(self, failures: int) -> None:
+        self.failures = failures
+        self.attempts = 0
+
+    def connect(self):
+        self.attempts += 1
+        if self.attempts <= self.failures:
+            raise OSError("connection refused")
+        return _Conn()
+
+
+@pytest.fixture
+def production(monkeypatch):
+    from app.core import database
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "database_url", "postgresql+asyncpg://app@db/eligo")
+    monkeypatch.setattr(settings, "auth_enabled", True)
+    monkeypatch.setattr(settings, "allow_insecure_rls", False)
+    monkeypatch.setattr(database, "_PROBE_RETRY_SECONDS", 0)
+    return database
+
+
+async def test_a_probe_that_cannot_run_refuses_to_start(production, monkeypatch) -> None:
+    flaky = _FlakyEngine(failures=99)
+    monkeypatch.setattr(production, "engine", flaky)
+    with pytest.raises(production.TenantIsolationNotEnforced, match="could not verify"):
+        await production.assert_runtime_rls_enforced()
+    assert flaky.attempts == production._PROBE_ATTEMPTS
+
+
+async def test_a_brief_outage_at_boot_is_retried_not_fatal(production, monkeypatch) -> None:
+    flaky = _FlakyEngine(failures=production._PROBE_ATTEMPTS - 1)
+    monkeypatch.setattr(production, "engine", flaky)
+    await production.assert_runtime_rls_enforced()  # does not raise
+    assert flaky.attempts == production._PROBE_ATTEMPTS
+
+
+async def test_the_explicit_override_still_lets_it_start(production, monkeypatch) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "allow_insecure_rls", True)
+    monkeypatch.setattr(production, "engine", _FlakyEngine(failures=99))
+    await production.assert_runtime_rls_enforced()  # logged, not raised
