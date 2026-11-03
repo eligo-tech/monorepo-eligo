@@ -4,11 +4,11 @@
     python -m scripts.check_rls_enforced
 
 The same audit as the startup guard (`assert_runtime_rls_enforced`), but
-strict. The startup guard treats "I could not check" as a warning on
-purpose — a transient fault must not take production down. In CI that
-leniency made the gate unable to fail: with a role that could not log in, it
-logged a warning and the step printed "policed" (reproduced 2026-11-01).
-Here, not being able to check is a failure.
+strict and immediate. The startup guard used to treat "I could not check"
+as a warning, which made this CI gate unable to fail: with a role that could
+not log in, it printed "policed" (reproduced 2026-11-01). The startup guard
+now retries and then refuses too (review #5); this gate does not retry —
+in CI a database that cannot be reached is a failure, not a pause.
 
 Connects with `ELIGO_DATABASE_URL`, which must be the runtime (app) role.
 """

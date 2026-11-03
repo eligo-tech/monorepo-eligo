@@ -8,6 +8,7 @@ code change.
 
 from __future__ import annotations
 
+import asyncio
 import ssl
 import uuid
 from collections.abc import AsyncGenerator, Sequence
@@ -224,6 +225,13 @@ def isolation_problems(
     return problems
 
 
+#: Startup probe: attempts, and the pause between them. A database still
+#: waking up at boot gets a few seconds; one that never answers does not get
+#: the benefit of the doubt.
+_PROBE_ATTEMPTS = 3
+_PROBE_RETRY_SECONDS = 2.0
+
+
 async def assert_runtime_rls_enforced() -> None:
     """Refuse to start when the database cannot enforce tenant isolation.
 
@@ -242,9 +250,10 @@ async def assert_runtime_rls_enforced() -> None:
     neighbouring fail-open; this is the same argument.
 
     A no-op off Postgres or with auth disabled — the SQLite demo and the test
-    suite are single-tenant. A probe that cannot RUN stays a warning: a
-    transient permission or network fault must not take the service down, and
-    "I could not check" is not the same claim as "I checked and it is broken".
+    suite are single-tenant. A probe that cannot RUN is retried
+    (`_PROBE_ATTEMPTS`) and then refuses too: it used to be a warning, so
+    "I could not check" was served past as if it were "I checked" (review
+    2026-10-31 #5). A database that is merely waking up gets the retries.
     """
     if not settings.is_postgres or not settings.auth_enabled:
         return
@@ -254,13 +263,34 @@ async def assert_runtime_rls_enforced() -> None:
 
     log = get_logger(__name__)
 
-    try:
-        async with engine.connect() as conn:
-            user, bypasses = (await conn.execute(text(_ROLE_BYPASS_QUERY))).one()
-            tables = (await conn.execute(text(_TENANT_TABLE_AUDIT))).all()
-    except Exception as exc:  # pragma: no cover - network/permission dependent
-        log.warning("could not verify RLS enforcement: %s", exc)
-        return
+    # "I could not check" used to be logged and served past. In production
+    # that is the one answer this guard must never accept: retry briefly (a
+    # database waking up at boot), then refuse like any other failed check.
+    # If the database cannot be reached the app cannot serve anyway; what
+    # this prevents is serving after a probe that failed for any other
+    # reason — a revoked catalog grant, a wrong role — unexamined.
+    last: Exception | None = None
+    for attempt in range(_PROBE_ATTEMPTS):
+        try:
+            async with engine.connect() as conn:
+                user, bypasses = (await conn.execute(text(_ROLE_BYPASS_QUERY))).one()
+                tables = (await conn.execute(text(_TENANT_TABLE_AUDIT))).all()
+            break
+        except Exception as exc:  # noqa: BLE001 — any failure to check is a failed check
+            last = exc
+            log.warning(
+                "could not verify RLS enforcement (attempt %d/%d): %s",
+                attempt + 1, _PROBE_ATTEMPTS, exc,
+            )
+            if attempt + 1 < _PROBE_ATTEMPTS:
+                await asyncio.sleep(_PROBE_RETRY_SECONDS)
+    else:
+        detail = f"could not verify isolation after {_PROBE_ATTEMPTS} attempts: {last}"
+        if settings.allow_insecure_rls:
+            log.error("SECURITY: serving with tenant isolation UNVERIFIED — %s. "
+                      "Allowed only by ELIGO_ALLOW_INSECURE_RLS.", detail)
+            return
+        raise TenantIsolationNotEnforced(f"refusing to start: {detail}")
 
     problems = isolation_problems(user, bypasses, tables)
 
