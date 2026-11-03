@@ -8,6 +8,7 @@ code change.
 
 from __future__ import annotations
 
+import asyncio
 import ssl
 import uuid
 from collections.abc import AsyncGenerator, Sequence
@@ -261,8 +262,6 @@ async def assert_runtime_rls_enforced() -> None:
     from app.core.logging import get_logger
 
     log = get_logger(__name__)
-
-    import asyncio
 
     # "I could not check" used to be logged and served past. In production
     # that is the one answer this guard must never accept: retry briefly (a
