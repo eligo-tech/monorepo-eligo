@@ -93,13 +93,17 @@ export function Chip({
   children,
   tone,
   className,
+  title,
 }: {
   children: ReactNode
   tone?: Tone
   className?: string
+  /** Hover text — e.g. the evidence behind a reason. */
+  title?: string
 }) {
   return (
     <span
+      title={title}
       className={cn(
         'rounded-md border px-2 py-0.5 font-mono text-[12px] leading-5',
         tone

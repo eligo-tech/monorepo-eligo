@@ -21,6 +21,9 @@ import { JobsScreen } from './screens/JobsScreen'
 import { ManagerScreen } from './screens/ManagerScreen'
 import { MarktScreen } from './screens/MarktScreen'
 import { ProjekteScreen } from './screens/ProjekteScreen'
+import { AgenturenScreen } from './screens/agenturen/AgenturenScreen'
+import { probeAgencyFinder, withAgencyScreen } from './screens/agenturen/agencyCopy'
+import { api } from '@/api/client'
 import type { SectionOption } from './SectionPicker'
 import { useCockpitData } from './data/useCockpitData'
 import { useMe } from './useMe'
@@ -30,6 +33,7 @@ export type ScreenKey =
   | 'cockpit'
   | 'markt'
   | 'projekte'
+  | 'agenturen'
   | 'managers'
   | 'jobs'
   | 'kandidaten'
@@ -50,8 +54,12 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'einstellungen', label: t('Einstellungen') },
 ]
 
+// `agenturen` is not in SCREENS: it is inserted per workspace, only where the
+// agency finder answers (see `agenturen/agencyCopy.ts`). The key is still
+// valid so that a shared link resolves — and falls back if this workspace may
+// not see it.
 export const isScreenKey = (v: string): v is ScreenKey =>
-  SCREENS.some((s) => s.key === v)
+  v === 'agenturen' || SCREENS.some((s) => s.key === v)
 
 /** Links and bookmarks from before Projekte replaced the flat Workspace list.
  *  One line is cheaper than a dead hash that silently lands on the cockpit. */
@@ -76,6 +84,15 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
   const [typeface, setTypeface] = useTypeface()
   const me = useMe()
   const [screen, setScreen] = useState<ScreenKey>(initialScreen)
+  /** null while asking; then whether this workspace sees the agency finder. */
+  const [agencyFinder, setAgencyFinder] = useState<boolean | null>(null)
+  useEffect(() => {
+    let live = true
+    void probeAgencyFinder(api.agencyProbe).then((ok) => live && setAgencyFinder(ok))
+    return () => {
+      live = false
+    }
+  }, [])
   const [detail, setDetail] = useState<string | null>(() =>
     resolveDetail(window.location.hash.replace('#', '')),
   )
@@ -87,6 +104,12 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
     window.location.hash = next
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
+
+  // A link to #agenturen opened by a workspace that may not see it lands on
+  // the cockpit, exactly as an unknown hash would.
+  useEffect(() => {
+    if (screen === 'agenturen' && agencyFinder === false) goToScreen('cockpit')
+  }, [screen, agencyFinder, goToScreen])
 
   /** Focus one mandate inside the cockpit, or go back to the overall view. */
   const goToMandate = useCallback((id: string | null) => {
@@ -129,7 +152,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         }
         typeface={typeface}
         onTypefaceChange={setTypeface}
-        screens={SCREENS}
+        screens={withAgencyScreen(SCREENS, agencyFinder === true) as SectionOption<ScreenKey>[]}
         screen={screen}
         onScreenChange={goToScreen}
       />
@@ -154,6 +177,15 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         )}
         {screen === 'markt' && <MarktScreen />}
         {screen === 'projekte' && <ProjekteScreen />}
+        {screen === 'agenturen' && agencyFinder && (
+          <AgenturenScreen
+            agencyId={detail}
+            onSelect={(id) => {
+              setDetail(id)
+              window.location.hash = id ? `agenturen/${id}` : 'agenturen'
+            }}
+          />
+        )}
         {screen === 'managers' && <ManagerScreen />}
         {screen === 'jobs' && (
           <JobsScreen query={query} onClearQuery={() => setQuery('')} />
