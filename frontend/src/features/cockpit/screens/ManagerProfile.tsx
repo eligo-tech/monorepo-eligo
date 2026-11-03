@@ -35,6 +35,7 @@ import { api } from '@/api/client'
 import type { ManagerDTO, ManagerInteractionDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
+import { EraseSection } from '../erasure/EraseSection'
 import { InteractionComposer } from '../ui/InteractionComposer'
 import {
   MANAGER_INTERACTION_KINDS,
@@ -187,11 +188,14 @@ export function ManagerProfile({
   companyName,
   onClose,
   onNotified,
+  onErased,
 }: {
   manager: ManagerDTO
   companyName: string
   onClose: () => void
   onNotified: (updated: ManagerDTO) => void
+  /** The contact was erased (GDPR Art. 17): close, reload the list. */
+  onErased?: () => void
 }) {
   const [manager, setManager] = useState(initial)
   const [history, setHistory] = useState<ManagerInteractionDTO[] | null>(null)
@@ -216,7 +220,7 @@ export function ManagerProfile({
   }, [initial])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !e.defaultPrevented && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
@@ -478,6 +482,14 @@ export function ManagerProfile({
                 : t('Für diesen Bereich liegen noch keine Daten vor — er wird beim Import noch nicht befüllt.')}
             </p>
           )}
+          <div className="px-6 pb-6">
+            <EraseSection
+              subject="manager"
+              id={manager.id}
+              name={manager.full_name}
+              onErased={onErased ?? onClose}
+            />
+          </div>
         </div>
 
         <aside className="w-full shrink-0 lg:w-[27rem]">

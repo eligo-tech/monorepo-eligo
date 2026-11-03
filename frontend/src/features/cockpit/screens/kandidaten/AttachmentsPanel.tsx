@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Download, FileText, Paperclip, Sparkles } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
+import { ReaddDeclined, withReaddConfirm } from '../../erasure/readd'
 import type {
   CVExtractionResultDTO,
   CandidateDTO,
@@ -114,7 +115,9 @@ export function AttachmentsPanel({
   }, [reload])
 
   const describe = (e: unknown) =>
-    e instanceof ApiError
+    e instanceof ReaddDeclined
+      ? e.message
+      : e instanceof ApiError
       ? `Fehlgeschlagen (HTTP ${e.status}).`
       : t('Fehlgeschlagen — keine Antwort vom Server.')
 
@@ -179,7 +182,9 @@ export function AttachmentsPanel({
     setBusy(true)
     setError(null)
     try {
-      const updated = await api.updateCandidate(candidateId, patch)
+      const updated = await withReaddConfirm((override) =>
+        api.updateCandidate(candidateId, { ...patch, override_suppression: override || undefined }),
+      )
       onCandidateChanged?.(updated)
       setProposals(null)
     } catch (e) {

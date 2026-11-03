@@ -516,3 +516,67 @@ async def test_editing_someone_else_to_an_erased_address_is_refused_too() -> Non
     assert cand.status_code == 409 and cand.json()["detail"]["code"] == "suppressed"
     assert mgr.status_code == 409
     assert ok.status_code == 200, ok.text
+
+
+async def test_the_log_shows_when_a_suppression_was_lifted_and_by_whom() -> None:
+    """Lifting lets a person back in, so the admin must be able to see it."""
+    from app.core.context import ActorRef, current_actor_var
+
+    tenant = settings.default_tenant_id
+    await create_all()
+    email = f"{uuid.uuid4().hex}@example.org"
+    async with SessionLocal() as s:
+        p = await _person(s, tenant, "Lift Person", email, f"ext-{uuid.uuid4()}")
+        await s.commit()
+    req = await _erase(tenant, p["candidate"], name="Lift Person")
+    token = current_actor_var.set(ActorRef(user_id="u_rec", name="R. Recruiter"))
+    try:
+        async with SessionLocal() as s:
+            await erasure.guard_readd(s, tenant_id=tenant, email=email, override=True)
+            await s.commit()
+    finally:
+        current_actor_var.reset(token)
+    async with _client() as c:
+        rows = (await c.get(f"{settings.api_v1_prefix}/erasure/requests")).json()
+    row = next(r for r in rows if r["id"] == str(req.id))
+    assert row["lifted"] == 1
+    assert row["last_lifted_by"] == "R. Recruiter"
+    assert row["last_lifted_at"] is not None
+
+
+async def test_the_cv_preview_says_the_address_belongs_to_someone_erased(monkeypatch) -> None:
+    """So the recruiter is asked BEFORE saving — a refused save would run the
+    (paid, nondeterministic) extraction again."""
+    from app.domain.documents import parser
+    from app.domain.documents import service as documents
+    from app.agents.document_extraction import ExtractedField
+    from app.domain.documents.extraction.base import CVSections
+
+    tenant = settings.default_tenant_id
+    await create_all()
+    email = f"{uuid.uuid4().hex}@example.org"
+    async with SessionLocal() as s:
+        p = await _person(s, tenant, "Cv Person", email, f"ext-{uuid.uuid4()}")
+        await s.commit()
+    await _erase(tenant, p["candidate"], name="Cv Person")
+    text = f"Cv Person\n{email}\nBackend Engineer\n" * 3
+    monkeypatch.setattr(parser, "pdf_to_text", lambda content: text)
+    monkeypatch.setattr(documents, "_run_extractor", lambda t: (
+        [ExtractedField(field="full_name", value="Cv Person", confidence=0.99),
+         ExtractedField(field="email", value=email.upper(), confidence=0.99)],
+        CVSections(), "fake"))
+    async with SessionLocal() as s:
+        preview = await documents.extract_cv(s, filename="cv.pdf", content=b"%PDF", tenant_id=tenant, persist=False)
+        clean = await documents.extract_cv(s, filename="cv.pdf", content=b"%PDF", tenant_id=uuid.uuid4(), persist=False)
+    assert str(preview.suppressed_on) == "2026-11-01"
+    assert clean.suppressed_on is None
+
+
+async def test_a_requested_on_date_in_the_future_is_refused() -> None:
+    cid = await _api_person("Api Person")
+    async with _client() as c:
+        resp = await c.post(f"{settings.api_v1_prefix}/erasure/candidates/{cid}",
+                            json={**BODY, "requested_on": "2099-01-01"})
+    assert resp.status_code == 422
+    async with SessionLocal() as s:
+        assert await s.get(Candidate, cid) is not None

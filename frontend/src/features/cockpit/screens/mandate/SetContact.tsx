@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { Check, Plus, UserRound, X } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
+import { ReaddDeclined, withReaddConfirm } from '../../erasure/readd'
 import type { ManagerDTO } from '@/api/types'
 import { Button, TextInput } from '../../ui/forms'
 
@@ -68,14 +69,15 @@ export function SetContact({
     setBusy(true)
     setError(null)
     try {
-      const manager = await api.createManager({
+      const manager = await withReaddConfirm((override) => api.createManager({
+        override_suppression: override || undefined,
         company_id: companyId,
         full_name: name.trim(),
         role_title: role.trim() || null,
         email: email.trim() || null,
         source: 'self_reported',
         source_detail: t('Ansprechpartner für das Mandat „{title}” erfasst', { title: jobTitle }),
-      })
+      }))
       await api.updateJob(jobId, { manager_id: manager.id })
       onDone()
       setOpen(false)
@@ -83,8 +85,10 @@ export function SetContact({
       setName('')
       setRole('')
       setEmail('')
-    } catch {
-      setError(t('Nicht gespeichert — bitte erneut versuchen.'))
+    } catch (e) {
+      setError(
+        e instanceof ReaddDeclined ? e.message : t('Nicht gespeichert — bitte erneut versuchen.'),
+      )
     }
     setBusy(false)
   }

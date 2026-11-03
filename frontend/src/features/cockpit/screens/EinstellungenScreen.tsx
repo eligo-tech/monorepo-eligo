@@ -22,6 +22,7 @@ import { CheckCircle2, Database, Loader2, Trash2 } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { MeDTO, SourceCapabilitiesDTO, TenantSourceDTO } from '@/api/types'
 import { isAdmin } from '../useMe'
+import { ErasureLog } from '../erasure/ErasureLog'
 import { AiFeaturesPanel } from './AiFeaturesPanel'
 import { FileImportPanel } from './FileImportPanel'
 import { Button, TextInput } from '../ui/forms'
@@ -389,6 +390,18 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
           hint={t('Aus, bis ein Administrator zustimmt')}
         />
         <AiFeaturesPanel admin={admin} />
+      </section>
+
+      {/* GDPR Art. 17/21 inside the workspace. Erasing happens on the
+          person's own page; this is the record that it happened. */}
+      <section className="space-y-5">
+        <SectionHeader
+          id="section-loeschung"
+          index="04"
+          title={t('Löschanträge')}
+          hint={t('DSGVO Art. 17 und 21')}
+        />
+        <ErasureLog admin={admin} />
       </section>
     </div>
   )

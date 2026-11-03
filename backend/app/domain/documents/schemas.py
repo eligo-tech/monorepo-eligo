@@ -31,6 +31,10 @@ class CVExtractionResult(BaseModel):
     candidate_id: uuid.UUID | None = None
     # Length of extracted text — 0 usually means an image-only/scanned PDF.
     text_chars: int
+    # The extracted address belongs to someone this workspace erased (GDPR
+    # Art. 17): the day they asked. Lets the UI ask BEFORE the save, which
+    # would otherwise be refused and re-run the extraction.
+    suppressed_on: dt.date | None = None
 
 
 class DocumentRead(BaseModel):

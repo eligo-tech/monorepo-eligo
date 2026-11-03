@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import Actor, get_current_actor
 from app.core.database import get_db
 from app.domain.erasure import service
-from app.domain.erasure.models import ErasureRequest
+from app.domain.erasure.models import ErasureRequest, TenantSuppression
 from app.domain.erasure.schemas import EraseRequest, ErasureRequestRead
 
 router = APIRouter(prefix="/erasure", tags=["erasure"])
@@ -75,9 +75,31 @@ async def erase_manager(
 async def list_requests(
     actor: Actor = Depends(_admin), db: AsyncSession = Depends(get_db),
 ) -> list[ErasureRequestRead]:
-    rows = await db.execute(
-        select(ErasureRequest)
-        .where(ErasureRequest.tenant_id == actor.tenant_id)
-        .order_by(ErasureRequest.created_at.desc())
-    )
-    return [ErasureRequestRead.model_validate(r) for r in rows.scalars()]
+    requests = (
+        await db.execute(
+            select(ErasureRequest)
+            .where(ErasureRequest.tenant_id == actor.tenant_id)
+            .order_by(ErasureRequest.created_at.desc())
+        )
+    ).scalars().all()
+    lifts = (
+        await db.execute(
+            select(TenantSuppression.request_id, TenantSuppression.lifted_at,
+                   TenantSuppression.lifted_by_name)
+            .where(TenantSuppression.tenant_id == actor.tenant_id,
+                   TenantSuppression.lifted_at.is_not(None))
+            .order_by(TenantSuppression.lifted_at)
+        )
+    ).all()
+    by_request: dict[uuid.UUID, list] = {}
+    for request_id, at, by in lifts:
+        by_request.setdefault(request_id, []).append((at, by))
+    out = []
+    for r in requests:
+        row = ErasureRequestRead.model_validate(r)
+        done = by_request.get(r.id, [])
+        if done:
+            row.lifted = len(done)
+            row.last_lifted_at, row.last_lifted_by = done[-1]
+        out.append(row)
+    return out

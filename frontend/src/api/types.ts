@@ -93,6 +93,31 @@ export interface CandidateDTO {
 
 /** PATCH body for a manual recruiter edit — every field optional; only the
  *  fields present are applied. Mirrors backend CandidateUpdate. */
+/** POST /erasure/{candidates|managers}/{id}. */
+export interface EraseBody {
+  /** Typed by the admin; must match the record's name. */
+  confirm_name: string
+  reason: 'erasure' | 'objection'
+  /** The day the person asked, YYYY-MM-DD. */
+  requested_on: string
+}
+
+/** One handled erasure request. Names nobody. */
+export interface ErasureRequestDTO {
+  id: string
+  subject_type: 'candidate' | 'manager'
+  reason: 'erasure' | 'objection'
+  requested_on: string
+  created_at: string
+  executed_by_name: string | null
+  /** Rows removed per table, `receipts_blacked_out`, `suppressions_written`. */
+  counts: Record<string, number>
+  /** Blocks lifted since because the person came back. */
+  lifted: number
+  last_lifted_at: string | null
+  last_lifted_by: string | null
+}
+
 export interface CandidateUpdatePayload {
   /** The `updated_at` the editor was opened on. The server refuses the write
    *  with 409 if somebody else has committed one of the same fields since;
@@ -144,6 +169,9 @@ export interface CandidateUpdatePayload {
   languages?: string[]
   education?: EducationDTO[]
   work_history?: WorkRoleDTO[]
+  /** Setting the address of someone erased here is refused (409) unless they
+   *  came back of their own accord. */
+  override_suppression?: boolean
 }
 
 export interface CriteriaSuggestionDTO {
@@ -551,6 +579,8 @@ export interface CVExtractionResultDTO {
   notes: string[]
   candidate_id: string | null
   text_chars: number
+  /** The extracted address belongs to someone erased here: the day they asked. */
+  suppressed_on?: string | null
 }
 /** The ad that names a contact, and the line that does. */
 export interface ContactEvidenceDTO {

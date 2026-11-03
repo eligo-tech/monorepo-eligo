@@ -14,6 +14,7 @@ import { t } from '@/i18n'
 import { useState } from 'react'
 import { Check, ChevronDown, ExternalLink, Mail, Phone, UserPlus } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
+import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 import type { CompanyContactsDTO, ContactCandidateDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
@@ -95,8 +96,8 @@ function ContactRow({
     setError(null)
     try {
       await onSave(contact)
-    } catch {
-      setError(t('Übernahme fehlgeschlagen.'))
+    } catch (e) {
+      setError(e instanceof ReaddDeclined ? e.message : t('Übernahme fehlgeschlagen.'))
     } finally {
       setSaving(false)
     }
@@ -247,19 +248,27 @@ export function ContactsPanel({
       // The ad itself — the answer to "where did you get my data?".
       source_detail: (contact.evidence[0]?.url ?? `hub_job_postings/${contact.evidence[0]?.posting_id}`).slice(0, 500),
     }
-    if (data.company_id) {
-      await api.createManager({
+    const companyId = data.company_id
+    if (companyId) {
+      await withReaddConfirm((override) => api.createManager({
         ...person,
-        company_id: data.company_id,
+        override_suppression: override || undefined,
+        company_id: companyId,
         first_name: contact.first_name,
         last_name: contact.last_name,
-      })
+      }))
     } else {
       // Not adopted yet: the first saved contact adopts the employer too.
       // That crossing goes through the verification gate and leaves a receipt.
       try {
         const adopted = await api.adoptHubCompany(company.hub_company_id, person)
         onAdopted(adopted.company_id)
+        // The company is in; the person was not — they asked to be erased
+        // here. No Art. 14 notice is owed for someone who was not stored.
+        if (adopted.manager_id === null) {
+          setReloadKey((k) => k + 1)
+          throw new ReaddDeclined()
+        }
       } catch (e) {
         if (!(e instanceof ApiError && e.status === 409)) throw e
         // Adopted meanwhile (another tab, another site of the employer):

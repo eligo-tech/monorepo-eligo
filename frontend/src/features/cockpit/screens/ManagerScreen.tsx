@@ -170,7 +170,9 @@ export function ManagerScreen() {
   // keystroke, capped at 200 of 647 — so a term matching 300 people showed
   // 200 of them with nothing saying so, and a typo showed none. 647 contacts
   // fit comfortably in the browser, where the scorer can also rank them.
-  const managers = useAsync(() => api.managersPage(), [])
+  // Bumped after an erasure, so the erased contact leaves the list.
+  const [reloadKey, setReloadKey] = useState(0)
+  const managers = useAsync(() => api.managersPage(), [reloadKey])
   const companies = useAsync<CompanyDTO[]>(() => api.companies(), [])
   const art14 = useAsync<ManagerDTO[]>(() => api.managersOwingArt14(), [])
 
@@ -322,6 +324,10 @@ export function ManagerScreen() {
             manager={overrides[selected.id] ?? selected}
             companyName={companyName(selected.company_id)}
             onClose={() => setSelected(null)}
+            onErased={() => {
+              setSelected(null)
+              setReloadKey((k) => k + 1)
+            }}
             onNotified={(updated) =>
               setOverrides((prev) => ({ ...prev, [updated.id]: updated }))
             }

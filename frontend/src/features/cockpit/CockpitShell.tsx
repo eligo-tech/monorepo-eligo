@@ -12,6 +12,7 @@ import { t } from '@/i18n'
 import { useCallback, useEffect, useState } from 'react'
 import { cn } from '@/lib/cn'
 import { CommandBar } from './CommandBar'
+import { ReaddHost } from './erasure/ReaddHost'
 import { CockpitScreen } from './screens/CockpitScreen'
 import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
 import { EinstellungenScreen } from './screens/EinstellungenScreen'
@@ -116,6 +117,8 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
 
   return (
     <div className="cockpit-root min-h-screen bg-cockpit-bg bg-grid bg-grid-cell font-sans text-cockpit-text">
+      {/* The one "this person asked to be erased" dialog for every form. */}
+      <ReaddHost />
       <CommandBar
         status={state.data.status}
         me={me}
