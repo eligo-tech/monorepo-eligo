@@ -8,7 +8,7 @@
 // Nothing is invented: before the first nightly rebuild the list is empty and
 // says so, and a failed call says so and shows nothing.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Building2, Check, ExternalLink, Loader2, UserPlus } from 'lucide-react'
 
 import { api } from '@/api/client'
@@ -26,7 +26,15 @@ import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader, Tag } from '../../ui/primitives'
 import { NetworkLink, dateDe, linkedInSearch, xingSearch } from '../ContactsPanel'
 import { prettyRegion } from '../MarktScreen'
-import { VERDICT_LABEL, contactPayload, reasonText, verdictTone } from './agencyCopy'
+import {
+  VERDICT_LABEL,
+  appendPage,
+  contactPayload,
+  latestOnly,
+  nothingSelected,
+  reasonText,
+  verdictTone,
+} from './agencyCopy'
 
 const PAGE = 50
 const VERDICTS: AgencyVerdict[] = ['agency', 'unclear', 'client']
@@ -50,10 +58,18 @@ export function AgenturenScreen({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const facets = useAsync<HubFacetsDTO>(() => api.hubFacets(), [])
+  const gate = useRef(latestOnly())
 
   const load = async (offset: number) => {
-    setLoading(true)
+    const token = gate.current.next()
     setError(null)
+    if (nothingSelected(verdicts)) {
+      setRows([])
+      setMore(false)
+      setLoading(false)
+      return
+    }
+    setLoading(true)
     try {
       const page = await api.agencies({
         verdict: verdicts,
@@ -63,13 +79,15 @@ export function AgenturenScreen({
         limit: PAGE,
         offset,
       })
-      setRows((prev) => (offset ? [...prev, ...page.items] : page.items))
+      if (!gate.current.isCurrent(token)) return
+      setRows((prev) => appendPage(prev, page.items, offset))
       setMore(page.items.length === PAGE)
     } catch (e) {
+      if (!gate.current.isCurrent(token)) return
       setError(t('Agenturen konnten nicht geladen werden (HTTP {status}).', { status: statusOf(e) ?? '—' }))
       if (!offset) setRows([])
     } finally {
-      setLoading(false)
+      if (gate.current.isCurrent(token)) setLoading(false)
     }
   }
 
@@ -106,6 +124,7 @@ export function AgenturenScreen({
             <button
               key={v}
               type="button"
+              aria-pressed={verdicts.includes(v)}
               onClick={() => toggle(v)}
               className={cn(
                 'rounded-lg border px-3 py-1.5 font-mono text-[12px] transition-colors',
@@ -257,6 +276,8 @@ function AgencyDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { profile, branches, postings, contacts } = detail.data
   const chosen: ContactCandidateDTO | undefined = contacts.contacts.find((c) => c.key === contactKey)
 
+  const [art14, setArt14] = useState(false)
+
   const adopt = async () => {
     setAdopting(true)
     setOutcome(null)
@@ -265,6 +286,7 @@ function AgencyDetail({ id, onClose }: { id: string; onClose: () => void }) {
         profile.id,
         chosen ? contactPayload(chosen) : null,
       )
+      setArt14(result.art14_outstanding)
       setOutcome(
         !chosen
           ? t('Im CRM angelegt.')
@@ -393,8 +415,24 @@ function AgencyDetail({ id, onClose }: { id: string; onClose: () => void }) {
           {adopting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
           {chosen ? t('Mit Kontakt ins CRM übernehmen') : t('Ins CRM übernehmen')}
         </button>
-        {outcome && <span className="font-mono text-[12px] text-cockpit-dim">{outcome}</span>}
+        <span aria-live="polite" className="font-mono text-[12px] text-cockpit-dim">
+          {outcome}
+        </span>
+        {chosen && (
+          <button
+            type="button"
+            onClick={() => setContactKey(null)}
+            className="font-mono text-[12px] text-cockpit-faint hover:text-cockpit-text"
+          >
+            {t('ohne Kontakt')}
+          </button>
+        )}
       </div>
+      {art14 && (
+        <p className="text-[13px] text-gold-400">
+          {t('Art.-14-Hinweis offen: Die Person wurde aus einer öffentlichen Anzeige übernommen und muss informiert werden.')}
+        </p>
+      )}
     </Panel>
   )
 }

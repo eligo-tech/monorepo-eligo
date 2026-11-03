@@ -92,3 +92,40 @@ describe('adopting with a contact', () => {
     expect(payload.source_detail).toBe('https://www.arbeitsagentur.de/jobsuche/jobdetail/1')
   })
 })
+
+describe('loading pages without mixing answers', () => {
+  it('only the newest request may write', async () => {
+    const { latestOnly } = await import('./agencyCopy')
+    const gate = latestOnly()
+    const older = gate.next()
+    const newer = gate.next()
+    expect(gate.isCurrent(older)).toBe(false)
+    expect(gate.isCurrent(newer)).toBe(true)
+  })
+  it('appending a page drops rows already shown', async () => {
+    const { appendPage } = await import('./agencyCopy')
+    const a = { id: 'a' }, b = { id: 'b' }, c = { id: 'c' }
+    expect(appendPage([a, b], [b, c], 2).map((x) => x.id)).toEqual(['a', 'b', 'c'])
+    expect(appendPage([a, b], [c], 0).map((x) => x.id)).toEqual(['c'])
+  })
+  it('no verdict selected means nothing to ask for', async () => {
+    const { nothingSelected } = await import('./agencyCopy')
+    expect(nothingSelected([])).toBe(true)
+    expect(nothingSelected(['client'])).toBe(false)
+  })
+})
+
+describe('the probe tolerates one hiccup', () => {
+  it('a 503 then a 200 shows the tab', async () => {
+    const answers = [503, 200]
+    expect(await probeAgencyFinder(async () => new Response('{}', { status: answers.shift()! }), 0)).toBe(true)
+  })
+  it('a 404 is final — no second ask', async () => {
+    let calls = 0
+    const ok = await probeAgencyFinder(async () => {
+      calls += 1
+      return new Response('{}', { status: 404 })
+    }, 0)
+    expect([ok, calls]).toEqual([false, 1])
+  })
+})

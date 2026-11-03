@@ -63,14 +63,48 @@ export const VERDICT_LABEL: Record<AgencyVerdict, string> = {
 export const verdictTone = (verdict: AgencyVerdict): Tone | undefined =>
   verdict === 'agency' ? 'mint' : verdict === 'unclear' ? 'gold' : undefined
 
-/** True only when the server answers the probe with 200. */
-export async function probeAgencyFinder(probe: () => Promise<Response>): Promise<boolean> {
-  try {
-    return (await probe()).status === 200
-  } catch {
-    return false
+/** True only when the server answers the probe with 200.
+ *
+ *  A 404/401/403 is the answer and is final. A 5xx or a dropped connection is
+ *  not an answer, so it is asked once more after `retryMs` — otherwise one cold
+ *  start hides Eligo's own tab until a reload. Still fail-closed: two failures
+ *  hide it. */
+export async function probeAgencyFinder(probe: () => Promise<Response>, retryMs = 1500): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const status = (await probe()).status
+      if (status === 200) return true
+      if (status < 500) return false
+    } catch {
+      // network failure: worth one more ask
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, retryMs))
+  }
+  return false
+}
+
+/** Request sequencing: only the newest load may write to the screen, so a
+ *  slow answer for an old filter never lands on top of the new one. */
+export function latestOnly() {
+  let current = 0
+  return {
+    next: () => ++current,
+    isCurrent: (token: number) => token === current,
   }
 }
+
+/** A page appended to what is shown — or the first page replacing it. Rows
+ *  already shown are dropped: a nightly rebuild between two pages can shift
+ *  an agency onto the next page too. */
+export function appendPage<T extends { id: string }>(shown: T[], page: T[], offset: number): T[] {
+  if (!offset) return page
+  const seen = new Set(shown.map((r) => r.id))
+  return [...shown, ...page.filter((r) => !seen.has(r.id))]
+}
+
+/** With every verdict switched off there is nothing to ask for. (The API
+ *  would answer with its default, agency + unclear, under three dark toggles.) */
+export const nothingSelected = (verdicts: readonly string[]) => verdicts.length === 0
 
 /** The screen list, with Agenturen after Projekte when this workspace may see it. */
 export function withAgencyScreen<K extends string, O extends { key: K | 'agenturen'; label: string }>(
