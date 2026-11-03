@@ -14,6 +14,7 @@ import { t } from '@/i18n'
 import { useState } from 'react'
 import { Check, ChevronDown, ExternalLink, Mail, Phone, UserPlus } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
+import { withReaddConfirm } from '../erasure/readd'
 import type { CompanyContactsDTO, ContactCandidateDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
@@ -247,13 +248,15 @@ export function ContactsPanel({
       // The ad itself — the answer to "where did you get my data?".
       source_detail: (contact.evidence[0]?.url ?? `hub_job_postings/${contact.evidence[0]?.posting_id}`).slice(0, 500),
     }
-    if (data.company_id) {
-      await api.createManager({
+    const companyId = data.company_id
+    if (companyId) {
+      await withReaddConfirm((override) => api.createManager({
         ...person,
-        company_id: data.company_id,
+        override_suppression: override || undefined,
+        company_id: companyId,
         first_name: contact.first_name,
         last_name: contact.last_name,
-      })
+      }))
     } else {
       // Not adopted yet: the first saved contact adopts the employer too.
       // That crossing goes through the verification gate and leaves a receipt.

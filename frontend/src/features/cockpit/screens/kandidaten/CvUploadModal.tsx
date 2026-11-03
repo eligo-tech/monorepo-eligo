@@ -9,6 +9,7 @@ import { t } from '@/i18n'
 import { useRef, useState } from 'react'
 import { AlertTriangle, Check, FileText, Loader2, UploadCloud } from 'lucide-react'
 import { api } from '@/api/client'
+import { withReaddConfirm } from '../../erasure/readd'
 import type { CVExtractionResultDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Button, CloseButton, Modal } from '../../ui/forms'
@@ -59,7 +60,8 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
     setSaving(true)
     setError(null)
     try {
-      await api.extractCv(file, true) // persist — creates the candidate
+      // persist — creates the candidate; asks first if they asked to be erased
+      await withReaddConfirm((override) => api.extractCv(file, true, override))
       onCreated()
       onClose()
     } catch (e) {

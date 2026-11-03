@@ -32,6 +32,7 @@ import { useState } from 'react'
 import { UserRoundPlus } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
+import { ReaddDeclined, withReaddConfirm } from '../../erasure/readd'
 import { toAmount } from '@/lib/amount'
 import {
   Button,
@@ -90,7 +91,8 @@ export function NewCandidate({
     setBusy(true)
     setError(null)
     try {
-      const created = await api.createCandidate({
+      const created = await withReaddConfirm((override) => api.createCandidate({
+        override_suppression: override || undefined,
         full_name: name,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -100,12 +102,14 @@ export function NewCandidate({
         skills,
         salary_expectation: toAmount(salary),
         source: source.trim() || undefined,
-      })
+      }))
       onCreated(created.id)
       onClose()
     } catch (e) {
       setError(
-        e instanceof ApiError && (e.status === 401 || e.status === 403)
+        e instanceof ReaddDeclined
+          ? e.message
+          : e instanceof ApiError && (e.status === 401 || e.status === 403)
           ? t('Sitzung abgelaufen — bitte neu anmelden.')
           : e instanceof ApiError
             ? t('Konnte nicht gespeichert werden (HTTP {status}).', { status: e.status })

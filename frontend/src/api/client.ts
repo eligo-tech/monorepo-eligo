@@ -2,6 +2,8 @@
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
   ConsultantDTO,
+  EraseBody,
+  ErasureRequestDTO,
   TrackingDTO,
   JobSpecProposalDTO,
   CandidateDTO,
@@ -176,6 +178,8 @@ export const api = {
     skills?: string[]
     salary_expectation?: number | null
     source?: string
+    /** Erased here on request and come back of their own accord (409 otherwise). */
+    override_suppression?: boolean
   }) =>
     request<CandidateDTO>('/candidates', {
       method: 'POST',
@@ -356,6 +360,8 @@ export const api = {
     linkedin_url?: string | null
     source?: string
     source_detail?: string | null
+    /** Erased here on request and come back of their own accord (409 otherwise). */
+    override_suppression?: boolean
   }) => request<ManagerDTO>('/managers', { method: 'POST', body: JSON.stringify(body) }),
 
   /** People we hold data on who have not been informed (GDPR Art. 14). */
@@ -442,6 +448,8 @@ export const api = {
       linkedin_url?: string | null
       source?: string
       source_detail?: string | null
+      /** Erased here on request and come back of their own accord (409 otherwise). */
+      override_suppression?: boolean
     },
   ) =>
     request<ManagerDTO>(
@@ -647,6 +655,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ job_id: jobId, include_rejected: includeRejected }),
     }),
+  /** Erase a person from this workspace (GDPR Art. 17/21). Admins only;
+   *  cannot be undone. */
+  eraseCandidate: (id: string, body: EraseBody) =>
+    request<ErasureRequestDTO>(`/erasure/candidates/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  eraseManager: (id: string, body: EraseBody) =>
+    request<ErasureRequestDTO>(`/erasure/managers/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** The handled requests. Names nobody. */
+  erasureRequests: () => request<ErasureRequestDTO[]>('/erasure/requests'),
+
   /** Funnel + dwell + KPIs, derived live from the record. */
   reportingOverview: () => request<ReportingOverviewDTO>('/reporting/overview'),
 
@@ -654,10 +677,15 @@ export const api = {
    * Upload a PDF CV for extraction. `persist=false` previews only (writes
    * nothing); `persist=true` creates a candidate from the accepted fields.
    */
-  async extractCv(file: File, persist = false): Promise<CVExtractionResultDTO> {
+  async extractCv(
+    file: File,
+    persist = false,
+    overrideSuppression = false,
+  ): Promise<CVExtractionResultDTO> {
     const body = new FormData()
     body.append('file', file)
-    const res = await fetch(`${BASE}/documents/extract-cv?persist=${persist}`, {
+    const q = `persist=${persist}${overrideSuppression ? '&override_suppression=true' : ''}`
+    const res = await fetch(`${BASE}/documents/extract-cv?${q}`, {
       method: 'POST',
       body, // let the browser set the multipart boundary
       headers: await authHeaders(),

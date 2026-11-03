@@ -612,6 +612,10 @@ export function KandidatenScreen({
           candidate={selected}
           onClose={closeDrawer}
           onPipelineChanged={onPipelineChanged}
+          onErased={() => {
+            closeDrawer()
+            setRefreshKey((k) => k + 1)
+          }}
           onSaved={(updated) => {
             setSelected(toCandidate(updated)) // reflect the edit in the open drawer
             setRefreshKey((k) => k + 1) // and refresh the underlying list

@@ -516,3 +516,29 @@ async def test_editing_someone_else_to_an_erased_address_is_refused_too() -> Non
     assert cand.status_code == 409 and cand.json()["detail"]["code"] == "suppressed"
     assert mgr.status_code == 409
     assert ok.status_code == 200, ok.text
+
+
+async def test_the_log_shows_when_a_suppression_was_lifted_and_by_whom() -> None:
+    """Lifting lets a person back in, so the admin must be able to see it."""
+    from app.core.context import ActorRef, current_actor_var
+
+    tenant = settings.default_tenant_id
+    await create_all()
+    email = f"{uuid.uuid4().hex}@example.org"
+    async with SessionLocal() as s:
+        p = await _person(s, tenant, "Lift Person", email, f"ext-{uuid.uuid4()}")
+        await s.commit()
+    req = await _erase(tenant, p["candidate"], name="Lift Person")
+    token = current_actor_var.set(ActorRef(user_id="u_rec", name="R. Recruiter"))
+    try:
+        async with SessionLocal() as s:
+            await erasure.guard_readd(s, tenant_id=tenant, email=email, override=True)
+            await s.commit()
+    finally:
+        current_actor_var.reset(token)
+    async with _client() as c:
+        rows = (await c.get(f"{settings.api_v1_prefix}/erasure/requests")).json()
+    row = next(r for r in rows if r["id"] == str(req.id))
+    assert row["lifted"] == 1
+    assert row["last_lifted_by"] == "R. Recruiter"
+    assert row["last_lifted_at"] is not None

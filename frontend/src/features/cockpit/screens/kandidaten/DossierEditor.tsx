@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Trash2, Save, Ban, AlertCircle, RefreshCw } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
+import { withReaddConfirm } from '../../erasure/readd'
 import type { CandidateDTO, CandidateUpdatePayload, EducationDTO, WorkRoleDTO } from '@/api/types'
 import {
   AddButton,
@@ -402,7 +403,10 @@ export function DossierEditor({
     setClash(null)
     setSaving(true)
     try {
-      const updated = await api.updateCandidate(dto.id, patch)
+      // An edit to the address of someone erased here asks first, like create.
+      const updated = await withReaddConfirm((override) =>
+        api.updateCandidate(dto.id, { ...patch, override_suppression: override || undefined }),
+      )
       onSaved(updated)
     } catch (e) {
       const fields = conflictFields(e)

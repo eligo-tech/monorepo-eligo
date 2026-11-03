@@ -28,6 +28,7 @@ import { useMemo, useState } from 'react'
 import { Building2, Check, Link2, Plus, UserRound, X } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
+import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 import type { CompanyDTO, JobSpecProposalDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { toAmount } from '@/lib/amount'
@@ -312,7 +313,8 @@ export function NewMandate({
       let contact = managerId
       if (!contact && newContact && client) {
         contact = (
-          await api.createManager({
+          await withReaddConfirm((override) => api.createManager({
+            override_suppression: override || undefined,
             company_id: client,
             full_name: newContact,
             role_title: managerRole.trim() || null,
@@ -324,7 +326,7 @@ export function NewMandate({
             source_detail: t('beim Anlegen des Mandats „{title}“ erfasst', {
               title: title.trim(),
             }),
-          })
+          }))
         ).id
       }
 
@@ -340,7 +342,9 @@ export function NewMandate({
       onCreated(job.id)
     } catch (e) {
       setError(
-        e instanceof ApiError
+        e instanceof ReaddDeclined
+          ? e.message
+          : e instanceof ApiError
           ? `${t('Nicht angelegt (HTTP {status}).', { status: e.status })} ${
               e.status === 422 ? t('Bitte Eingaben prüfen.') : ''
             }`

@@ -29,3 +29,8 @@ class ErasureRequestRead(BaseModel):
     created_at: dt.datetime
     executed_by_name: str | None = None
     counts: dict[str, int]
+    #: Fingerprints lifted since, because the person came back of their own
+    #: accord — each one lets them be created again, so the admin sees it.
+    lifted: int = 0
+    last_lifted_at: dt.datetime | None = None
+    last_lifted_by: str | None = None

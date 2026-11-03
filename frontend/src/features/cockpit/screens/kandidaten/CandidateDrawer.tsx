@@ -49,6 +49,7 @@ import { QualificationChecklist } from './QualificationChecklist'
 import { AttachmentsPanel } from './AttachmentsPanel'
 import { CandidateNotesPanel } from './CandidateNotesPanel'
 import { ConsentPanel } from './ConsentPanel'
+import { EraseSection } from '../../erasure/EraseSection'
 import { DossierEditor } from './DossierEditor'
 
 export function CandidateDrawer({
@@ -56,6 +57,7 @@ export function CandidateDrawer({
   onClose,
   onSaved,
   onPipelineChanged,
+  onErased,
 }: {
   candidate: Candidate
   onClose: () => void
@@ -64,6 +66,8 @@ export function CandidateDrawer({
   /** Called after an assignment: the cockpit's board just changed, and the
    *  next thing the recruiter does is open it. */
   onPipelineChanged?: () => void
+  /** The candidate was erased (GDPR Art. 17): close, reload the list. */
+  onErased?: () => void
 }) {
   const [cvUrl, setCvUrl] = useState<string | null>(null)
   const [cvState, setCvState] = useState<'loading' | 'ready' | 'missing'>('loading')
@@ -527,6 +531,13 @@ export function CandidateDrawer({
                 <div className="mt-7">
                   <HistoryTrail entityType="candidate" entityId={candidate.id} />
                 </div>
+
+                <EraseSection
+                  subject="candidate"
+                  id={candidate.id}
+                  name={candidate.name}
+                  onErased={onErased ?? onClose}
+                />
               </>
             )}
           </div>
