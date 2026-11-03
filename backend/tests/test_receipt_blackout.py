@@ -187,7 +187,7 @@ async def test_a_blackout_that_bypassed_the_trigger_is_caught_by_verify_chain() 
 
 
 def test_the_migration_installs_the_same_trigger_function_as_create_all() -> None:
-    """Existing databases get the function from 0049, fresh ones from the model.
+    """Existing databases get the function from 0050, fresh ones from the model.
     If the two drift, CI (create_all) and production (migrated) enforce
     different rules on the one table whose rules matter most."""
     import importlib.util
@@ -195,8 +195,8 @@ def test_the_migration_installs_the_same_trigger_function_as_create_all() -> Non
 
     from app.domain.verification.models import BLACKOUT_SUMMARY, PG_APPEND_ONLY_FUNCTION
 
-    path = Path(__file__).parents[1] / "migrations/versions/0049_tenant_erasure.py"
-    spec = importlib.util.spec_from_file_location("m0049", path)
+    path = Path(__file__).parents[1] / "migrations/versions/0050_tenant_erasure.py"
+    spec = importlib.util.spec_from_file_location("m0050", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.FUNCTION == PG_APPEND_ONLY_FUNCTION

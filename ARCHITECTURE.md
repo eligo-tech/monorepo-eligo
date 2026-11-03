@@ -164,7 +164,7 @@ apart at the schema level.
 | **Art. 6(1)(f)** lawful basis | documented Legitimate Interest Assessment per source | ❌ not written |
 | **Art. 14** third-party collection notice | any *person* ingested from a public source flags an Art. 14 duty | ✅ `agents/enrichment.py`; must extend to `managers` |
 | **Art. 15/16** access & rectification | provenance per field, so we can say where a value came from | ✅ `EnrichmentRecord`, `hub_observations`, `resolution_basis` |
-| **Art. 17/21** erasure & objection | **a suppression list, not a delete** — see below | ⚠ corpus: `hub_suppressions` by company and person name, no VAT/register/domain keys yet. Workspace: erasure of a candidate or contact with suppression, receipt blackout and request log (`domain/erasure/`, 0049) — no UI yet, backups not covered |
+| **Art. 17/21** erasure & objection | **a suppression list, not a delete** — see below | ⚠ corpus: `hub_suppressions` by company and person name, no VAT/register/domain keys yet. Workspace: erasure of a candidate or contact with suppression, receipt blackout and request log (`domain/erasure/`, 0050) — no UI yet, backups not covered |
 | **Art. 22** human oversight of decisions | hard filters deterministic; LLM only ranks | ✅ `matching/service.py` |
 | **Art. 28** processors | inventory of sub-processors + DPAs (Railway, Supabase, Vercel, OpenAI) | ❌ not written |
 | **Art. 30** records of processing | source inventory: what we fetch, how often, on what basis | ⚠ `hub_observations` is the evidence; no RoPA document |
@@ -193,7 +193,7 @@ its date.
   refused every write by a SELECT-only policy (proved in
   `tests/test_rls_postgres.py`).
 
-**Inside a workspace** (migration 0049, `app/domain/erasure/`). The
+**Inside a workspace** (migration 0050, `app/domain/erasure/`). The
 workspace is the controller and decides; an admin carries it out.
 
 - **erase** — `POST /erasure/candidates/{id}` or `/erasure/managers/{id}`,

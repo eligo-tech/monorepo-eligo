@@ -1,7 +1,7 @@
 """The receipt blackout, proved on Postgres as the runtime role.
 
 The SQLite suite (`test_receipt_blackout.py`) exercises a different trigger
-language. What production enforces is the plpgsql function from 0049 — under
+language. What production enforces is the plpgsql function from 0050 — under
 RLS, as `eligo_app`, which holds UPDATE on `receipts` only because a foreign
 key needs it (0024). The trigger is therefore the only thing between the app
 role and the ledger, and this file attacks it from there.

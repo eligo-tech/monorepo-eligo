@@ -37,7 +37,7 @@ def app_role_privileges(role: str) -> list[str]:
     * `tenant_suppressions` may be inserted and LIFTED, nothing else: deleting
       a row, or changing its fingerprint, would silently let the person back.
 
-    Applied by migration 0049 on existing databases and by
+    Applied by migration 0050 on existing databases and by
     `scripts/apply_rls.py` after its blanket grant (which would otherwise
     undo it). Proved in tests/test_erasure_postgres.py.
     """
@@ -72,7 +72,7 @@ class TenantSuppression(Base, IDMixin, TenantMixin, TimestampMixin):
 
     #: The request that wrote it. Not a foreign key on purpose: a FK check
     #: needs UPDATE rights on the parent, and the app role holds none on
-    #: `erasure_requests` (insert-only, migration 0049).
+    #: `erasure_requests` (insert-only, migration 0050).
     request_id: Mapped[uuid.UUID] = mapped_column(Uuid(), nullable=False, index=True)
     #: "import_id" (source:external_id) | "email".
     kind: Mapped[str] = mapped_column(String(20), nullable=False)

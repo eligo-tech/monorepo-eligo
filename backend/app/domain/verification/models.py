@@ -167,7 +167,7 @@ BLACKOUT_SUMMARY = "[gelöscht — Löschantrag, DSGVO Art. 17]"
 # The licence is not a flag or a role — it is an ERASE receipt in the same
 # workspace that lists this receipt, which is itself append-only and chained.
 # Every other column (hash included) must be unchanged, and an already
-# blacked-out row cannot be touched again. Migration 0049 installs the same
+# blacked-out row cannot be touched again. Migration 0050 installs the same
 # function on existing databases; `tests/test_receipt_blackout.py` keeps the
 # two identical.
 PG_APPEND_ONLY_FUNCTION = f"""

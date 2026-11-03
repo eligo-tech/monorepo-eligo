@@ -61,7 +61,7 @@ These are enforced in code. Do not route around them.
   the runtime role; UPDATE was re-granted by 0024 because a foreign key needs
   it, so for UPDATE the trigger is the only guard.
 - **One update is allowed, and only one: an erasure's blackout** (GDPR Art.
-  17, migration 0049). Summary → `BLACKOUT_SUMMARY`, payload →
+  17, migration 0050). Summary → `BLACKOUT_SUMMARY`, payload →
   `{"erased_by": <ERASE receipt id>}`, every other column unchanged, and only
   when an ERASE receipt in the same workspace lists that receipt (an ERASE
   receipt itself can never be blacked out). `verify_chain` accepts a
