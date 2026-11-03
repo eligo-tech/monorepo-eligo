@@ -118,7 +118,7 @@ const REGION_LABELS: Record<string, string> = {
 }
 
 /** Falls back to title-case for anything the source adds later. */
-const prettyRegion = (raw: string) =>
+export const prettyRegion = (raw: string) =>
   REGION_LABELS[raw] ??
   raw
     .split('_')

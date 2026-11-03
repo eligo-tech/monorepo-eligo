@@ -50,12 +50,12 @@ const searchTerms = (contact: ContactCandidateDTO, company: string) =>
       .replace(/\s+/g, ' ')
       .trim(),
   )
-const linkedInSearch = (c: ContactCandidateDTO, company: string) =>
+export const linkedInSearch = (c: ContactCandidateDTO, company: string) =>
   `https://www.linkedin.com/search/results/people/?keywords=${searchTerms(c, company)}`
-const xingSearch = (c: ContactCandidateDTO, company: string) =>
+export const xingSearch = (c: ContactCandidateDTO, company: string) =>
   `https://www.xing.com/search/members?keywords=${searchTerms(c, company)}`
 
-function NetworkLink({ href, label, className }: { href: string; label: string; className: string }) {
+export function NetworkLink({ href, label, className }: { href: string; label: string; className: string }) {
   return (
     <a
       href={href}

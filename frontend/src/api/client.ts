@@ -1,6 +1,9 @@
 // Thin typed fetch client for the Eligo Labs backend.
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
+  AgencyDetailDTO,
+  AgencyPageDTO,
+  AgencyVerdict,
   ConsultantDTO,
   EraseBody,
   ErasureRequestDTO,
@@ -494,6 +497,41 @@ export const api = {
   /** Open roles for one hub company. */
   hubCompanyPostings: (id: string) =>
     request<HubJobPostingDTO[]>(`/hub/companies/${id}/postings?limit=200`),
+
+  /** Agency finder: ranked agencies, best first. 404 outside the
+   *  `agency_finder_tenants` allowlist — see `agencyCopy.probeAgencyFinder`. */
+  agencies: (params: {
+    verdict: AgencyVerdict[]
+    region?: string
+    berufsfeld?: string
+    includeChains?: boolean
+    limit?: number
+    offset?: number
+  }) => {
+    const q = new URLSearchParams()
+    for (const v of params.verdict) q.append('verdict', v)
+    if (params.region) q.set('region', params.region)
+    if (params.berufsfeld) q.set('berufsfeld', params.berufsfeld)
+    if (params.includeChains) q.set('include_chains', 'true')
+    q.set('limit', String(params.limit ?? 50))
+    q.set('offset', String(params.offset ?? 0))
+    return request<AgencyPageDTO>(`/hub/agencies?${q.toString()}`)
+  },
+  agency: (id: string) => request<AgencyDetailDTO>(`/hub/agencies/${id}`),
+  /** Take an agency into this workspace as a lead — the same receipted
+   *  crossing as an employer. 409 when it is already in the CRM. */
+  adoptAgency: (
+    id: string,
+    manager?: { full_name: string; role_title?: string | null; email?: string | null; phone?: string | null; source?: string; source_detail?: string | null } | null,
+  ) =>
+    request<AdoptResultDTO>(`/hub/agencies/${id}/adopt`, {
+      method: 'POST',
+      body: JSON.stringify({ manager: manager ?? null }),
+    }),
+  /** Authenticated GET of the first agency — whether this workspace may see
+   *  the agency finder at all. Only the status matters. */
+  agencyProbe: async (): Promise<Response> =>
+    fetch(`${BASE}/hub/agencies?limit=1`, { headers: await authHeaders() }),
 
   /** People an employer's public ads name as contacts. Reads the corpus;
    *  fetches and stores nothing. */

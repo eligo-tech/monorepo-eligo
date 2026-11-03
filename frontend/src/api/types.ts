@@ -1104,3 +1104,45 @@ export interface ConsultantDTO {
   events: number
 }
 
+
+// ── Agency finder (Eligo's own leads; allowlisted workspaces only) ──
+
+/** One signal behind a verdict or a score, with the evidence for it. */
+export interface AgencyReasonDTO {
+  code: string
+  points: number | null
+  evidence: Record<string, unknown>
+}
+
+export type AgencyVerdict = 'agency' | 'unclear' | 'client'
+
+export interface AgencyProfileDTO {
+  id: string
+  group_key: string
+  name: string
+  primary_company_id: string
+  verdict: AgencyVerdict
+  score: number
+  open_postings: number
+  new_28d: number
+  branches: number
+  region: string | null
+  city: string | null
+  /** berufsfeld → open ads */
+  fields: Record<string, number>
+  reasons: AgencyReasonDTO[]
+  refreshed_at: string
+}
+
+export interface AgencyPageDTO {
+  items: AgencyProfileDTO[]
+  limit: number
+  offset: number
+}
+
+export interface AgencyDetailDTO {
+  profile: AgencyProfileDTO
+  branches: HubCompanyDTO[]
+  postings: HubJobPostingDTO[]
+  contacts: CompanyContactsDTO
+}
