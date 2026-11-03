@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from app.api.routes import api_router
 from app.core.config import settings
 from app.core.auth import assert_auth_configured
+from app.core.body_limit import BodySizeLimit
 from app.core.database import assert_runtime_rls_enforced, create_all
 from app.core.logging import configure_logging, get_logger
 from app.core.observability import configure_error_reporting
@@ -120,3 +121,7 @@ async def root() -> dict[str, str]:
 # `/mcp` and `/.well-known/oauth-protected-resource/mcp` (ADR 0003), dispatched
 # by exact path before anything else — see `MCPRoutes` for why not a mount.
 app.add_middleware(mcp_server.MCPRoutes)
+
+# Outermost: bounds every request body while it arrives, /mcp included
+# (review 2026-10-31 #5 B). See app/core/body_limit.py.
+app.add_middleware(BodySizeLimit)
