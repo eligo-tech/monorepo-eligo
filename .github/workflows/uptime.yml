@@ -1,0 +1,36 @@
+name: Uptime
+
+# Is production up and still guarded? (review 2026-10-31 #5 E)
+#
+# Every 6 hours, not every few minutes: the repository is private, so each
+# run bills Actions minutes against the quota CI also needs (~120 min/month
+# at this rate). Minute-level checks belong to GlitchTip's uptime monitors —
+# but GlitchTip runs in the same Railway project as the API, so a
+# platform-wide outage would silence it too. This run lives outside Railway.
+#
+# A failed scheduled run is emailed by GitHub to whoever last changed this
+# schedule. The checks themselves are in .github/scripts/uptime.sh and can be
+# run by hand.
+
+on:
+  schedule:
+    - cron: "41 */6 * * *"   # off the hour: GitHub delays top-of-hour runs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  uptime:
+    name: Production is up and guarded
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/scripts
+      - name: Check
+        env:
+          API: https://monorepo-eligo-production.up.railway.app
+          SITE: https://eligolabs.com
+        run: .github/scripts/uptime.sh
