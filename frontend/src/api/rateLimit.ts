@@ -18,5 +18,5 @@ export function retryAfter(e: unknown): number | null {
 /** The sentence a screen shows, or null when this was not a rate refusal. */
 export function rateLimitMessage(e: unknown): string | null {
   const s = retryAfter(e)
-  return s === null ? null : t('Zu viele KI-Anfragen in kurzer Zeit — bitte {s} Sekunden warten.', { s: String(s) })
+  return s === null ? null : t('Zu viele Anfragen in kurzer Zeit — bitte {s} Sekunden warten.', { s: String(s) })
 }
