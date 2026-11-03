@@ -14,6 +14,11 @@ this is a no-op):
 1. revoke what they hold on every table and sequence in `public` today;
 2. revoke the default privileges `postgres` hands them on future ones.
 
+Production, read 2026-11-03: all 32 tables in `public` are owned by
+`postgres` and there are no sequences, so every REVOKE acts on rights
+`postgres` itself granted. Function EXECUTE stays: harmless without any table
+right, and extension functions in `public` belong to other owners.
+
 `service_role` is left alone on purpose (decided 2026-11-03): it is
 Supabase's own admin path and bypasses RLS by design — its key must stay
 secret. Defaults owned by `supabase_admin` cover only objects that role
@@ -67,7 +72,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Back to what Supabase sets up."""
+    """Back to what Supabase sets up — broader than before 0051 in one way:
+    it re-grants on every table, including the ones 0047 and 0050 had
+    narrowed for these roles."""
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return
