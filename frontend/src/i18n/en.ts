@@ -1109,6 +1109,7 @@ export const EN: Record<string, string> = {
   'Ziel ändern': 'Change target',
   'Ziele setzen können nur Administratoren': 'Only administrators can set targets',
   'Zu Mandat zuordnen': 'Assign to a mandate',
+  'Zu viele Anfragen in kurzer Zeit — bitte {s} Sekunden warten.': 'Too many requests in a short time — please wait {s} seconds.',
   'Zugestimmt': 'Opted in',
   'Zuletzt': 'Last',
   'zuletzt aktualisiert {when}': 'last updated {when}',

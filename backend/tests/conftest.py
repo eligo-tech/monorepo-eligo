@@ -41,6 +41,17 @@ async def _fresh_db():
 
 
 @pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """Each test starts with empty request windows: the whole suite runs as
+    one user, and its own traffic must not trip the per-minute limits."""
+    from app.core import ratelimit
+
+    for window in (ratelimit.REST, ratelimit.AI, ratelimit.MCP):
+        window.reset()
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_outbound_network(monkeypatch):
     """No test may touch the internet.
 

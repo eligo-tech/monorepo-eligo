@@ -28,6 +28,7 @@ import { useMemo, useState } from 'react'
 import { Building2, Check, Link2, Plus, UserRound, X } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
+import { rateLimitMessage } from '@/api/rateLimit'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 import type { CompanyDTO, JobSpecProposalDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
@@ -257,9 +258,10 @@ export function NewMandate({
       // offered as chips to tick, never filled in. See `proposedSkills`.
     } catch (e) {
       setReadError(
-        e instanceof ApiError && e.status === 422
+        rateLimitMessage(e) ??
+        (e instanceof ApiError && e.status === 422
           ? t('Diese Anzeige ließ sich nicht lesen — bitte den Text der Anzeige einfügen.')
-          : t('Die Anzeige konnte nicht gelesen werden.'),
+          : t('Die Anzeige konnte nicht gelesen werden.')),
       )
     }
     setReading(false)

@@ -9,6 +9,7 @@ import { t } from '@/i18n'
 import { useRef, useState } from 'react'
 import { AlertTriangle, Check, FileText, Loader2, UploadCloud } from 'lucide-react'
 import { api } from '@/api/client'
+import { rateLimitMessage } from '@/api/rateLimit'
 import { ReaddDeclined, askReadd, withReaddConfirm } from '../../erasure/readd'
 import type { CVExtractionResultDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
@@ -49,7 +50,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
     try {
       setResult(await api.extractCv(f, false)) // preview — writes nothing
     } catch (e) {
-      setError((e as Error).message || 'Extraktion fehlgeschlagen')
+      setError(rateLimitMessage(e) ?? ((e as Error).message || 'Extraktion fehlgeschlagen'))
     } finally {
       setLoading(false)
     }
@@ -72,7 +73,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
       onCreated()
       onClose()
     } catch (e) {
-      setError((e as Error).message || t('Speichern fehlgeschlagen'))
+      setError(rateLimitMessage(e) ?? ((e as Error).message || t('Speichern fehlgeschlagen')))
       setSaving(false)
     }
   }

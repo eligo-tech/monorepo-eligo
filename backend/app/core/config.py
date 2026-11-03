@@ -117,6 +117,14 @@ class Settings(BaseSettings):
     mcp_resource_url: str = "http://localhost:8000/mcp"
     #: Tool calls per user per minute. In-process: correct for one instance.
     mcp_rate_limit_per_minute: int = 60
+    #: Every authenticated REST request, per user per minute. Generous: a
+    #: cockpit page fans out a dozen calls; this stops a runaway script, not
+    #: a recruiter. 0 switches it off.
+    rest_rate_limit_per_minute: int = 600
+    #: Routes that pay an LLM per call (CV / transcript extraction, job-advert
+    #: parsing), per user per minute. A saved CV costs two (preview + save),
+    #: so 30 is ~15 CVs a minute. 0 switches it off.
+    ai_rate_limit_per_minute: int = 30
 
     # --- Information hub (public-source ingestion) -----------------------
     # Identify the crawler honestly: Nominatim and most public APIs require a
