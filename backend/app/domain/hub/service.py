@@ -27,6 +27,7 @@ import base64
 import hashlib
 import html
 import json
+import time
 import uuid
 
 from sqlalchemy import Select, and_, case, func, literal, or_, select, update
@@ -1535,6 +1536,14 @@ async def _search_candidates(
 #: slower AND less useful. Title and occupation still apply, so the term is never
 #: ignored — only its weakest evidence is.
 _AD_TEXT_HIT_CAP = 21_000
+#: Terms a real count found over the cap, with when that verdict expires.
+#: Over the cap the ad-text arm is dropped, so re-matching only re-pays for a
+#: result that is thrown away — 1.3 s for "sap" on production (2026-11-03).
+#: In-process and for a day: the corpus only grows overnight, and a term this
+#: common does not fall back under 21,000 in a night. Postgres's own estimate
+#: cannot replace the count — it said 48 rows for terms with 3,560–14,015.
+_TOO_COMMON: dict[str, float] = {}
+_TOO_COMMON_TTL_SECONDS = 24 * 3600
 
 
 async def _description_hits(session: AsyncSession, term: str) -> list | None:
@@ -1558,13 +1567,20 @@ async def _description_hits(session: AsyncSession, term: str) -> list | None:
     memo: dict = session.info.setdefault("hub_description_hits", {})
     if term in memo:
         return memo[term]
+    if _TOO_COMMON.get(term, 0.0) > time.monotonic():
+        memo[term] = None
+        return None
     result = await session.execute(
         select(HubPostingPayload.hub_job_posting_id)
         .where(func.lower(HubPostingPayload.description).like(f"%{term}%"))
         .limit(_AD_TEXT_HIT_CAP + 1)
     )
     ids = list(result.scalars().all())
-    memo[term] = None if len(ids) > _AD_TEXT_HIT_CAP else ids
+    if len(ids) > _AD_TEXT_HIT_CAP:
+        _TOO_COMMON[term] = time.monotonic() + _TOO_COMMON_TTL_SECONDS
+        memo[term] = None
+    else:
+        memo[term] = ids
     return memo[term]
 
 
