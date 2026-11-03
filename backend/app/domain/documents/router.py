@@ -36,6 +36,10 @@ async def extract_cv(
         default=False,
         description="If true, create a candidate from the accepted fields and record receipts.",
     ),
+    override_suppression: bool = Query(
+        default=False,
+        description="The person was erased here on request and has come back of their own accord.",
+    ),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> CVExtractionResult:
@@ -61,6 +65,7 @@ async def extract_cv(
             content=content,
             tenant_id=tenant_id,
             persist=persist,
+            override_suppression=override_suppression,
         )
     except PreconditionFailed as exc:
         # A blocking pre/postcondition did not hold — reject rather than write.

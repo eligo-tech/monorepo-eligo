@@ -26,6 +26,7 @@ from app.domain.notices.router import router as notices_router
 from app.domain.pipeline.router import router as pipeline_router
 from app.domain.projects.router import router as projects_router
 from app.domain.proposals.router import router as proposals_router
+from app.domain.erasure.router import router as erasure_router
 from app.domain.reporting.router import router as reporting_router
 from app.domain.searches.router import router as searches_router
 from app.domain.verification.router import router as verification_router
@@ -74,5 +75,6 @@ api_router.include_router(matching_router)
 api_router.include_router(notices_router)
 api_router.include_router(reporting_router)
 api_router.include_router(proposals_router)
+api_router.include_router(erasure_router)
 api_router.include_router(searches_router)
 api_router.include_router(verification_router)

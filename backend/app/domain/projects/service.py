@@ -452,6 +452,12 @@ async def add_contact(
     )
     if membership is None:
         raise ValueError("company is not in this project")
+    # Before adopting anything: a refused contact must leave nothing behind.
+    from app.domain.erasure import service as erasure
+
+    await erasure.guard_readd(
+        session, tenant_id=tenant_id, email=payload.email, override=payload.override_suppression
+    )
 
     adopted, _ = await _adopted_and_contacts(
         session, tenant_id=tenant_id, hub_company_ids=[hub_company_id]

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import api_router
 from app.core.config import settings
@@ -18,6 +19,7 @@ from app.core.auth import assert_auth_configured
 from app.core.database import assert_runtime_rls_enforced, create_all
 from app.core.logging import configure_logging, get_logger
 from app.core.observability import configure_error_reporting
+from app.domain.erasure import service as _erasure
 from app.mcp import server as mcp_server
 
 logger = get_logger(__name__)
@@ -72,6 +74,37 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.api_v1_prefix)
+
+
+# Erasure (GDPR Art. 17/21) answers the same way from every endpoint that can
+# create a person, so it is mapped here once rather than in each router.
+
+
+@app.exception_handler(_erasure.Suppressed)
+async def _suppressed(_: Request, exc: _erasure.Suppressed) -> JSONResponse:
+    # The date the person asked, never their address: the caller typed it, and
+    # an error body ends up in logs and crash reports.
+    return JSONResponse(
+        status_code=409,
+        content={"detail": {
+            "code": "suppressed",
+            "requested_on": exc.requested_on.isoformat(),
+            "message": "Diese Person hat die Löschung ihrer Daten verlangt. Nur anlegen, "
+                       "wenn sie sich seitdem selbst wieder gemeldet hat.",
+        }},
+    )
+
+
+@app.exception_handler(_erasure.NotConfigured)
+async def _erasure_not_configured(_: Request, __: _erasure.NotConfigured) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"detail": {
+            "code": "erasure_not_configured",
+            "message": "Löschung ist auf diesem Server nicht eingerichtet "
+                       "(ELIGO_SUPPRESSION_KEY fehlt).",
+        }},
+    )
 
 
 @app.get("/", tags=["system"])

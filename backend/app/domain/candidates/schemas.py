@@ -79,6 +79,9 @@ class CandidateBase(BaseModel):
 class CandidateCreate(CandidateBase):
     tenant_id: uuid.UUID | None = None
     merged_identities: list[str] = Field(default_factory=list)
+    #: The person was erased here on request and has since come back of their
+    #: own accord. Without it, adding someone erased is refused (409).
+    override_suppression: bool = False
 
 
 class CandidateUpdate(BaseModel):
@@ -90,6 +93,10 @@ class CandidateUpdate(BaseModel):
     1.0), so the edit leaves an append-only receipt + ``EnrichmentRecord`` —
     the value stays as auditable as an agent-proposed one.
     """
+
+    #: Setting an address of someone erased here is refused (409) unless they
+    #: came back of their own accord.
+    override_suppression: bool = False
 
     #: The ``updated_at`` the editor was opened on, echoed back so the server
     #: can tell a fresh edit from one written against a record somebody else

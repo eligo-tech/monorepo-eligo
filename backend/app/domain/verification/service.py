@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from sqlalchemy import desc, select, text
+from sqlalchemy import desc, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +31,7 @@ from app.core.config import settings
 from app.core.context import current_actor_var
 from app.core.logging import get_logger
 from app.domain.common.enums import ReceiptAction
-from app.domain.verification.models import EnrichmentRecord, Receipt
+from app.domain.verification.models import BLACKOUT_SUMMARY, EnrichmentRecord, Receipt
 from app.domain.verification.schemas import (
     CommitResult,
     EnrichmentRecordRead,
@@ -413,6 +413,72 @@ async def list_receipts(
     return list(result.scalars().all())
 
 
+def _as_uuid_str(value: object) -> str:
+    """SQLite returns a UUID column read through raw SQL as 32 hex digits."""
+    try:
+        return str(uuid.UUID(str(value)))
+    except ValueError:
+        return str(value)
+
+
+async def erase_receipts(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    receipt_ids: list[uuid.UUID],
+    request_id: uuid.UUID,
+    subject_type: str,
+    actor_user_id: str | None = None,
+    actor_name: str | None = None,
+) -> Receipt:
+    """Black out these receipts for an erasure, and record that it happened.
+
+    Appends one ERASE receipt listing every receipt it blacks out with that
+    receipt's hash — references only — then replaces each one's summary and
+    payload with the marker. The database trigger refuses the update unless
+    that ERASE receipt exists and lists the row; `verify_chain` checks the
+    same licence. Already blacked-out receipts are skipped.
+    """
+    rows = (
+        await session.execute(
+            select(Receipt.id, Receipt.receipt_hash).where(
+                Receipt.tenant_id == tenant_id,
+                Receipt.id.in_(receipt_ids),
+                Receipt.summary != BLACKOUT_SUMMARY,
+            )
+        )
+    ).all()
+    redacted = {str(rid): rhash for rid, rhash in rows}
+    erase = await append_receipt(
+        session,
+        tenant_id=tenant_id,
+        agent="erasure",
+        action=ReceiptAction.ERASE,
+        subject_type="erasure_request",
+        subject_id=str(request_id),
+        verified=True,
+        summary=f"erasure of a {subject_type}: {len(redacted)} receipt(s) blacked out",
+        payload={"request_id": str(request_id), "subject_type": subject_type, "redacted": redacted},
+        actor_user_id=actor_user_id,
+        actor_name=actor_name,
+    )
+    await session.flush()
+    for rid, _ in rows:
+        await session.execute(
+            update(Receipt)
+            .where(Receipt.tenant_id == tenant_id, Receipt.id == rid)
+            # `updated_at` set to itself: its onupdate would otherwise change
+            # it, and the trigger refuses any column other than these two.
+            .values(
+                summary=BLACKOUT_SUMMARY,
+                payload={"erased_by": str(erase.id)},
+                updated_at=Receipt.updated_at,
+            )
+            .execution_options(synchronize_session=False)
+        )
+    return erase
+
+
 async def verify_chain(
     session: AsyncSession, *, tenant_id: uuid.UUID
 ) -> tuple[bool, str]:
@@ -422,9 +488,41 @@ async def verify_chain(
         .where(Receipt.tenant_id == tenant_id)
         .order_by(Receipt.chain_index)
     )
+    receipts = list(result.scalars().all())
+    # Every receipt an erasure was allowed to black out, with the hash it had.
+    # Built first: an ERASE receipt comes after the receipts it names.
+    #
+    # The app role can append receipts, so it could write an ERASE receipt
+    # for itself; the trigger cannot tell. What it cannot also do invisibly
+    # is the request log: an ERASE receipt counts only when the
+    # `erasure_requests` row it names points back at it (that table is
+    # insert-only for the app role). An ERASE receipt nobody asked for is
+    # reported as tampering, whether or not it blacked anything out.
+    backing = {
+        (_as_uuid_str(rid), _as_uuid_str(eid))
+        for rid, eid in (
+            await session.execute(
+                text(
+                    "SELECT id, erase_receipt_id FROM erasure_requests "
+                    "WHERE tenant_id = :t AND erase_receipt_id IS NOT NULL"
+                ),
+                {"t": tenant_id if settings.is_postgres else tenant_id.hex},
+            )
+        ).all()
+    }
+    licensed: dict[str, dict] = {}
+    for r in receipts:
+        if r.action != ReceiptAction.ERASE.value:
+            continue
+        redacted = (r.payload or {}).get("redacted")
+        if not isinstance(redacted, dict):
+            return False, f"erase receipt {r.id} has a malformed licence"
+        if (_as_uuid_str(r.subject_id), str(r.id)) not in backing:
+            return False, f"erase receipt {r.id} is not backed by an erasure request"
+        licensed[str(r.id)] = redacted
     prev: str | None = None
     expected_index = 0
-    for receipt in result.scalars().all():
+    for receipt in receipts:
         # A gap means a receipt was removed. The hash chain alone would not
         # notice: deleting a row and re-pointing its successor is detectable,
         # but a contiguous sequence is what proves nothing was quietly dropped.
@@ -435,6 +533,21 @@ async def verify_chain(
                 f"(next receipt is {receipt.chain_index})",
             )
         expected_index += 1
+        if receipt.summary == BLACKOUT_SUMMARY:
+            # Its content is gone, so its hash cannot be recomputed. It passes
+            # only if an ERASE receipt licensed exactly this row with exactly
+            # this hash — the marker alone proves nothing. The links are
+            # checked as for every row.
+            erased_by = (receipt.payload or {}).get("erased_by")
+            if (
+                receipt.payload != {"erased_by": erased_by}
+                or licensed.get(str(erased_by), {}).get(str(receipt.id)) != receipt.receipt_hash
+            ):
+                return False, f"receipt {receipt.id} is blacked out without a matching erasure"
+            if receipt.prev_hash != prev:
+                return False, f"chain broken at receipt {receipt.id}"
+            prev = receipt.receipt_hash
+            continue
         expected = _hash_receipt(
             receipt_id=receipt.id,
             tenant_id=receipt.tenant_id,

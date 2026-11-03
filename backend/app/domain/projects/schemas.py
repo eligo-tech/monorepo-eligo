@@ -111,5 +111,7 @@ class AddContactRequest(BaseModel):
     email: str | None = None
     phone: str | None = None
     linkedin_url: str | None = Field(default=None, max_length=300)
+    #: Erased here on request and since come back of their own accord.
+    override_suppression: bool = False
     source: ConfidenceSource = ConfidenceSource.PUBLIC_WEB
     source_detail: str | None = Field(default=None, max_length=500)

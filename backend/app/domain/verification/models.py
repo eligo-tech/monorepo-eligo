@@ -159,15 +159,46 @@ class EnrichmentRecord(Base, IDMixin, TenantMixin, TimestampMixin):
 #
 # Note the function body is dollar-quoted and contains its own semicolons,
 # which is why this is an explicit tuple rather than a `split(";")`.
-_PG_APPEND_ONLY = (
-    """
+#: What an erased receipt's summary becomes. Its payload becomes exactly
+#: {"erased_by": "<ERASE receipt id>"}; nothing else about the row changes.
+BLACKOUT_SUMMARY = "[gelöscht — Löschantrag, DSGVO Art. 17]"
+
+# The ONE update the trigger lets through: an erasure blacking out a receipt.
+# The licence is not a flag or a role — it is an ERASE receipt in the same
+# workspace that lists this receipt, which is itself append-only and chained.
+# Every other column (hash included) must be unchanged, and an already
+# blacked-out row cannot be touched again. Migration 0050 installs the same
+# function on existing databases; `tests/test_receipt_blackout.py` keeps the
+# two identical.
+PG_APPEND_ONLY_FUNCTION = f"""
     CREATE OR REPLACE FUNCTION receipts_are_append_only()
     RETURNS trigger AS $$
     BEGIN
+        IF TG_OP = 'UPDATE'
+           AND OLD.action <> 'erase'
+           AND OLD.summary <> '{BLACKOUT_SUMMARY}'
+           AND NEW.summary = '{BLACKOUT_SUMMARY}'
+           AND NEW.payload::jsonb = jsonb_build_object(
+                   'erased_by', NEW.payload::jsonb ->> 'erased_by')
+           AND (to_jsonb(NEW) - 'summary' - 'payload')
+             = (to_jsonb(OLD) - 'summary' - 'payload')
+           AND EXISTS (
+                 SELECT 1 FROM receipts e
+                  WHERE e.id::text = NEW.payload::jsonb ->> 'erased_by'
+                    AND e.tenant_id = OLD.tenant_id
+                    AND e.action = 'erase'
+                    AND jsonb_typeof(e.payload::jsonb -> 'redacted') = 'object'
+                    AND (e.payload::jsonb -> 'redacted') ? OLD.id::text)
+        THEN
+            RETURN NEW;
+        END IF;
         RAISE EXCEPTION 'receipts are append-only: % is not permitted', TG_OP;
     END;
     $$ LANGUAGE plpgsql
-    """,
+    """
+
+_PG_APPEND_ONLY = (
+    PG_APPEND_ONLY_FUNCTION,
     "DROP TRIGGER IF EXISTS receipts_no_update ON receipts",
     "DROP TRIGGER IF EXISTS receipts_no_delete ON receipts",
     "CREATE TRIGGER receipts_no_update BEFORE UPDATE ON receipts "
@@ -176,8 +207,33 @@ _PG_APPEND_ONLY = (
     "FOR EACH ROW EXECUTE FUNCTION receipts_are_append_only()",
 )
 
+# SQLite stores a UUID as 32 hex characters and the payload as JSON text, so
+# the ids are compared with the dashes removed.
+_SQLITE_BLACKOUT_ALLOWED = f"""
+    OLD.action <> 'erase'
+    AND OLD.summary <> '{BLACKOUT_SUMMARY}'
+    AND NEW.summary = '{BLACKOUT_SUMMARY}'
+    AND json_extract(NEW.payload, '$.erased_by') IS NOT NULL
+    AND (SELECT count(*) FROM json_each(NEW.payload)) = 1
+    AND NEW.id IS OLD.id AND NEW.tenant_id IS OLD.tenant_id
+    AND NEW.created_at IS OLD.created_at AND NEW.updated_at IS OLD.updated_at
+    AND NEW.chain_index IS OLD.chain_index AND NEW.agent IS OLD.agent
+    AND NEW.action IS OLD.action AND NEW.subject_type IS OLD.subject_type
+    AND NEW.subject_id IS OLD.subject_id AND NEW.verified IS OLD.verified
+    AND NEW.actor_user_id IS OLD.actor_user_id AND NEW.actor_name IS OLD.actor_name
+    AND NEW.prev_hash IS OLD.prev_hash AND NEW.receipt_hash IS OLD.receipt_hash
+    AND EXISTS (
+        SELECT 1 FROM receipts e, json_each(e.payload, '$.redacted') j
+         WHERE json_type(e.payload, '$.redacted') = 'object'
+           AND e.id = replace(json_extract(NEW.payload, '$.erased_by'), '-', '')
+           AND e.tenant_id = OLD.tenant_id
+           AND e.action = 'erase'
+           AND replace(j.key, '-', '') = OLD.id)
+"""
+
 _SQLITE_APPEND_ONLY = (
     "CREATE TRIGGER IF NOT EXISTS receipts_no_update BEFORE UPDATE ON receipts "
+    f"WHEN NOT ({_SQLITE_BLACKOUT_ALLOWED}) "
     "BEGIN SELECT RAISE(ABORT, 'receipts are append-only'); END",
     "CREATE TRIGGER IF NOT EXISTS receipts_no_delete BEFORE DELETE ON receipts "
     "BEGIN SELECT RAISE(ABORT, 'receipts are append-only'); END",
