@@ -1552,13 +1552,20 @@ async def _description_hits(session: AsyncSession, term: str) -> list | None:
     cap + 1 so one row past the cliff is enough to know we are past it — the
     150,479 rows holding "und" are never fetched.
     """
+    # Memoised on the session — one request. The result page and its total
+    # both ask, and the match is the expensive half of a search: 1.29–1.40 s
+    # for "sap" on production (2026-11-03), paid twice before this.
+    memo: dict = session.info.setdefault("hub_description_hits", {})
+    if term in memo:
+        return memo[term]
     result = await session.execute(
         select(HubPostingPayload.hub_job_posting_id)
         .where(func.lower(HubPostingPayload.description).like(f"%{term}%"))
         .limit(_AD_TEXT_HIT_CAP + 1)
     )
     ids = list(result.scalars().all())
-    return None if len(ids) > _AD_TEXT_HIT_CAP else ids
+    memo[term] = None if len(ids) > _AD_TEXT_HIT_CAP else ids
+    return memo[term]
 
 
 def _role_match(
