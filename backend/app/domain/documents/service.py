@@ -227,6 +227,11 @@ async def extract_cv(
     agent = DocumentExtractionAgent()
     candidate_id: uuid.UUID | None = None
     accepted = _accepted(extracted)
+    from app.domain.erasure import service as erasure
+
+    suppressed_on = await erasure.suppressed_on(
+        session, tenant_id=tenant_id, email=accepted.get("email")
+    )
 
     # ── Postconditions over the result (checks on real values, not model text).
     post_checks = list(gate.POSTCONDITIONS)
@@ -314,6 +319,7 @@ async def extract_cv(
         notes=notes,
         candidate_id=candidate_id,
         text_chars=len(text),
+        suppressed_on=suppressed_on,
     )
 
 

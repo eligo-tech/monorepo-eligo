@@ -421,6 +421,8 @@ function AdoptDialog({
   const [source, setSource] = useState('self_reported')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Adopted, but the contact sent along was not stored (erased here).
+  const [dropped, setDropped] = useState<AdoptResultDTO | null>(null)
 
   const submit = async () => {
     setBusy(true)
@@ -438,6 +440,12 @@ function AdoptDialog({
             }
           : null,
       )
+      // A contact was sent but not stored: they asked to be erased here. The
+      // company is adopted; say so instead of letting the name vanish.
+      if (name.trim() && result.manager_id === null) {
+        setDropped(result)
+        return
+      }
       onAdopted(result)
     } catch (e) {
       setError(
@@ -505,12 +513,25 @@ function AdoptDialog({
         </div>
 
         {error && <p className="text-[13px] text-coral-400">{error}</p>}
+        {dropped && (
+          <p role="alert" className="text-[13px] text-gold-300">
+            {t('Unternehmen übernommen. Der Kontakt wurde nicht angelegt: Diese Person hat die Löschung ihrer Daten verlangt.')}
+          </p>
+        )}
 
         <div className="flex justify-end gap-2">
+          {dropped ? (
+            <Button tone="primary" onClick={() => onAdopted(dropped)}>
+              {t('Schließen')}
+            </Button>
+          ) : (
+          <>
           <Button onClick={onClose}>{t('Abbrechen')}</Button>
           <Button tone="primary" onClick={submit} disabled={busy}>
             {busy ? t('Übernimmt…') : t('Übernehmen')}
           </Button>
+          </>
+          )}
         </div>
       </Panel>
     </div>

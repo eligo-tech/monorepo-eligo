@@ -81,9 +81,17 @@ function EraseDialog({
   const finish = () => (done ? onErased() : onClose())
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !busy && finish()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Capture phase, and stopped: Escape must not also close the drawer
+    // underneath — mid-request that would unmount this dialog and the list
+    // would keep showing a person who is already erased.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      if (!busy) finish()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   })
 
   const submit = async () => {

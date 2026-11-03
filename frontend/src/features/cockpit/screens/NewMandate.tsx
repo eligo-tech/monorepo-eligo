@@ -308,6 +308,9 @@ export function NewMandate({
       let client = companyId
       if (!client && newClient) {
         client = (await api.createCompany({ name: newClient })).id
+        // Kept at once: if the contact below is refused (an erased person,
+        // a failure), saving again must not create this client a second time.
+        setCompanyId(client)
       }
 
       let contact = managerId

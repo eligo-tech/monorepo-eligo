@@ -974,6 +974,7 @@ export const EN: Record<string, string> = {
   'ungefiltert': 'unfiltered',
   'Unternehmen': 'Companies',
   'Unternehmen nach Zusammenfassung der Standorte': 'Companies after merging their sites',
+  'Unternehmen übernommen. Der Kontakt wurde nicht angelegt: Diese Person hat die Löschung ihrer Daten verlangt.': 'Company adopted. The contact was not added: this person asked for their data to be erased.',
   'USt-IdNr': 'VAT ID',
   'Veranstaltung': 'Event',
   'Verbundene Systeme': 'Connected systems',

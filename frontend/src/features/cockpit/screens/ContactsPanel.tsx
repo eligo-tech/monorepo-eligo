@@ -14,7 +14,7 @@ import { t } from '@/i18n'
 import { useState } from 'react'
 import { Check, ChevronDown, ExternalLink, Mail, Phone, UserPlus } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
-import { withReaddConfirm } from '../erasure/readd'
+import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 import type { CompanyContactsDTO, ContactCandidateDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
@@ -96,8 +96,8 @@ function ContactRow({
     setError(null)
     try {
       await onSave(contact)
-    } catch {
-      setError(t('Übernahme fehlgeschlagen.'))
+    } catch (e) {
+      setError(e instanceof ReaddDeclined ? e.message : t('Übernahme fehlgeschlagen.'))
     } finally {
       setSaving(false)
     }
@@ -263,6 +263,12 @@ export function ContactsPanel({
       try {
         const adopted = await api.adoptHubCompany(company.hub_company_id, person)
         onAdopted(adopted.company_id)
+        // The company is in; the person was not — they asked to be erased
+        // here. No Art. 14 notice is owed for someone who was not stored.
+        if (adopted.manager_id === null) {
+          setReloadKey((k) => k + 1)
+          throw new ReaddDeclined()
+        }
       } catch (e) {
         if (!(e instanceof ApiError && e.status === 409)) throw e
         // Adopted meanwhile (another tab, another site of the employer):

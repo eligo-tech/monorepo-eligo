@@ -248,7 +248,8 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
 /** Locks background scroll and closes on Escape — shared by Drawer and Modal. */
 function useOverlay(onClose: () => void) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    // `defaultPrevented`: a dialog on top already handled this Escape.
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !e.defaultPrevented && onClose()
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'

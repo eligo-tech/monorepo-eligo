@@ -6,7 +6,7 @@ import datetime as dt
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class EraseRequest(BaseModel):
@@ -15,6 +15,15 @@ class EraseRequest(BaseModel):
     reason: Literal["erasure", "objection"] = "erasure"
     #: The day the person asked.
     requested_on: dt.date
+
+    @field_validator("requested_on")
+    @classmethod
+    def _not_in_the_future(cls, value: dt.date) -> dt.date:
+        # One day of slack: just after midnight in Berlin it is still
+        # yesterday in UTC, and the other way round.
+        if value > dt.datetime.now(dt.UTC).date() + dt.timedelta(days=1):
+            raise ValueError("requested_on cannot be in the future")
+        return value
 
 
 class ErasureRequestRead(BaseModel):

@@ -13,17 +13,23 @@ export function ReaddHost() {
   const [asking, setAsking] = useState<string | null>(null)
   const answer = useRef<((yes: boolean) => void) | null>(null)
 
-  useEffect(
-    () =>
-      registerReaddAsker(
-        (requestedOn) =>
-          new Promise<boolean>((resolve) => {
-            answer.current = resolve
-            setAsking(requestedOn)
-          }),
-      ),
-    [],
-  )
+  useEffect(() => {
+    const unregister = registerReaddAsker(
+      (requestedOn) =>
+        new Promise<boolean>((resolve) => {
+          // A second question while one is open: the first is answered "no"
+          // rather than left waiting for ever.
+          answer.current?.(false)
+          answer.current = resolve
+          setAsking(requestedOn)
+        }),
+    )
+    return () => {
+      unregister()
+      answer.current?.(false)
+      answer.current = null
+    }
+  }, [])
 
   const close = (yes: boolean) => {
     answer.current?.(yes)
@@ -33,9 +39,16 @@ export function ReaddHost() {
 
   useEffect(() => {
     if (!asking) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close(false)
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Capture phase, and stopped: Escape answers THIS dialog only — it must
+    // not also close the form underneath and throw away what was typed.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      close(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [asking])
 
   if (!asking) return null

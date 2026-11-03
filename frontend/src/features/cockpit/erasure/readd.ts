@@ -26,6 +26,12 @@ export function registerReaddAsker(fn: Ask): () => void {
   }
 }
 
+/** Ask directly — for a screen that already knows (the CV preview flags the
+ *  address) and should ask BEFORE writing anything. No dialog means no. */
+export function askReadd(requestedOn: string): Promise<boolean> {
+  return asker ? asker(requestedOn) : Promise.resolve(false)
+}
+
 export class ReaddDeclined extends Error {
   constructor() {
     super(t('Nicht angelegt: Diese Person hat die Löschung ihrer Daten verlangt.'))

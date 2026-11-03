@@ -579,6 +579,8 @@ export interface CVExtractionResultDTO {
   notes: string[]
   candidate_id: string | null
   text_chars: number
+  /** The extracted address belongs to someone erased here: the day they asked. */
+  suppressed_on?: string | null
 }
 /** The ad that names a contact, and the line that does. */
 export interface ContactEvidenceDTO {

@@ -9,7 +9,7 @@ import { t } from '@/i18n'
 import { useRef, useState } from 'react'
 import { AlertTriangle, Check, FileText, Loader2, UploadCloud } from 'lucide-react'
 import { api } from '@/api/client'
-import { withReaddConfirm } from '../../erasure/readd'
+import { ReaddDeclined, askReadd, withReaddConfirm } from '../../erasure/readd'
 import type { CVExtractionResultDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Button, CloseButton, Modal } from '../../ui/forms'
@@ -60,8 +60,15 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
     setSaving(true)
     setError(null)
     try {
-      // persist — creates the candidate; asks first if they asked to be erased
-      await withReaddConfirm((override) => api.extractCv(file, true, override))
+      // The preview already knows when the address belongs to someone erased
+      // here: ask BEFORE saving, so the (paid) extraction is not re-run by a
+      // refused save. The wrapper still covers a preview that could not tell.
+      let override = false
+      if (result?.suppressed_on) {
+        override = await askReadd(result.suppressed_on)
+        if (!override) throw new ReaddDeclined()
+      }
+      await withReaddConfirm((o) => api.extractCv(file, true, override || o))
       onCreated()
       onClose()
     } catch (e) {

@@ -542,3 +542,41 @@ async def test_the_log_shows_when_a_suppression_was_lifted_and_by_whom() -> None
     assert row["lifted"] == 1
     assert row["last_lifted_by"] == "R. Recruiter"
     assert row["last_lifted_at"] is not None
+
+
+async def test_the_cv_preview_says_the_address_belongs_to_someone_erased(monkeypatch) -> None:
+    """So the recruiter is asked BEFORE saving — a refused save would run the
+    (paid, nondeterministic) extraction again."""
+    from app.domain.documents import parser
+    from app.domain.documents import service as documents
+    from app.agents.document_extraction import ExtractedField
+    from app.domain.documents.extraction.base import CVSections
+
+    tenant = settings.default_tenant_id
+    await create_all()
+    email = f"{uuid.uuid4().hex}@example.org"
+    async with SessionLocal() as s:
+        p = await _person(s, tenant, "Cv Person", email, f"ext-{uuid.uuid4()}")
+        await s.commit()
+    await _erase(tenant, p["candidate"], name="Cv Person")
+    text = f"Cv Person\n{email}\nBackend Engineer\n" * 3
+    monkeypatch.setattr(parser, "pdf_to_text", lambda content: text)
+    monkeypatch.setattr(documents, "_run_extractor", lambda t: (
+        [ExtractedField(field="full_name", value="Cv Person", confidence=0.99),
+         ExtractedField(field="email", value=email.upper(), confidence=0.99)],
+        CVSections(), "fake"))
+    async with SessionLocal() as s:
+        preview = await documents.extract_cv(s, filename="cv.pdf", content=b"%PDF", tenant_id=tenant, persist=False)
+        clean = await documents.extract_cv(s, filename="cv.pdf", content=b"%PDF", tenant_id=uuid.uuid4(), persist=False)
+    assert str(preview.suppressed_on) == "2026-11-01"
+    assert clean.suppressed_on is None
+
+
+async def test_a_requested_on_date_in_the_future_is_refused() -> None:
+    cid = await _api_person("Api Person")
+    async with _client() as c:
+        resp = await c.post(f"{settings.api_v1_prefix}/erasure/candidates/{cid}",
+                            json={**BODY, "requested_on": "2099-01-01"})
+    assert resp.status_code == 422
+    async with SessionLocal() as s:
+        assert await s.get(Candidate, cid) is not None

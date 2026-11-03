@@ -357,23 +357,7 @@ async def guard_readd(
     asked to have deleted, and a re-application does not bring that back.
     Returns True when a suppression was lifted.
     """
-    if not email or not email.strip():
-        return False
-    if not await active_digests(session, tenant_id):
-        return False  # nothing erased here: no key needed, nothing to check
-    key = digest(tenant_id, "email", email)
-    rows = (
-        await session.execute(
-            select(TenantSuppression, ErasureRequest.requested_on)
-            .join(ErasureRequest, ErasureRequest.id == TenantSuppression.request_id)
-            .where(
-                TenantSuppression.tenant_id == tenant_id,
-                TenantSuppression.kind == "email",
-                TenantSuppression.digest == key,
-                TenantSuppression.lifted_at.is_(None),
-            )
-        )
-    ).all()
+    rows = await _active_email_rows(session, tenant_id, email)
     if not rows:
         return False
     if not override:
@@ -388,3 +372,35 @@ async def guard_readd(
         row.lifted_by_name = getattr(actor, "name", None)
     await session.flush()
     return True
+
+
+async def suppressed_on(
+    session: AsyncSession, *, tenant_id: uuid.UUID, email: str | None
+) -> dt.date | None:
+    """The day this address's owner asked to be erased here, or None. For a
+    preview that must ask BEFORE anything is written; never raises."""
+    try:
+        rows = await _active_email_rows(session, tenant_id, email)
+    except NotConfigured:
+        return None  # the save itself will say so (503)
+    return max(on for _, on in rows) if rows else None
+
+
+async def _active_email_rows(session: AsyncSession, tenant_id: uuid.UUID, email: str | None) -> list:
+    if not email or not email.strip():
+        return []
+    if not await active_digests(session, tenant_id):
+        return []  # nothing erased here: no key needed, nothing to check
+    key = digest(tenant_id, "email", email)
+    return (
+        await session.execute(
+            select(TenantSuppression, ErasureRequest.requested_on)
+            .join(ErasureRequest, ErasureRequest.id == TenantSuppression.request_id)
+            .where(
+                TenantSuppression.tenant_id == tenant_id,
+                TenantSuppression.kind == "email",
+                TenantSuppression.digest == key,
+                TenantSuppression.lifted_at.is_(None),
+            )
+        )
+    ).all()

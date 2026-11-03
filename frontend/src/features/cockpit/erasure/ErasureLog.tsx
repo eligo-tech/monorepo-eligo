@@ -41,7 +41,9 @@ export function ErasureLog({ admin }: { admin: boolean }) {
   if (failed) {
     return <Panel className="px-6 py-5 text-[13px] text-coral-300">{t('Löschanträge konnten nicht geladen werden.')}</Panel>
   }
-  if (rows === null) return null
+  if (rows === null) {
+    return <Panel className="px-6 py-5 text-[13px] text-cockpit-faint">{t('Lädt…')}</Panel>
+  }
   if (rows.length === 0) {
     return (
       <Panel className="px-6 py-5 text-[13px] text-cockpit-dim">
