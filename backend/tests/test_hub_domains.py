@@ -65,7 +65,9 @@ def test_a_domain_named_like_a_known_employer_is_flagged_as_the_client() -> None
     ranked = domain_candidates(
         [("p1", "Infos unter https://www.autobahn.de/karriere")],
         firm_names=["Die Autobahn GmbH des Bundes"],
-        employer_names={"autobahn"},
+        # As the corpus stores it: "Die Autobahn GmbH des Bundes" → "die autobahn …";
+        # the employer row for the client is "die autobahn".
+        employer_names={"die autobahn"},
     )
     assert ranked[0]["domain"] == "autobahn.de"
     assert ranked[0]["likely_client"] is True
@@ -81,3 +83,50 @@ def test_at_most_three_candidates_and_three_example_ads() -> None:
 def test_one_ad_counts_once_per_domain() -> None:
     ranked = domain_candidates([("p1", "a@acme.de b@acme.de https://acme.de")], firm_names=["Acme"])
     assert ranked[0]["ads"] == 1
+
+
+def test_a_sentence_glued_to_an_address_does_not_invent_a_domain() -> None:
+    assert extract_domains("Mail an info@firma.de.Wir freuen uns") == {"firma.de"}
+    assert extract_domains("Mehr auf www.firma.de.Bewerben Sie sich") == {"firma.de"}
+
+
+def test_an_address_inside_a_link_is_not_a_second_domain() -> None:
+    assert extract_domains("https://bewerbung.firma.de/apply?mail=a@other.de") == {"firma.de"}
+
+
+def test_umlaut_domains_match_the_folded_firm_name() -> None:
+    best = domain_candidates([("p1", "x@müller-personal.de")], firm_names=["Müller Personal GmbH"])[0]
+    assert best["name_match"] is True
+
+
+def test_city_and_sector_words_do_not_make_a_name_match() -> None:
+    ranked = domain_candidates(
+        [("p1", "https://www.charite-berlin.de/x"), ("p2", "https://www.pflegeheim-sonne.de")],
+        firm_names=["Berlin Pflege Plus GmbH"],
+    )
+    assert not any(c["name_match"] for c in ranked)
+
+
+def test_an_agency_that_also_hires_in_its_own_name_keeps_its_own_site() -> None:
+    ranked = domain_candidates(
+        [("p1", "x@zebrafink.de")],
+        firm_names=["Zebrafink Personal GmbH"],
+        employer_names={"zebrafink"},
+        own_names={"zebrafink", "zebrafink personal"},
+    )
+    assert ranked[0]["likely_client"] is False
+
+
+def test_a_chain_with_thousands_of_ads_keeps_three_examples_and_the_count() -> None:
+    ranked = domain_candidates([(f"p{i}", "x@chain-personal.de") for i in range(5000)], firm_names=["Chain Personal"])
+    assert ranked[0]["ads"] == 5000 and len(ranked[0]["posting_ids"]) == 3
+
+
+def test_a_domain_spelling_the_whole_firm_name_matches_even_if_short_or_generic() -> None:
+    # From the T0 sample: both are the agencies' own sites.
+    assert domain_candidates([("p", "x@dis-ag.com")], firm_names=["DIS AG Germany"])[0]["name_match"]
+    assert domain_candidates([("p", "x@bbrecruiting.de")], firm_names=["BBRecruiting Personalberatung"])[0]["name_match"]
+
+
+def test_a_firm_named_after_its_city_does_not_own_the_citys_domain() -> None:
+    assert not domain_candidates([("p", "https://www.berlin.de/x")], firm_names=["Berlin Personal GmbH"])[0]["name_match"]

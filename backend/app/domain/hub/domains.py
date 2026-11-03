@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 
 from app.domain.hub.agency_rank import STAFFING_NAME as _STAFFING_NAME
-from app.domain.hub.resolution import normalize_company_name
+from app.domain.hub.resolution import fold_umlauts, normalize_company_name
 
 #: Candidates kept per agency, and example ads per candidate.
 MAX_CANDIDATES = 3
@@ -27,6 +27,23 @@ MAX_EXAMPLES = 3
 
 _EMAIL = re.compile(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)")
 _URL = re.compile(r"(?:https?://|\bwww\.)([\w-]+(?:\.[\w-]+)+)", re.IGNORECASE)
+#: A whole link, so an address in its query string is not read as a second
+#: domain ("…/apply?mail=a@other.de").
+_WHOLE_URL = re.compile(r"(?:https?://|\bwww\.)\S+", re.IGNORECASE)
+
+#: Top-level domains an ad in this corpus links to. A trailing label that is
+#: not one is the next sentence glued on — "info@firma.de.Wir freuen uns" must
+#: give firma.de, not "de.wir". Closed on purpose: an unknown TLD drops a
+#: candidate, which is cheaper than showing an invented one.
+_TLDS = {
+    "de", "com", "net", "org", "eu", "info", "biz", "at", "ch", "li", "lu", "nl",
+    "be", "fr", "it", "es", "pt", "pl", "cz", "sk", "hu", "dk", "se", "no", "fi",
+    "uk", "ie", "us", "io", "co", "ai", "me", "tv", "cc", "jobs", "online",
+    "digital", "team", "work", "works", "careers", "career", "agency", "expert",
+    "experts", "consulting", "solutions", "services", "group", "gmbh", "berlin",
+    "hamburg", "koeln", "cologne", "bayern", "nrw", "ruhr", "saarland", "global",
+    "network", "partners", "health", "care", "tech", "app", "dev", "world",
+}
 
 #: Two-label public suffixes this corpus actually meets.
 _MULTI_SUFFIX = {
@@ -62,8 +79,19 @@ _NOT_A_FIRM = {
 }
 
 #: Words too generic to tie a domain to a firm ("Personal Partner GmbH" must
-#: not claim personalwerk.de).
-_GENERIC = re.compile(r"^(?:gruppe|group|service|services|partner|management|solutions|deutschland|germany|holding|international)$")
+#: not claim personalwerk.de, "Berlin Pflege Plus" must not claim
+#: charite-berlin.de): structure words, sectors, and the places a firm sits in.
+_GENERIC = re.compile(
+    r"^(?:gruppe|group|service|services|partner|partners|management|solutions|"
+    r"deutschland|germany|holding|international|europe|europa|plus|more|team|"
+    r"work|staff|pflege|care|medical|medizin|health|gesundheit|technik|tech|"
+    r"engineering|industrie|industry|logistik|office|consult|digital|"
+    r"berlin|hamburg|muenchen|koeln|frankfurt|stuttgart|duesseldorf|dortmund|"
+    r"essen|leipzig|bremen|dresden|hannover|nuernberg|duisburg|bochum|wuppertal|"
+    r"bielefeld|bonn|muenster|mannheim|karlsruhe|augsburg|wiesbaden|kiel|"
+    r"sachsen|bayern|hessen|thueringen|brandenburg|niedersachsen|westfalen|"
+    r"rhein|ruhr|nord|sued|west|ost|mitte|rheinland|pfalz|baden|wuerttemberg)$"
+)
 
 
 def registrable_domain(host: str | None) -> str | None:
@@ -73,7 +101,9 @@ def registrable_domain(host: str | None) -> str | None:
     labels = [p for p in host.lower().strip(".").split(".") if p]
     if labels and labels[0] == "www":
         labels = labels[1:]
-    if len(labels) < 2 or not labels[-1].isalpha() or len(labels[-1]) < 2:
+    while labels and labels[-1] not in _TLDS:  # a glued-on next sentence
+        labels = labels[:-1]
+    if len(labels) < 2:
         return None
     take = 3 if ".".join(labels[-2:]) in _MULTI_SUFFIX and len(labels) >= 3 else 2
     return ".".join(labels[-take:])
@@ -83,7 +113,7 @@ def extract_domains(text: str | None) -> set[str]:
     """Every registrable domain an ad text names in an address or a link."""
     if not text:
         return set()
-    hosts = _EMAIL.findall(text) + _URL.findall(text)
+    hosts = _URL.findall(text) + _EMAIL.findall(_WHOLE_URL.sub(" ", text))
     return {d for h in hosts if (d := registrable_domain(h))}
 
 
@@ -96,7 +126,15 @@ def _usable(domain: str) -> bool:
 
 
 def _squash(value: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", value)
+    return re.sub(r"[^a-z0-9]", "", fold_umlauts(value).lower())
+
+
+_ARTICLE = re.compile(r"^(?:die|der|das|the)\s+")
+
+
+def _name_key(name: str) -> str:
+    """A company name as a domain label would spell it: "die autobahn" → "autobahn"."""
+    return _squash(_ARTICLE.sub("", name))
 
 
 def _firm_tokens(names: list[str]) -> set[str]:
@@ -120,6 +158,7 @@ def domain_candidates(
     *,
     firm_names: list[str],
     employer_names: set[str] | None = None,
+    own_names: set[str] | None = None,
 ) -> list[dict]:
     """The agency's likely website, best first, each with its evidence.
 
@@ -127,44 +166,77 @@ def domain_candidates(
     distinctive word of the firm's name, then how many ads use it. A domain
     whose name is a known EMPLOYER's is flagged `likely_client`.
     """
-    seen: dict[str, list[str]] = {}
+    seen: dict[str, dict] = {}
     for posting_id, text in ads:
         collect(seen, posting_id, text)
-    return rank(seen, firm_names=firm_names, employer_names=employer_names)
+    return rank(seen, firm_names=firm_names, employer_names=employer_names, own_names=own_names)
 
 
-def collect(seen: dict[str, list[str]], posting_id: str, text: str | None) -> None:
-    """Add one ad's usable domains to `seen` (domain → posting ids). Streaming
-    form, so a rebuild never holds every ad text at once."""
+def collect(seen: dict[str, dict], posting_id: str, text: str | None) -> None:
+    """Add one ad's usable domains to `seen` (domain → count + first example
+    ids). Streaming and bounded, so a chain with thousands of ads costs a
+    counter, not a list."""
     for domain in extract_domains(text):
         if _usable(domain):
-            ids = seen.setdefault(domain, [])
-            if posting_id not in ids:
-                ids.append(posting_id)
+            entry = seen.setdefault(domain, {"ads": 0, "ids": []})
+            entry["ads"] += 1
+            if len(entry["ids"]) < MAX_EXAMPLES:
+                entry["ids"].append(str(posting_id))
+
+
+def _whole_names(names: list[str]) -> set[str]:
+    """The firm's name as a label would spell it in full — first word, first
+    two words — legal form included: "DIS AG Germany" → "dis", "disag"."""
+    out: set[str] = set()
+    for name in names:
+        words = [_squash(w) for w in name.split() if _squash(w)]
+        if words and not _GENERIC.match(words[0]):  # "Berlin Personal" ≠ berlin.de
+            out.add(words[0])
+            if len(words) >= 2:
+                out.add(words[0] + words[1])
+    return {w for w in out if len(w) >= 3}
+
+
+def _matches(label: str, tokens: set[str], whole: set[str] = frozenset()) -> bool:
+    """A label that spells the firm's name exactly ("dis-ag", "bbrecruiting"),
+    a firm word at the START of the label or of a hyphen part
+    ("woltersdorf-pb"), or a long word anywhere in it."""
+    if _squash(label) in whole:
+        return True
+    parts = [_squash(p) for p in label.split("-")] + [_squash(label)]
+    return any(
+        any(part.startswith(t) for part in parts) or (len(t) >= 7 and t in _squash(label))
+        for t in tokens
+    )
 
 
 def rank(
-    seen: dict[str, list[str]],
+    seen: dict[str, dict],
     *,
     firm_names: list[str],
     employer_names: set[str] | None = None,
+    own_names: set[str] | None = None,
 ) -> list[dict]:
-    """Rank collected domains — see `domain_candidates`."""
+    """Rank collected domains — see `domain_candidates`.
+
+    `employer_names` / `own_names` are normalized company names. A domain
+    spelled like an employer's name is flagged `likely_client` — unless that
+    employer is the agency itself, hiring in its own name.
+    """
     tokens = _firm_tokens(firm_names)
-    employers = employer_names or set()
+    whole = _whole_names(firm_names)
+    own = {_name_key(n) for n in (own_names or set())}
+    employers = {_name_key(n) for n in (employer_names or set())} - own
     ranked = []
-    for domain, ids in seen.items():
+    for domain, entry in seen.items():
         label = domain.split(".")[0]
-        squashed = _squash(label)
         ranked.append(
             {
                 "domain": domain,
-                "ads": len(ids),
-                "name_match": any(t in squashed for t in tokens),
-                "likely_client": label in employers
-                or label.replace("-", " ") in employers
-                or squashed in employers,
-                "posting_ids": [str(i) for i in ids[:MAX_EXAMPLES]],
+                "ads": entry["ads"],
+                "name_match": _matches(label, tokens, whole),
+                "likely_client": _squash(label) in employers,
+                "posting_ids": entry["ids"],
             }
         )
     ranked.sort(key=lambda c: (not c["name_match"], -c["ads"], c["domain"]))

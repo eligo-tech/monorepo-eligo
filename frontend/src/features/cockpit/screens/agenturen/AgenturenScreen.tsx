@@ -34,6 +34,7 @@ import {
   nothingSelected,
   reasonText,
   verdictTone,
+  websiteCandidates,
 } from './agencyCopy'
 
 const PAGE = 50
@@ -333,20 +334,15 @@ function AgencyDetail({ id, onClose }: { id: string; onClose: () => void }) {
         <h4 className="font-mono text-[12px] uppercase tracking-[0.08em] text-cockpit-faint">
           {t('Website (unbestätigt)')}
         </h4>
-        {profile.website_candidates.length === 0 ? (
+        {websiteCandidates(profile).length === 0 ? (
           <p className="text-[13px] text-cockpit-faint">{t('Keine Domain in den Anzeigentexten.')}</p>
         ) : (
           <ul className="space-y-1 text-[13px]">
-            {profile.website_candidates.map((c) => (
+            {websiteCandidates(profile).map((c) => (
               <li key={c.domain} className="flex flex-wrap items-baseline gap-2">
-                <a
-                  href={`https://${c.domain}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-cockpit-text hover:underline"
-                >
-                  {c.domain}
-                </a>
+                {/* Plain text, not a link: nobody has checked this site yet —
+                    it may be the client's, or a look-alike. PR7 verifies. */}
+                <span className="select-all font-mono text-cockpit-text">{c.domain}</span>
                 <span className="font-mono text-[12px] text-cockpit-faint">
                   {c.ads === 1 ? t('1 Anzeige') : t('{n} Anzeigen', { n: num(c.ads) })}
                 </span>

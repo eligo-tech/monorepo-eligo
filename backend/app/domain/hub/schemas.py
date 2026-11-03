@@ -14,7 +14,7 @@ from typing import Literal
 
 from urllib.parse import quote
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.domain.common.enums import ConfidenceSource
 
@@ -371,6 +371,14 @@ class DescriptionFetchRequest(BaseModel):
 
     external_ids: list[str] | None = Field(default=None, min_length=1, max_length=25)
     segment: Literal["employer", "private_recruiter"] | None = None
+
+    @model_validator(mode="after")
+    def _scoped(self) -> "DescriptionFetchRequest":
+        # A body that names no scope is a caller bug (it meant "these ids" and
+        # sent none) — refuse it rather than start a backlog pass.
+        if self.external_ids is None and self.segment is None:
+            raise ValueError("give external_ids or segment, or send no body")
+        return self
 
 
 # --------------------------------------------------------------------------

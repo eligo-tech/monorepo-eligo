@@ -7,7 +7,7 @@
 // shown exactly when an authenticated probe succeeds. Any other answer, or no
 // answer, hides it: a customer's screen must not hint that it exists.
 
-import type { AgencyReasonDTO, AgencyVerdict, ContactCandidateDTO } from '@/api/types'
+import type { AgencyProfileDTO, AgencyReasonDTO, AgencyVerdict, ContactCandidateDTO, WebsiteCandidateDTO } from '@/api/types'
 import { num } from '@/i18n/format'
 import { t } from '@/i18n'
 import type { Tone } from '../../ui/primitives'
@@ -130,3 +130,8 @@ export function contactPayload(c: ContactCandidateDTO) {
     source_detail: (c.evidence[0]?.url ?? `hub_job_postings/${c.evidence[0]?.posting_id}`).slice(0, 500),
   }
 }
+
+/** The profile's website candidates — none when the backend predates them
+ *  (Vercel can deploy ahead of Railway). */
+export const websiteCandidates = (p: Pick<AgencyProfileDTO, 'website_candidates'>): WebsiteCandidateDTO[] =>
+  p.website_candidates ?? []

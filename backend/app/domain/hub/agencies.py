@@ -128,7 +128,7 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
 
     # Ad texts: the heavy part, streamed. This is why it runs in the cron.
     name_of = {row.id: row.name for row in companies}
-    seen_domains: dict[str, dict[str, list]] = collections.defaultdict(dict)
+    seen_domains: dict[str, dict[str, dict]] = collections.defaultdict(dict)
     texts = await session.stream(
         select(HubJobPosting.hub_company_id, HubJobPosting.id, HubPostingPayload.description)
         .join(HubPostingPayload, HubPostingPayload.hub_job_posting_id == HubJobPosting.id)
@@ -171,7 +171,14 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
     # Website candidates. A domain named like a known employer is likely the
     # client's ("autobahn.de" in an agency's ad for Die Autobahn GmbH).
     labels = {d.split(".")[0] for seen in seen_domains.values() for d in seen}
-    variants = sorted({v for label in labels for v in (label, label.replace("-", " "))})
+    variants = sorted(
+        {
+            prefix + v
+            for label in labels
+            for v in (label, label.replace("-", " "))
+            for prefix in ("", "die ", "der ", "das ")
+        }
+    )
     employer_labels: set[str] = set()
     for start in range(0, len(variants), _BATCH):
         found = await session.execute(
@@ -207,6 +214,7 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
                     seen_domains.get(key, {}),
                     firm_names=f.names,
                     employer_names=employer_labels,
+                    own_names={key, *(r.normalized_name for r in rows)},
                 ),
                 refreshed_at=now,
             )

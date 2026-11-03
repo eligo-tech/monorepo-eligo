@@ -349,3 +349,21 @@ async def test_the_endpoint_passes_the_segment_through(postings, monkeypatch) ->
         )
     assert r.status_code == 200, r.text
     assert seen["segment"] == "private_recruiter"
+
+
+async def test_an_empty_scope_is_refused_not_read_as_the_backlog(postings) -> None:
+    # A caller that meant "these ids" and sent none must fail loudly, not
+    # start a backlog pass.
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.config import settings
+    from app.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        for body in ({}, {"external_ids": None}):
+            r = await c.post(
+                "/api/v1/hub/descriptions/fetch?limit=5",
+                json=body,
+                headers={"Authorization": f"Bearer {settings.ingest_token}"},
+            )
+            assert r.status_code == 422, body
