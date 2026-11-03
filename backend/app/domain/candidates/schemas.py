@@ -94,6 +94,10 @@ class CandidateUpdate(BaseModel):
     the value stays as auditable as an agent-proposed one.
     """
 
+    #: Setting an address of someone erased here is refused (409) unless they
+    #: came back of their own accord.
+    override_suppression: bool = False
+
     #: The ``updated_at`` the editor was opened on, echoed back so the server
     #: can tell a fresh edit from one written against a record somebody else
     #: has since changed. **Control, not content** — `update_candidate` pops

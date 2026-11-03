@@ -232,7 +232,15 @@ async def update_manager(
     )
     if manager is None:
         return None
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    override = bool(changes.pop("override_suppression", False))
+    if changes.get("email") and changes["email"] != manager.email:
+        from app.domain.erasure import service as erasure
+
+        await erasure.guard_readd(
+            session, tenant_id=tenant_id, email=changes["email"], override=override
+        )
+    for field, value in changes.items():
         setattr(manager, field, value)
     await session.commit()
     await session.refresh(manager)

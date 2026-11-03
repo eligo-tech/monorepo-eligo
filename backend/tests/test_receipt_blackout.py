@@ -54,11 +54,7 @@ async def test_an_erasure_blacks_out_exactly_the_named_receipts_and_the_chain_ho
     tenant = uuid.uuid4()
     async with SessionLocal() as s:
         rows = await _receipts(s, tenant)
-        erase = await service.erase_receipts(
-            s, tenant_id=tenant, receipt_ids=[rows[0].id, rows[2].id],
-            request_id=uuid.uuid4(), subject_type="candidate",
-        )
-        await s.commit()
+        erase = await _licensed(s, tenant, [rows[0].id, rows[2].id])
         s.expire_all()
         got = {r.id: r for r in (await s.execute(
             Receipt.__table__.select().where(Receipt.tenant_id == tenant)
@@ -71,6 +67,24 @@ async def test_an_erasure_blacks_out_exactly_the_named_receipts_and_the_chain_ho
     assert got[rows[2].id]["summary"] == service.BLACKOUT_SUMMARY
     assert "person0@example.org" not in str(got[erase.id]["payload"])  # ids + hashes only
     assert ok, why
+
+
+async def _licensed(s, tenant: uuid.UUID, ids: list[uuid.UUID]) -> Receipt:
+    """A blackout as the erasure service does it: ERASE receipt, then the
+    request log row that names it — the pair `verify_chain` requires."""
+    import datetime as dt
+
+    from app.domain.erasure.models import ErasureRequest
+
+    request_id = uuid.uuid4()
+    erase = await service.erase_receipts(
+        s, tenant_id=tenant, receipt_ids=ids, request_id=request_id, subject_type="candidate"
+    )
+    s.add(ErasureRequest(id=request_id, tenant_id=tenant, subject_type="candidate",
+                         reason="erasure", requested_on=dt.date(2026, 11, 1), counts={},
+                         erase_receipt_id=erase.id))
+    await s.commit()
+    return erase
 
 
 async def _refused(statement, params=None) -> None:
@@ -187,3 +201,71 @@ def test_the_migration_installs_the_same_trigger_function_as_create_all() -> Non
     spec.loader.exec_module(module)
     assert module.FUNCTION == PG_APPEND_ONLY_FUNCTION
     assert module._MARKER == BLACKOUT_SUMMARY
+
+
+async def test_an_erase_receipt_no_request_backs_does_not_verify() -> None:
+    """The app role can append receipts, so it can write an ERASE receipt for
+    itself. The trigger lets that blackout through — it cannot see intent —
+    but the chain check must not: a licence counts only when the request log
+    names it."""
+    await create_all()
+    tenant = uuid.uuid4()
+    async with SessionLocal() as s:
+        rows = await _receipts(s, tenant, 2)
+        forged = await service.erase_receipts(
+            s, tenant_id=tenant, receipt_ids=[rows[0].id],
+            request_id=uuid.uuid4(), subject_type="candidate",
+        )
+        await s.commit()
+        ok, why = await service.verify_chain(s, tenant_id=tenant)
+    assert not ok and str(forged.id) in why
+
+
+async def test_an_erase_receipt_cannot_black_out_itself_or_another_erase_receipt() -> None:
+    await create_all()
+    tenant = uuid.uuid4()
+    async with SessionLocal() as s:
+        rows = await _receipts(s, tenant, 1)
+        first = await _licensed(s, tenant, [rows[0].id])
+    async with SessionLocal() as s:
+        second = await service.append_receipt(
+            s, tenant_id=tenant, agent="erasure", action=ReceiptAction.ERASE,
+            subject_type="erasure_request", subject_id=str(uuid.uuid4()), verified=True,
+            summary="erasure", payload={"redacted": {str(first.id): first.receipt_hash}},
+        )
+        await s.commit()
+    await _refused(
+        update(Receipt).where(Receipt.id == first.id).values(
+            summary=service.BLACKOUT_SUMMARY, payload={"erased_by": str(second.id)},
+            updated_at=Receipt.updated_at,
+        )
+    )
+
+
+async def test_a_licence_that_is_not_a_map_reads_as_tampering_not_a_crash() -> None:
+    await create_all()
+    tenant = uuid.uuid4()
+    async with SessionLocal() as s:
+        rows = await _receipts(s, tenant, 1)
+        bad = await service.append_receipt(
+            s, tenant_id=tenant, agent="erasure", action=ReceiptAction.ERASE,
+            subject_type="erasure_request", subject_id=str(uuid.uuid4()), verified=True,
+            summary="erasure", payload={"redacted": [str(rows[0].id)]},
+        )
+        await s.execute(text("DROP TRIGGER receipts_no_update"))
+        await s.execute(
+            update(Receipt).where(Receipt.id == rows[0].id).values(
+                summary=service.BLACKOUT_SUMMARY, payload={"erased_by": str(bad.id)},
+                updated_at=Receipt.updated_at,
+            )
+        )
+        await s.commit()
+        ok, why = await service.verify_chain(s, tenant_id=tenant)
+    from app.domain.verification.models import _SQLITE_APPEND_ONLY
+
+    async with SessionLocal() as s:
+        for statement in _SQLITE_APPEND_ONLY:
+            await s.execute(text(statement))
+        await s.commit()
+    assert not ok
+

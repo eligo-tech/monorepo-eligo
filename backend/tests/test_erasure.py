@@ -490,3 +490,29 @@ async def test_the_api_refuses_a_wrong_name_and_a_missing_key(monkeypatch) -> No
     assert unset.status_code == 503 and unset.json()["detail"]["code"] == "erasure_not_configured"
     async with SessionLocal() as s:
         assert await s.get(Candidate, cid) is not None
+
+
+async def test_editing_someone_else_to_an_erased_address_is_refused_too() -> None:
+    """Create was guarded; an edit setting the same address is the same act."""
+    tenant = settings.default_tenant_id
+    await create_all()
+    async with SessionLocal() as s:
+        erika = await _person(s, tenant, "Erika Muster", EMAIL, f"ext-{uuid.uuid4()}")
+        other = await _person(s, tenant, "Max Bleibt", f"{uuid.uuid4().hex}@example.org", f"ext-{uuid.uuid4()}")
+        company = Company(tenant_id=tenant, name=f"Kunde {uuid.uuid4()}")
+        s.add(company)
+        await s.flush()
+        boss = Manager(tenant_id=tenant, company_id=company.id, full_name="Hans Neu")
+        s.add(boss)
+        await s.commit()
+        boss_id = boss.id
+    await _erase(tenant, erika["candidate"])
+    base = settings.api_v1_prefix
+    async with _client() as c:
+        cand = await c.patch(f"{base}/candidates/{other['candidate']}", json={"email": EMAIL})
+        mgr = await c.patch(f"{base}/managers/{boss_id}", json={"email": EMAIL.lower()})
+        ok = await c.patch(f"{base}/candidates/{other['candidate']}",
+                           json={"email": EMAIL, "override_suppression": True})
+    assert cand.status_code == 409 and cand.json()["detail"]["code"] == "suppressed"
+    assert mgr.status_code == 409
+    assert ok.status_code == 200, ok.text

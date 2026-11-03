@@ -1965,6 +1965,20 @@ async def adopt_company(
     person is usually unknown at adopt time, and inventing a placeholder would
     put an unsourced natural person into the record. Absent means absent.
     """
+
+    # A contact this workspace erased (GDPR Art. 17) is not brought back by
+    # adopting the ad that names them: the company is adopted, the person is
+    # not. Checked BEFORE any write, so a missing suppression key refuses the
+    # whole adoption rather than leaving it half done.
+    if manager and (manager.get("full_name") or "").strip():
+        from app.domain.erasure import service as erasure
+
+        try:
+            await erasure.guard_readd(
+                session, tenant_id=tenant_id, email=manager.get("email"), override=False
+            )
+        except erasure.Suppressed:
+            manager = None
     from app.domain.managers.models import Manager
 
     hub_company = await get_company(session, hub_company_id=hub_company_id, kind=kind)
@@ -2040,17 +2054,6 @@ async def adopt_company(
     )
 
     created_manager = None
-    if manager and (manager.get("full_name") or "").strip():
-        # A contact this workspace erased is not brought back by adopting the
-        # ad that names them. The company is still adopted; the person is not.
-        from app.domain.erasure import service as erasure
-
-        try:
-            await erasure.guard_readd(
-                session, tenant_id=tenant_id, email=manager.get("email"), override=False
-            )
-        except erasure.Suppressed:
-            manager = None
     if manager and (manager.get("full_name") or "").strip():
         created_manager = Manager(
             tenant_id=tenant_id,

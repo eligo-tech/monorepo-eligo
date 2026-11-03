@@ -175,6 +175,7 @@ PG_APPEND_ONLY_FUNCTION = f"""
     RETURNS trigger AS $$
     BEGIN
         IF TG_OP = 'UPDATE'
+           AND OLD.action <> 'erase'
            AND OLD.summary <> '{BLACKOUT_SUMMARY}'
            AND NEW.summary = '{BLACKOUT_SUMMARY}'
            AND NEW.payload::jsonb = jsonb_build_object(
@@ -186,6 +187,7 @@ PG_APPEND_ONLY_FUNCTION = f"""
                   WHERE e.id::text = NEW.payload::jsonb ->> 'erased_by'
                     AND e.tenant_id = OLD.tenant_id
                     AND e.action = 'erase'
+                    AND jsonb_typeof(e.payload::jsonb -> 'redacted') = 'object'
                     AND (e.payload::jsonb -> 'redacted') ? OLD.id::text)
         THEN
             RETURN NEW;
@@ -208,7 +210,8 @@ _PG_APPEND_ONLY = (
 # SQLite stores a UUID as 32 hex characters and the payload as JSON text, so
 # the ids are compared with the dashes removed.
 _SQLITE_BLACKOUT_ALLOWED = f"""
-    OLD.summary <> '{BLACKOUT_SUMMARY}'
+    OLD.action <> 'erase'
+    AND OLD.summary <> '{BLACKOUT_SUMMARY}'
     AND NEW.summary = '{BLACKOUT_SUMMARY}'
     AND json_extract(NEW.payload, '$.erased_by') IS NOT NULL
     AND (SELECT count(*) FROM json_each(NEW.payload)) = 1
@@ -221,7 +224,8 @@ _SQLITE_BLACKOUT_ALLOWED = f"""
     AND NEW.prev_hash IS OLD.prev_hash AND NEW.receipt_hash IS OLD.receipt_hash
     AND EXISTS (
         SELECT 1 FROM receipts e, json_each(e.payload, '$.redacted') j
-         WHERE e.id = replace(json_extract(NEW.payload, '$.erased_by'), '-', '')
+         WHERE json_type(e.payload, '$.redacted') = 'object'
+           AND e.id = replace(json_extract(NEW.payload, '$.erased_by'), '-', '')
            AND e.tenant_id = OLD.tenant_id
            AND e.action = 'erase'
            AND replace(j.key, '-', '') = OLD.id)

@@ -123,6 +123,11 @@ async def _ensure_app_role(conn) -> None:
     # receipts") while CI stayed green, because SQLite has no grants. See 0024.
     await conn.execute(text(f"REVOKE DELETE ON receipts FROM {role}"))
     await conn.execute(text(f"GRANT UPDATE ON receipts TO {role}"))
+    # Erasure's log and suppression list: insert-only / lift-only, see there.
+    from app.domain.erasure.models import app_role_privileges
+
+    for statement in app_role_privileges(role):
+        await conn.execute(text(statement))
     print(f"  ✓ app role {role} ready (NOBYPASSRLS) + DML grants · {login}")
 
 

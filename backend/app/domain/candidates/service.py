@@ -331,6 +331,15 @@ async def update_candidate(
     # Control, not content: it names the version this edit was composed
     # against and must never be looked up as a column.
     changes.pop("base_updated_at", None)
+    override = bool(changes.pop("override_suppression", False))
+    # An edit that sets the address of someone this workspace erased is the
+    # same act as creating them again (GDPR Art. 17).
+    if changes.get("email") and changes["email"] != candidate.email:
+        from app.domain.erasure import service as erasure
+
+        await erasure.guard_readd(
+            session, tenant_id=tenant_id, email=changes["email"], override=override
+        )
 
     # Settle what would really change BEFORE asking whether anyone else
     # touched it. Re-typing the value that is already stored is not an edit

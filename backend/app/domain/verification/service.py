@@ -413,6 +413,14 @@ async def list_receipts(
     return list(result.scalars().all())
 
 
+def _as_uuid_str(value: object) -> str:
+    """SQLite returns a UUID column read through raw SQL as 32 hex digits."""
+    try:
+        return str(uuid.UUID(str(value)))
+    except ValueError:
+        return str(value)
+
+
 async def erase_receipts(
     session: AsyncSession,
     *,
@@ -483,11 +491,35 @@ async def verify_chain(
     receipts = list(result.scalars().all())
     # Every receipt an erasure was allowed to black out, with the hash it had.
     # Built first: an ERASE receipt comes after the receipts it names.
-    licensed: dict[str, dict] = {
-        str(r.id): (r.payload or {}).get("redacted") or {}
-        for r in receipts
-        if r.action == ReceiptAction.ERASE.value
+    #
+    # The app role can append receipts, so it could write an ERASE receipt
+    # for itself; the trigger cannot tell. What it cannot also do invisibly
+    # is the request log: an ERASE receipt counts only when the
+    # `erasure_requests` row it names points back at it (that table is
+    # insert-only for the app role). An ERASE receipt nobody asked for is
+    # reported as tampering, whether or not it blacked anything out.
+    backing = {
+        (_as_uuid_str(rid), _as_uuid_str(eid))
+        for rid, eid in (
+            await session.execute(
+                text(
+                    "SELECT id, erase_receipt_id FROM erasure_requests "
+                    "WHERE tenant_id = :t AND erase_receipt_id IS NOT NULL"
+                ),
+                {"t": tenant_id if settings.is_postgres else tenant_id.hex},
+            )
+        ).all()
     }
+    licensed: dict[str, dict] = {}
+    for r in receipts:
+        if r.action != ReceiptAction.ERASE.value:
+            continue
+        redacted = (r.payload or {}).get("redacted")
+        if not isinstance(redacted, dict):
+            return False, f"erase receipt {r.id} has a malformed licence"
+        if (_as_uuid_str(r.subject_id), str(r.id)) not in backing:
+            return False, f"erase receipt {r.id} is not backed by an erasure request"
+        licensed[str(r.id)] = redacted
     prev: str | None = None
     expected_index = 0
     for receipt in receipts:

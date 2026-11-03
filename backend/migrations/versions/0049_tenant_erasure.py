@@ -38,6 +38,7 @@ FUNCTION = f"""
     RETURNS trigger AS $$
     BEGIN
         IF TG_OP = 'UPDATE'
+           AND OLD.action <> 'erase'
            AND OLD.summary <> '{_MARKER}'
            AND NEW.summary = '{_MARKER}'
            AND NEW.payload::jsonb = jsonb_build_object(
@@ -49,6 +50,7 @@ FUNCTION = f"""
                   WHERE e.id::text = NEW.payload::jsonb ->> 'erased_by'
                     AND e.tenant_id = OLD.tenant_id
                     AND e.action = 'erase'
+                    AND jsonb_typeof(e.payload::jsonb -> 'redacted') = 'object'
                     AND (e.payload::jsonb -> 'redacted') ? OLD.id::text)
         THEN
             RETURN NEW;
@@ -105,8 +107,7 @@ def upgrade() -> None:
             "tenant_suppressions",
             sa.Column("id", sa.Uuid(), primary_key=True),
             sa.Column("tenant_id", sa.Uuid(), nullable=False, index=True),
-            sa.Column("request_id", sa.Uuid(), sa.ForeignKey("erasure_requests.id"),
-                      nullable=False, index=True),
+            sa.Column("request_id", sa.Uuid(), nullable=False, index=True),
             sa.Column("kind", sa.String(20), nullable=False),
             sa.Column("digest", sa.String(64), nullable=False),
             sa.Column("lifted_at", sa.DateTime(timezone=True), nullable=True),
@@ -126,6 +127,29 @@ def upgrade() -> None:
                 f"USING ({_PREDICATE}) WITH CHECK ({_PREDICATE})"
             )
         op.execute(FUNCTION)
+        # Insert-only log, lift-only suppressions for the app role(s). Frozen
+        # here rather than imported, like the trigger function above.
+        for role in _app_roles(bind):
+            for statement in (
+                f'REVOKE UPDATE, DELETE, TRUNCATE ON erasure_requests FROM "{role}"',
+                f'REVOKE UPDATE, DELETE, TRUNCATE ON tenant_suppressions FROM "{role}"',
+                f'GRANT SELECT, INSERT ON erasure_requests, tenant_suppressions TO "{role}"',
+                f'GRANT UPDATE (lifted_at, lifted_by_user_id, lifted_by_name, updated_at) '
+                f'ON tenant_suppressions TO "{role}"',
+            ):
+                op.execute(statement)
+
+
+def _app_roles(bind) -> list[str]:  # noqa: ANN001
+    """The application role(s), found as in 0024: whoever may insert receipts."""
+    rows = bind.execute(
+        sa.text(
+            "SELECT DISTINCT grantee FROM information_schema.role_table_grants "
+            "WHERE table_name = 'receipts' AND privilege_type = 'INSERT' "
+            "AND grantee NOT IN ('PUBLIC', current_user)"
+        )
+    ).fetchall()
+    return [r[0] for r in rows if r[0] and r[0].replace("_", "").isalnum()]
 
 
 def downgrade() -> None:

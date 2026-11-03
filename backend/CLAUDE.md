@@ -63,9 +63,12 @@ These are enforced in code. Do not route around them.
 - **One update is allowed, and only one: an erasure's blackout** (GDPR Art.
   17, migration 0049). Summary → `BLACKOUT_SUMMARY`, payload →
   `{"erased_by": <ERASE receipt id>}`, every other column unchanged, and only
-  when an ERASE receipt in the same workspace lists that receipt. `verify_chain`
-  accepts a blacked-out row only if its ERASE receipt names it with that exact
-  hash. Change the trigger in `models.py` AND in a new migration —
+  when an ERASE receipt in the same workspace lists that receipt (an ERASE
+  receipt itself can never be blacked out). `verify_chain` accepts a
+  blacked-out row only if its ERASE receipt names it with that exact hash AND
+  an `erasure_requests` row (insert-only for the app role) points at that
+  ERASE receipt — the app role can append receipts, so the receipt alone is
+  no licence. Change the trigger in `models.py` AND in a new migration —
   `tests/test_receipt_blackout.py` fails when they differ.
 - New receipts hold **references only** — field names and record ids, never a
   value, an address or free text that may quote one. The value lives on

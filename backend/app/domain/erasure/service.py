@@ -150,22 +150,21 @@ async def _finish(
 ) -> ErasureRequest:
     if reason not in REASONS:
         raise ValueError(f"reason must be one of {REASONS}")
-    request = ErasureRequest(
-        tenant_id=tenant_id, subject_type=subject_type, reason=reason,
-        requested_on=requested_on, executed_by_user_id=actor_user_id,
-        executed_by_name=actor_name, counts={},
-    )
-    session.add(request)
-    await session.flush()
-    session.add_all(
-        TenantSuppression(tenant_id=tenant_id, request_id=request.id, kind=k, digest=d)
-        for k, d in keys
-    )
+    # The log row is written ONCE, at the end, already pointing at its ERASE
+    # receipt: the app role may only insert into `erasure_requests`, never
+    # change or delete a row, so the log cannot be rewritten after the fact
+    # and `verify_chain` can trust it as the licence's backing.
+    request_id = uuid.uuid4()
     erase = await verification.erase_receipts(
-        session, tenant_id=tenant_id, receipt_ids=receipt_ids, request_id=request.id,
+        session, tenant_id=tenant_id, receipt_ids=receipt_ids, request_id=request_id,
         subject_type=subject_type, actor_user_id=actor_user_id, actor_name=actor_name,
     )
-    counts: dict[str, int] = {"receipts_blacked_out": len((erase.payload or {}).get("redacted", {}))}
+    counts: dict[str, int] = {
+        "receipts_blacked_out": len((erase.payload or {}).get("redacted", {})),
+        # Zero means nothing can stop this person coming back: no e-mail and
+        # no import id to fingerprint. The caller must say so.
+        "suppressions_written": len(keys),
+    }
     for model, ids in deletions:
         if ids:
             await session.execute(
@@ -174,8 +173,16 @@ async def _finish(
                 .execution_options(synchronize_session=False)
             )
         counts[model.__tablename__] = counts.get(model.__tablename__, 0) + len(ids)
-    request.counts = counts
-    request.erase_receipt_id = erase.id
+    request = ErasureRequest(
+        id=request_id, tenant_id=tenant_id, subject_type=subject_type, reason=reason,
+        requested_on=requested_on, executed_by_user_id=actor_user_id,
+        executed_by_name=actor_name, counts=counts, erase_receipt_id=erase.id,
+    )
+    session.add(request)
+    session.add_all(
+        TenantSuppression(tenant_id=tenant_id, request_id=request_id, kind=k, digest=d)
+        for k, d in keys
+    )
     await session.flush()
     # Bulk deletes bypassed the identity map; drop what it still holds about
     # the person, then reload the one object handed back.

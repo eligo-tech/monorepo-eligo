@@ -198,19 +198,35 @@ workspace is the controller and decides; an admin carries it out.
 
 - **erase** — `POST /erasure/candidates/{id}` or `/erasure/managers/{id}`,
   admins only, the name typed to confirm. One transaction removes the person
-  and every row that refers to them (CVs, processes and their steps,
-  assessments, match results, notices, notes, interviews, provenance, AI
-  proposals). A contact's mandates stay and lose the link.
+  and every row that refers to them **by id** (CVs, processes and their
+  steps, assessments, match results, notices, notes, interviews, provenance,
+  AI proposals). Deliberately broad: a client note that names the candidate
+  goes with them, and so do briefings linked to an erased contact. A
+  contact's mandates stay and lose the link. Free text elsewhere that names
+  the person without an id (a note on another record, a transcript) is not
+  found — that remains a manual search.
 - **receipts** — every receipt naming the person or one of those rows is
-  blacked out (backend/CLAUDE.md §2.1); one ERASE receipt lists them with
-  their hashes, and the chain still verifies.
+  blacked out whole (backend/CLAUDE.md §2.1), including AI-read receipts
+  that listed them among others; one ERASE receipt lists them with their
+  hashes, and the chain still verifies. **Trust boundary:** the app role
+  carries out erasures, so a stolen app credential can erase too — what it
+  cannot do is erase unseen. Every blackout needs an ERASE receipt (chained,
+  never removable) backed by an `erasure_requests` row (insert-only for the
+  app role); `verify_chain` reports an ERASE receipt without one. A
+  blacked-out row's other columns are no longer under any hash: someone with
+  DDL rights who drops the trigger could change them undetected.
 - **suppression** — `tenant_suppressions` holds HMAC fingerprints (key:
-  `ELIGO_SUPPRESSION_KEY`) of their import ids, including merged duplicates,
-  and their e-mail. The ATS import skips and counts a match before creating
-  anyone, and refuses to run in a workspace with erasures if the key is
-  missing. Adding the person again by hand is refused (409, with the date
-  they asked) unless the recruiter confirms they came back; that lifts only
-  the e-mail fingerprint, so the old ATS record stays out.
+  `ELIGO_SUPPRESSION_KEY`) of their import id (`source:external_id`, plus
+  `merged_identities` should anything ever fill it) and their e-mail. The
+  ATS import skips and counts a match before creating anyone, and refuses to
+  run in a workspace with erasures if the key is missing. Creating the
+  person again by hand, or editing someone to their address, is refused
+  (409, with the date they asked) unless the recruiter confirms they came
+  back; that lifts only the e-mail fingerprint, so the old ATS record stays
+  out. Insert-and-lift only for the app role: a suppression cannot be
+  deleted. **A person with neither an e-mail nor an import id gets no
+  fingerprint and nothing stops them coming back** (`counts.suppressions_written
+  == 0`; the UI must say so).
 - **log** — `erasure_requests`: when asked, when done, by whom, how much.
 
 Not covered, by design or not yet: copies outside the database (Supabase

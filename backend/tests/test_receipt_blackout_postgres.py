@@ -84,10 +84,18 @@ async def test_the_app_role_can_black_out_what_an_erasure_lists_and_the_chain_ho
     rows = await _write(tenant, 3)
     with _as(tenant):
         async with SessionLocal() as s:
-            await service.erase_receipts(
+            import datetime as dt
+
+            from app.domain.erasure.models import ErasureRequest
+
+            request_id = uuid.uuid4()
+            erase = await service.erase_receipts(
                 s, tenant_id=tenant, receipt_ids=[rows[1].id],
-                request_id=uuid.uuid4(), subject_type="candidate",
+                request_id=request_id, subject_type="candidate",
             )
+            s.add(ErasureRequest(id=request_id, tenant_id=tenant, subject_type="candidate",
+                                 reason="erasure", requested_on=dt.date(2026, 11, 1), counts={},
+                                 erase_receipt_id=erase.id))
             await s.commit()
         async with SessionLocal() as s:
             ok, why = await service.verify_chain(s, tenant_id=tenant)
@@ -153,3 +161,37 @@ async def test_another_workspaces_erasure_cannot_black_out_mine() -> None:
             )
             await s.commit()
     await _refused(mine, _blackout(rows[0], foreign.id))
+
+
+async def test_a_licence_that_is_a_list_is_refused() -> None:
+    """`?` is true for a JSON array element too; the trigger must insist on a map."""
+    tenant = uuid.uuid4()
+    rows = await _write(tenant, 1)
+    with _as(tenant):
+        async with SessionLocal() as s:
+            bad = await service.append_receipt(
+                s, tenant_id=tenant, agent="erasure", action=ReceiptAction.ERASE,
+                subject_type="erasure_request", subject_id=str(uuid.uuid4()), verified=True,
+                summary="erasure", payload={"redacted": [str(rows[0].id)]},
+            )
+            await s.commit()
+    await _refused(tenant, _blackout(rows[0], bad.id))
+
+
+async def test_an_erase_receipt_cannot_be_blacked_out() -> None:
+    tenant = uuid.uuid4()
+    with _as(tenant):
+        async with SessionLocal() as s:
+            first = await service.append_receipt(
+                s, tenant_id=tenant, agent="erasure", action=ReceiptAction.ERASE,
+                subject_type="erasure_request", subject_id=str(uuid.uuid4()), verified=True,
+                summary="erasure", payload={"redacted": {}},
+            )
+            await s.flush()
+            second = await service.append_receipt(
+                s, tenant_id=tenant, agent="erasure", action=ReceiptAction.ERASE,
+                subject_type="erasure_request", subject_id=str(uuid.uuid4()), verified=True,
+                summary="erasure", payload={"redacted": {str(first.id): first.receipt_hash}},
+            )
+            await s.commit()
+    await _refused(tenant, _blackout(first, second.id))

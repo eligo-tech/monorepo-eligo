@@ -19,12 +19,35 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, String, Uuid
+from sqlalchemy import Date, DateTime, Index, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
 from app.domain.common.types import JSONBDict
+
+
+def app_role_privileges(role: str) -> list[str]:
+    """What the runtime role may do to these two tables — narrower than the
+    blanket DML grant every other table gets.
+
+    * `erasure_requests` is insert-only: rewriting or deleting a row would hide
+      that an erasure happened, and `verify_chain` trusts it as the backing of
+      every blackout.
+    * `tenant_suppressions` may be inserted and LIFTED, nothing else: deleting
+      a row, or changing its fingerprint, would silently let the person back.
+
+    Applied by migration 0049 on existing databases and by
+    `scripts/apply_rls.py` after its blanket grant (which would otherwise
+    undo it). Proved in tests/test_erasure_postgres.py.
+    """
+    return [
+        f'REVOKE UPDATE, DELETE, TRUNCATE ON erasure_requests FROM "{role}"',
+        f'REVOKE UPDATE, DELETE, TRUNCATE ON tenant_suppressions FROM "{role}"',
+        f'GRANT SELECT, INSERT ON erasure_requests, tenant_suppressions TO "{role}"',
+        f'GRANT UPDATE (lifted_at, lifted_by_user_id, lifted_by_name, updated_at) '
+        f'ON tenant_suppressions TO "{role}"',
+    ]
 
 
 class ErasureRequest(Base, IDMixin, TenantMixin, TimestampMixin):
@@ -47,9 +70,10 @@ class TenantSuppression(Base, IDMixin, TenantMixin, TimestampMixin):
     __tablename__ = "tenant_suppressions"
     __table_args__ = (Index("ix_tenant_suppressions_digest", "tenant_id", "digest"),)
 
-    request_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("erasure_requests.id"), nullable=False, index=True
-    )
+    #: The request that wrote it. Not a foreign key on purpose: a FK check
+    #: needs UPDATE rights on the parent, and the app role holds none on
+    #: `erasure_requests` (insert-only, migration 0049).
+    request_id: Mapped[uuid.UUID] = mapped_column(Uuid(), nullable=False, index=True)
     #: "import_id" (source:external_id) | "email".
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     #: HMAC-SHA256 hex of tenant:kind:normalised value (see service.digest).
