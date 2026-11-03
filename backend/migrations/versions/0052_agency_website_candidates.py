@@ -9,8 +9,8 @@ naming the firm (PR7) promotes a candidate to the company's website.
 Derived data, rebuilt nightly; existing rows start empty. No personal data:
 domains, counts and posting ids.
 
-Revision ID: 0051
-Revises: 0050
+Revision ID: 0052
+Revises: 0051
 """
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0051"
-down_revision: str | None = "0050"
+revision: str = "0052"
+down_revision: str | None = "0051"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
