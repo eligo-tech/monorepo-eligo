@@ -138,6 +138,7 @@ the model is wrong.
 |---|---|---|---|---|
 | **Public corpus** | company identity, address, postings, fetch evidence, persons as named by a public source | `hub_companies`, `hub_job_postings`, `hub_observations` | no | **only as published, with provenance** (RULE 2) |
 | **Corpus, derived** | the agency finder's ranked agencies: verdict, score, evidence counts, company mail domains — rebuilt nightly, readable only by `agency_finder_tenants` (fail-closed) | `hub_agency_profiles` | no | **as the corpus**: a sole trader's trading name, as published; removed with the company by the opt-out list |
+| **Corpus, site checks** | one row per agency website candidate checked against its Impressum: outcome, Impressum URL, fetch, and COMPANY facts as published (register, VAT, company phone, function mailboxes) | `hub_site_checks` | no | **no** — people named in an Impressum are parsed but not stored until the GDPR Art. 14 question is answered (decision 2026-11-04) |
 | **Opt-out list** | normalized company names, folded person names, reason | `hub_suppressions` | no | **minimal** — only what is needed to recognise the record again; app role read-only |
 | **Tenant overlay** | tracked/prospect flags, notes, adoption link | `hub_company_link` | yes | no |
 | **Tenant record** | clients, mandates, pipeline | `companies`, `jobs`, `applications` | yes | no |

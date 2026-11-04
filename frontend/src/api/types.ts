@@ -1145,6 +1145,8 @@ export interface WebsiteCandidateDTO {
   /** Named like a known employer — probably the agency's client. */
   likely_client: boolean
   posting_ids: string[]
+  /** Outcome of the Impressum check, once made. */
+  check?: 'verified' | 'not_named' | 'no_impressum' | 'blocked' | 'error' | string | null
 }
 
 export interface AgencyPageDTO {

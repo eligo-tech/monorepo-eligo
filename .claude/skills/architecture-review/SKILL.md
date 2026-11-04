@@ -164,6 +164,7 @@ wrong.
 |---|---|---|---|
 | Public corpus | `hub_companies`, `hub_job_postings`, `hub_observations` | no | **only as a public source published it, with provenance** |
 | Corpus, derived | `hub_agency_profiles` (allowlisted reads only) | no | sole traders' trading names, as published |
+| Corpus, site checks | `hub_site_checks` (company facts from an agency's Impressum) | no | no — Impressum people are not stored |
 | Opt-out list | `hub_suppressions` (app role read-only) | no | minimal: the key that recognises the record |
 | Tenant overlay | `hub_company_link` | yes | no |
 | Tenant record | `companies`, `jobs`, `applications` | yes | no |

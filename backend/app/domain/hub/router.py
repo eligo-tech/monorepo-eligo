@@ -587,6 +587,20 @@ async def refresh_agency_profiles(
     return await agencies.refresh_profiles(db)
 
 
+@router.post("/agencies/sites/check")
+async def check_agency_sites(
+    limit: int = Query(default=5, ge=1, le=50),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Verify agency website candidates through their Impressum. Machine-only
+    (RULE 1): the nightly job calls it in small batches."""
+    from app.domain.hub import sites
+
+    async with sites.SiteFetcher() as fetcher:
+        return await sites.check_agency_sites(db, fetcher=fetcher, limit=limit)
+
+
 @router.get("/agencies", response_model=AgencyPage)
 async def list_agencies(
     verdict: list[str] = Query(default=["agency", "unclear"]),

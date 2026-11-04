@@ -1,0 +1,159 @@
+20) ? true : false;
+" @resize.window="
+$store.checkIfMobile.checkWidth();
+" x-init="
+$store.checkIfMobile.checkWidth();
+showBar = (window.pageYOffset > 20) ? true : false;
+" :class="{ 'bg-white transition duration-100 shadow-[0px_4px_20px_rgba(0,0,0,0.1)]' : showBar || $store.checkIfMobile.isMobile }"
+class="header grid grid-cols-6 xl:grid-cols-24 gap-5 h-[3.75rem] xl:h-[6.25rem] fixed top-0 z-[100] w-full max-w-[120rem] pl-5 2xl:pl-0" x-cloak>
+
+open = false, 150);">
+
+Jobbörse
+
+open = false, 150);">
+
+Für Bewerber
+
+Bewerbungsprozess
+
+Personalvermittlung
+
+GECAD als Arbeitgeber
+
+FAQ
+
+open = false, 150);">
+
+Für Unternehmen
+
+Personalanfrage
+
+open = false, 150);">
+
+Über GECAD
+
+open = false, 150);">
+
+Kontakt
+
+open = false, 150);">
+
+Initiativbewerbung
+
+Jobbörse
+
+Für Bewerber
+
+zurück
+
+Für Bewerber
+
+Bewerbungsprozess
+
+Personalvermittlung
+
+GECAD als Arbeitgeber
+
+FAQ
+
+Für Unternehmen
+
+zurück
+
+Für Unternehmen
+
+Personalanfrage
+
+Über GECAD
+
+Kontakt
+
+Initiativbewerbung
+
+Impressum
+
+GECAD GmbH
+Altmühlstr. 30
+33689 Bielefeld
+
+Geschäftsführer:
+Max Mustermann, Erika Musterfrau
+
+E-Mail: info(at)gecad.de
+
+Telefon: +49 5205 1004 280
+
+Handelsregister:
+HRB 45867, Amtsgericht Bielefeld
+
+Steuer-Nummer:
+349/5721/3082
+
+Umsatzsteuer:
+Umsatzsteuer-Identifikationsnummer gemäß §27 a Umsatzsteuergesetz:
+DE223960681
+
+Bildnachweis
+
+Quellenangaben zu dem verwendeten Bildmaterial :
+istockphoto.com
+
+Jobbörse
+
+Für Bewerber
+
+Bewerbungsprozess
+
+Personalvermittlung
+
+GECAD als Arbeitgeber
+
+FAQ
+
+Für Unternehmen
+
+Personalanfrage
+
+Über GECAD
+
+Kontakt
+
+Rechtliches
+
+Impressum
+
+.
+
+Datenschutz
+
+.
+
+AGB
+
+.
+
+Nutzungsbestimmungen
+
+.
+
+Hinweisgeberverfahren
+
+.
+
+Barrierefreiheitserklärung
+
+.
+
+© 2026 GECAD GmbH. Alle Rechte vorbehalten.
+
+{
+window.scrollTo({
+top: 0,
+behavior: 'smooth'
+});
+},
+}"
+@scroll.window.debounce.100ms="
+onTop = (window.pageYOffset > 100) ? false : true;
+">

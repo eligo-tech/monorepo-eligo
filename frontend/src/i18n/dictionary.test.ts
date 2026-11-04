@@ -12,6 +12,7 @@ import { preferredLang, setLang, STORAGE_KEY, t } from './index'
  *  screen, which looks like a decision rather than a bug. Comparing the two
  *  sides at the same level of escaping is the only way to see that. */
 const SAME_IN_BOTH = new Set([
+  'Website',
   'Name: {name}',
   'Score {n}',
   'aiFind (ATS)',

@@ -413,6 +413,27 @@ async def _fetch_partner_pages(client: httpx.AsyncClient, *, budget: int) -> dic
     return {**latest, **totals}
 
 
+#: Agencies per site-check request. Each check is ~4 paced fetches (robots,
+#: homepage, Impressum), so five keep one request well inside a proxy timeout.
+_SITE_BATCH_SIZE = 5
+
+
+async def _check_sites(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
+    """Verify up to `budget` agency websites, in proxy-sized batches. Stops
+    when the server reports nothing left to check."""
+    totals = {"checked": 0, "verified": 0, "not_named": 0, "no_impressum": 0, "blocked": 0, "error": 0}
+    while totals["checked"] < budget:
+        size = min(_SITE_BATCH_SIZE, budget - totals["checked"])
+        response = await client.post(f"/hub/agencies/sites/check?limit={size}")
+        response.raise_for_status()
+        result = response.json()
+        for key in totals:
+            totals[key] += result.get(key, 0)
+        if result.get("checked", 0) == 0:
+            break
+    return totals
+
+
 def run_verdict(
     *,
     source_down: str | None,
@@ -668,6 +689,13 @@ async def main() -> int:
         dest="agencies",
         action="store_false",
         help="skip the private-recruiter pass (agency finder leads)",
+    )
+    parser.add_argument(
+        "--site-checks",
+        type=int,
+        default=100,
+        help="agency websites to verify through their Impressum this run "
+        "(0 = off). Best-scored agencies first; each domain is checked once.",
     )
     parser.add_argument(
         "--agencies-only",
@@ -929,6 +957,20 @@ async def main() -> int:
                 failures.append("descriptions")
         elif args.descriptions:
             print("  Anzeigentexte: keine neuen Rollen in diesem Lauf")
+
+        # --- agency finder: verify website candidates via the Impressum -----
+        # Before the rebuild, so tonight's verifications show tonight.
+        if args.agencies and not agency_down and args.site_checks > 0:
+            try:
+                q = await _check_sites(client, budget=args.site_checks)
+                print(
+                    f"    Websites: {q['checked']} geprüft, {q['verified']} bestätigt, "
+                    f"{q['not_named']} fremdes Impressum, {q['no_impressum']} ohne Impressum, "
+                    f"{q['blocked']} gesperrt, {q['error']} Fehler"
+                )
+            except Exception as exc:
+                print(f"  site checks FAILED: {exc}", file=sys.stderr)
+                failures.append("site-checks")
 
         # --- agency finder: rebuild the ranked list ------------------------
         # After the ad text, so tonight's new agencies are judged with theirs;

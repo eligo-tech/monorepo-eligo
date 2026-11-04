@@ -52,6 +52,12 @@ def _source(fields: dict[str, int], seen: list[dict]):
         if request.url.path.endswith("/hub/agencies/refresh"):
             seen.append({"refresh": True})
             return httpx.Response(200, json={"profiles": 7, "agency": 5, "unclear": 1, "client": 1})
+        if request.url.path.endswith("/hub/agencies/sites/check"):
+            seen.append({"sites": request.url.params.get("limit")})
+            # Two agencies left to check, then nothing.
+            done = sum(1 for b in seen if "sites" in b)
+            n = 2 if done == 1 else 0
+            return httpx.Response(200, json={"checked": n, "verified": n, "not_named": 0, "no_impressum": 0, "blocked": 0, "error": 0})
         body = json.loads(request.content)
         seen.append(body)
         field = body.get("berufsfeld")
@@ -354,3 +360,18 @@ async def test_the_rebuild_runs_after_tonights_ad_text(monkeypatch) -> None:
     await _run_main(monkeypatch, ["--partner-pages", "0", "--no-profiles", "--delay", "0"], {"A": 50})
     assert order == ["descriptions"]
     assert {"refresh": True} in _run_main.seen  # type: ignore[attr-defined]
+
+
+async def test_site_checks_run_before_the_profile_rebuild_within_a_budget(monkeypatch) -> None:
+    await _run_main(monkeypatch, ["--agencies-only", "--since", "1", "--delay", "0", "--site-checks", "12"], {"A": 50})
+    seen = _run_main.seen  # type: ignore[attr-defined]
+    order = [next(iter(b)) for b in seen if "sites" in b or "refresh" in b]
+    assert order[-1] == "refresh" and "sites" in order
+    assert order.index("sites") < order.index("refresh")
+    # Stops when the server reports nothing left, well inside the budget.
+    assert sum(1 for b in seen if "sites" in b) == 2
+
+
+async def test_no_site_checks_when_switched_off(monkeypatch) -> None:
+    await _run_main(monkeypatch, ["--agencies-only", "--since", "1", "--delay", "0", "--site-checks", "0"], {"A": 50})
+    assert not [b for b in _run_main.seen if "sites" in b]  # type: ignore[attr-defined]

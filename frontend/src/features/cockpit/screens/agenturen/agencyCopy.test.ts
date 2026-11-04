@@ -137,3 +137,13 @@ describe('website candidates', () => {
     expect(websiteCandidates({ website_candidates: [{ domain: 'a.de' }] } as never)).toEqual([{ domain: 'a.de' }])
   })
 })
+
+describe('website check status', () => {
+  it('reads each outcome', async () => {
+    const { siteCheck } = await import('./agencyCopy')
+    expect(siteCheck('verified')).toEqual({ label: 'confirmed by Impressum', tone: 'mint' })
+    expect(siteCheck('not_named')).toEqual({ label: "someone else's Impressum", tone: 'coral' })
+    expect(siteCheck(undefined)).toBeNull()
+    expect(siteCheck('something_new')).toEqual({ label: 'something_new', tone: undefined })
+  })
+})

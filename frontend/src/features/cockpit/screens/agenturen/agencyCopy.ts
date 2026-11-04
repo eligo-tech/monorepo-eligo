@@ -135,3 +135,24 @@ export function contactPayload(c: ContactCandidateDTO) {
  *  (Vercel can deploy ahead of Railway). */
 export const websiteCandidates = (p: Pick<AgencyProfileDTO, 'website_candidates'>): WebsiteCandidateDTO[] =>
   p.website_candidates ?? []
+
+/** The Impressum check of one website candidate, as a chip — or nothing yet. */
+export function siteCheck(status: string | null | undefined): { label: string; tone: Tone | undefined } | null {
+  switch (status) {
+    case null:
+    case undefined:
+      return null
+    case 'verified':
+      return { label: t('vom Impressum bestätigt'), tone: 'mint' }
+    case 'not_named':
+      return { label: t('fremdes Impressum'), tone: 'coral' }
+    case 'no_impressum':
+      return { label: t('kein Impressum gefunden'), tone: undefined }
+    case 'blocked':
+      return { label: t('Abruf nicht erlaubt'), tone: undefined }
+    case 'error':
+      return { label: t('nicht erreichbar'), tone: undefined }
+    default:
+      return { label: status, tone: undefined }
+  }
+}
