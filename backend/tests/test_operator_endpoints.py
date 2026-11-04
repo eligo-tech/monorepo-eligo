@@ -37,6 +37,8 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     ("POST", "/hub/crawl-profiles/mark-crawled"),
     # Rebuilds the agency finder's derived profiles from the corpus.
     ("POST", "/hub/agencies/refresh"),
+    # Fetches agency homepages + Impressum pages — an outbound crawl.
+    ("POST", "/hub/agencies/sites/check"),
     # Not a crawl of a public source — a workspace's own ATS — but it
     # decrypts that workspace's password, so it is machine-only for the same
     # fail-closed reason.

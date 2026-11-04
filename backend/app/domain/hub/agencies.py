@@ -169,25 +169,24 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
                 facts[key].employer_overlap = True
 
     # Website candidates. A domain named like a known employer is likely the
-    # client's ("autobahn.de" in an agency's ad for Die Autobahn GmbH).
-    labels = {d.split(".")[0] for seen in seen_domains.values() for d in seen}
-    variants = sorted(
-        {
-            prefix + v
-            for label in labels
-            for v in (label, label.replace("-", " "))
-            for prefix in ("", "die ", "der ", "das ")
-        }
-    )
-    employer_labels: set[str] = set()
-    for start in range(0, len(variants), _BATCH):
-        found = await session.execute(
-            select(HubCompany.normalized_name).where(
-                HubCompany.kind == EMPLOYER,
-                HubCompany.normalized_name.in_(variants[start : start + _BATCH]),
-            )
+    # client's: autobahn.de in an agency's ad for "die autobahn des bundes".
+    # Every employer name, once — first words included, which an exact-name
+    # lookup missed.
+    employer_names = (
+        await session.execute(
+            select(HubCompany.normalized_name).where(HubCompany.kind == EMPLOYER).distinct()
         )
-        employer_labels |= {name for (name,) in found}
+    ).scalars().all()
+    employer_label_keys = site_domains.employer_keys(employer_names)
+    from app.domain.hub.models import HubSiteCheck
+
+    # Keyed by agency too: a domain verified for one agency is not another's.
+    site_status = {
+        (domain, group): status
+        for domain, group, status in (
+            await session.execute(select(HubSiteCheck.domain, HubSiteCheck.group_key, HubSiteCheck.status))
+        ).all()
+    }
 
     await session.execute(delete(HubAgencyProfile))
     verdicts: collections.Counter = collections.Counter()
@@ -210,12 +209,15 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
                 city=primary.city,
                 fields=dict(f.fields),
                 reasons=why + score_why,
-                website_candidates=site_domains.rank(
-                    seen_domains.get(key, {}),
-                    firm_names=f.names,
-                    employer_names=employer_labels,
-                    own_names={key, *(r.normalized_name for r in rows)},
-                ),
+                website_candidates=[
+                    {**c, "check": site_status.get((c["domain"], key))}
+                    for c in site_domains.rank(
+                        seen_domains.get(key, {}),
+                        firm_names=f.names,
+                        client_keys=employer_label_keys,
+                        own_names={key, *(r.normalized_name for r in rows)},
+                    )
+                ],
                 refreshed_at=now,
             )
         )

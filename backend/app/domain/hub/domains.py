@@ -137,6 +137,20 @@ def _name_key(name: str) -> str:
     return _squash(_ARTICLE.sub("", name))
 
 
+def employer_keys(names) -> set[str]:
+    """How employers' names could appear as a domain label: the whole name
+    without article, and its first word — "die autobahn des bundes" gives
+    "autobahndesbundes" and "autobahn". Computed once per rebuild."""
+    keys: set[str] = set()
+    for name in names:
+        bare = _ARTICLE.sub("", name)
+        keys.add(_squash(bare))
+        first = bare.split()[0] if bare.split() else ""
+        if len(first) >= 4 and not _GENERIC.match(first):
+            keys.add(_squash(first))
+    return {k for k in keys if len(k) >= 4}
+
+
 def _firm_tokens(names: list[str]) -> set[str]:
     """Distinctive words of the firm's name, ≥4 letters, generic ones dropped —
     plus the first two words joined ("tw con" → "twcon")."""
@@ -169,7 +183,12 @@ def domain_candidates(
     seen: dict[str, dict] = {}
     for posting_id, text in ads:
         collect(seen, posting_id, text)
-    return rank(seen, firm_names=firm_names, employer_names=employer_names, own_names=own_names)
+    return rank(
+        seen,
+        firm_names=firm_names,
+        client_keys=employer_keys(employer_names or set()),
+        own_names=own_names,
+    )
 
 
 def collect(seen: dict[str, dict], posting_id: str, text: str | None) -> None:
@@ -214,19 +233,19 @@ def rank(
     seen: dict[str, dict],
     *,
     firm_names: list[str],
-    employer_names: set[str] | None = None,
+    client_keys: set[str] | None = None,
     own_names: set[str] | None = None,
 ) -> list[dict]:
     """Rank collected domains — see `domain_candidates`.
 
-    `employer_names` / `own_names` are normalized company names. A domain
-    spelled like an employer's name is flagged `likely_client` — unless that
-    employer is the agency itself, hiring in its own name.
+    `client_keys` come from `employer_keys()`; `own_names` are the agency's
+    normalized names. A domain spelled like an employer is flagged
+    `likely_client` — unless that employer is the agency itself.
     """
     tokens = _firm_tokens(firm_names)
     whole = _whole_names(firm_names)
-    own = {_name_key(n) for n in (own_names or set())}
-    employers = {_name_key(n) for n in (employer_names or set())} - own
+    own = employer_keys(own_names or set()) | {_name_key(n) for n in (own_names or set())}
+    employers = (client_keys or set()) - own
     ranked = []
     for domain, entry in seen.items():
         label = domain.split(".")[0]
@@ -241,3 +260,8 @@ def rank(
         )
     ranked.sort(key=lambda c: (not c["name_match"], -c["ads"], c["domain"]))
     return ranked[:MAX_CANDIDATES]
+
+
+# Shared with the Impressum adapter.
+squash = _squash
+whole_names = _whole_names

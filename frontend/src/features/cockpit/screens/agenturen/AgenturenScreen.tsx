@@ -33,6 +33,7 @@ import {
   latestOnly,
   nothingSelected,
   reasonText,
+  siteCheck,
   verdictTone,
   websiteCandidates,
 } from './agencyCopy'
@@ -332,7 +333,7 @@ function AgencyDetail({ id, onClose }: { id: string; onClose: () => void }) {
 
       <div className="space-y-2">
         <h4 className="font-mono text-[12px] uppercase tracking-[0.08em] text-cockpit-faint">
-          {t('Website (unbestätigt)')}
+          {t('Website')}
         </h4>
         {websiteCandidates(profile).length === 0 ? (
           <p className="text-[13px] text-cockpit-faint">{t('Keine Domain in den Anzeigentexten.')}</p>
@@ -348,12 +349,16 @@ function AgencyDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 </span>
                 {c.name_match && <Chip tone="mint">{t('Name passt')}</Chip>}
                 {c.likely_client && <Chip tone="gold">{t('vermutlich Kunde')}</Chip>}
+                {(() => {
+                  const check = siteCheck(c.check)
+                  return check ? <Chip tone={check.tone}>{check.label}</Chip> : null
+                })()}
               </li>
             ))}
           </ul>
         )}
         <p className="text-[12px] text-cockpit-faint">
-          {t('Aus den Anzeigen gelesen, nicht geprüft — bestätigt erst ein Impressum, das die Firma nennt.')}
+          {t('Aus den Anzeigen gelesen. Bestätigt erst ein Impressum, das die Firma als Betreiber nennt — nachts geprüft.')}
         </p>
       </div>
 

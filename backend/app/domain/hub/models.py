@@ -477,3 +477,41 @@ class HubAgencyProfile(Base, IDMixin, TimestampMixin):
     #: `hub_companies.website_domain`: only the Impressum naming the firm does.
     website_candidates: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
     refreshed_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+#: Outcomes of checking one website candidate through its Impressum.
+SITE_VERIFIED = "verified"  # the Impressum names the agency as operator
+SITE_NOT_NAMED = "not_named"  # an Impressum, but someone else's
+SITE_NO_IMPRESSUM = "no_impressum"  # no readable Impressum found
+SITE_BLOCKED = "blocked"  # robots.txt, or an unsafe link/redirect
+SITE_ERROR = "error"  # network failure — retried after a week
+SITE_STATUSES = (SITE_VERIFIED, SITE_NOT_NAMED, SITE_NO_IMPRESSUM, SITE_BLOCKED, SITE_ERROR)
+
+
+class HubSiteCheck(Base, IDMixin, TimestampMixin):
+    """One check of one website candidate against its Impressum.
+
+    Persistent where `HubAgencyProfile` is rebuilt: a domain is fetched once,
+    not every night, and a rejected one is not tried again. Holds COMPANY facts
+    only (decision 2026-11-04, option A): register, VAT, a company phone and
+    function mailboxes as the Impressum publishes them. People named there are
+    not stored until the GDPR Art. 14 question is answered.
+
+    Shared corpus, no tenant_id; the fetch is a `hub_observations` row.
+    """
+
+    __tablename__ = "hub_site_checks"
+    #: Per agency: a domain one agency's ad names may be another agency's own
+    #: site — "not_named" for the first must not stop the second verifying it.
+    __table_args__ = (UniqueConstraint("domain", "group_key", name="uq_hub_site_check_domain_group"),)
+
+    domain: Mapped[str] = mapped_column(String(253), nullable=False, index=True)
+    group_key: Mapped[str] = mapped_column(String(300), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    impressum_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    observation_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(), ForeignKey("hub_observations.id"), nullable=True
+    )
+    #: vat_id, register, register_court, phone, emails — as published.
+    facts: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    checked_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
