@@ -17,6 +17,12 @@ User-Agent, a pause per host) plus what fetching arbitrary agency sites needs:
 redirects are followed by hand, and every hop must be a public host name that
 resolves only to public addresses. Measured: one agency's Impressum link points
 at http://localhost:8093/.
+
+Known limit: the name is resolved once for the check and again by httpx to
+connect, so a domain with a very short TTL could answer differently the second
+time (DNS rebinding). The exposure is blind — only a hash and parsed company
+facts are kept, never a response body — and pinning the connection to the
+checked address is the follow-up if this step ever returns content.
 """
 
 from __future__ import annotations
@@ -64,6 +70,9 @@ STATUS_BLOCKED = 1  # robots.txt, or an unsafe host/redirect
 STATUS_ERROR = 2  # network failure
 _MAX_REDIRECTS = 5
 _MAX_HTML = 2_000_000
+#: Whole-fetch limit. `timeout=` bounds each read, not a site that trickles
+#: bytes — and this runs inside the API process.
+_FETCH_SECONDS = 20
 #: A network error is "not now", not "not ever".
 ERROR_RETRY_AFTER = dt.timedelta(days=7)
 
@@ -158,6 +167,23 @@ class SiteFetcher:
             self._robots[origin] = parser
         return parser.can_fetch(self._ua, url)
 
+    async def _read(self, url: str) -> tuple[int, str | None, str | None]:
+        """(status, redirect location, html) — the body streamed and capped at
+        `_MAX_HTML` bytes, never read whole into memory."""
+        async with self._client.stream("GET", url) as r:
+            if r.is_redirect and r.headers.get("location"):
+                return r.status_code, r.headers["location"], None
+            if r.status_code != 200:
+                return r.status_code, None, None
+            chunks, size = [], 0
+            async for chunk in r.aiter_bytes():
+                chunks.append(chunk)
+                size += len(chunk)
+                if size >= _MAX_HTML:
+                    break
+            raw = b"".join(chunks)[:_MAX_HTML]
+            return 200, None, strip_control(raw.decode(r.encoding or "utf-8", errors="replace"))
+
     async def get(self, url: str) -> SitePage:
         current = url
         for _ in range(_MAX_REDIRECTS + 1):
@@ -167,18 +193,15 @@ class SiteFetcher:
                 return SitePage(url, current, STATUS_BLOCKED, None, "robots.txt disallows")
             await self._pace(urlparse(current).netloc)
             try:
-                r = await self._client.get(current)
+                async with asyncio.timeout(_FETCH_SECONDS):
+                    status, location, html = await self._read(current)
             except Exception as exc:  # noqa: BLE001 — one site must not end a batch
                 return SitePage(url, current, STATUS_ERROR, None, type(exc).__name__)
-            if r.is_redirect and r.headers.get("location"):
-                current = urljoin(current, r.headers["location"])
+            if location:
+                current = urljoin(current, location)
                 continue
-            if r.status_code != 200:
-                return SitePage(url, current, r.status_code, None)
-            try:
-                html = strip_control(r.text[:_MAX_HTML])
-            except Exception as exc:  # noqa: BLE001 — a broken charset
-                return SitePage(url, current, STATUS_ERROR, None, type(exc).__name__)
+            if status != 200:
+                return SitePage(url, current, status, None)
             return SitePage(url, current, 200, html)
         return SitePage(url, current, STATUS_BLOCKED, None, "too many redirects")
 
@@ -201,17 +224,15 @@ def _company_facts(facts) -> dict:
     }
 
 
-def _pick(profiles, checks: dict[str, HubSiteCheck], now: dt.datetime, limit: int):
+def _pick(profiles, checks: dict[tuple[str, str], HubSiteCheck], now: dt.datetime, limit: int):
     picked: list[tuple[HubAgencyProfile, str]] = []
     for profile in profiles:
         candidates = [c for c in (profile.website_candidates or []) if not c.get("likely_client")]
-        if any(
-            checks.get(c["domain"]) is not None and checks[c["domain"]].status == SITE_VERIFIED
-            for c in candidates
-        ):
+        mine = {c["domain"]: checks.get((c["domain"], profile.group_key)) for c in candidates}
+        if any(check is not None and check.status == SITE_VERIFIED for check in mine.values()):
             continue  # this agency's website is known
         for c in candidates:
-            check = checks.get(c["domain"])
+            check = mine[c["domain"]]
             if check is not None:
                 checked_at = check.checked_at
                 if checked_at.tzinfo is None:  # SQLite
@@ -228,7 +249,7 @@ def _pick(profiles, checks: dict[str, HubSiteCheck], now: dt.datetime, limit: in
 async def check_agency_sites(session: AsyncSession, *, fetcher, limit: int = 10) -> dict[str, int]:
     """Check up to `limit` agencies' best unchecked website candidate."""
     now = dt.datetime.now(dt.UTC)
-    checks = {c.domain: c for c in (await session.execute(select(HubSiteCheck))).scalars()}
+    checks = {(c.domain, c.group_key): c for c in (await session.execute(select(HubSiteCheck))).scalars()}
     profiles = (
         await session.execute(
             select(HubAgencyProfile)
@@ -237,9 +258,27 @@ async def check_agency_sites(session: AsyncSession, *, fetcher, limit: int = 10)
         )
     ).scalars().all()
     counts = {"checked": 0, SITE_VERIFIED: 0, SITE_NOT_NAMED: 0, SITE_NO_IMPRESSUM: 0, SITE_BLOCKED: 0, SITE_ERROR: 0}
-    for profile, domain in _pick(profiles, checks, now, limit):
-        status = await _check_one(session, fetcher, profile, domain, now, checks)
-        await session.commit()
+    picked = [(p.id, p.group_key, d) for p, d in _pick(profiles, checks, now, limit)]
+    await session.commit()  # no transaction held open across network fetches
+    for profile_id, group_key, domain in picked:
+        try:
+            profile = await session.get(HubAgencyProfile, profile_id)
+            status = await _check_one(session, fetcher, profile, domain, now, checks)
+            await session.commit()
+        except Exception as exc:  # noqa: BLE001 — one site must not stop the night
+            # Recorded, so the same broken site is not first in line tomorrow.
+            await session.rollback()
+            logger.warning("site check %s failed: %s", domain, type(exc).__name__)
+            status = SITE_ERROR
+            existing = await session.scalar(
+                select(HubSiteCheck).where(HubSiteCheck.domain == domain, HubSiteCheck.group_key == group_key)
+            )
+            if existing is None:
+                session.add(HubSiteCheck(domain=domain, group_key=group_key, status=status, facts={}, checked_at=now))
+            else:
+                existing.status, existing.checked_at = status, now
+            await session.commit()
+            checks = {(c.domain, c.group_key): c for c in (await session.execute(select(HubSiteCheck))).scalars()}
         counts["checked"] += 1
         counts[status] += 1
     logger.info("agency site checks: %s", counts)
@@ -263,10 +302,10 @@ async def _check_one(session, fetcher, profile, domain, now, checks) -> str:
     ).scalars().all() if ids else []
     names = sorted({c.name for c in companies} | {profile.name})
 
-    if page.status == STATUS_BLOCKED:
-        status = SITE_BLOCKED
-    elif page.status == STATUS_ERROR or page.status >= 500:
-        status = SITE_ERROR
+    if page.status in (STATUS_BLOCKED, 401, 403):
+        status = SITE_BLOCKED  # the site said no — not asked again
+    elif page.status in (STATUS_ERROR, 408, 429) or page.status >= 500:
+        status = SITE_ERROR  # "not now" — retried after a week
     elif not facts.is_impressum:
         status = SITE_NO_IMPRESSUM
     elif names_firm(text, names):
@@ -287,24 +326,26 @@ async def _check_one(session, fetcher, profile, domain, now, checks) -> str:
     session.add(observation)
     await session.flush()
 
-    stored = _company_facts(facts) if status == SITE_VERIFIED else {}
+    # A sole trader's VAT id and phone are a natural person's data: for them
+    # only the website (a business fact) is kept.
+    sole_trader = any(c.suspected_natural_person for c in companies)
+    stored = _company_facts(facts) if status == SITE_VERIFIED and not sole_trader else {}
     if status == SITE_VERIFIED:
         # Backfill only — a fact already on record outranks this one.
         for company in companies:
             if company.website_domain is None:
                 company.website_domain = domain
-            if company.vat_id is None and facts.vat_id:
-                company.vat_id = facts.vat_id
+            if company.vat_id is None and stored.get("vat_id"):
+                company.vat_id = stored["vat_id"]
             if company.register_number is None and stored.get("register"):
                 company.register_number = stored["register"]
                 company.register_court = company.register_court or facts.register_court
 
-    check = checks.get(domain)
+    check = checks.get((domain, profile.group_key))
     if check is None:
         check = HubSiteCheck(domain=domain, group_key=profile.group_key, status=status, checked_at=now)
         session.add(check)
-        checks[domain] = check
-    check.group_key = profile.group_key
+        checks[(domain, profile.group_key)] = check
     check.status = status
     check.impressum_url = impressum_url[:1000] if impressum_url else None
     check.observation_id = observation.id

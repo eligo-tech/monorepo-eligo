@@ -180,7 +180,13 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
     employer_label_keys = site_domains.employer_keys(employer_names)
     from app.domain.hub.models import HubSiteCheck
 
-    site_status = dict((await session.execute(select(HubSiteCheck.domain, HubSiteCheck.status))).all())
+    # Keyed by agency too: a domain verified for one agency is not another's.
+    site_status = {
+        (domain, group): status
+        for domain, group, status in (
+            await session.execute(select(HubSiteCheck.domain, HubSiteCheck.group_key, HubSiteCheck.status))
+        ).all()
+    }
 
     await session.execute(delete(HubAgencyProfile))
     verdicts: collections.Counter = collections.Counter()
@@ -204,7 +210,7 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
                 fields=dict(f.fields),
                 reasons=why + score_why,
                 website_candidates=[
-                    {**c, "check": site_status.get(c["domain"])}
+                    {**c, "check": site_status.get((c["domain"], key))}
                     for c in site_domains.rank(
                         seen_domains.get(key, {}),
                         firm_names=f.names,

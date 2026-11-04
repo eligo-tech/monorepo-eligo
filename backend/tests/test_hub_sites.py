@@ -219,3 +219,72 @@ async def test_an_agencys_own_redirect_is_followed(public_dns) -> None:
     async with httpx.AsyncClient(transport=_transport(routes)) as client:
         page = await sites.SiteFetcher(client=client, per_host_delay=0).get("https://firma.de/")
     assert page.status == 200 and page.final_url == "https://firma.jimdosite.com/"
+
+
+async def test_one_broken_site_is_recorded_as_an_error_and_the_batch_goes_on() -> None:
+    await _agency("FOCUS search GmbH", "jobs@focussearch.de")
+    await _agency("Dreada GmbH", "info@dreada.de")
+
+    class _Boom(_Fetcher):
+        async def get(self, url):
+            if "dreada" in url:
+                raise ValueError("Invalid port: 'abc'")
+            return await super().get(url)
+
+    outcome = await _check(_Boom(_focus_pages()))
+    async with SessionLocal() as s:
+        statuses = dict((await s.execute(select(HubSiteCheck.domain, HubSiteCheck.status))).all())
+    assert statuses == {"focussearch.de": "verified", "dreada.de": "error"}
+    assert outcome["checked"] == 2
+
+
+async def test_a_refusal_is_blocked_and_a_rate_limit_is_retried_later() -> None:
+    await _agency("FOCUS search GmbH", "jobs@focussearch.de")
+    await _check(_Fetcher({"https://focussearch.de/": (403, None)}))
+    async with SessionLocal() as s:
+        assert (await s.scalar(select(HubSiteCheck))).status == "blocked"
+        await s.execute(HubSiteCheck.__table__.delete())
+        await s.commit()
+    await _check(_Fetcher({"https://focussearch.de/": (429, None)}))
+    async with SessionLocal() as s:
+        assert (await s.scalar(select(HubSiteCheck))).status == "error"
+
+
+async def test_a_domain_verified_for_one_agency_is_not_shown_as_verified_for_another() -> None:
+    await _agency("FOCUS search GmbH", "jobs@focussearch.de")
+    await _agency("Zebrafink Personal GmbH", "Bewerbung über jobs@focussearch.de")
+    await _check(_Fetcher(_focus_pages()))
+    async with SessionLocal() as s:
+        await agencies.refresh_profiles(s)
+        zebra = await s.scalar(select(HubAgencyProfile).where(HubAgencyProfile.group_key.like("zebrafink%")))
+        focus = await s.scalar(select(HubAgencyProfile).where(HubAgencyProfile.group_key.like("focus%")))
+    # Each agency gets its own verdict on the shared domain.
+    assert zebra.website_candidates[0]["check"] == "not_named"
+    assert focus.website_candidates[0]["check"] == "verified"
+
+
+async def test_a_sole_traders_tax_id_and_phone_are_not_stored() -> None:
+    # A sole trader's VAT id and phone are a natural person's data.
+    await _agency("Erika Beispiel Personalberatung", "kontakt@beispiel-pb.de")
+    async with SessionLocal() as s:
+        (await s.scalar(select(HubCompany))).suspected_natural_person = True
+        await s.commit()
+    pages = {
+        "https://beispiel-pb.de/": (200, '<a href="/impressum">Impressum</a>'),
+        "https://beispiel-pb.de/impressum": (200, _html((FX / "sole_trader_personal.txt").read_text())),
+    }
+    await _check(_Fetcher(pages))
+    async with SessionLocal() as s:
+        check = await s.scalar(select(HubSiteCheck))
+        company = await s.scalar(select(HubCompany))
+    assert check.status == "verified" and check.facts == {}
+    assert company.website_domain == "beispiel-pb.de" and company.vat_id is None
+
+
+async def test_a_huge_or_slow_page_is_cut_off(public_dns, monkeypatch) -> None:
+    monkeypatch.setattr(sites, "_MAX_HTML", 1000)
+    big = "<p>" + "x" * 50_000 + "</p>"
+    routes = {"https://firma.de/robots.txt": httpx.Response(404), "https://firma.de/": httpx.Response(200, text=big)}
+    async with httpx.AsyncClient(transport=_transport(routes)) as client:
+        page = await sites.SiteFetcher(client=client, per_host_delay=0).get("https://firma.de/")
+    assert page.status == 200 and len(page.html) <= 1000

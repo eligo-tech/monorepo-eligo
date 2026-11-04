@@ -167,3 +167,40 @@ def test_a_link_to_an_internal_address_is_never_followed() -> None:
 )
 def test_safe_url(url: str, ok: bool) -> None:
     assert safe_url(url, "firma.de") is ok
+
+
+def test_gs_company_names_both_directors() -> None:
+    names = [p.name for p in parse_impressum(_page("gs_company_de")).people]
+    assert names == ["Max Mustermann", "Erika Musterfrau"]
+
+
+def test_a_person_sharing_the_firms_surname_does_not_verify_it() -> None:
+    # A job board whose manager is called Schmidt is not Schmidt Personal's site.
+    board = "Impressum\nJobBoard Media GmbH\nErika Schmidt\nGeschäftsführer: Erika Schmidt\nHRB 1, Amtsgericht Köln\n"
+    assert not names_firm(board, ["Schmidt Personal GmbH"])
+
+
+def test_a_legal_word_in_the_navigation_does_not_hide_the_operator_block() -> None:
+    page = (
+        "Start\nGeschäftsführung\nKarriere\n" + "Menüpunkt\n" * 20
+        + "Impressum\nFOCUS search GmbH\nMusterweg 1\nHRB 78563, Amtsgericht Köln\n"
+    )
+    assert names_firm(page, ["FOCUS search GmbH"])
+
+
+def test_the_fax_number_is_not_the_phone() -> None:
+    assert parse_impressum("Impressum\nX GmbH\nTelefax: 0221 999\nTelefon: 0221 123 456\nHRB 1 Amtsgericht Köln").phone == "0221 123 456"
+
+
+def test_the_court_belongs_to_the_register_it_sits_next_to() -> None:
+    text = (
+        "Impressum\nGS Company GmbH & Co. KG\nAmtsgericht: Neuruppin\nHRA 3520 NP\n"
+        "Persönlich haftende Gesellschafterin: GS Verwaltung GmbH, Amtsgericht Potsdam HRB 99\n"
+    )
+    facts = parse_impressum(text)
+    assert (facts.register_type, facts.register_number, facts.register_court) == ("HRA", "3520", "Neuruppin")
+
+
+def test_an_unparseable_port_is_unsafe_not_a_crash() -> None:
+    for url in ("https://firma.de:abc/impressum", "https://firma.de:99999/"):
+        assert safe_url(url, "firma.de") is False

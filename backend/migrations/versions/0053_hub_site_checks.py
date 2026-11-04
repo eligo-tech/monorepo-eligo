@@ -33,7 +33,7 @@ def upgrade() -> None:
         op.create_table(
             _TABLE,
             sa.Column("id", sa.Uuid(), primary_key=True),
-            sa.Column("domain", sa.String(253), nullable=False, unique=True),
+            sa.Column("domain", sa.String(253), nullable=False, index=True),
             sa.Column("group_key", sa.String(300), nullable=False, index=True),
             sa.Column("status", sa.String(20), nullable=False),
             sa.Column("impressum_url", sa.String(1000), nullable=True),
@@ -42,6 +42,7 @@ def upgrade() -> None:
             sa.Column("checked_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            sa.UniqueConstraint("domain", "group_key", name="uq_hub_site_check_domain_group"),
         )
     if bind.dialect.name != "postgresql":
         return

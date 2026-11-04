@@ -501,8 +501,11 @@ class HubSiteCheck(Base, IDMixin, TimestampMixin):
     """
 
     __tablename__ = "hub_site_checks"
+    #: Per agency: a domain one agency's ad names may be another agency's own
+    #: site — "not_named" for the first must not stop the second verifying it.
+    __table_args__ = (UniqueConstraint("domain", "group_key", name="uq_hub_site_check_domain_group"),)
 
-    domain: Mapped[str] = mapped_column(String(253), nullable=False, unique=True)
+    domain: Mapped[str] = mapped_column(String(253), nullable=False, index=True)
     group_key: Mapped[str] = mapped_column(String(300), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     impressum_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)

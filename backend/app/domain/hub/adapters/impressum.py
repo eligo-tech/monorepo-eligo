@@ -39,7 +39,8 @@ _COURT = re.compile(
     r"Amtsgericht\s*:?\s*([A-ZÄÖÜ][\wäöüß]+"
     r"(?:\s(?:am|an der|im|in der|ob der)\s[A-ZÄÖÜ][\wäöüß]+|-[A-ZÄÖÜ][\wäöüß]+)?)"
 )
-_PHONE_LABEL = re.compile(r"^(?:Telefon|Tel\.?|Fon|Phone)\s*\.?:?\s*(.*)$", re.IGNORECASE)
+#: "Telefax" starts with "Tel" — the label must end where the word does.
+_PHONE_LABEL = re.compile(r"^(?:Telefon|Tel\.|Tel\b|Fon\b|Phone)\s*\.?:?\s*(.*)$", re.IGNORECASE)
 _PHONE = re.compile(r"(?:\+\s?)?\(?\d[\d\s()/.\-–]{5,}\d")
 _EMAIL = re.compile(r"([\w.+-]+)\s*(?:@|\(at\)|\[at\])\s*([\w-]+(?:\.[\w-]+)+)", re.IGNORECASE)
 #: Function mailboxes — the company's channel, not a person's.
@@ -107,11 +108,19 @@ def _people(lines: list[str]) -> list[ImpressumPerson]:
         value = _next_value(lines, i, m.group(2))
         if _PEOPLE_LABEL.match(value):
             continue  # "Vertreten durch:" / "Geschäftsführer: …" — read on its own line
-        quote = line if m.group(2).strip() else f"{line} {value}"
-        for part in re.split(r"\s*(?:,|&|\||\bund\b|;)\s*", value):
-            part = part.strip()
-            if _PERSON.match(part):
-                out.append(ImpressumPerson(role=m.group(1), name=part, quote=quote[:200]))
+        values = [value]
+        if not m.group(2).strip():
+            # "Geschäftsführer:" then one name per line.
+            for follow in lines[i + 2 : i + 5]:
+                if not _PERSON.match(follow):
+                    break
+                values.append(follow)
+        quote = line if m.group(2).strip() else " ".join([line, *values])
+        for value_line in values:
+            for part in re.split(r"\s*(?:,|&|\||\bund\b|;)\s*", value_line):
+                part = part.strip()
+                if _PERSON.match(part):
+                    out.append(ImpressumPerson(role=m.group(1), name=part, quote=quote[:200]))
     return out
 
 
@@ -125,7 +134,12 @@ def parse_impressum(text: str | None) -> ImpressumFacts:
     if not (vat or register or markers >= 2):
         return ImpressumFacts(is_impressum=False)
 
-    court = _COURT.search(body) if register else None
+    # The court beside THIS register — a GmbH & Co. KG also names its general
+    # partner's court further down.
+    court = None
+    if register:
+        nearby = body[max(0, register.start() - 80) : register.end() + 80]
+        court = _COURT.search(nearby) or _COURT.search(body)
     phone = None
     for i, line in enumerate(lines):
         m = _PHONE_LABEL.match(line)
@@ -161,14 +175,42 @@ def names_firm(text: str | None, firm_names: list[str]) -> bool:
     the hogapage.de trap from T0.
     """
     lines = _lines(text or "")
-    first = next((i for i, line in enumerate(lines) if _LEGAL_MARKER.search(line)), None)
-    if first is None:
+    markers = [i for i, line in enumerate(lines) if _LEGAL_MARKER.search(line)][:6]
+    if not markers:
         return False
-    window = lines[max(0, first - _WINDOW_BEFORE) : first + 1]
-    keys = {k for k in _whole_names(firm_names) if len(k) >= 4}
-    keys |= {_squash(normalize_company_name(n)) for n in firm_names}
-    keys = {k for k in keys if len(k) >= 4}
-    return any(len(line) <= 100 and any(k in _squash(line) for k in keys) for line in window)
+    # The lines before each of the first legal markers: one stray
+    # "Geschäftsführung" in the navigation must not be the only window.
+    window = {j for i in markers for j in range(max(0, i - _WINDOW_BEFORE), i + 1)}
+    multiword = {k for k in _whole_names(firm_names) if len(k) >= 4}
+    multiword |= {_squash(normalize_company_name(n)) for n in firm_names}
+    multiword = {k for k in multiword if len(k) >= 4}
+    for j in sorted(window):
+        line = lines[j]
+        if len(line) > 100:
+            continue
+        squashed = _squash(line)
+        # A company line ("FOCUS search GmbH") may name the firm anywhere in
+        # it; any other line must START with a distinctive name — "Erika
+        # Schmidt" is a person, not Schmidt Personal GmbH.
+        if _LEGAL_FORM.search(line.lower()):
+            if any(k in squashed for k in multiword):
+                return True
+        elif any(squashed.startswith(k) and (len(k) >= 8 or k in _joined(firm_names)) for k in multiword):
+            return True
+    return False
+
+
+_LEGAL_FORM = re.compile(r"\b(?:gmbh|mbh|ag|ug|kg|ohg|gbr|e\.\s?k\.?|se|kgaa|e\.\s?v\.|partg)\b")
+
+
+def _joined(firm_names: list[str]) -> set[str]:
+    """First two words joined — a multi-word name, safe to match at a line start."""
+    out = set()
+    for name in firm_names:
+        words = [_squash(w) for w in name.split() if _squash(w)]
+        if len(words) >= 2:
+            out.add(words[0] + words[1])
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +224,11 @@ _IMPRESSUM_LINK = re.compile(r"impressum|imprint|legal[\s_-]?notice|anbieterkenn
 def public_host(url: str) -> bool:
     """http(s), default port, a name — not an IP literal, not localhost."""
     parts = urlparse(url)
-    if parts.scheme not in ("http", "https") or parts.port not in (None,):
+    try:
+        port = parts.port  # raises on ":abc" or ":99999"
+    except ValueError:
+        return False
+    if parts.scheme not in ("http", "https") or port is not None:
         return False
     host = (parts.hostname or "").lower().rstrip(".")
     if not host or host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
