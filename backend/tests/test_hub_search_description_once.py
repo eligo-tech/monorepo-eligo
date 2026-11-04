@@ -121,3 +121,25 @@ async def test_a_term_under_the_cap_is_matched_every_request(monkeypatch) -> Non
     finally:
         event.remove(engine.sync_engine, "before_cursor_execute", record)
     assert _count_ad_text_queries(seen) == 2
+
+
+async def test_an_ad_text_match_that_runs_out_of_time_is_dropped_not_waited_for(monkeypatch) -> None:
+    """Production, 2026-11-04: the ad-text match for "sap" took 14.5 s of a
+    17.7 s search — the 2.8 GB ad-text table does not fit the 512 MB cache, so
+    the match reads from disk. A time budget bounds it: past it, the search
+    answers from titles, occupations and names, and remembers the term."""
+    monkeypatch.setattr(service, "_TOO_COMMON", {})
+
+    async def too_slow(session, stmt):
+        raise service.AdTextTimeout()
+
+    monkeypatch.setattr(service, "_run_ad_text_match", too_slow)
+    async with SessionLocal() as s:
+        assert await service._description_hits(s, "sap") is None
+        # The rest of the search still runs in the same session.
+        await service.count_employers(s, q="sap")
+    # Remembered briefly (a cold cache is not a common term), not for a day.
+    import time as _time
+
+    remaining = service._TOO_COMMON["sap"] - _time.monotonic()
+    assert 0 < remaining <= service._TIMEOUT_MEMORY_SECONDS

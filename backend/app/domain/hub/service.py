@@ -1547,6 +1547,42 @@ _AD_TEXT_HIT_CAP = 21_000
 #: cannot replace the count — it said 48 rows for terms with 3,560–14,015.
 _TOO_COMMON: dict[str, float] = {}
 _TOO_COMMON_TTL_SECONDS = 24 * 3600
+#: The ad-text match may take this long, then the search goes on without it.
+#: Production, 2026-11-04: "sap" took 14.5 s of a 17.7 s search — the 2.8 GB
+#: ad-text table does not fit the 512 MB cache (24% heap hit rate), so the
+#: match reads long texts from disk. Past the budget the term is treated as
+#: too common for the day: titles, occupations and names still answer.
+_AD_TEXT_BUDGET_MS = 500
+_TIMEOUT_MEMORY_SECONDS = 15 * 60
+
+
+class AdTextTimeout(Exception):
+    """The ad-text match exceeded `_AD_TEXT_BUDGET_MS`."""
+
+
+async def _run_ad_text_match(session: AsyncSession, stmt) -> list:
+    """Run the match under the time budget, in a savepoint so a cancelled
+    statement does not poison the request's transaction. Postgres only —
+    SQLite has no statement timeout and test corpora are tiny."""
+    if session.bind.dialect.name != "postgresql":
+        return list((await session.execute(stmt)).scalars().all())
+    from sqlalchemy import text as sql
+    from sqlalchemy.exc import DBAPIError
+
+    previous = (await session.execute(sql("SHOW statement_timeout"))).scalar()
+    savepoint = await session.begin_nested()
+    try:
+        await session.execute(sql(f"SET LOCAL statement_timeout = '{_AD_TEXT_BUDGET_MS}ms'"))
+        ids = list((await session.execute(stmt)).scalars().all())
+    except DBAPIError as exc:
+        await savepoint.rollback()  # also undoes the SET LOCAL
+        if "statement timeout" in str(exc).lower() or "canceling statement" in str(exc).lower():
+            raise AdTextTimeout() from exc
+        raise
+    # SET LOCAL outlives a released savepoint; put the caller's limit back.
+    await session.execute(sql("SELECT set_config('statement_timeout', :v, true)"), {"v": previous})
+    await savepoint.commit()
+    return ids
 
 
 async def _description_hits(session: AsyncSession, term: str) -> list | None:
@@ -1573,12 +1609,21 @@ async def _description_hits(session: AsyncSession, term: str) -> list | None:
     if _TOO_COMMON.get(term, 0.0) > time.monotonic():
         memo[term] = None
         return None
-    result = await session.execute(
-        select(HubPostingPayload.hub_job_posting_id)
-        .where(func.lower(HubPostingPayload.description).like(f"%{term}%"))
-        .limit(_AD_TEXT_HIT_CAP + 1)
-    )
-    ids = list(result.scalars().all())
+    try:
+        ids = await _run_ad_text_match(
+            session,
+            select(HubPostingPayload.hub_job_posting_id)
+            .where(func.lower(HubPostingPayload.description).like(f"%{term}%"))
+            .limit(_AD_TEXT_HIT_CAP + 1),
+        )
+    except AdTextTimeout:
+        logger.info("ad-text match for %r over %d ms budget — skipped", term, _AD_TEXT_BUDGET_MS)
+        # Short memory: a timeout may be a cold cache, not a common term —
+        # measured 2026-11-04, "zerspanungsmechaniker" (2,308 ads) timed out
+        # too. Retry after a while rather than lose its ad text for a day.
+        _TOO_COMMON[term] = time.monotonic() + _TIMEOUT_MEMORY_SECONDS
+        memo[term] = None
+        return None
     if len(ids) > _AD_TEXT_HIT_CAP:
         _TOO_COMMON[term] = time.monotonic() + _TOO_COMMON_TTL_SECONDS
         memo[term] = None
