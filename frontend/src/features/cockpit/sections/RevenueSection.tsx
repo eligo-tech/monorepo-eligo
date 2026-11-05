@@ -163,6 +163,11 @@ function RevenueBody({
           </div>
 
           <div className="mt-3 divide-y divide-cockpit-line">
+            {panel.closing.length === 0 && (
+              <p className="py-3 text-[14px] text-cockpit-faint">
+                {t('Noch kein Prozess nach dem Finaltermin.')}
+              </p>
+            )}
             {panel.closing.map((deal) => (
               <div key={deal.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 py-3">
                 <div className="min-w-0 flex-1">

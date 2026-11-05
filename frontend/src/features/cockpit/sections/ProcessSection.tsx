@@ -72,12 +72,18 @@ function MandateHead({ mandate }: { mandate: Mandate }) {
 export function ProcessSection({
   mandates,
   isLive,
+  unavailable = false,
+  loading = false,
   onStepClick,
   onChanged,
   onOpenMandate,
 }: {
   mandates: Mandate[]
   isLive: boolean
+  /** The processes could not be loaded — an error, not an empty book. */
+  unavailable?: boolean
+  /** A reload is in flight — the retry shows it rather than doing nothing. */
+  loading?: boolean
   onStepClick?: (card: ProcessCard, step: ProcessStep) => void
   /** Called after a step was written, so the cockpit can re-read it. */
   onChanged?: () => void
@@ -129,9 +135,23 @@ export function ProcessSection({
         </Panel>
       )}
 
-      {total === 0 ? (
+      {unavailable ? (
         <Panel className="px-6 py-10 text-center text-[15px] text-cockpit-dim">
-          {t('Kein Kandidat ist derzeit vorgestellt — sobald ein Profil beim Kunden liegt, erscheint der Prozess hier.')}
+          {t('Die Prozesse konnten gerade nicht geladen werden.')}{' '}
+          {onChanged && (
+            <button
+              type="button"
+              onClick={onChanged}
+              disabled={loading}
+              className="text-mint-400 underline underline-offset-4 enabled:hover:text-mint-300 disabled:no-underline disabled:text-cockpit-faint"
+            >
+              {loading ? t('lädt …') : t('Erneut versuchen')}
+            </button>
+          )}
+        </Panel>
+      ) : total === 0 ? (
+        <Panel className="px-6 py-10 text-center text-[15px] text-cockpit-dim">
+          {t('Noch kein laufender Prozess — ordnen Sie einem Mandat einen Kandidaten zu, dann erscheint er hier mit allen Schritten zum Bearbeiten.')}
         </Panel>
       ) : (
         <div className="space-y-5">

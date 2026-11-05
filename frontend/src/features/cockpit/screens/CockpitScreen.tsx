@@ -39,7 +39,7 @@ export function CockpitScreen({
   /** Jump to a neighbouring work surface (the design's compass). */
   onGoToScreen?: (screen: ScreenKey) => void
 }) {
-  const { data, live, reload } = state
+  const { data, live, loading, reload } = state
 
   // Every mandate the workspace has, not only the nine someone is running
   // on: choosing a mandate to work ON is exactly the case where the process
@@ -147,6 +147,8 @@ export function CockpitScreen({
           <ProcessSection
             mandates={selection}
             isLive={live.processes}
+            unavailable={live.unavailable}
+            loading={loading}
             onChanged={reload}
             onOpenMandate={onSelectMandate}
           />
@@ -215,11 +217,17 @@ export function CockpitScreen({
         <ProcessSection
           mandates={data.mandates}
           isLive={live.processes}
+          unavailable={live.unavailable}
+          loading={loading}
           onChanged={reload}
           onOpenMandate={onSelectMandate}
         />
         <NextActionsSection actions={data.actions} />
-        <JobScoringSection rows={data.jobScores} isLive={live.jobScores} />
+        <JobScoringSection
+          rows={data.jobScores}
+          isLive={live.jobScores}
+          unavailable={live.scoresUnavailable}
+        />
         <CompetitionSection />
         <WorldStrip onGo={onGoToScreen} />
       </div>

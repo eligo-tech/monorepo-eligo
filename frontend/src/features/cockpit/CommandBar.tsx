@@ -101,11 +101,14 @@ export function CommandBar({
         <div className="flex shrink-0 items-center gap-2">
           {/* What Claude proposed, waiting for a person. Hidden when empty. */}
           <ProposalsButton />
-          <span className="flex items-center gap-2 rounded-xl border border-gold-600/45 bg-gold-800/25 px-3 py-1.5 text-[13px] text-gold-300">
-            <span className="h-[7px] w-[7px] rounded-full bg-gold-400" />
-            {t('Datenlauf fällig ·')} <Figure figure={status.pendingChanges} />{' '}
-            {t('Änderungen')}
-          </span>
+          {/* Hidden at zero: "fällig · 0 Änderungen" is not a thing to act on. */}
+          {status.pendingChanges.value > 0 && (
+            <span className="flex items-center gap-2 rounded-xl border border-gold-600/45 bg-gold-800/25 px-3 py-1.5 text-[13px] text-gold-300">
+              <span className="h-[7px] w-[7px] rounded-full bg-gold-400" />
+              {t('Datenlauf fällig ·')} <Figure figure={status.pendingChanges} />{' '}
+              {t('Änderungen')}
+            </span>
+          )}
           {status.humanInTheLoop && (
             <span className="flex items-center gap-2 rounded-xl border border-mint-600/45 bg-mint-800/25 px-3 py-1.5 text-[13px] text-mint-300">
               <span className="h-[7px] w-[7px] rounded-full bg-mint-400" />

@@ -6,7 +6,16 @@ import { ScoreBar, scoreTone } from '../ui/ScoreBar'
 import { SectionHeader } from '../ui/primitives'
 import type { JobScore } from '../data/types'
 
-export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: boolean }) {
+export function JobScoringSection({
+  rows,
+  isLive,
+  unavailable = false,
+}: {
+  rows: JobScore[]
+  isLive: boolean
+  /** Scoring failed — an error, not "no mandate". */
+  unavailable?: boolean
+}) {
   const half = Math.ceil(rows.length / 2)
   const columns = [rows.slice(0, half), rows.slice(half)]
 
@@ -30,28 +39,38 @@ export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: 
         }
       />
 
-      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
-        <span>
-          Ø <span className="text-cockpit-text">{average}</span>
-        </span>
-        <span>
-          <span className="text-cockpit-text">{strong}</span> {t('über 70')}
-        </span>
-        <span>
-          <span className="text-coral-400">{critical}</span> {t('kritisch')}
-        </span>
-        <span>{t('M = Deal-Chance beim Manager')}</span>
-      </div>
+      {rows.length === 0 ? (
+        <p className="text-[15px] text-cockpit-dim">
+          {unavailable
+            ? t('Das Jobscoring konnte gerade nicht berechnet werden.')
+            : t('Noch kein laufendes Mandat zum Bewerten.')}
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
+            <span>
+              Ø <span className="text-cockpit-text">{average}</span>
+            </span>
+            <span>
+              <span className="text-cockpit-text">{strong}</span> {t('über 70')}
+            </span>
+            <span>
+              <span className="text-coral-400">{critical}</span> {t('kritisch')}
+            </span>
+            <span>{t('M = Deal-Chance beim Manager')}</span>
+          </div>
 
-      <div className="grid gap-x-12 gap-y-1 lg:grid-cols-2">
-        {columns.map((column, i) => (
-          <div key={i} className="min-w-0">
-            {column.map((row) => (
-              <ScoreBar key={row.id} row={row} />
+          <div className="grid gap-x-12 gap-y-1 lg:grid-cols-2">
+            {columns.map((column, i) => (
+              <div key={i} className="min-w-0">
+                {column.map((row) => (
+                  <ScoreBar key={row.id} row={row} />
+                ))}
+              </div>
             ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </section>
   )
 }

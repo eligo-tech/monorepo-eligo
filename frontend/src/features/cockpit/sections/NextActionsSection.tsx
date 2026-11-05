@@ -52,6 +52,11 @@ export function NextActionsSection({ actions }: { actions: NextAction[] }) {
       />
 
       <div className="space-y-3">
+        {actions.length === 0 && (
+          <Panel className="px-6 py-6 text-[15px] text-cockpit-dim">
+            {t('Keine offenen Aktionen.')}
+          </Panel>
+        )}
         {actions.map((action) => {
           const { label, tone, icon: Icon } = CATEGORY[action.category]
           const isDone = done.has(action.id)
