@@ -52,6 +52,45 @@ describe('a real workspace with nothing in it', () => {
     expect(live.unavailable).toBe(true)
   })
 
+  it('shows no demo money and no demo change count', async () => {
+    const { data } = await loadCockpit(empty, false)
+    expect(data.status.pendingChanges.value).toBe(0)
+    const figures = data.slides.flatMap((s) =>
+      s.panels
+        ? Object.values(s.panels).flatMap((p) => [
+            p.actual.value,
+            p.potential.value,
+            p.target.value,
+            p.yearActual.value,
+            p.yearTarget.value,
+            p.pipelineTotal.value,
+            p.pipelineWeighted.value,
+          ])
+        : [],
+    )
+    expect(figures.length).toBeGreaterThan(0)
+    expect(figures.every((v) => v === 0)).toBe(true)
+  })
+
+  it('reports scoring as unavailable when matching fails, not as "no mandate"', async () => {
+    const job = { id: 'j1', status: 'open' } as never
+    const { live } = await loadCockpit(
+      { ...empty, jobs: async () => [job], matchJob: () => Promise.reject(new Error('502')) },
+      false,
+    )
+    expect(live.scoresUnavailable).toBe(true)
+    const ok = await loadCockpit(empty, false)
+    expect(ok.live.scoresUnavailable).toBe(false)
+  })
+
+  it('reports processes as unavailable when the tracker fails even if the board answers', async () => {
+    const { live } = await loadCockpit(
+      { ...empty, processes: () => Promise.reject(new Error('500')) },
+      false,
+    )
+    expect(live.unavailable).toBe(true)
+  })
+
   it('does not flash the demo book while loading', () => {
     const data = cockpitBaseline(false)
     expect(data.processes).toEqual([])

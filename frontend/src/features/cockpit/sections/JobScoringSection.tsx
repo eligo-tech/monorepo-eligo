@@ -6,7 +6,16 @@ import { ScoreBar, scoreTone } from '../ui/ScoreBar'
 import { SectionHeader } from '../ui/primitives'
 import type { JobScore } from '../data/types'
 
-export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: boolean }) {
+export function JobScoringSection({
+  rows,
+  isLive,
+  unavailable = false,
+}: {
+  rows: JobScore[]
+  isLive: boolean
+  /** Scoring failed — an error, not "no mandate". */
+  unavailable?: boolean
+}) {
   const half = Math.ceil(rows.length / 2)
   const columns = [rows.slice(0, half), rows.slice(half)]
 
@@ -32,7 +41,9 @@ export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: 
 
       {rows.length === 0 ? (
         <p className="text-[15px] text-cockpit-dim">
-          {t('Noch kein laufendes Mandat zum Bewerten.')}
+          {unavailable
+            ? t('Das Jobscoring konnte gerade nicht berechnet werden.')
+            : t('Noch kein laufendes Mandat zum Bewerten.')}
         </p>
       ) : (
         <>

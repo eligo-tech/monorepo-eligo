@@ -73,6 +73,7 @@ export function ProcessSection({
   mandates,
   isLive,
   unavailable = false,
+  loading = false,
   onStepClick,
   onChanged,
   onOpenMandate,
@@ -81,6 +82,8 @@ export function ProcessSection({
   isLive: boolean
   /** The processes could not be loaded — an error, not an empty book. */
   unavailable?: boolean
+  /** A reload is in flight — the retry shows it rather than doing nothing. */
+  loading?: boolean
   onStepClick?: (card: ProcessCard, step: ProcessStep) => void
   /** Called after a step was written, so the cockpit can re-read it. */
   onChanged?: () => void
@@ -139,9 +142,10 @@ export function ProcessSection({
             <button
               type="button"
               onClick={onChanged}
-              className="text-mint-400 underline underline-offset-4 hover:text-mint-300"
+              disabled={loading}
+              className="text-mint-400 underline underline-offset-4 enabled:hover:text-mint-300 disabled:no-underline disabled:text-cockpit-faint"
             >
-              {t('Erneut versuchen')}
+              {loading ? t('lädt …') : t('Erneut versuchen')}
             </button>
           )}
         </Panel>

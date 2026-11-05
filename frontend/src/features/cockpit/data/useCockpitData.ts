@@ -20,7 +20,7 @@ import {
   toJobScores,
   toProcessCards,
 } from './adapters'
-import type { ClosingDeal, CockpitData } from './types'
+import type { ClosingDeal, CockpitData, Figure } from './types'
 import { isLive } from '../ui/jobStatus'
 
 /** Which sections are showing live data — drives the section-header hints. */
@@ -31,6 +31,8 @@ export interface LiveSections {
   closing: boolean
   /** A real workspace whose processes could not be loaded at all. */
   unavailable: boolean
+  /** A real workspace whose Jobscoring could not be computed. */
+  scoresUnavailable: boolean
 }
 
 export interface CockpitState {
@@ -62,20 +64,46 @@ export type CockpitClient = Pick<
  *  The demo build keeps the full mock book. A signed-in workspace starts
  *  empty instead: a demo card there looks like a real process but has nothing
  *  behind it to save to, so an empty workspace read as "this user cannot
- *  edit". Only the record-like parts are emptied — the revenue figures and
- *  placeholders carry their own "Demo" provenance until a backend exists. */
+ *  edit". Revenue figures and the change count have no backend yet, so
+ *  they read zero rather than an invented number. */
 export function cockpitBaseline(demo: boolean): CockpitData {
   if (demo) return { ...MOCK_COCKPIT }
   return {
     ...MOCK_COCKPIT,
+    status: { ...MOCK_COCKPIT.status, pendingChanges: zero(MOCK_COCKPIT.status.pendingChanges) },
     signals: [],
     actions: [],
     processes: [],
     mandates: [],
     jobScores: [],
-    slides: withClosing(MOCK_COCKPIT.slides, []),
+    slides: withClosing(MOCK_COCKPIT.slides, []).map((slide) =>
+      slide.panels
+        ? {
+            ...slide,
+            panels: Object.fromEntries(
+              Object.entries(slide.panels).map(([key, panel]) => [
+                key,
+                {
+                  ...panel,
+                  actual: zero(panel.actual),
+                  potential: zero(panel.potential),
+                  target: zero(panel.target),
+                  yearActual: zero(panel.yearActual),
+                  yearTarget: zero(panel.yearTarget),
+                  pipelineTotal: zero(panel.pipelineTotal),
+                  pipelineWeighted: zero(panel.pipelineWeighted),
+                },
+              ]),
+            ) as typeof slide.panels,
+          }
+        : slide,
+    ),
   }
 }
+
+/** A demo figure with nothing in it — keeps its "Demo" provenance, drops the
+ *  invented number. */
+const zero = (figure: Figure): Figure => ({ ...figure, value: 0 })
 
 /** The same "Kurz vor Abschluss" list on every period: it is a state of the
  *  process, not of the month being looked at. */
@@ -111,6 +139,7 @@ export async function loadCockpit(
     jobScores: false,
     closing: false,
     unavailable: false,
+    scoresUnavailable: false,
   }
 
   // ── 03 Laufende Prozesse ──
@@ -132,9 +161,9 @@ export async function loadCockpit(
     }
   }
 
-  // Neither source answered: say so, rather than an empty board that reads
-  // as "nothing is running".
-  if (!demo && !live.processes && !processes && !(board && candidates && jobs && companies)) {
+  // The tracker did not answer and the board had nothing to stand in for it:
+  // say so, rather than an empty board that reads as "nothing is running".
+  if (!demo && !live.processes && !processes) {
     live.unavailable = true
   }
 
@@ -169,9 +198,13 @@ export async function loadCockpit(
       if (matches.some((m) => m !== null)) {
         data.jobScores = toJobScores(open, matches)
         live.jobScores = true
+      } else if (!demo) {
+        live.scoresUnavailable = true
       }
     }
   }
+
+  if (!jobs && !demo) live.scoresUnavailable = true
 
   return { data, loading: false, live }
 }
@@ -191,7 +224,13 @@ export function useCockpitData(): CockpitState {
     return {
       data: cockpitBaseline(demo),
       loading,
-      live: { processes: false, jobScores: false, closing: false, unavailable: false },
+      live: {
+        processes: false,
+        jobScores: false,
+        closing: false,
+        unavailable: false,
+        scoresUnavailable: false,
+      },
       reload,
     }
   return { ...data, loading, reload }
