@@ -46,7 +46,8 @@ def _listing(tree: dict, calls: list | None = None):
         if calls is not None:
             calls.append((dict(filters), page))
         total, facets, ids = tree[frozenset(filters.items())]
-        return {"total_available": total, "facets": facets, "external_ids": ids[(page - 1) * 100: page * 100]}
+        chunk = ids[(page - 1) * 100: page * 100]
+        return {"total_available": total, "facets": facets, "external_ids": chunk, "records": len(chunk)}
 
     return listing
 
@@ -74,6 +75,19 @@ async def test_every_page_of_a_leaf_is_read_and_a_failed_leaf_is_recorded() -> N
     assert result["live"] == set(ids)
     assert [page for _, page in calls if _ == {"berufsfeld": "A"}] == [1, 2, 3]
     assert result["failed"] == [{"berufsfeld": "Kaputt"}]
+
+
+async def test_a_page_short_of_references_but_full_of_records_reads_on() -> None:
+    pages = {1: (["a"] * 99, 100), 2: (["b"], 1)}
+    calls: list[int] = []
+
+    async def listing(filters: dict[str, str], page: int) -> dict:
+        calls.append(page)
+        ids, records = pages[page]
+        return {"total_available": 101, "facets": {}, "external_ids": ids, "records": records}
+
+    await read_leaves(listing, [({"berufsfeld": "A"}, 101)])
+    assert calls == [1, 2]
 
 
 async def test_a_leaf_over_the_cap_stops_at_page_100() -> None:
@@ -124,29 +138,57 @@ async def test_marking_walks_every_page_of_our_open_ads() -> None:
     assert [m["listed"] for m in marked] == [["b"], []]
 
 
+def _answer(checked: int, closed: int = 0, live: int = 0, unknown: int = 0, **flags) -> dict:
+    return {"checked": checked, "closed": closed, "live": live, "unknown": unknown,
+            "source_unreachable": False, "control_failed": False, **flags}
+
+
 async def test_checks_stop_at_the_budget() -> None:
     asked: list[int] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         n = int(request.url.params["limit"])
         asked.append(n)
-        return httpx.Response(200, json={"checked": n, "closed": n, "live": 0, "unknown": 0, "source_unreachable": False})
+        return httpx.Response(200, json=_answer(n, closed=n))
 
     totals = await check_pass(_api(handler), budget=120, batch=50)
     assert asked == [50, 50, 20] and totals["closed"] == 120
 
 
 async def test_checks_stop_when_the_queue_is_empty() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"checked": 7, "closed": 2, "live": 5, "unknown": 0, "source_unreachable": False})
+    answers = iter([_answer(25, closed=5, live=20), _answer(7, closed=2, live=5), _answer(0)])
 
-    totals = await check_pass(_api(handler), budget=1_000, batch=50)
-    assert totals == {"checked": 7, "closed": 2, "live": 5, "unknown": 0}
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=next(answers))
+
+    totals = await check_pass(_api(handler), budget=1_000)
+    assert totals == {"checked": 32, "closed": 7, "live": 25, "unknown": 0}
+
+
+async def test_a_failed_control_fails_the_run() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_answer(0, control_failed=True))
+
+    with pytest.raises(SourceDown, match="control"):
+        await check_pass(_api(handler), budget=1_000)
+
+
+async def test_a_batch_with_no_answers_at_all_fails_the_run() -> None:
+    """Throttled (429) or blocked: the same night must not keep asking."""
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json=_answer(25, unknown=25))
+
+    with pytest.raises(SourceDown, match="no answer"):
+        await check_pass(_api(handler), budget=15_000)
+    assert len(calls) == 1
 
 
 async def test_an_unreachable_source_fails_the_run() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"checked": 3, "closed": 0, "live": 3, "unknown": 0, "source_unreachable": True})
+        return httpx.Response(200, json=_answer(3, live=3, source_unreachable=True))
 
     with pytest.raises(SourceDown):
         await check_pass(_api(handler), budget=1_000)
@@ -159,8 +201,10 @@ async def test_five_failed_calls_in_a_row_mean_the_source_is_down(monkeypatch) -
         return httpx.Response(502, json={"detail": "listing unavailable"})
 
     api = _api(handler)
-    with pytest.raises((SourceDown, RuntimeError)):
+    # Three attempts at the first call: an error, not yet an outage…
+    with pytest.raises(RuntimeError):
         await api.call("POST", "/hub/liveness/listing", json={})
+    # …two more failures make five in a row.
     with pytest.raises(SourceDown):
         await api.call("POST", "/hub/liveness/listing", json={})
 

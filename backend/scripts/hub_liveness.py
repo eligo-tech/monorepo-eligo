@@ -108,7 +108,9 @@ async def read_leaves(listing: Listing, leaves: list[tuple[dict[str, str], int]]
             for page in range(1, pages + 1):
                 body = await listing(filters, page)
                 live.update(body["external_ids"])
-                if len(body["external_ids"]) < _PAGE_SIZE:
+                # By RECORDS, not references: a record without a reference
+                # would otherwise end the shard a page early.
+                if body.get("records", len(body["external_ids"])) < _PAGE_SIZE:
                     break
         except SourceDown:
             raise
@@ -201,18 +203,28 @@ async def mark_suspects(api: Api, segment: str, live: set[str]) -> dict[str, int
             return totals
 
 
-async def check_pass(api: Api, *, budget: int, batch: int = 50) -> dict:
-    """Drive the backend's checker until the budget or the queue runs out."""
+async def check_pass(api: Api, *, budget: int, batch: int = 25) -> dict:
+    """Drive the backend's checker until the budget or the queue runs out.
+
+    Stops — and fails the run — when the source is down, its control ad did not
+    answer live, or a whole batch got no answer at all (throttling): asking the
+    same source harder is never the fix.
+    """
     totals = {"checked": 0, "closed": 0, "live": 0, "unknown": 0}
     while totals["checked"] < budget:
         size = min(batch, budget - totals["checked"])
         result = await api.call("POST", "/hub/liveness/check", params={"limit": size})
         for key in totals:
             totals[key] += result.get(key, 0)
+        if result.get("control_failed"):
+            raise SourceDown(f"the control ad did not answer live after {totals['checked']} checks")
         if result.get("source_unreachable"):
             raise SourceDown(f"source unreachable after {totals['checked']} checks")
-        if result.get("checked", 0) < size:
-            break  # the queue is empty
+        checked = result.get("checked", 0)
+        if checked and not (result.get("closed", 0) + result.get("live", 0)):
+            raise SourceDown(f"{checked} checks in a row got no answer")
+        if checked == 0:
+            break  # the queue is empty (a time-capped batch returns fewer than asked)
     return totals
 
 

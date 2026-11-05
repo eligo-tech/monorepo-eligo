@@ -182,7 +182,7 @@ wrong.
   of ad text or company rows into `hub_*` that does not go through
   `suppression.load(...)` — `redact` for text, `blocks_company` for records.
 - **Retention.** Closed postings lose their payload (`hub/liveness.py`: closed
-  only on a 404 from the ad's own page, never on absence alone). The `raw` copy
+  only on the source's own not-found for that ad, never on absence alone). The `raw` copy
   of OPEN postings still accumulates; observations have no window (GDPR Art.
   5(1)(e)). Flag a change that closes postings on any weaker evidence.
 - **Provenance.** Every corpus row must trace to a `hub_observations` row. A new

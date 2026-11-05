@@ -9,42 +9,66 @@ Two steps, both driven by the nightly job (`scripts/hub_liveness.py`):
 
 1. **Weekly listing → suspects.** The job reads the source's full listing,
    compares it with our open ads (`active_ids`) and `mark`s the ones it did not
-   see. `unlisted_at` makes an ad a SUSPECT, never closes it: the listing
-   reaches ~82% of the source, because shards over the 10,000 cap cannot be
-   read whole (Verkauf alone is 108k).
-2. **Nightly check → verdict.** `check_batch` asks each suspect's own detail
-   page. A 404 closes it; a 200 records that it answered and keeps it out of
-   the queue for `recheck_days`; anything else — 5xx, 429, a timeout — is no
-   evidence and changes nothing. An outage stops the batch.
+   see: `unlisted_at` (when) and `check_due_at` (queued now). A suspect, never a
+   verdict: the listing reaches ~82% of the source, because shards over the
+   10,000 cap cannot be read whole (Verkauf alone is 108k).
+2. **Nightly check → verdict.** `check_batch` asks each due suspect's own
+   detail page, after first asking a known-live CONTROL ad. Only the source's
+   own "not found" closes (`adapters/bundesagentur.liveness_from_response`);
+   the closure is recorded as a `hub_observations` row. A live answer re-queues
+   the ad 14 days out (30 once it has answered before); no answer, 1 day out.
+
+The safety argument, measured the same day: 160 of 160 ads on the live listing
+answered 200, a made-up reference answered 404 with the source's not-found
+code. A systematic failure — the path retired, the key changed, a CDN page —
+fails the control first, or answers without that code; either closes nothing.
 
 A closed ad keeps its row (title, company, dates: "they filled it" is a BD
-signal) and loses its payload — ad text, raw copy, partner page. That is the
-disk the closure frees (GDPR Art. 5(1)(e) storage limitation, too). If the
-source publishes the same reference again, the ingest touch path reopens it.
+signal) and loses its payload — ad text, raw copy, partner page (GDPR Art.
+5(1)(e)). Postgres reuses that space after vacuum; it does not shrink the
+files. If the source publishes the same reference again, the ingest touch
+path reopens it (`service.ingest`).
 
-Business logic only: no FastAPI, no outbound I/O except through the adapter.
+No database transaction is held across the source calls: the batch reads its
+queue, ends the transaction, asks the source, then writes every verdict in one
+short transaction.
 """
 
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import time
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.domain.hub.models import HubCompany, HubJobPosting, HubPostingPayload
+from app.domain.hub.models import HubCompany, HubJobPosting, HubObservation, HubPostingPayload
 
 logger = get_logger(__name__)
 
 SOURCE = "bundesagentur"
-#: A suspect the source just confirmed live waits this long for its next check.
-RECHECK_DAYS = 14
+#: Re-queue delays. An ad that answered live once waits two weeks; one that has
+#: answered before waits longer — most of those sit in shards the listing
+#: cannot reach, and would otherwise crowd out new suspects.
+RECHECK_FIRST = dt.timedelta(days=14)
+RECHECK_AGAIN = dt.timedelta(days=30)
+RETRY_UNKNOWN = dt.timedelta(days=1)
+#: Transport failures in a row that mean the source is down, not one ad slow.
+OUTAGE_STREAK = 3
+#: The control reference, reused for a while: one batch every ~30 s should not
+#: re-run its lookup each time. Dropped the moment it fails to answer live.
+CONTROL_TTL_SECONDS = 900
+_control_cache: dict[str | None, tuple[str, float]] = {}
+#: The batch's clock — a seam, so a test can move time without moving asyncio's.
+_clock = time.monotonic
 
 
-def _open(segment: str | None):
-    clauses = [HubJobPosting.source == SOURCE, HubJobPosting.is_active.is_(True)]
+def _open(segment: str | None) -> list:
+    # Bare `is_active`, not `.is_(True)`: Postgres renders the latter `IS true`
+    # and cannot then prove the partial index's `is_active` predicate.
+    clauses = [HubJobPosting.source == SOURCE, HubJobPosting.is_active]
     if segment is not None:
         clauses.append(HubJobPosting.segment == segment)
     return clauses
@@ -68,21 +92,21 @@ async def active_ids(
 async def mark(
     session: AsyncSession, *, segment: str, unlisted: list[str], listed: list[str]
 ) -> dict[str, int]:
-    """Record what one listing showed: `unlisted` became suspects, `listed`
-    were seen again. The FIRST time an ad went missing is kept."""
+    """Record what one listing showed: `unlisted` are queued as suspects,
+    `listed` leave the queue. A suspect already queued keeps its place."""
     now = dt.datetime.now(dt.UTC)
     flagged = cleared = 0
     if unlisted:
         flagged = (await session.execute(
             update(HubJobPosting)
             .where(*_open(segment), HubJobPosting.external_id.in_(unlisted), HubJobPosting.unlisted_at.is_(None))
-            .values(unlisted_at=now)
+            .values(unlisted_at=now, check_due_at=now)
         )).rowcount or 0
     if listed:
         cleared = (await session.execute(
             update(HubJobPosting)
             .where(*_open(segment), HubJobPosting.external_id.in_(listed), HubJobPosting.unlisted_at.is_not(None))
-            .values(unlisted_at=None)
+            .values(unlisted_at=None, check_due_at=None)
         )).rowcount or 0
     await session.commit()
     return {"unlisted": flagged, "listed": cleared}
@@ -94,7 +118,7 @@ async def recount_open_postings(session: AsyncSession, company_ids: set) -> None
         return
     counts = dict((await session.execute(
         select(HubJobPosting.hub_company_id, func.count(HubJobPosting.id))
-        .where(HubJobPosting.hub_company_id.in_(company_ids), HubJobPosting.is_active.is_(True))
+        .where(HubJobPosting.hub_company_id.in_(company_ids), HubJobPosting.is_active)
         .group_by(HubJobPosting.hub_company_id)
     )).all())
     for company_id in company_ids:
@@ -104,61 +128,123 @@ async def recount_open_postings(session: AsyncSession, company_ids: set) -> None
         )
 
 
+async def _control(session: AsyncSession, segment: str | None) -> str | None:
+    """A reference the listing showed and the queue does not hold — the newest.
+    If the source does not answer 200 for it, it is not answering for anyone."""
+    cached = _control_cache.get(segment)
+    if cached and cached[1] > _clock():
+        return cached[0]
+    # `posted_at DESC` with NULLs filtered out is a backward walk of
+    # ix_hub_job_postings_posted_at that stops at the first non-suspect;
+    # `DESC NULLS LAST` does not match that index and sorted the table.
+    reference = (await session.execute(
+        select(HubJobPosting.external_id)
+        .where(*_open(segment), HubJobPosting.check_due_at.is_(None), HubJobPosting.posted_at.is_not(None))
+        .order_by(HubJobPosting.posted_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if reference is not None:
+        _control_cache[segment] = (reference, _clock() + CONTROL_TTL_SECONDS)
+    return reference
+
+
 async def check_batch(
     session: AsyncSession,
     *,
     adapter,
     limit: int,
     segment: str | None = None,
-    recheck_days: int = RECHECK_DAYS,
     delay: float = 0.3,
+    time_budget: float = 60.0,
 ) -> dict:
-    """Ask the source about up to `limit` suspects, longest-missing first."""
+    """Ask the source about up to `limit` due suspects, earliest due first."""
     from app.domain.hub.adapters.bundesagentur import SourceUnreachable
 
     now = dt.datetime.now(dt.UTC)
-    due = now - dt.timedelta(days=recheck_days)
-    rows = (await session.execute(
-        select(HubJobPosting)
-        .where(
-            *_open(segment),
-            HubJobPosting.unlisted_at.is_not(None),
-            or_(HubJobPosting.live_checked_at.is_(None), HubJobPosting.live_checked_at < due),
-        )
-        .order_by(HubJobPosting.unlisted_at, HubJobPosting.posted_at.nulls_first(), HubJobPosting.external_id)
+    result = {"checked": 0, "closed": 0, "live": 0, "unknown": 0,
+              "source_unreachable": False, "control_failed": False}
+    queue = (await session.execute(
+        select(HubJobPosting.id, HubJobPosting.external_id, HubJobPosting.hub_company_id,
+               HubJobPosting.live_checked_at)
+        .where(*_open(segment), HubJobPosting.check_due_at <= now)
+        .order_by(HubJobPosting.check_due_at, HubJobPosting.id)
         .limit(limit)
-    )).scalars().all()
+    )).all()
+    control = await _control(session, segment) if queue else None
+    await session.commit()  # no transaction across the source calls
+    if not queue:
+        return result
 
-    result = {"checked": 0, "closed": 0, "live": 0, "unknown": 0, "source_unreachable": False}
-    closed: list[HubJobPosting] = []
-    for row in rows:
+    try:
+        control_ok = control is not None and await adapter.check_live(control) == "live"
+    except SourceUnreachable:
+        control_ok = False
+    if not control_ok:
+        _control_cache.pop(segment, None)
+        logger.warning("liveness: control %r did not answer live — nothing checked", control)
+        result["control_failed"] = True
+        return result
+
+    verdicts: dict[str, list] = {"gone": [], "live": [], "unknown": []}
+    started, streak = _clock(), 0
+    for row in queue:
+        if _clock() - started > time_budget:
+            break  # keep a request well inside the caller's timeout
         try:
             verdict = await adapter.check_live(row.external_id)
+            streak = 0
         except SourceUnreachable as exc:
-            # The source is down, not this ad: stop, and leave the rest unstamped.
-            logger.warning("liveness: source unreachable, stopping batch (%s)", exc)
-            result["source_unreachable"] = True
-            break
+            streak += 1
+            if streak >= OUTAGE_STREAK:
+                logger.warning("liveness: source unreachable, stopping batch (%s)", exc)
+                result["source_unreachable"] = True
+                verdicts["unknown"].append(row)
+                result["checked"] += 1
+                result["unknown"] += 1
+                break
+            verdict = "unknown"  # one slow ad is not an outage
+        verdicts[verdict].append(row)
         result["checked"] += 1
-        if verdict == "gone":
-            row.is_active = False
-            row.closed_at = now
-            closed.append(row)
-            result["closed"] += 1
-        elif verdict == "live":
-            row.live_checked_at = now
-            result["live"] += 1
-        else:
-            result["unknown"] += 1
+        result["closed" if verdict == "gone" else verdict] += 1
         if delay:
             await asyncio.sleep(delay)
 
-    if closed:
-        await session.flush()
-        await session.execute(
-            delete(HubPostingPayload).where(HubPostingPayload.hub_job_posting_id.in_([r.id for r in closed]))
+    done = dt.datetime.now(dt.UTC)
+    gone = verdicts["gone"]
+    if gone:
+        observation = HubObservation(
+            source=SOURCE,
+            request_url=getattr(adapter, "detail_url_template", "detail/{base64(reference)}"),
+            http_status=404,
+            record_count=len(gone),
+            fetched_at=done,
+            note=f"liveness: {len(gone)} closed on the source's not-found; control {control} answered 200",
+            payload={"closed": [r.external_id for r in gone], "control": control},
         )
-        await recount_open_postings(session, {r.hub_company_id for r in closed})
+        session.add(observation)
+        await session.flush()
+        ids = [r.id for r in gone]
+        await session.execute(
+            update(HubJobPosting).where(HubJobPosting.id.in_(ids)).values(
+                is_active=False, closed_at=done, check_due_at=None, observation_id=observation.id,
+            )
+        )
+        await session.execute(delete(HubPostingPayload).where(HubPostingPayload.hub_job_posting_id.in_(ids)))
+        await recount_open_postings(session, {r.hub_company_id for r in gone})
+    for rows, due in (
+        ([r for r in verdicts["live"] if r.live_checked_at is None], done + RECHECK_FIRST),
+        ([r for r in verdicts["live"] if r.live_checked_at is not None], done + RECHECK_AGAIN),
+    ):
+        if rows:
+            await session.execute(
+                update(HubJobPosting).where(HubJobPosting.id.in_([r.id for r in rows]))
+                .values(live_checked_at=done, check_due_at=due)
+            )
+    if verdicts["unknown"]:
+        await session.execute(
+            update(HubJobPosting).where(HubJobPosting.id.in_([r.id for r in verdicts["unknown"]]))
+            .values(check_due_at=done + RETRY_UNKNOWN)
+        )
     await session.commit()
     logger.info("liveness: %s", result)
     return result

@@ -151,7 +151,7 @@ class _StubAdapter:
     async def fetch_listing(self, *, segment, filters, page):  # noqa: ANN001
         from app.domain.hub.adapters.bundesagentur import ListingPage
 
-        return ListingPage(external_ids=[], total_available=0, facets={})
+        return ListingPage(external_ids=[], records=0, total_available=0, facets={})
 
     async def check_live(self, external_id):  # noqa: ANN001
         return "live"

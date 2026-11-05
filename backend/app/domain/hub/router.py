@@ -546,7 +546,10 @@ async def liveness_listing(
     except (SourceUnreachable, ListingUnavailable) as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"listing unavailable: {exc}") from exc
     return ListingResponse(
-        external_ids=page.external_ids, total_available=page.total_available, facets=page.facets
+        external_ids=page.external_ids,
+        records=page.records,
+        total_available=page.total_available,
+        facets=page.facets,
     )
 
 
@@ -577,11 +580,12 @@ async def liveness_mark(
 
 @router.post("/liveness/check")
 async def liveness_check(
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=25, ge=1, le=100),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Ask the source about up to `limit` suspects; close those it 404s."""
+    """Ask the source about up to `limit` due suspects; close those it says
+    it does not have. Bounded to ~60 s so it stays inside the caller's timeout."""
     adapter = get_source_adapter(liveness.SOURCE)
     if not hasattr(adapter, "check_live"):
         raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "source cannot check an ad")

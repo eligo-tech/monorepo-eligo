@@ -228,8 +228,13 @@ class BundesagenturAdapter:
         api_key: str | None = None,
         timeout: float | None = None,
         user_agent: str | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = (base_url or settings.hub_ba_base_url).rstrip("/")
+        #: Tests only: lets the liveness calls run against a fake source.
+        self._transport = transport
+        #: Where a liveness verdict came from — recorded with each closure.
+        self.detail_url_template = f"{self._base_url}{_DETAIL_PATH}/{{base64(reference)}}"
         self._api_key = api_key or settings.hub_ba_api_key
         self._timeout = timeout or settings.hub_http_timeout
         self._user_agent = user_agent or settings.hub_user_agent
@@ -361,7 +366,7 @@ class BundesagenturAdapter:
         url = f"{self._base_url}{_SEARCH_PATH}"
         headers = {"X-API-Key": self._api_key, "User-Agent": self._user_agent}
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
                 response = await client.get(url, params=params, headers=headers)
         except httpx.HTTPError as exc:
             raise SourceUnreachable(f"{type(exc).__name__} for {url}") from exc
@@ -370,16 +375,17 @@ class BundesagenturAdapter:
         return parse_listing(response.json())
 
     async def check_live(self, external_id: str) -> str:
-        """Is this ad still listed? "live", "gone" (404/410) or "unknown"."""
+        """Is this ad still listed? "live", "gone" or "unknown" — see
+        `liveness_from_response` for what counts as gone."""
         encoded = base64.b64encode(external_id.encode()).decode()
         url = f"{self._base_url}{_DETAIL_PATH}/{encoded}"
         headers = {"X-API-Key": self._api_key, "User-Agent": self._user_agent}
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
                 response = await client.get(url, headers=headers)
         except httpx.HTTPError as exc:
             raise SourceUnreachable(f"{type(exc).__name__} for {url}") from exc
-        return liveness_from_status(response.status_code)
+        return liveness_from_response(response.status_code, response.text)
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +405,8 @@ class ListingPage:
     """One page of the full listing: which ads exist, not what they say."""
 
     external_ids: list[str]
+    #: Records on the page, with or without a reference — what paging goes by.
+    records: int
     total_available: int
     facets: dict[str, dict[str, int]]
 
@@ -407,12 +415,10 @@ def parse_listing(payload: dict) -> ListingPage:
     """Every reference on the page — including records the ingest gate would
     reject for a missing employer. Liveness is about the ad, not the row."""
     facets = payload.get("facetten") or {}
+    records = payload.get("ergebnisliste") or []
     return ListingPage(
-        external_ids=[
-            str(r["referenznummer"])
-            for r in payload.get("ergebnisliste") or []
-            if r.get("referenznummer")
-        ],
+        external_ids=[str(r["referenznummer"]) for r in records if r.get("referenznummer")],
+        records=len(records),
         total_available=int(payload.get("maxErgebnisse") or 0),
         facets={
             dim: dict((facets.get(dim) or {}).get("counts") or {})
@@ -422,13 +428,28 @@ def parse_listing(payload: dict) -> ListingPage:
     )
 
 
-def liveness_from_status(status: int) -> str:
-    """The detail page's answer as evidence. Only "not found" closes an ad: a
-    5xx, a 429 or a 403 says something about the source, not about the ad."""
+#: What the source itself says about a reference it does not have. Measured
+#: 2026-11-05: a made-up reference → 404 with this code; 160 of 160 ads on the
+#: live listing → 200.
+_NOT_FOUND_CODE = "STELLENANGEBOT_NICHT_GEFUNDEN"
+
+
+def liveness_from_response(status: int, body: str) -> str:
+    """The detail page's answer as evidence.
+
+    Gone only when the SOURCE says so: a 404 carrying its own not-found code. A
+    bare 404 — a CDN error page, a retired path, a changed key — is about the
+    route, not the ad; so is every 5xx, 429 and 403. "unknown" closes nothing.
+    """
     if status == 200:
         return "live"
-    if status in (404, 410):
-        return "gone"
+    if status == 404:
+        try:
+            messages = json.loads(body).get("messages") or []
+        except (ValueError, AttributeError):
+            return "unknown"
+        if any(isinstance(m, dict) and m.get("code") == _NOT_FOUND_CODE for m in messages):
+            return "gone"
     return "unknown"
 
 

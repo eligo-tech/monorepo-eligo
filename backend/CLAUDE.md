@@ -219,8 +219,10 @@ These are enforced in code. Do not route around them.
   posting published two months ago and still open is never re-listed, so its
   `last_seen_at` goes stale while the vacancy is live; sweeping on that basis
   closes real roles. Closing is `hub/liveness.py`'s job: a weekly full listing
-  marks SUSPECTS (`unlisted_at`; it reaches ~82% of the source), and only a 404
-  on the ad's own detail page closes one (`closed_at`) and deletes its payload.
+  marks SUSPECTS (`unlisted_at`; it reaches ~82% of the source), and only the
+  source's own not-found on the ad's detail page (404 + `STELLENANGEBOT_NICHT_
+  GEFUNDEN`), after a known-live control answered 200, closes one (`closed_at`,
+  with a `hub_observations` row) and deletes its payload.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.

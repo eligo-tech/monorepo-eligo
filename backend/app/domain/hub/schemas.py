@@ -508,6 +508,8 @@ class ListingRequest(BaseModel):
 
 class ListingResponse(BaseModel):
     external_ids: list[str]
+    #: Records on the page, with or without a reference — the job pages by it.
+    records: int
     total_available: int
     facets: dict[str, dict[str, int]]
 

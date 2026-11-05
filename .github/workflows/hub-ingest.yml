@@ -92,17 +92,20 @@ jobs:
   # Close ads the source took down (backend/app/domain/hub/liveness.py). After
   # the ingest, never beside it: both lean on the same database.
   #
-  # Sundays it first reads the FULL listing (~5,950 pages, measured 2026-11-05)
-  # and marks our open ads it did not see as suspects. Every night it asks the
-  # source about up to `liveness_checks` suspects — only a 404 closes one.
-  # ~8k ads close per day at the source; 15k checks is ~2 h at the paced rate
-  # and drains the first backlog (~250k) in about three weeks.
+  # Sundays it first reads the FULL listing (~5,950 pages, ~2 h, measured
+  # 2026-11-05) and queues our open ads it did not see as suspects; that night
+  # checks fewer. Every night it asks the source about up to `liveness_checks`
+  # due suspects — only the source's own "not found" closes one, and only after
+  # a known-live control answered. ~8k ads close per day at the source; 15k
+  # checks is ~2 h, so the first backlog (~250k closed + ~75k unreachable live
+  # ads re-checked every 14-30 days) drains in roughly four weeks.
   liveness:
     needs: ingest
-    # A failed ingest says nothing about whether ads closed.
-    if: ${{ always() && github.event.inputs.agencies_only != 'true' }}
+    # A failed ingest says nothing about whether ads closed; a CANCELLED run
+    # (someone stopped it) must not start five more hours.
+    if: ${{ !cancelled() && github.event.inputs.agencies_only != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 340
     steps:
       - uses: actions/checkout@v5
 
@@ -124,5 +127,7 @@ jobs:
           extra=()
           if [ "$LIST_INPUT" = "true" ] || [ "$(date -u +%u)" = "7" ]; then
             extra=(--list)
+            # The listing takes ~2 h of the budget: check fewer that night.
+            if [ -z "${{ github.event.inputs.liveness_checks }}" ]; then CHECKS=8000; fi
           fi
           python -m scripts.hub_liveness --checks "$CHECKS" "${extra[@]}"
