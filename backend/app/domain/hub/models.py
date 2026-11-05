@@ -53,6 +53,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -240,6 +241,20 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("source", "external_id", name="uq_hub_posting_source_id"),
         Index("ix_hub_posting_company_active", "hub_company_id", "is_active"),
+        # The liveness checker's queue: open suspects by due date. Partial, so
+        # it holds only the queue; the checker filters on bare `is_active`
+        # (not `IS true`) so the planner can prove the predicate and use it.
+        # `id` is in the key so `ORDER BY check_due_at, id LIMIT n` is an index
+        # walk that stops at n: a weekly listing queues 250k ads at ONE
+        # timestamp, and without the tiebreak in the index every batch would
+        # read and sort all of them (measured on 650k rows).
+        Index(
+            "ix_hub_posting_check_due",
+            "check_due_at",
+            "id",
+            postgresql_where=text("is_active AND check_due_at IS NOT NULL"),
+            sqlite_where=text("is_active AND check_due_at IS NOT NULL"),
+        ),
     )
 
     hub_company_id: Mapped[uuid.UUID] = mapped_column(
@@ -317,6 +332,18 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
         DateTime(timezone=True), nullable=True, index=True
     )
     source_page_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Liveness (`hub/liveness.py`). A delta crawl never re-lists an old ad, so
+    # absence over time proves nothing; these three record what DOES:
+    #   unlisted_at     — first missing from a weekly full listing: a SUSPECT,
+    #                     not a verdict (the listing reaches ~82% of the source)
+    #   live_checked_at — the ad's own detail page last answered 200
+    #   closed_at       — the source said "not found": it took the ad down
+    #   check_due_at    — the queue: when to ask next (NULL = not queued)
+    unlisted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    live_checked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    check_due_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # SHA-256 of the meaningful fields — an unchanged posting only bumps
     # `last_seen_at` instead of rewriting the row.

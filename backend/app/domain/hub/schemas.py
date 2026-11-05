@@ -489,3 +489,34 @@ class AgencyDetail(BaseModel):
     branches: list[HubCompanyRead]
     postings: list[HubJobPostingRead]
     contacts: CompanyContacts
+
+
+# --- liveness (hub/liveness.py) — operator contracts --------------------------
+
+#: The listing's split dimensions (adapters/bundesagentur.LISTING_DIMENSIONS).
+ListingDimension = Literal["berufsfeld", "befristung", "angebotsart", "branche", "arbeitszeit"]
+_SEGMENT = Literal["employer", "private_recruiter"]
+
+
+class ListingRequest(BaseModel):
+    """One page of one shard of the source's FULL listing. No window, no `wo`."""
+
+    segment: _SEGMENT = "employer"
+    filters: dict[ListingDimension, str] = Field(default_factory=dict)
+    page: int = Field(default=1, ge=1, le=100)
+
+
+class ListingResponse(BaseModel):
+    external_ids: list[str]
+    #: Records on the page, with or without a reference — the job pages by it.
+    records: int
+    total_available: int
+    facets: dict[str, dict[str, int]]
+
+
+class MarkRequest(BaseModel):
+    """What one listing showed, bounded so a request stays one statement."""
+
+    segment: _SEGMENT = "employer"
+    unlisted: list[str] = Field(default_factory=list, max_length=10_000)
+    listed: list[str] = Field(default_factory=list, max_length=10_000)

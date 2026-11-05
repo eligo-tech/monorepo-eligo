@@ -181,8 +181,10 @@ wrong.
   as `hub_suppressions` (`app/domain/hub/suppression.py`): flag any NEW write
   of ad text or company rows into `hub_*` that does not go through
   `suppression.load(...)` — `redact` for text, `blocks_company` for records.
-- **Retention.** `hub_job_postings.raw` accumulates source payloads indefinitely;
-  stale postings need pruning (GDPR Art. 5(1)(e)). Not yet built.
+- **Retention.** Closed postings lose their payload (`hub/liveness.py`: closed
+  only on the source's own not-found for that ad, never on absence alone). The `raw` copy
+  of OPEN postings still accumulates; observations have no window (GDPR Art.
+  5(1)(e)). Flag a change that closes postings on any weaker evidence.
 - **Provenance.** Every corpus row must trace to a `hub_observations` row. A new
   write path that does not record its retrieval is a violation of the
   "every displayed claim is evidence-backed" invariant.

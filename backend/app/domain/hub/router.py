@@ -10,18 +10,22 @@ genuinely selects rows is the overlay routes below.
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_tenant, get_ingest_tenant
 from app.core.database import get_db
-from app.domain.hub import service
+from app.domain.hub import liveness, service
 from app.domain.hub.adapters.factory import available_sources, get_source_adapter
 from app.domain.hub.gate import PreconditionFailed
 from app.domain.searches import service as searches_service
 from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
+    ListingRequest,
+    ListingResponse,
+    MarkRequest,
     AdoptCompanyRequest,
     AgencyDetail,
     AgencyPage,
@@ -516,6 +520,76 @@ async def expire_stale_postings(
     is what `last_seen_at` tracks.
     """
     return await service.deactivate_stale_postings(db, older_than_days=days)
+
+
+# --------------------------------------------------------------------------
+# Liveness — machine-only (RULE 1): the nightly job closes ads the source took
+# down. A suspect from the listing, a verdict only from the ad's own page.
+# --------------------------------------------------------------------------
+
+
+@router.post("/liveness/listing", response_model=ListingResponse)
+async def liveness_listing(
+    payload: ListingRequest,
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+) -> ListingResponse:
+    """One page of the source's full listing: which references exist. No write."""
+    from app.domain.hub.adapters.bundesagentur import ListingUnavailable, SourceUnreachable
+
+    adapter = get_source_adapter(liveness.SOURCE)
+    if not hasattr(adapter, "fetch_listing"):
+        raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "source has no full listing")
+    try:
+        page = await adapter.fetch_listing(
+            segment=payload.segment, filters=dict(payload.filters), page=payload.page
+        )
+    except (SourceUnreachable, ListingUnavailable) as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"listing unavailable: {exc}") from exc
+    return ListingResponse(
+        external_ids=page.external_ids,
+        records=page.records,
+        total_available=page.total_available,
+        facets=page.facets,
+    )
+
+
+@router.get("/liveness/active")
+async def liveness_active(
+    segment: Literal["employer", "private_recruiter"] = "employer",
+    after: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=20_000, ge=1, le=50_000),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Our open ads in reference order, with "already a suspect", keyset-paged."""
+    rows = await liveness.active_ids(db, segment=segment, after=after, limit=limit)
+    return {"ids": rows, "next": rows[-1][0] if len(rows) == limit else None}
+
+
+@router.post("/liveness/mark")
+async def liveness_mark(
+    payload: MarkRequest,
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Record one listing's result: suspects in, relisted ads out."""
+    return await liveness.mark(
+        db, segment=payload.segment, unlisted=payload.unlisted, listed=payload.listed
+    )
+
+
+@router.post("/liveness/check")
+async def liveness_check(
+    limit: int = Query(default=25, ge=1, le=100),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Ask the source about up to `limit` due suspects; close those it says
+    it does not have. Bounded to ~60 s so it stays inside the caller's timeout."""
+    adapter = get_source_adapter(liveness.SOURCE)
+    if not hasattr(adapter, "check_live"):
+        raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "source cannot check an ad")
+    return await liveness.check_batch(db, adapter=adapter, limit=limit)
 
 
 @router.post(

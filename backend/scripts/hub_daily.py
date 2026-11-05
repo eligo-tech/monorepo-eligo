@@ -53,7 +53,8 @@ publication-date delta never re-lists a posting published two months ago that is
 still open, so its `last_seen_at` goes stale even though the vacancy is live —
 sweeping on that basis would close roles that never closed. Deactivation is only
 sound after a pass that would have re-seen everything still listed, which is a
-job for a periodic full crawl, not this one.
+job for a periodic full crawl, not this one — `scripts/hub_liveness.py`, run
+after this job, closes ads the source says it no longer has.
 
 **Saved searches deepen the corpus where people actually recruit.** After the
 regional sweep the job fetches `/hub/crawl-profiles` — the deduplicated union of

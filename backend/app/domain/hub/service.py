@@ -396,6 +396,20 @@ async def ingest(
 
         # Seen before: a touch when nothing changed, a rewrite when it did.
         row.last_seen_at = now
+        if row.closed_at is not None:
+            # The source published a reference it had taken down (liveness.py).
+            # Closure deleted its payload: restore the raw copy now, and ask
+            # for the ad text and the partner page again.
+            row.closed_at = None
+            row.description_fetched_at = None
+            row.source_page_fetched_at = None
+            row.source_page_status = None
+            row.payload = HubPostingPayload(
+                raw=rules.redact_json(posting.raw), description=rules.redact(posting.description)
+            )
+        # Listed again, so no longer a suspect.
+        row.unlisted_at = None
+        row.check_due_at = None
         row.is_active = True
         row.observation_id = observation.id
         # Backfill only. A posting first seen by a regional sweep has no field;
@@ -544,21 +558,9 @@ async def deactivate_stale_postings(
 
     # The denormalized signal must follow, or "who is hiring hardest" keeps
     # counting vacancies that closed.
-    counts = await session.execute(
-        select(HubJobPosting.hub_company_id, func.count(HubJobPosting.id))
-        .where(
-            HubJobPosting.hub_company_id.in_(company_ids),
-            HubJobPosting.is_active.is_(True),
-        )
-        .group_by(HubJobPosting.hub_company_id)
-    )
-    open_counts = dict(counts.all())
-    for company_id in company_ids:
-        await session.execute(
-            update(HubCompany)
-            .where(HubCompany.id == company_id)
-            .values(open_postings_count=open_counts.get(company_id, 0))
-        )
+    from app.domain.hub.liveness import recount_open_postings
+
+    await recount_open_postings(session, company_ids)
     await session.commit()
 
     logger.info(
