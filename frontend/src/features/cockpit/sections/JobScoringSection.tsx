@@ -30,28 +30,36 @@ export function JobScoringSection({ rows, isLive }: { rows: JobScore[]; isLive: 
         }
       />
 
-      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
-        <span>
-          Ø <span className="text-cockpit-text">{average}</span>
-        </span>
-        <span>
-          <span className="text-cockpit-text">{strong}</span> {t('über 70')}
-        </span>
-        <span>
-          <span className="text-coral-400">{critical}</span> {t('kritisch')}
-        </span>
-        <span>{t('M = Deal-Chance beim Manager')}</span>
-      </div>
+      {rows.length === 0 ? (
+        <p className="text-[15px] text-cockpit-dim">
+          {t('Noch kein laufendes Mandat zum Bewerten.')}
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
+            <span>
+              Ø <span className="text-cockpit-text">{average}</span>
+            </span>
+            <span>
+              <span className="text-cockpit-text">{strong}</span> {t('über 70')}
+            </span>
+            <span>
+              <span className="text-coral-400">{critical}</span> {t('kritisch')}
+            </span>
+            <span>{t('M = Deal-Chance beim Manager')}</span>
+          </div>
 
-      <div className="grid gap-x-12 gap-y-1 lg:grid-cols-2">
-        {columns.map((column, i) => (
-          <div key={i} className="min-w-0">
-            {column.map((row) => (
-              <ScoreBar key={row.id} row={row} />
+          <div className="grid gap-x-12 gap-y-1 lg:grid-cols-2">
+            {columns.map((column, i) => (
+              <div key={i} className="min-w-0">
+                {column.map((row) => (
+                  <ScoreBar key={row.id} row={row} />
+                ))}
+              </div>
             ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </section>
   )
 }

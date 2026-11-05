@@ -147,6 +147,7 @@ export function CockpitScreen({
           <ProcessSection
             mandates={selection}
             isLive={live.processes}
+            unavailable={live.unavailable}
             onChanged={reload}
             onOpenMandate={onSelectMandate}
           />
@@ -215,6 +216,7 @@ export function CockpitScreen({
         <ProcessSection
           mandates={data.mandates}
           isLive={live.processes}
+          unavailable={live.unavailable}
           onChanged={reload}
           onOpenMandate={onSelectMandate}
         />
