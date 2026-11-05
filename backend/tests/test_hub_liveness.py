@@ -164,6 +164,17 @@ async def test_a_failed_control_closes_nothing() -> None:
     assert (await _payload("a")) is not None
 
 
+async def test_a_withdrawn_newest_control_falls_back_to_the_next() -> None:
+    """The newest ad may itself be gone: one withdrawn ad must not stop the night."""
+    await _postings({"a": {}, "newer": {"unlisted_at": None, "check_due_at": None, "posted_at": NOW + dt.timedelta(hours=1)}})
+    adapter = _Adapter({"newer": "gone", "a": "gone"})
+    result = await _check(adapter, limit=10)
+    assert result["control_failed"] is False and result["closed"] == 1
+    assert adapter.calls == ["newer", "control", "a"]
+    # The newer ad answered gone as a CONTROL: that is no verdict on it.
+    assert (await _row("newer")).is_active is True
+
+
 async def test_without_a_control_reference_nothing_is_checked() -> None:
     await _postings({"a": {}}, control=False)
     adapter = _Adapter({"a": "gone"})

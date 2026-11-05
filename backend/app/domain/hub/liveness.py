@@ -128,24 +128,26 @@ async def recount_open_postings(session: AsyncSession, company_ids: set) -> None
         )
 
 
-async def _control(session: AsyncSession, segment: str | None) -> str | None:
-    """A reference the listing showed and the queue does not hold — the newest.
-    If the source does not answer 200 for it, it is not answering for anyone."""
+#: Control candidates tried before the source is judged not to be answering:
+#: the newest ad may itself have been withdrawn since it was listed.
+CONTROL_CANDIDATES = 3
+
+
+async def _controls(session: AsyncSession, segment: str | None) -> list[str]:
+    """References the listing showed and the queue does not hold — the newest.
+    If the source answers 200 for none of them, it is not answering for anyone."""
     cached = _control_cache.get(segment)
     if cached and cached[1] > _clock():
-        return cached[0]
+        return [cached[0]]
     # `posted_at DESC` with NULLs filtered out is a backward walk of
     # ix_hub_job_postings_posted_at that stops at the first non-suspect;
     # `DESC NULLS LAST` does not match that index and sorted the table.
-    reference = (await session.execute(
+    return list((await session.execute(
         select(HubJobPosting.external_id)
         .where(*_open(segment), HubJobPosting.check_due_at.is_(None), HubJobPosting.posted_at.is_not(None))
         .order_by(HubJobPosting.posted_at.desc())
-        .limit(1)
-    )).scalar_one_or_none()
-    if reference is not None:
-        _control_cache[segment] = (reference, _clock() + CONTROL_TTL_SECONDS)
-    return reference
+        .limit(CONTROL_CANDIDATES)
+    )).scalars())
 
 
 async def check_batch(
@@ -170,18 +172,24 @@ async def check_batch(
         .order_by(HubJobPosting.check_due_at, HubJobPosting.id)
         .limit(limit)
     )).all()
-    control = await _control(session, segment) if queue else None
+    candidates = await _controls(session, segment) if queue else []
     await session.commit()  # no transaction across the source calls
     if not queue:
         return result
 
-    try:
-        control_ok = control is not None and await adapter.check_live(control) == "live"
-    except SourceUnreachable:
-        control_ok = False
-    if not control_ok:
+    control = None
+    for candidate in candidates:
+        try:
+            if await adapter.check_live(candidate) == "live":
+                control = candidate
+                break
+        except SourceUnreachable:
+            break
+    if control is not None:
+        _control_cache[segment] = (control, _clock() + CONTROL_TTL_SECONDS)
+    else:
         _control_cache.pop(segment, None)
-        logger.warning("liveness: control %r did not answer live — nothing checked", control)
+        logger.warning("liveness: no control of %r answered live — nothing checked", candidates)
         result["control_failed"] = True
         return result
 
@@ -225,7 +233,11 @@ async def check_batch(
         await session.flush()
         ids = [r.id for r in gone]
         await session.execute(
-            update(HubJobPosting).where(HubJobPosting.id.in_(ids)).values(
+            # Still open and still due: a row reopened by an ingest between the
+            # read and this write is not closed behind its back.
+            update(HubJobPosting)
+            .where(HubJobPosting.id.in_(ids), HubJobPosting.is_active, HubJobPosting.check_due_at <= now)
+            .values(
                 is_active=False, closed_at=done, check_due_at=None, observation_id=observation.id,
             )
         )

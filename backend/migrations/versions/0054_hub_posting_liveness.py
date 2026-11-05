@@ -57,10 +57,23 @@ def upgrade() -> None:
     # CONCURRENTLY: the build reads the whole 650k-row table, and a plain
     # CREATE INDEX would block every ingest write meanwhile. It cannot run in
     # a transaction, hence the autocommit block (and session-level settings).
+    #
+    # A CONCURRENTLY build that dies half-way (deploy killed, deadlock) leaves
+    # an INVALID index under this name, which IF NOT EXISTS would then skip
+    # forever — the queue would silently scan the table. Drop it first.
     with op.get_context().autocommit_block():
         op.execute("SET statement_timeout = 0")
+        # It waits for older transactions; bounded, so a boot cannot hang.
+        op.execute("SET lock_timeout = '10min'")
+        invalid = bind.execute(sa.text(
+            "SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+            "WHERE c.relname = :name AND NOT i.indisvalid"
+        ), {"name": _INDEX}).scalar()
+        if invalid:
+            op.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {_INDEX}")
         op.execute(f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {_INDEX} ON {_TABLE} (check_due_at, id) WHERE {_WHERE}")
         op.execute("RESET statement_timeout")
+        op.execute("RESET lock_timeout")
 
 
 def downgrade() -> None:

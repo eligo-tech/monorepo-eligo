@@ -122,12 +122,13 @@ jobs:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
           LIST_INPUT: ${{ github.event.inputs.liveness_list }}
-          CHECKS: ${{ github.event.inputs.liveness_checks || '15000' }}
+          CHECKS_INPUT: ${{ github.event.inputs.liveness_checks }}
         run: |
           extra=()
+          CHECKS="${CHECKS_INPUT:-15000}"
           if [ "$LIST_INPUT" = "true" ] || [ "$(date -u +%u)" = "7" ]; then
             extra=(--list)
             # The listing takes ~2 h of the budget: check fewer that night.
-            if [ -z "${{ github.event.inputs.liveness_checks }}" ]; then CHECKS=8000; fi
+            if [ -z "$CHECKS_INPUT" ]; then CHECKS=8000; fi
           fi
           python -m scripts.hub_liveness --checks "$CHECKS" "${extra[@]}"
