@@ -255,6 +255,14 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
             postgresql_where=text("is_active AND check_due_at IS NOT NULL"),
             sqlite_where=text("is_active AND check_due_at IS NOT NULL"),
         ),
+        # The vacancy-key backfill's queue: open ads still without a key. Empty
+        # once the backlog is done; new ads are keyed at ingest.
+        Index(
+            "ix_hub_posting_unkeyed",
+            "id",
+            postgresql_where=text("is_active AND vacancy_key IS NULL"),
+            sqlite_where=text("is_active AND vacancy_key IS NULL"),
+        ),
     )
 
     hub_company_id: Mapped[uuid.UUID] = mapped_column(
@@ -344,6 +352,10 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     live_checked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     check_due_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # One vacancy across relays and sources (`hub/vacancy.py`): employer +
+    # normalized title + place. Counts and lists group by it; NULL until the
+    # nightly backfill reaches the row, and such an ad counts as itself.
+    vacancy_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # SHA-256 of the meaningful fields — an unchanged posting only bumps
     # `last_seen_at` instead of rewriting the row.

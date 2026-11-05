@@ -30,7 +30,7 @@ import json
 import time
 import uuid
 
-from sqlalchemy import Select, and_, case, func, literal, or_, select, update
+from sqlalchemy import Select, String, and_, case, cast, func, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -41,6 +41,7 @@ from app.domain.hub.spelling import (
     umlaut_variants,
 )
 from app.domain.hub.adapters.base import SourceAdapter, SourcedPosting, SourceQuery
+from app.domain.hub.vacancy import vacancy_count, vacancy_key
 from app.domain.hub.models import (
     EMPLOYER,
     HubCompany,
@@ -381,6 +382,10 @@ async def ingest(
                     external_id=posting.external_id,
                     content_hash=content_hash,
                     segment=segment,
+                    vacancy_key=vacancy_key(
+                        company.normalized_name, posting.title,
+                        postal_code=posting.postal_code, city=posting.city,
+                    ),
                     first_seen_at=now,
                     last_seen_at=now,
                     is_active=True,
@@ -442,6 +447,12 @@ async def ingest(
             row.source_url = posting.source_url
             row.content_hash = content_hash
             row.payload.raw = rules.redact_json(posting.raw)
+        # Recomputed on every touch: a changed title or place is a different
+        # vacancy, and an ad the backfill has not reached gets its key here.
+        # An unchanged value writes nothing (the ORM compares).
+        row.vacancy_key = vacancy_key(
+            company.normalized_name, row.title, postal_code=row.postal_code, city=row.city
+        ) or row.vacancy_key
         postings_updated += 1
 
     await session.flush()
@@ -449,8 +460,9 @@ async def ingest(
     # --- recompute the BD signal for every company this slice touched ----
     touched = [company.id for company in company_by_key.values()]
     if touched:
+        # Vacancies, not ads: a board relaying one role three times is one.
         counts = await session.execute(
-            select(HubJobPosting.hub_company_id, func.count(HubJobPosting.id))
+            select(HubJobPosting.hub_company_id, vacancy_count())
             .where(
                 HubJobPosting.hub_company_id.in_(touched),
                 HubJobPosting.is_active.is_(True),
@@ -997,7 +1009,7 @@ async def corpus_stats(session: AsyncSession) -> dict:
     that describes the page while claiming to describe the corpus is worse than
     no number.
     """
-    postings_active = select(func.count(HubJobPosting.id)).where(
+    postings_active = select(vacancy_count()).where(
         HubJobPosting.is_active.is_(True), _employer_posting()
     )
     return {
@@ -1066,24 +1078,24 @@ async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
     keeps the UI from offering filters that return nothing.
     """
     regions = await session.execute(
-        select(HubJobPosting.region, func.count(HubJobPosting.id))
+        select(HubJobPosting.region, vacancy_count())
         .where(
             HubJobPosting.is_active.is_(True),
             HubJobPosting.region.is_not(None),
             _employer_posting(),
         )
         .group_by(HubJobPosting.region)
-        .order_by(func.count(HubJobPosting.id).desc())
+        .order_by(vacancy_count().desc())
     )
     fields = await session.execute(
-        select(HubJobPosting.berufsfeld, func.count(HubJobPosting.id))
+        select(HubJobPosting.berufsfeld, vacancy_count())
         .where(
             HubJobPosting.is_active.is_(True),
             HubJobPosting.berufsfeld.is_not(None),
             _employer_posting(),
         )
         .group_by(HubJobPosting.berufsfeld)
-        .order_by(func.count(HubJobPosting.id).desc())
+        .order_by(vacancy_count().desc())
     )
     return {
         "regions": [{"value": v, "count": c} for v, c in regions.all()],
@@ -1762,7 +1774,9 @@ async def search_employers(
     # construction rather than by remembering to update both.
     role_match = _role_match(terms, name_hits, posting_filters, description_hits)
 
-    roles = func.count(HubJobPosting.id)
+    # Vacancies, not ads (`vacancy.py`): one role relayed by three boards or
+    # seen on two sources is one. The evidence list below dedupes the same way.
+    roles = vacancy_count()
     grouped = await session.execute(
         select(
             HubCompany.normalized_name,
@@ -1845,13 +1859,34 @@ async def search_employers(
     # roles at all — an entry in the result list carrying none of the evidence
     # the list exists to show. The window makes the cost limit x
     # roles_per_employer regardless of how lopsided the corpus is.
-    ranked_roles = (
+    # One row per VACANCY first — the best-matching, newest copy — so the list
+    # agrees with the vacancy count above it. Then the per-employer numbering.
+    vacancy = func.coalesce(HubJobPosting.vacancy_key, cast(HubJobPosting.id, String))
+    one_per_vacancy = (
         select(
             HubJobPosting.id.label("posting_id"),
             HubCompany.normalized_name.label("employer"),
+            _role_relevance(terms).label("relevance"),
+            HubJobPosting.posted_at.label("posted_at"),
             func.row_number()
             .over(
-                partition_by=HubCompany.normalized_name,
+                partition_by=vacancy,
+                order_by=(_role_relevance(terms).desc(), HubJobPosting.posted_at.desc().nulls_last(),
+                          HubJobPosting.id),
+            )
+            .label("copy"),
+        )
+        .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
+        .where(HubCompany.normalized_name.in_(names), _employer_company(), *role_match)
+        .subquery()
+    )
+    ranked_roles = (
+        select(
+            one_per_vacancy.c.posting_id,
+            one_per_vacancy.c.employer,
+            func.row_number()
+            .over(
+                partition_by=one_per_vacancy.c.employer,
                 # Relevance FIRST, then recency. The employer's score is the max
                 # over its roles, so ordering the evidence by date alone showed
                 # a rel=4 employer beneath a role that does not demonstrate 4 —
@@ -1859,15 +1894,15 @@ async def search_employers(
                 # search, where the Python role existed but sat further down.
                 # The row that earned the score is the row worth showing first.
                 order_by=(
-                    _role_relevance(terms).desc(),
-                    HubJobPosting.posted_at.desc().nulls_last(),
+                    one_per_vacancy.c.relevance.desc(),
+                    one_per_vacancy.c.posted_at.desc().nulls_last(),
                 ),
             )
             .label("rn"),
         )
-        .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
-        # The SAME predicate that produced the count above.
-        .where(HubCompany.normalized_name.in_(names), _employer_company(), *role_match)
+        # The SAME predicate that produced the count above (inside the
+        # subquery), keeping one copy per vacancy.
+        .where(one_per_vacancy.c.copy == 1)
         .subquery()
     )
     role_stmt = (
@@ -1893,6 +1928,15 @@ async def search_employers(
             )
             bucket.append(posting)
 
+    # How many copies each shown vacancy has, and on which sources — "seen on
+    # the Bundesagentur and the employer's own board" is itself evidence.
+    shown = [p for bucket in matched.values() for p in bucket]
+    copies = await _vacancy_copies(session, [p.vacancy_key for p in shown if p.vacancy_key])
+    for posting in shown:
+        found = copies.get(posting.vacancy_key or "")
+        posting.copies = sum(found.values()) if found else 1
+        posting.sources = sorted(found) if found else [posting.source]
+
     return [
         {
             "normalized_name": row.normalized_name,
@@ -1909,6 +1953,21 @@ async def search_employers(
         }
         for row in groups
     ]
+
+
+async def _vacancy_copies(session: AsyncSession, keys: list[str]) -> dict[str, dict[str, int]]:
+    """Open ads per vacancy key, per source."""
+    if not keys:
+        return {}
+    rows = await session.execute(
+        select(HubJobPosting.vacancy_key, HubJobPosting.source, func.count(HubJobPosting.id))
+        .where(HubJobPosting.vacancy_key.in_(set(keys)), HubJobPosting.is_active.is_(True), _employer_posting())
+        .group_by(HubJobPosting.vacancy_key, HubJobPosting.source)
+    )
+    out: dict[str, dict[str, int]] = {}
+    for key, source, n in rows.all():
+        out.setdefault(key, {})[source] = n
+    return out
 
 
 async def count_employers(
