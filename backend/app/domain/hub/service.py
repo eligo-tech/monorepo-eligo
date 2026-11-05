@@ -396,6 +396,13 @@ async def ingest(
 
         # Seen before: a touch when nothing changed, a rewrite when it did.
         row.last_seen_at = now
+        if row.closed_at is not None:
+            # The source published a reference it had taken down (liveness.py).
+            # Its text was deleted at closure: ask for it again.
+            row.closed_at = None
+            row.description_fetched_at = None
+        # Listed again, so no longer a suspect.
+        row.unlisted_at = None
         row.is_active = True
         row.observation_id = observation.id
         # Backfill only. A posting first seen by a regional sweep has no field;

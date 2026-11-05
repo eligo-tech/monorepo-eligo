@@ -33,6 +33,12 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     ("POST", "/hub/descriptions/fetch"),
     ("POST", "/hub/partner-pages/fetch"),
     ("POST", "/hub/maintenance/expire-stale"),
+    # Liveness: the full listing and per-ad checks are outbound reads of the
+    # source; active/mark read and write the corpus for the nightly job.
+    ("POST", "/hub/liveness/listing"),
+    ("GET", "/hub/liveness/active"),
+    ("POST", "/hub/liveness/mark"),
+    ("POST", "/hub/liveness/check"),
     ("GET", "/hub/crawl-profiles"),
     ("POST", "/hub/crawl-profiles/mark-crawled"),
     # Rebuilds the agency finder's derived profiles from the corpus.
@@ -141,6 +147,14 @@ class _StubAdapter:
             postings=[],
             total_available=0,
         )
+
+    async def fetch_listing(self, *, segment, filters, page):  # noqa: ANN001
+        from app.domain.hub.adapters.bundesagentur import ListingPage
+
+        return ListingPage(external_ids=[], total_available=0, facets={})
+
+    async def check_live(self, external_id):  # noqa: ANN001
+        return "live"
 
 
 @pytest.mark.parametrize(("method", "path"), sorted(DECLARED_OPERATOR_ROUTES))

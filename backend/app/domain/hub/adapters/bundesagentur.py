@@ -33,6 +33,7 @@ resolved. Never describe BA-derived data as licensed or resellable.
 from __future__ import annotations
 
 import base64
+import dataclasses
 import datetime as dt
 import hashlib
 import json
@@ -349,3 +350,87 @@ class BundesagenturAdapter:
         )
         cleaned = _strip_markup(text).strip()
         return cleaned or None
+
+    async def fetch_listing(self, *, segment: str, filters: dict[str, str], page: int) -> ListingPage:
+        """One page of the FULL listing (no publication window) — references only.
+
+        `filters` are `LISTING_DIMENSIONS` values; the caller validates them.
+        """
+        params = self.build_params(SourceQuery(segment=segment, page=page, size=100))
+        params.update(filters)
+        url = f"{self._base_url}{_SEARCH_PATH}"
+        headers = {"X-API-Key": self._api_key, "User-Agent": self._user_agent}
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(url, params=params, headers=headers)
+        except httpx.HTTPError as exc:
+            raise SourceUnreachable(f"{type(exc).__name__} for {url}") from exc
+        if response.status_code != 200:
+            raise ListingUnavailable(f"HTTP {response.status_code}")
+        return parse_listing(response.json())
+
+    async def check_live(self, external_id: str) -> str:
+        """Is this ad still listed? "live", "gone" (404/410) or "unknown"."""
+        encoded = base64.b64encode(external_id.encode()).decode()
+        url = f"{self._base_url}{_DETAIL_PATH}/{encoded}"
+        headers = {"X-API-Key": self._api_key, "User-Agent": self._user_agent}
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            raise SourceUnreachable(f"{type(exc).__name__} for {url}") from exc
+        return liveness_from_status(response.status_code)
+
+
+# ---------------------------------------------------------------------------
+# Liveness — is an ad still listed? (`hub/liveness.py`)
+# ---------------------------------------------------------------------------
+
+#: Facets a full-listing shard may be split by. Each value of each is a filter
+#: the search accepts, measured 2026-11-05 (`berufsfeld=Verkauf…&befristung=3`
+#: returned exactly the 73,579 the facet promised). The coordinator only splits
+#: by one whose counts SUM to the shard's total — exhaustive, so no ad falls
+#: between two values; `arbeitszeit` and `eintrittsdatum` overlap and fail that.
+LISTING_DIMENSIONS = ("berufsfeld", "befristung", "angebotsart", "branche", "arbeitszeit")
+
+
+@dataclasses.dataclass(frozen=True)
+class ListingPage:
+    """One page of the full listing: which ads exist, not what they say."""
+
+    external_ids: list[str]
+    total_available: int
+    facets: dict[str, dict[str, int]]
+
+
+def parse_listing(payload: dict) -> ListingPage:
+    """Every reference on the page — including records the ingest gate would
+    reject for a missing employer. Liveness is about the ad, not the row."""
+    facets = payload.get("facetten") or {}
+    return ListingPage(
+        external_ids=[
+            str(r["referenznummer"])
+            for r in payload.get("ergebnisliste") or []
+            if r.get("referenznummer")
+        ],
+        total_available=int(payload.get("maxErgebnisse") or 0),
+        facets={
+            dim: dict((facets.get(dim) or {}).get("counts") or {})
+            for dim in LISTING_DIMENSIONS
+            if dim in facets
+        },
+    )
+
+
+def liveness_from_status(status: int) -> str:
+    """The detail page's answer as evidence. Only "not found" closes an ad: a
+    5xx, a 429 or a 403 says something about the source, not about the ad."""
+    if status == 200:
+        return "live"
+    if status in (404, 410):
+        return "gone"
+    return "unknown"
+
+
+class ListingUnavailable(Exception):
+    """The source answered the listing with something other than a page."""

@@ -40,6 +40,16 @@ on:
         required: false
         default: false
         type: boolean
+      liveness_list:
+        # Normally Sundays only (see the liveness job). Set for a first run.
+        description: "Also read the full listing and mark suspects tonight"
+        required: false
+        default: false
+        type: boolean
+      liveness_checks:
+        description: "Suspects to check at the source (0 = none)"
+        required: false
+        default: "15000"
 
 concurrency:
   # Never let a slow run overlap the next night's.
@@ -78,3 +88,41 @@ jobs:
           fi
           python -m scripts.hub_daily \
             --since "${{ github.event.inputs.since || '1' }}" "${extra[@]}"
+
+  # Close ads the source took down (backend/app/domain/hub/liveness.py). After
+  # the ingest, never beside it: both lean on the same database.
+  #
+  # Sundays it first reads the FULL listing (~5,950 pages, measured 2026-11-05)
+  # and marks our open ads it did not see as suspects. Every night it asks the
+  # source about up to `liveness_checks` suspects — only a 404 closes one.
+  # ~8k ads close per day at the source; 15k checks is ~2 h at the paced rate
+  # and drains the first backlog (~250k) in about three weeks.
+  liveness:
+    needs: ingest
+    # A failed ingest says nothing about whether ads closed.
+    if: ${{ always() && github.event.inputs.agencies_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Close ads the source took down
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+          LIST_INPUT: ${{ github.event.inputs.liveness_list }}
+          CHECKS: ${{ github.event.inputs.liveness_checks || '15000' }}
+        run: |
+          extra=()
+          if [ "$LIST_INPUT" = "true" ] || [ "$(date -u +%u)" = "7" ]; then
+            extra=(--list)
+          fi
+          python -m scripts.hub_liveness --checks "$CHECKS" "${extra[@]}"

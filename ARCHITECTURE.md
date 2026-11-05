@@ -161,7 +161,7 @@ apart at the schema level.
 |---|---|---|
 | **Art. 5(1)(b)** purpose limitation | each source adapter records why it exists and what it may be used for | ⚠ adapters have docstrings, no machine-readable purpose |
 | **Art. 5(1)(c)** minimisation | corpus holds persons only as a public source published them (RULE 2); raw payloads pruned | ⚠ `hub_job_postings.raw` retains full source records indefinitely |
-| **Art. 5(1)(e)** storage limitation | postings deactivate + expire; observations have a retention window | ❌ not implemented — no retention job. `agent_proposals` erases its free text and the candidate's name on every decision, and a nightly job (`POST /proposals/maintenance/expire`) does the same for proposals older than 7 days in every workspace |
+| **Art. 5(1)(e)** storage limitation | postings deactivate + expire; observations have a retention window | ⚠ partial — ads the source took down are closed and their payload (ad text, raw copy, partner page) deleted by the nightly liveness job (`hub/liveness.py`, only on a 404 from the ad's own page); open ads keep `raw` indefinitely and observations have no window yet. `agent_proposals` erases its free text and the candidate's name on every decision, and a nightly job (`POST /proposals/maintenance/expire`) does the same for proposals older than 7 days in every workspace |
 | **Art. 6(1)(f)** lawful basis | documented Legitimate Interest Assessment per source | ❌ not written |
 | **Art. 14** third-party collection notice | any *person* ingested from a public source flags an Art. 14 duty | ✅ `agents/enrichment.py`; must extend to `managers` |
 | **Art. 15/16** access & rectification | provenance per field, so we can say where a value came from | ✅ `EnrichmentRecord`, `hub_observations`, `resolution_basis` |
@@ -284,7 +284,7 @@ job measures and prints its own coverage every run rather than assuming it.
 1. The rest of Art. 17/21: identifier-keyed corpus suppressions (VAT,
    register, domain) and the erasure UI. Corpus opt-outs and workspace
    erasure are built (§3).
-2. Retention/pruning of `raw` payloads and stale postings (Art. 5(1)(e))
+2. Retention/pruning of `raw` payloads of OPEN postings and of observations (Art. 5(1)(e)); closed postings are pruned by the liveness job
 3. A written LIA + RoPA + sub-processor list (Art. 6/28/30)
 4. **Sending** the Art. 14 notice. The tracking exists — `managers` carries
    `art14_notified_at`, `art14_outstanding` derives from the source, and
