@@ -39,6 +39,8 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     ("GET", "/hub/liveness/active"),
     ("POST", "/hub/liveness/mark"),
     ("POST", "/hub/liveness/check"),
+    # Keys existing ads for vacancy dedupe — a bounded corpus write.
+    ("POST", "/hub/vacancy-keys/backfill"),
     ("GET", "/hub/crawl-profiles"),
     ("POST", "/hub/crawl-profiles/mark-crawled"),
     # Rebuilds the agency finder's derived profiles from the corpus.

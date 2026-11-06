@@ -40,7 +40,7 @@ import asyncio
 import datetime as dt
 import time
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -116,8 +116,10 @@ async def recount_open_postings(session: AsyncSession, company_ids: set) -> None
     """Keep `open_postings_count` true after postings close."""
     if not company_ids:
         return
+    from app.domain.hub.vacancy import vacancy_count
+
     counts = dict((await session.execute(
-        select(HubJobPosting.hub_company_id, func.count(HubJobPosting.id))
+        select(HubJobPosting.hub_company_id, vacancy_count())
         .where(HubJobPosting.hub_company_id.in_(company_ids), HubJobPosting.is_active)
         .group_by(HubJobPosting.hub_company_id)
     )).all())

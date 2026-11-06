@@ -592,6 +592,19 @@ async def liveness_check(
     return await liveness.check_batch(db, adapter=adapter, limit=limit)
 
 
+@router.post("/vacancy-keys/backfill")
+async def vacancy_keys_backfill(
+    limit: int = Query(default=5_000, ge=1, le=10_000),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Key up to `limit` open ads that predate `vacancy_key`. Machine-only: a
+    bounded write the nightly job spreads over nights (disk-IO budget)."""
+    from app.domain.hub import vacancy
+
+    return await vacancy.backfill(db, limit=limit)
+
+
 @router.post(
     "/ingest", response_model=IngestSummary, status_code=status.HTTP_201_CREATED
 )

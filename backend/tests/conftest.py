@@ -37,6 +37,10 @@ async def _fresh_db():
     async with admin_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+    # Corpus counts are cached for minutes; a fresh schema is a fresh corpus.
+    from app.domain.hub import service as hub_service
+
+    hub_service._corpus_cache.clear()
     yield
 
 

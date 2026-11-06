@@ -170,6 +170,10 @@ These are enforced in code. Do not route around them.
   VAT → register court+number → registrable domain → normalized name + PLZ/city.
   `resolution_basis` records which rung matched, so a weak identity is visible.
   Fuzzy/LLM similarity belongs in a human review queue, never in an auto-merge.
+- **Vacancy identity is deterministic too** (`hub/vacancy.py`): employer
+  `normalized_name` + title without gender tags + postcode (else city). One
+  role relayed by several boards or seen on several sources counts ONCE in
+  every count and search list; an ad not yet keyed counts as itself.
 - **`HubJobPosting` is NOT `jobs.Job`.** A `Job` is a client mandate driving
   `matching.apply_hard_filters` and the pipeline; a hub posting is a market
   signal. Promotion of a posting into a mandate is an explicit human action, so

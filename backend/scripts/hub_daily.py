@@ -435,6 +435,27 @@ async def _check_sites(client: httpx.AsyncClient, *, budget: int) -> dict[str, i
     return totals
 
 
+#: Ads keyed per request: one bulk UPDATE, well inside the proxy's timeout.
+_VACANCY_BATCH = 5_000
+
+
+async def _key_vacancies(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
+    """Give up to `budget` older open ads their `vacancy_key`, in batches.
+    Spread over nights on purpose: one UPDATE of 650k rows would be a disk-IO
+    burst on a database already short of budget."""
+    totals = {"keyed": 0, "remaining": 0}
+    while totals["keyed"] < budget:
+        size = min(_VACANCY_BATCH, budget - totals["keyed"])
+        response = await client.post(f"/hub/vacancy-keys/backfill?limit={size}")
+        response.raise_for_status()
+        result = response.json()
+        totals["keyed"] += result.get("keyed", 0)
+        totals["remaining"] = result.get("remaining", 0)
+        if result.get("keyed", 0) < size:
+            break
+    return totals
+
+
 def run_verdict(
     *,
     source_down: str | None,
@@ -699,6 +720,13 @@ async def main() -> int:
         "(0 = off). Best-scored agencies first; each domain is checked once.",
     )
     parser.add_argument(
+        "--vacancy-keys",
+        type=int,
+        default=50_000,
+        help="older open ads to give a vacancy key this run (0 = off); the "
+        "backlog drains over nights, new ads are keyed at ingest",
+    )
+    parser.add_argument(
         "--agencies-only",
         action="store_true",
         help="run ONLY the private-recruiter pass — the backfill: "
@@ -711,7 +739,7 @@ async def main() -> int:
         # 28-day window (~45k detail calls) would outlast the workflow; the
         # hub-descriptions workflow owns that backlog.
         args.agencies, args.profiles, args.descriptions = True, False, False
-        args.partner_pages, args.stale_days = 0, 0
+        args.partner_pages, args.stale_days, args.vacancy_keys = 0, 0, 0
 
     base = os.environ.get("ELIGO_API_BASE", "").rstrip("/")
     token = os.environ.get("ELIGO_INGEST_TOKEN", "")
@@ -1002,6 +1030,15 @@ async def main() -> int:
             except Exception as exc:
                 print(f"  partner-page fetch FAILED: {exc}", file=sys.stderr)
                 failures.append("partner-pages")
+
+        # --- vacancy keys for ads that predate them (hub/vacancy.py) ---------
+        if args.vacancy_keys > 0:
+            try:
+                k = await _key_vacancies(client, budget=args.vacancy_keys)
+                print(f"  Vakanz-Schlüssel: +{k['keyed']} vergeben, {k['remaining']} offen")
+            except Exception as exc:
+                print(f"  vacancy-key backfill FAILED: {exc}", file=sys.stderr)
+                failures.append("vacancy-keys")
 
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.
