@@ -172,10 +172,10 @@ class HubJobPostingHit(HubJobPostingRead):
     """
 
     match_snippet: str | None = None
-    #: Open ads of this same vacancy (`hub/vacancy.py`) and the sources they
-    #: came from. 1 and [this ad's source] when it has no twin.
+    #: Ads of this same vacancy (`hub/vacancy.py`) that match the query —
+    #: 1 when it has no twin. Which SOURCES they came from is added with the
+    #: second source; today every ad is the Bundesagentur's.
     copies: int = 1
-    sources: list[str] = Field(default_factory=list)
 
 
 class HubEmployerHit(BaseModel):

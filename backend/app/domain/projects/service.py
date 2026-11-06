@@ -13,6 +13,7 @@ import uuid
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.hub.vacancy import vacancy_count
 from app.domain.hub.models import EMPLOYER, HubCompany, HubCompanyLink, HubJobPosting
 from app.domain.managers.models import Manager
 from app.domain.projects.models import Project, ProjectCompany
@@ -144,7 +145,8 @@ async def _employer_rollup(
         await session.execute(
             select(
                 HubJobPosting.hub_company_id,
-                func.count(HubJobPosting.id),
+                # Vacancies, not ads — the same count Markt shows.
+                vacancy_count(),
                 func.max(HubJobPosting.posted_at),
             )
             .where(

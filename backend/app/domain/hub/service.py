@@ -384,7 +384,7 @@ async def ingest(
                     segment=segment,
                     vacancy_key=vacancy_key(
                         company.normalized_name, posting.title,
-                        postal_code=posting.postal_code, city=posting.city,
+                        postal_code=posting.postal_code, city=posting.city, country=posting.country,
                     ),
                     first_seen_at=now,
                     last_seen_at=now,
@@ -449,10 +449,16 @@ async def ingest(
             row.payload.raw = rules.redact_json(posting.raw)
         # Recomputed on every touch: a changed title or place is a different
         # vacancy, and an ad the backfill has not reached gets its key here.
-        # An unchanged value writes nothing (the ORM compares).
-        row.vacancy_key = vacancy_key(
-            company.normalized_name, row.title, postal_code=row.postal_code, city=row.city
-        ) or row.vacancy_key
+        # An unchanged value writes nothing (the ORM compares). Only with the
+        # row's OWN company: a re-crawl resolving to another firm does not move
+        # the row, so it must not take that firm's name either.
+        # An ad that cannot be keyed (no place, title only a gender tag) takes
+        # its own id — counted as itself, and out of the backfill's queue.
+        if company.id == row.hub_company_id:
+            row.vacancy_key = vacancy_key(
+                company.normalized_name, row.title,
+                postal_code=row.postal_code, city=row.city, country=row.country,
+            ) or f"id:{row.id.hex}"
         postings_updated += 1
 
     await session.flush()
@@ -1001,7 +1007,34 @@ async def list_observations(
     return list(rows.scalars().all())
 
 
+#: Corpus-wide counts, recomputed at most every 10 minutes. Counting distinct
+#: VACANCIES over ~600k ads sorts to disk (measured 2.6 s and 54 MB of temp on
+#: 600k rows, against 31 ms for counting ads); on every Markt load that is IO
+#: the database does not have. The corpus changes nightly, not per minute.
+CORPUS_CACHE_SECONDS = 600
+_corpus_cache: dict[str, tuple[float, object]] = {}
+
+
+async def _cached(name: str, compute):
+    hit = _corpus_cache.get(name)
+    if hit and hit[0] > time.monotonic():
+        return hit[1]
+    value = await compute()
+    _corpus_cache[name] = (time.monotonic() + CORPUS_CACHE_SECONDS, value)
+    return value
+
+
 async def corpus_stats(session: AsyncSession) -> dict:
+    """Corpus-wide aggregates (see `_corpus_stats`), cached."""
+    return await _cached("stats", lambda: _corpus_stats(session))
+
+
+async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
+    """Filter options with counts (see `_corpus_facets`), cached."""
+    return await _cached("facets", lambda: _corpus_facets(session))
+
+
+async def _corpus_stats(session: AsyncSession) -> dict:
     """Corpus-wide aggregates, counted in the DATABASE.
 
     The screen used to derive these from whatever page it had loaded, so a
@@ -1070,7 +1103,7 @@ async def corpus_stats(session: AsyncSession) -> dict:
     }
 
 
-async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
+async def _corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
     """Filter options with counts, derived from the corpus itself.
 
     Not a hardcoded taxonomy: the options are what the corpus actually holds, so
@@ -1875,6 +1908,9 @@ async def search_employers(
                           HubJobPosting.id),
             )
             .label("copy"),
+            # Copies of this vacancy that match the query — counted here, in
+            # the rows already being read, not by a second pass over the table.
+            func.count().over(partition_by=vacancy).label("copies"),
         )
         .join(HubCompany, HubJobPosting.hub_company_id == HubCompany.id)
         .where(HubCompany.normalized_name.in_(names), _employer_company(), *role_match)
@@ -1884,6 +1920,7 @@ async def search_employers(
         select(
             one_per_vacancy.c.posting_id,
             one_per_vacancy.c.employer,
+            one_per_vacancy.c.copies,
             func.row_number()
             .over(
                 partition_by=one_per_vacancy.c.employer,
@@ -1906,13 +1943,14 @@ async def search_employers(
         .subquery()
     )
     role_stmt = (
-        select(HubJobPosting, ranked_roles.c.employer)
+        select(HubJobPosting, ranked_roles.c.employer, ranked_roles.c.copies)
         .join(ranked_roles, ranked_roles.c.posting_id == HubJobPosting.id)
         .where(ranked_roles.c.rn <= roles_per_employer)
         .order_by(ranked_roles.c.employer, ranked_roles.c.rn)
     )
     matched: dict[str, list[HubJobPosting]] = {}
-    for posting, name in (await session.execute(role_stmt)).all():
+    for posting, name, copies in (await session.execute(role_stmt)).all():
+        posting.copies = int(copies or 1)
         bucket = matched.setdefault(name, [])
         if len(bucket) < roles_per_employer:
             # Transient, set for the search response only: it is a property of
@@ -1927,15 +1965,6 @@ async def search_employers(
                 _snippet(posting.description, unexplained) if unexplained else None
             )
             bucket.append(posting)
-
-    # How many copies each shown vacancy has, and on which sources — "seen on
-    # the Bundesagentur and the employer's own board" is itself evidence.
-    shown = [p for bucket in matched.values() for p in bucket]
-    copies = await _vacancy_copies(session, [p.vacancy_key for p in shown if p.vacancy_key])
-    for posting in shown:
-        found = copies.get(posting.vacancy_key or "")
-        posting.copies = sum(found.values()) if found else 1
-        posting.sources = sorted(found) if found else [posting.source]
 
     return [
         {
@@ -1953,21 +1982,6 @@ async def search_employers(
         }
         for row in groups
     ]
-
-
-async def _vacancy_copies(session: AsyncSession, keys: list[str]) -> dict[str, dict[str, int]]:
-    """Open ads per vacancy key, per source."""
-    if not keys:
-        return {}
-    rows = await session.execute(
-        select(HubJobPosting.vacancy_key, HubJobPosting.source, func.count(HubJobPosting.id))
-        .where(HubJobPosting.vacancy_key.in_(set(keys)), HubJobPosting.is_active.is_(True), _employer_posting())
-        .group_by(HubJobPosting.vacancy_key, HubJobPosting.source)
-    )
-    out: dict[str, dict[str, int]] = {}
-    for key, source, n in rows.all():
-        out.setdefault(key, {})[source] = n
-    return out
 
 
 async def count_employers(

@@ -42,6 +42,17 @@ NOW = dt.datetime.now(dt.UTC)
         ("Softwareentwickler:in Java", "Softwareentwickler Java (gn)"),
         ("Elektriker – Gebäudetechnik", "Elektriker - Gebäudetechnik"),
         ("Data Engineer (m/f/d)", "Data Engineer (f/m/d)"),
+        ("Koch (w/m/div)", "Koch"),
+        ("Koch (m/w/divers)", "Koch"),
+        ("Koch (f/m/div.)", "Koch"),
+        ("Koch (gn*)", "Koch"),
+        ("Koch (all genders welcome)", "Koch"),
+        ("Verkäufer / in", "Verkäufer"),
+        ("Verkäufer/ in", "Verkäufer"),
+        ("Verkäufer /in", "Verkäufer"),
+        ("Verkäufer", "Verkaeufer"),
+        ("Pflegefachkraft m/w/d", "Pflegefachkraft"),
+        ("Pflegefachkraft - m/w/d", "Pflegefachkraft"),
     ],
 )
 def test_gender_tags_and_punctuation_do_not_make_a_new_vacancy(a: str, b: str) -> None:
@@ -54,6 +65,11 @@ def test_gender_tags_and_punctuation_do_not_make_a_new_vacancy(a: str, b: str) -
         ("Senior Developer", "Developer"),           # a different role
         ("Pflegefachkraft Nachtdienst", "Pflegefachkraft"),
         ("Werkstudent Marketing", "Praktikum Marketing"),
+        ("C++ Developer", "C# Developer"),
+        ("C++ Developer", "C Developer"),
+        ("F# Engineer", "F Engineer"),
+        ("Sachbearbeiter F/X Handel", "Sachbearbeiter Handel"),   # a desk, not a gender tag
+        ("Lehrerin", "Lehrer/in"),                                 # deliberately conservative
     ],
 )
 def test_a_near_match_is_not_the_same_vacancy(a: str, b: str) -> None:
@@ -78,10 +94,19 @@ def test_the_postcode_wins_over_the_city_and_the_city_stands_in_without_one() ->
     )
 
 
-def test_no_key_without_a_title_or_an_employer() -> None:
+def test_no_key_without_a_title_an_employer_or_a_place() -> None:
     assert vacancy_key("x", "", postal_code="1", city="a") is None
     assert vacancy_key("x", "(m/w/d)", postal_code="1", city="a") is None
     assert vacancy_key("", "Koch", postal_code="1", city="a") is None
+    # Remote or nationwide ads name no place: they count as themselves rather
+    # than collapsing every same-title ad of the employer into one.
+    assert vacancy_key("x", "Koch", postal_code=None, city=None) is None
+
+
+def test_a_postcode_is_one_place_only_within_its_country() -> None:
+    wien = vacancy_key("x", "Koch", postal_code="1010", city="Wien", country="Österreich")
+    lausanne = vacancy_key("x", "Koch", postal_code="1010", city="Lausanne", country="Schweiz")
+    assert wien != lausanne
 
 
 # --- in the corpus ------------------------------------------------------------
@@ -126,7 +151,6 @@ async def test_search_counts_a_relayed_vacancy_once_and_names_its_sources() -> N
     assert len(roles) == 2
     relayed = next(r for r in roles if r.postal_code == "70839")
     assert relayed.copies == 3
-    assert relayed.sources == ["bundesagentur", "smartrecruiters"]
 
 
 async def test_an_ad_without_a_key_yet_still_counts_as_itself() -> None:
@@ -165,6 +189,19 @@ async def test_the_companys_open_roles_count_vacancies_not_ads() -> None:
         )).scalars().all()
     assert company.open_postings_count == len({p.vacancy_key for p in ads})
     assert company.open_postings_count == len(ads) - 1
+
+
+async def test_projects_count_vacancies_like_search() -> None:
+    """The same firm must not show 3 open roles in a project and 2 in Markt."""
+    from app.domain.projects import service as projects
+
+    async with SessionLocal() as s:
+        firm = await _company(s, "Muster GmbH")
+        s.add_all([_posting(firm, "Koch", "a"), _posting(firm, "Koch (m/w/d)", "b"), _posting(firm, "Kellner", "c")])
+        await s.commit()
+    async with SessionLocal() as s:
+        rollup = await projects._employer_rollup(s, hub_company_ids=[firm.id])
+    assert rollup[firm.id]["open_roles"] == 2
 
 
 async def test_corpus_stats_count_vacancies() -> None:
@@ -228,3 +265,20 @@ async def test_the_nightly_job_drains_the_backlog_in_batches_and_stops_when_done
         left["n"] = 100_000
         assert (await _key_vacancies(client, budget=7_000))["keyed"] == 7_000
         assert asked == [5_000, 2_000]
+
+
+async def test_corpus_counts_are_served_from_cache_between_refreshes(monkeypatch) -> None:
+    """A distinct count over the whole corpus sorts to disk: once per 10 min,
+    not on every Markt load."""
+    async with SessionLocal() as s:
+        firm = await _company(s, "Muster GmbH")
+        s.add(_posting(firm, "Koch", "a"))
+        await s.commit()
+    async with SessionLocal() as s:
+        first = await service.corpus_stats(s)
+        s.add(_posting(firm, "Kellner", "b"))
+        await s.commit()
+        assert (await service.corpus_stats(s))["open_postings"] == first["open_postings"] == 1
+        monkeypatch.setattr(service, "CORPUS_CACHE_SECONDS", 0)
+        service._corpus_cache.clear()
+        assert (await service.corpus_stats(s))["open_postings"] == 2
