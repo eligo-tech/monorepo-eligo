@@ -238,6 +238,15 @@ These are enforced in code. Do not route around them.
   so identity uses `SourcedCompany.area` (`region:<country>:<region>`) and the
   vacancy key is the ad itself. Liveness runs per source (`?source=eures`):
   gone = 404 + `se.jv.error.notAvailable`.
+- **Employers' own Personio boards** (`adapters/personio.py`, `hub/ats.py`,
+  `scripts/hub_ats.py`, daily at 12:37 UTC — `.github/workflows/hub-ats.yml`).
+  Boards are discovered from Common Crawl's URL index (`hub_ats_boards`), never
+  by a user. The feed is a full snapshot: a DACH job it stops listing is closed
+  (one empty or unreadable answer closes nothing; 404/410 retires the board).
+  Office postcodes come from ONE job page per office (the page's
+  `office_addresses` app data, schema.org as a fallback), cached on the board —
+  so the same job on BA has the same company and vacancy key. Ingest goes
+  through `service.merge_fetch`, the shared post-fetch path.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.

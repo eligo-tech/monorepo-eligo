@@ -23,6 +23,7 @@ from app.domain.hub.gate import PreconditionFailed
 from app.domain.searches import service as searches_service
 from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
+    AddBoardsRequest,
     ListingRequest,
     ListingResponse,
     LivenessSource,
@@ -596,6 +597,32 @@ async def liveness_check(
     if not hasattr(adapter, "check_live"):
         raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "source cannot check an ad")
     return await liveness.check_batch(db, adapter=adapter, limit=limit)
+
+
+@router.post("/ats/boards")
+async def add_ats_boards(
+    payload: AddBoardsRequest,
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Record board slugs a discovery pass found. Machine-only (RULE 1)."""
+    from app.domain.hub import ats
+
+    return await ats.add_boards(db, ats=payload.ats, slugs=payload.slugs, discovered_via=payload.discovered_via)
+
+
+@router.post("/ats/sync")
+async def sync_ats_boards(
+    limit: int = Query(default=20, ge=1, le=100),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Read up to `limit` due boards' feeds and merge them. Machine-only (RULE
+    1): an outbound read of employers' public boards, ~60 s per request."""
+    from app.domain.hub import ats
+    from app.domain.hub.adapters.personio import PersonioAdapter
+
+    return await ats.sync_due(db, adapter=PersonioAdapter(), limit=limit)
 
 
 @router.post("/vacancy-keys/backfill")

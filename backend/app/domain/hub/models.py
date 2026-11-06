@@ -554,3 +554,45 @@ class HubSiteCheck(Base, IDMixin, TimestampMixin):
     #: vat_id, register, register_court, phone, emails — as published.
     facts: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
     checked_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HubAtsBoard(Base, IDMixin, TimestampMixin):
+    """One employer's public job board on an applicant-tracking system.
+
+    Personio first (`adapters/personio.py`): each company that switches on
+    Personio's job feed publishes `{slug}.jobs.personio.de/xml`. The board is
+    the employer's own source — full text, its own offices — and the feed is a
+    full snapshot, so a job missing from it is closed (`hub/ats.py`).
+
+    Boards are DISCOVERED by a scheduled job (`scripts/hub_ats.py --discover`,
+    from Common Crawl's URL index), never by a user (RULE 1). Shared corpus, no
+    tenant_id.
+
+    `offices` caches each office's postal address, read once from one job
+    page (its `office_addresses` app data, schema.org as a fallback; an
+    office with none is retried weekly): the feed names an office ("Berlin") but no
+    postcode, and the postcode is what makes BA's copy of the same job one
+    vacancy. `open_ids` is the last snapshot, the base for the next diff.
+    """
+
+    __tablename__ = "hub_ats_boards"
+    __table_args__ = (UniqueConstraint("ats", "slug", name="uq_hub_ats_board"),)
+
+    ats: Mapped[str] = mapped_column(String(30), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    #: new · active (DACH jobs) · elsewhere (jobs, none in DACH) · empty · gone · failing
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
+    company_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    discovered_via: Mapped[str] = mapped_column(String(60), nullable=False)
+    offices: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+    open_ids: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)
+    jobs_listed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    jobs_dach: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    #: Consecutive empty snapshots; one alone never closes anything.
+    empty_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_fetch_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )

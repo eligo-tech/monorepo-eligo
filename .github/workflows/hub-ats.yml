@@ -1,0 +1,56 @@
+# Employers' own Personio boards → the shared corpus
+# (backend/app/domain/hub/ats.py). A scheduled job only (ARCHITECTURE.md
+# RULE 1), over HTTP with the machine token — no database credentials in CI.
+#
+# Daytime, so it never competes with the nightly ingest chain for the
+# database. Each board is one feed request (~1/s), plus one job page per new
+# office. On the 1st of the month it first rediscovers boards from Common
+# Crawl's URL index. A failed run fails the workflow: that is the monitoring.
+name: Hub · employer boards (Personio)
+
+on:
+  schedule:
+    - cron: "37 12 * * *"
+  workflow_dispatch:
+    inputs:
+      discover:
+        description: "Find new boards in Common Crawl first"
+        required: false
+        default: false
+        type: boolean
+      minutes:
+        description: "Sync time budget in minutes"
+        required: false
+        default: "120"
+
+concurrency:
+  group: hub-ats
+  cancel-in-progress: false
+
+jobs:
+  boards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200  # discovery ≤ 40 min (its own budget) + sync ≤ 120 min
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Sync employer boards
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+          DISCOVER_INPUT: ${{ github.event.inputs.discover }}
+          MINUTES_INPUT: ${{ github.event.inputs.minutes }}
+        run: |
+          extra=()
+          if [ "$DISCOVER_INPUT" = "true" ] || [ "$(date -u +%d)" = "01" ]; then extra=(--discover); fi
+          MINUTES="${MINUTES_INPUT:-120}"
+          case "$MINUTES" in ''|*[!0-9]*) echo "minutes must be a number"; exit 2;; esac
+          python -m scripts.hub_ats --minutes "$MINUTES" "${extra[@]}"

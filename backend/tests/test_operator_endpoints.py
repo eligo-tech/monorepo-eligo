@@ -39,6 +39,9 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     ("GET", "/hub/liveness/active"),
     ("POST", "/hub/liveness/mark"),
     ("POST", "/hub/liveness/check"),
+    # Employers' ATS boards: discovery writes slugs; sync reads their feeds.
+    ("POST", "/hub/ats/boards"),
+    ("POST", "/hub/ats/sync"),
     # Keys existing ads for vacancy dedupe — a bounded corpus write.
     ("POST", "/hub/vacancy-keys/backfill"),
     ("GET", "/hub/crawl-profiles"),
