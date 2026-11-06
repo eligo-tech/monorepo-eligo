@@ -25,6 +25,7 @@ from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
     ListingRequest,
     ListingResponse,
+    LivenessSource,
     MarkRequest,
     AdoptCompanyRequest,
     AgencyDetail,
@@ -534,15 +535,17 @@ async def liveness_listing(
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
 ) -> ListingResponse:
     """One page of the source's full listing: which references exist. No write."""
-    from app.domain.hub.adapters.bundesagentur import ListingUnavailable, SourceUnreachable
+    from app.domain.hub.adapters.base import InvalidQuery, ListingUnavailable, SourceUnreachable
 
-    adapter = get_source_adapter(liveness.SOURCE)
+    adapter = get_source_adapter(payload.source)
     if not hasattr(adapter, "fetch_listing"):
         raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "source has no full listing")
     try:
         page = await adapter.fetch_listing(
             segment=payload.segment, filters=dict(payload.filters), page=payload.page
         )
+    except InvalidQuery as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     except (SourceUnreachable, ListingUnavailable) as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"listing unavailable: {exc}") from exc
     return ListingResponse(
@@ -556,13 +559,14 @@ async def liveness_listing(
 @router.get("/liveness/active")
 async def liveness_active(
     segment: Literal["employer", "private_recruiter"] = "employer",
+    source: LivenessSource = "bundesagentur",
     after: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=20_000, ge=1, le=50_000),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Our open ads in reference order, with "already a suspect", keyset-paged."""
-    rows = await liveness.active_ids(db, segment=segment, after=after, limit=limit)
+    rows = await liveness.active_ids(db, segment=segment, after=after, limit=limit, source=source)
     return {"ids": rows, "next": rows[-1][0] if len(rows) == limit else None}
 
 
@@ -574,19 +578,21 @@ async def liveness_mark(
 ) -> dict[str, int]:
     """Record one listing's result: suspects in, relisted ads out."""
     return await liveness.mark(
-        db, segment=payload.segment, unlisted=payload.unlisted, listed=payload.listed
+        db, segment=payload.segment, unlisted=payload.unlisted, listed=payload.listed,
+        source=payload.source,
     )
 
 
 @router.post("/liveness/check")
 async def liveness_check(
     limit: int = Query(default=25, ge=1, le=100),
+    source: LivenessSource = "bundesagentur",
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Ask the source about up to `limit` due suspects; close those it says
     it does not have. Bounded to ~60 s so it stays inside the caller's timeout."""
-    adapter = get_source_adapter(liveness.SOURCE)
+    adapter = get_source_adapter(source)
     if not hasattr(adapter, "check_live"):
         raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "source cannot check an ad")
     return await liveness.check_batch(db, adapter=adapter, limit=limit)
@@ -626,8 +632,13 @@ async def ingest_slice(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
+    from app.domain.hub.adapters.base import InvalidQuery
+
     try:
         return await service.ingest(db, adapter=adapter, request=payload)
+    except InvalidQuery as exc:
+        # Refused before any request: a question this source cannot answer.
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     except PreconditionFailed as exc:
         # A blocking precondition (robots/ToS refusal, non-200 source) — the
         # observation recording the refusal is already committed.

@@ -43,6 +43,8 @@ class SourceQuery:
     # asks for agencies ONLY — the agency finder's leads — and overrides
     # `include_staffing`.
     segment: str = "employer"
+    # NACE section (EURES): the split key for a region over the 10,000 cap.
+    sector: str | None = None
     # Adapter-specific escape hatch (an ATS board token, a feed URL, ...).
     params: dict[str, Any] = field(default_factory=dict)
 
@@ -61,6 +63,9 @@ class SourcedCompany:
     latitude: float | None = None
     longitude: float | None = None
     industry: str | None = None
+    # The identity ladder's place when the source has no postcode or city
+    # (EURES: "region:oesterreich:wien"). Never displayed, never a town.
+    area: str | None = None
 
 
 @dataclass
@@ -91,6 +96,9 @@ class SourcedPosting:
     expires_at: dt.datetime | None = None
     source_url: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    # Set when the SOURCE RECORD decides the segment (EURES has no staffing
+    # filter, so its adapter classifies each ad). None: the query's segment.
+    segment: str | None = None
 
 
 @dataclass
@@ -111,6 +119,39 @@ class FetchResult:
     # How the source says this result set divides (Bundesagentur: the
     # `berufsfeld` facet). The crawler's shard plan, straight from the API.
     facet_counts: dict[str, int] = field(default_factory=dict)
+    # Records the parser dropped, by reason ("employer not named": 33). Carried
+    # to the summary, so a drop is counted rather than silent.
+    dropped: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ListingPage:
+    """One page of the full listing: which ads exist, not what they say."""
+
+    external_ids: list[str]
+    #: Records on the page, with or without a reference — what paging goes by.
+    records: int
+    total_available: int
+    facets: dict[str, dict[str, int]]
+
+
+
+class SourceUnreachable(Exception):
+    """The source did not answer at all — not the same as answering "nothing".
+
+    A per-posting fetch that cannot reach the source must say so: marking the
+    posting as attempted would retire it permanently over an outage that lasts
+    an afternoon.
+    """
+
+
+class ListingUnavailable(Exception):
+    """The source answered the listing with something other than a page."""
+
+
+class InvalidQuery(ValueError):
+    """A query this source cannot answer (an unknown region, a window it does
+    not have). Refused before any request, so it never reads as "no ads"."""
 
 
 @runtime_checkable

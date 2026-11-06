@@ -66,7 +66,9 @@ async def refresh_profiles(session: AsyncSession) -> dict[str, int]:
                 HubCompany.suspected_natural_person,
                 HubCompany.region,
                 HubCompany.city,
-            ).where(HubCompany.kind == PRIVATE_RECRUITER)
+            # BA's `pav=true` firms only: EURES sorts agencies by its own rule
+            # and cannot tell a temp agency (out of scope) from a recruiter.
+            ).where(HubCompany.kind == PRIVATE_RECRUITER, HubCompany.source == "bundesagentur")
         )
     ).all()
     group_of: dict[uuid.UUID, str] = {}

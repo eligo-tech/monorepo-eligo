@@ -33,7 +33,6 @@ resolved. Never describe BA-derived data as licensed or resellable.
 from __future__ import annotations
 
 import base64
-import dataclasses
 import datetime as dt
 import hashlib
 import json
@@ -46,23 +45,19 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.hub.adapters.base import (
     FetchResult,
+    InvalidQuery,
+    ListingPage,
+    ListingUnavailable,
     SourcedCompany,
     SourcedPosting,
     SourceQuery,
+    SourceUnreachable,
 )
 
 logger = get_logger(__name__)
 
 SOURCE_NAME = "bundesagentur"
 
-
-class SourceUnreachable(Exception):
-    """The source did not answer at all — not the same as answering "nothing".
-
-    A per-posting fetch that cannot reach the source must say so: marking the
-    posting as attempted would retire it permanently over an outage that lasts
-    an afternoon.
-    """
 _SEARCH_PATH = "/pc/v6/jobs"
 # Full ad text lives behind a per-record call, keyed on base64 of the reference
 # number. The search endpoint never returns it — which is why the corpus could
@@ -359,8 +354,14 @@ class BundesagenturAdapter:
     async def fetch_listing(self, *, segment: str, filters: dict[str, str], page: int) -> ListingPage:
         """One page of the FULL listing (no publication window) — references only.
 
-        `filters` are `LISTING_DIMENSIONS` values; the caller validates them.
+        `filters` are `LISTING_DIMENSIONS` values; anything else is refused,
+        since the search would ignore it and answer for the whole listing.
         """
+        unknown = set(filters) - set(LISTING_DIMENSIONS)
+        if unknown:
+            raise InvalidQuery(f"listing splits by {LISTING_DIMENSIONS}, not {sorted(unknown)}")
+        if page > 100:
+            raise InvalidQuery("the search answers pages 1–100")
         params = self.build_params(SourceQuery(segment=segment, page=page, size=100))
         params.update(filters)
         url = f"{self._base_url}{_SEARCH_PATH}"
@@ -398,17 +399,6 @@ class BundesagenturAdapter:
 #: by one whose counts SUM to the shard's total — exhaustive, so no ad falls
 #: between two values; `arbeitszeit` and `eintrittsdatum` overlap and fail that.
 LISTING_DIMENSIONS = ("berufsfeld", "befristung", "angebotsart", "branche", "arbeitszeit")
-
-
-@dataclasses.dataclass(frozen=True)
-class ListingPage:
-    """One page of the full listing: which ads exist, not what they say."""
-
-    external_ids: list[str]
-    #: Records on the page, with or without a reference — what paging goes by.
-    records: int
-    total_available: int
-    facets: dict[str, dict[str, int]]
 
 
 def parse_listing(payload: dict) -> ListingPage:
@@ -452,6 +442,3 @@ def liveness_from_response(status: int, body: str) -> str:
             return "gone"
     return "unknown"
 
-
-class ListingUnavailable(Exception):
-    """The source answered the listing with something other than a page."""

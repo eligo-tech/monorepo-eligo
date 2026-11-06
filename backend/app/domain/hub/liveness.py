@@ -48,6 +48,9 @@ from app.domain.hub.models import HubCompany, HubJobPosting, HubObservation, Hub
 
 logger = get_logger(__name__)
 
+#: The default source. EURES (Austria, Switzerland) runs the same two steps
+#: with its own not-found (`adapters/eures.liveness_from_response`); every
+#: function takes the source, and a batch checks one source's queue only.
 SOURCE = "bundesagentur"
 #: Re-queue delays. An ad that answered live once waits two weeks; one that has
 #: answered before waits longer — most of those sit in shards the listing
@@ -60,27 +63,27 @@ OUTAGE_STREAK = 3
 #: The control reference, reused for a while: one batch every ~30 s should not
 #: re-run its lookup each time. Dropped the moment it fails to answer live.
 CONTROL_TTL_SECONDS = 900
-_control_cache: dict[str | None, tuple[str, float]] = {}
+_control_cache: dict[tuple[str, str | None], tuple[str, float]] = {}
 #: The batch's clock — a seam, so a test can move time without moving asyncio's.
 _clock = time.monotonic
 
 
-def _open(segment: str | None) -> list:
+def _open(segment: str | None, source: str = SOURCE) -> list:
     # Bare `is_active`, not `.is_(True)`: Postgres renders the latter `IS true`
     # and cannot then prove the partial index's `is_active` predicate.
-    clauses = [HubJobPosting.source == SOURCE, HubJobPosting.is_active]
+    clauses = [HubJobPosting.source == source, HubJobPosting.is_active]
     if segment is not None:
         clauses.append(HubJobPosting.segment == segment)
     return clauses
 
 
 async def active_ids(
-    session: AsyncSession, *, segment: str, after: str | None, limit: int
+    session: AsyncSession, *, segment: str, after: str | None, limit: int, source: str = SOURCE
 ) -> list[tuple[str, bool]]:
     """Our open ads in reference order, each with "already a suspect"."""
     stmt = (
         select(HubJobPosting.external_id, HubJobPosting.unlisted_at.is_not(None))
-        .where(*_open(segment))
+        .where(*_open(segment, source))
         .order_by(HubJobPosting.external_id)
         .limit(limit)
     )
@@ -90,7 +93,8 @@ async def active_ids(
 
 
 async def mark(
-    session: AsyncSession, *, segment: str, unlisted: list[str], listed: list[str]
+    session: AsyncSession, *, segment: str, unlisted: list[str], listed: list[str],
+    source: str = SOURCE,
 ) -> dict[str, int]:
     """Record what one listing showed: `unlisted` are queued as suspects,
     `listed` leave the queue. A suspect already queued keeps its place."""
@@ -99,13 +103,15 @@ async def mark(
     if unlisted:
         flagged = (await session.execute(
             update(HubJobPosting)
-            .where(*_open(segment), HubJobPosting.external_id.in_(unlisted), HubJobPosting.unlisted_at.is_(None))
+            .where(*_open(segment, source), HubJobPosting.external_id.in_(unlisted),
+                   HubJobPosting.unlisted_at.is_(None))
             .values(unlisted_at=now, check_due_at=now)
         )).rowcount or 0
     if listed:
         cleared = (await session.execute(
             update(HubJobPosting)
-            .where(*_open(segment), HubJobPosting.external_id.in_(listed), HubJobPosting.unlisted_at.is_not(None))
+            .where(*_open(segment, source), HubJobPosting.external_id.in_(listed),
+                   HubJobPosting.unlisted_at.is_not(None))
             .values(unlisted_at=None, check_due_at=None)
         )).rowcount or 0
     await session.commit()
@@ -135,10 +141,10 @@ async def recount_open_postings(session: AsyncSession, company_ids: set) -> None
 CONTROL_CANDIDATES = 3
 
 
-async def _controls(session: AsyncSession, segment: str | None) -> list[str]:
+async def _controls(session: AsyncSession, segment: str | None, source: str) -> list[str]:
     """References the listing showed and the queue does not hold — the newest.
     If the source answers 200 for none of them, it is not answering for anyone."""
-    cached = _control_cache.get(segment)
+    cached = _control_cache.get((source, segment))
     if cached and cached[1] > _clock():
         return [cached[0]]
     # `posted_at DESC` with NULLs filtered out is a backward walk of
@@ -146,7 +152,8 @@ async def _controls(session: AsyncSession, segment: str | None) -> list[str]:
     # `DESC NULLS LAST` does not match that index and sorted the table.
     return list((await session.execute(
         select(HubJobPosting.external_id)
-        .where(*_open(segment), HubJobPosting.check_due_at.is_(None), HubJobPosting.posted_at.is_not(None))
+        .where(*_open(segment, source), HubJobPosting.check_due_at.is_(None),
+               HubJobPosting.posted_at.is_not(None))
         .order_by(HubJobPosting.posted_at.desc())
         .limit(CONTROL_CANDIDATES)
     )).scalars())
@@ -161,20 +168,22 @@ async def check_batch(
     delay: float = 0.3,
     time_budget: float = 60.0,
 ) -> dict:
-    """Ask the source about up to `limit` due suspects, earliest due first."""
-    from app.domain.hub.adapters.bundesagentur import SourceUnreachable
+    """Ask `adapter`'s source about up to `limit` of ITS due suspects,
+    earliest due first."""
+    from app.domain.hub.adapters.base import SourceUnreachable
 
+    source = adapter.name
     now = dt.datetime.now(dt.UTC)
     result = {"checked": 0, "closed": 0, "live": 0, "unknown": 0,
               "source_unreachable": False, "control_failed": False}
     queue = (await session.execute(
         select(HubJobPosting.id, HubJobPosting.external_id, HubJobPosting.hub_company_id,
                HubJobPosting.live_checked_at)
-        .where(*_open(segment), HubJobPosting.check_due_at <= now)
+        .where(*_open(segment, source), HubJobPosting.check_due_at <= now)
         .order_by(HubJobPosting.check_due_at, HubJobPosting.id)
         .limit(limit)
     )).all()
-    candidates = await _controls(session, segment) if queue else []
+    candidates = await _controls(session, segment, source) if queue else []
     await session.commit()  # no transaction across the source calls
     if not queue:
         return result
@@ -188,9 +197,9 @@ async def check_batch(
         except SourceUnreachable:
             break
     if control is not None:
-        _control_cache[segment] = (control, _clock() + CONTROL_TTL_SECONDS)
+        _control_cache[(source, segment)] = (control, _clock() + CONTROL_TTL_SECONDS)
     else:
-        _control_cache.pop(segment, None)
+        _control_cache.pop((source, segment), None)
         logger.warning("liveness: no control of %r answered live — nothing checked", candidates)
         result["control_failed"] = True
         return result
@@ -223,8 +232,8 @@ async def check_batch(
     gone = verdicts["gone"]
     if gone:
         observation = HubObservation(
-            source=SOURCE,
-            request_url=getattr(adapter, "detail_url_template", "detail/{base64(reference)}"),
+            source=source,
+            request_url=getattr(adapter, "detail_url_template", "detail/{reference}"),
             http_status=404,
             record_count=len(gone),
             fetched_at=done,

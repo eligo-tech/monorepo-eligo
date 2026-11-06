@@ -92,6 +92,7 @@ def check_posting(posting: SourcedPosting, *, now: dt.datetime | None = None) ->
         website_domain=posting.company.website_domain,
         postal_code=posting.company.postal_code,
         city=posting.company.city,
+        area=posting.company.area,
     ) is None:
         return False, f"employer {posting.company.name!r} has no resolvable identity (no place)"
 

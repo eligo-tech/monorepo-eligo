@@ -19,12 +19,18 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validat
 from app.domain.common.enums import ConfidenceSource
 
 
-def ba_detail_url(source: str, external_id: str | None) -> str | None:
-    """The agency's own page for a posting, from its reference number."""
-    if source == "bundesagentur" and external_id:
+def source_detail_url(source: str, external_id: str | None) -> str | None:
+    """The source's own page for a posting, from its reference."""
+    if not external_id:
+        return None
+    if source == "bundesagentur":
         return "https://www.arbeitsagentur.de/jobsuche/jobdetail/" + quote(
             external_id, safe=""
         )
+    if source == "eures":
+        return "https://europa.eu/eures/portal/jv-se/jv-details/" + quote(
+            external_id, safe=""
+        ) + "?lang=de"
     return None
 
 
@@ -116,7 +122,7 @@ class HubJobPostingRead(BaseModel):
         for every posting already in the corpus. `source_url` keeps its narrower
         meaning — the EMPLOYER's own ad — so the two are not conflated.
         """
-        return ba_detail_url(self.source, self.external_id)
+        return source_detail_url(self.source, self.external_id)
 
 
 class HubObservationRead(BaseModel):
@@ -314,6 +320,8 @@ class IngestRequest(BaseModel):
     # Which advertisers this slice asks for. "private_recruiter" feeds the
     # agency finder; those rows never appear in a recruiter-facing view.
     segment: Literal["employer", "private_recruiter"] = "employer"
+    # NACE section (EURES): splits a region over the source's 10,000 cap.
+    sector: str | None = Field(default=None, pattern=r"^(?:[a-v]|NS)$")
     # Reuse a recent fetch of this exact slice instead of hitting the source
     # again. The corpus is shared, so the first caller pays the network cost and
     # everyone else gets the answer for free — which is what keeps N recruiters
@@ -357,6 +365,9 @@ class IngestSummary(BaseModel):
     # Records refused because the company is on the opt-out list. A count, not
     # a list: naming them would re-publish exactly who asked to be left out.
     suppressed: int = 0
+    # Records the source's parser dropped, by reason — e.g. EURES ads whose
+    # employer is "siehe Beschreibung". Counted, never silent.
+    dropped: dict[str, int] = Field(default_factory=dict)
     # The gate's verdicts, in runbook order — the verification trace.
     notes: list[str] = Field(default_factory=list)
     # How the source says this result set divides — the crawler's shard plan,
@@ -498,16 +509,22 @@ class AgencyDetail(BaseModel):
 # --- liveness (hub/liveness.py) — operator contracts --------------------------
 
 #: The listing's split dimensions (adapters/bundesagentur.LISTING_DIMENSIONS).
-ListingDimension = Literal["berufsfeld", "befristung", "angebotsart", "branche", "arbeitszeit"]
+ListingDimension = Literal[
+    "berufsfeld", "befristung", "angebotsart", "branche", "arbeitszeit",  # bundesagentur
+    "region", "sector",  # eures — each adapter refuses the other's
+]
 _SEGMENT = Literal["employer", "private_recruiter"]
+#: Sources with a full listing and a per-ad check (`hub/liveness.py`).
+LivenessSource = Literal["bundesagentur", "eures"]
 
 
 class ListingRequest(BaseModel):
     """One page of one shard of the source's FULL listing. No window, no `wo`."""
 
+    source: LivenessSource = "bundesagentur"
     segment: _SEGMENT = "employer"
     filters: dict[ListingDimension, str] = Field(default_factory=dict)
-    page: int = Field(default=1, ge=1, le=100)
+    page: int = Field(default=1, ge=1, le=200)  # BA stops at 100, EURES at 200
 
 
 class ListingResponse(BaseModel):
@@ -521,6 +538,7 @@ class ListingResponse(BaseModel):
 class MarkRequest(BaseModel):
     """What one listing showed, bounded so a request stays one statement."""
 
+    source: LivenessSource = "bundesagentur"
     segment: _SEGMENT = "employer"
     unlisted: list[str] = Field(default_factory=list, max_length=10_000)
     listed: list[str] = Field(default_factory=list, max_length=10_000)

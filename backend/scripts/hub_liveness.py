@@ -23,6 +23,12 @@ suspects, longest-missing first. Only a 404 closes an ad; the backend does the
 deciding, this loop only drives it. Stops early when the queue is empty or the
 source is down.
 
+**`--source eures`** runs the same two steps for Austria and Switzerland
+(`adapters/eures.py`). Its listing is one listing for both segments — the
+source has no agency flag, the split is ours — so it is read once and marked
+per segment. Regions shard it completely (18 buckets incl. "no region",
+Oberösterreich split by NACE section), 50 a page, 200 pages a shard.
+
 Exits non-zero on failure, so the scheduler's own notification is the
 monitoring (SOC 2 CC7.2).
 """
@@ -31,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import os
 import sys
 from collections.abc import Awaitable, Callable
@@ -38,15 +45,39 @@ from collections.abc import Awaitable, Callable
 import httpx
 
 _RESULT_CEILING = 10_000
-_PAGE_SIZE = 100
-_PAGE_CEILING = 100
 _ATTEMPTS = 3
 #: Consecutive failed calls before the run concludes the source is down.
 _DOWN_STREAK = 5
-#: Split order. `berufsfeld` is the root; the rest only split an oversized shard.
-_SPLIT_ORDER = ("befristung", "angebotsart", "branche", "arbeitszeit")
 _MARK_CHUNK = 10_000
 SEGMENTS = ("employer", "private_recruiter")
+
+
+@dataclasses.dataclass(frozen=True)
+class SourcePlan:
+    """How one source's listing is cut and paged."""
+
+    name: str
+    #: The facet every shard starts from.
+    root: str
+    #: Facets that may split an oversized shard, in order.
+    split_order: tuple[str, ...]
+    page_size: int
+    page_ceiling: int
+    #: True when the source lists each segment separately (BA's `pav`); False
+    #: when one listing holds both (EURES) — read once, marked per segment.
+    per_segment: bool
+
+
+BA = SourcePlan(
+    "bundesagentur", root="berufsfeld",
+    split_order=("befristung", "angebotsart", "branche", "arbeitszeit"),
+    page_size=100, page_ceiling=100, per_segment=True,
+)
+EURES = SourcePlan(
+    "eures", root="region", split_order=("sector",),
+    page_size=50, page_ceiling=200, per_segment=False,
+)
+PLANS = {p.name: p for p in (BA, EURES)}
 
 Listing = Callable[[dict[str, str], int], Awaitable[dict]]
 
@@ -55,21 +86,23 @@ class SourceDown(Exception):
     """The source stopped answering for a run of calls, not just one."""
 
 
-def split_dimension(facets: dict[str, dict[str, int]], total: int, used: set[str]) -> str | None:
+def split_dimension(
+    facets: dict[str, dict[str, int]], total: int, used: set[str], order: tuple[str, ...] = BA.split_order
+) -> str | None:
     """The first facet that divides this shard exactly — or None.
 
     Exact means its counts sum to the shard's total: every ad has one value.
     `arbeitszeit` usually sums to more (an ad is both full- and part-time) and
     `branche` to less (some ads have none); either would lose or double ads.
     """
-    for dim in _SPLIT_ORDER:
+    for dim in order:
         counts = facets.get(dim) or {}
         if dim not in used and len(counts) > 1 and sum(counts.values()) == total:
             return dim
     return None
 
 
-async def plan_shards(listing: Listing) -> dict:
+async def plan_shards(listing: Listing, plan: SourcePlan = BA) -> dict:
     """Shards that together cover the listing, from the source's own facets.
 
     Returns `leaves` (filters, expected) to read, `truncated` — the leaves over
@@ -85,7 +118,7 @@ async def plan_shards(listing: Listing) -> dict:
             leaves.append((filters, expected))
             return
         probe = await listing(filters, 1)
-        dim = split_dimension(probe["facets"], probe["total_available"], set(filters))
+        dim = split_dimension(probe["facets"], probe["total_available"], set(filters), plan.split_order)
         if dim is None:
             leaves.append((filters, probe["total_available"]))
             truncated.append((filters, probe["total_available"]))
@@ -93,24 +126,26 @@ async def plan_shards(listing: Listing) -> dict:
         for value, count in sorted(probe["facets"][dim].items()):
             await place({**filters, dim: value}, count)
 
-    for field, count in sorted((root["facets"].get("berufsfeld") or {}).items()):
-        await place({"berufsfeld": field}, count)
+    for field, count in sorted((root["facets"].get(plan.root) or {}).items()):
+        await place({plan.root: field}, count)
     return {"leaves": leaves, "truncated": truncated, "total": total}
 
 
-async def read_leaves(listing: Listing, leaves: list[tuple[dict[str, str], int]]) -> dict:
+async def read_leaves(
+    listing: Listing, leaves: list[tuple[dict[str, str], int]], plan: SourcePlan = BA
+) -> dict:
     """Every reference the listing shows. A leaf that fails is recorded, not fatal."""
     live: set[str] = set()
     failed: list[dict[str, str]] = []
     for filters, expected in leaves:
-        pages = min(_PAGE_CEILING, -(-expected // _PAGE_SIZE)) or 1
+        pages = min(plan.page_ceiling, -(-expected // plan.page_size)) or 1
         try:
             for page in range(1, pages + 1):
                 body = await listing(filters, page)
                 live.update(body["external_ids"])
                 # By RECORDS, not references: a record without a reference
                 # would otherwise end the shard a page early.
-                if body.get("records", len(body["external_ids"])) < _PAGE_SIZE:
+                if body.get("records", len(body["external_ids"])) < plan.page_size:
                     break
         except SourceDown:
             raise
@@ -168,11 +203,11 @@ class Api:
                 await asyncio.sleep(min(2**attempt * 5, 30))
         raise RuntimeError(f"{method} {path}: {error}")
 
-    def listing(self, segment: str) -> Listing:
+    def listing(self, segment: str, source: str = BA.name) -> Listing:
         async def page(filters: dict[str, str], number: int) -> dict:
             body = await self.call(
                 "POST", "/hub/liveness/listing",
-                json={"segment": segment, "filters": filters, "page": number},
+                json={"source": source, "segment": segment, "filters": filters, "page": number},
             )
             if self.delay:
                 await asyncio.sleep(self.delay)  # a free public service is not a load test
@@ -180,18 +215,19 @@ class Api:
         return page
 
 
-async def mark_suspects(api: Api, segment: str, live: set[str]) -> dict[str, int]:
+async def mark_suspects(api: Api, segment: str, live: set[str], source: str = BA.name) -> dict[str, int]:
     """Walk our open ads and record which the listing did and did not show."""
     totals = {"open": 0, "unlisted": 0, "listed": 0}
     after: str | None = None
     while True:
-        params = {"segment": segment, **({"after": after} if after else {})}
+        params = {"source": source, "segment": segment, **({"after": after} if after else {})}
         body = await api.call("GET", "/hub/liveness/active", params=params)
         page = [(ext, bool(flag)) for ext, flag in body["ids"]]
         totals["open"] += len(page)
         unlisted, listed = diff(page, live)
         for i in range(0, max(len(unlisted), len(listed)), _MARK_CHUNK):
             result = await api.call("POST", "/hub/liveness/mark", json={
+                "source": source,
                 "segment": segment,
                 "unlisted": unlisted[i:i + _MARK_CHUNK],
                 "listed": listed[i:i + _MARK_CHUNK],
@@ -203,7 +239,7 @@ async def mark_suspects(api: Api, segment: str, live: set[str]) -> dict[str, int
             return totals
 
 
-async def check_pass(api: Api, *, budget: int, batch: int = 25) -> dict:
+async def check_pass(api: Api, *, budget: int, batch: int = 25, source: str = BA.name) -> dict:
     """Drive the backend's checker until the budget or the queue runs out.
 
     Stops — and fails the run — when the source is down, its control ad did not
@@ -213,7 +249,7 @@ async def check_pass(api: Api, *, budget: int, batch: int = 25) -> dict:
     totals = {"checked": 0, "closed": 0, "live": 0, "unknown": 0}
     while totals["checked"] < budget:
         size = min(batch, budget - totals["checked"])
-        result = await api.call("POST", "/hub/liveness/check", params={"limit": size})
+        result = await api.call("POST", "/hub/liveness/check", params={"limit": size, "source": source})
         for key in totals:
             totals[key] += result.get(key, 0)
         if result.get("control_failed"):
@@ -228,22 +264,29 @@ async def check_pass(api: Api, *, budget: int, batch: int = 25) -> dict:
     return totals
 
 
-async def list_segment(api: Api, segment: str, *, min_coverage: float) -> tuple[bool, str]:
-    listing = api.listing(segment)
-    plan = await plan_shards(listing)
-    print(f"  {segment}: {plan['total']:,} listed, {len(plan['leaves'])} shards, "
-          f"{len(plan['truncated'])} over the cap")
-    for filters, expected in plan["truncated"]:
+async def list_segment(
+    api: Api, segment: str, *, min_coverage: float, plan: SourcePlan = BA,
+    mark_segments: tuple[str, ...] | None = None,
+) -> tuple[bool, str]:
+    """Read one listing, then mark it against `mark_segments` (default: the
+    segment it was read for)."""
+    listing = api.listing(segment, plan.name)
+    shards = await plan_shards(listing, plan)
+    label = segment if plan.per_segment else plan.name
+    print(f"  {label}: {shards['total']:,} listed, {len(shards['leaves'])} shards, "
+          f"{len(shards['truncated'])} over the cap")
+    for filters, expected in shards["truncated"]:
         print(f"    ~ {filters}: {expected:,} — only {_RESULT_CEILING:,} readable", file=sys.stderr)
-    read = await read_leaves(listing, plan["leaves"])
+    read = await read_leaves(listing, shards["leaves"], plan)
     ok, line = listing_verdict(
-        read=len(read["live"]), total=plan["total"], failed=read["failed"], min_coverage=min_coverage
+        read=len(read["live"]), total=shards["total"], failed=read["failed"], min_coverage=min_coverage
     )
-    print(f"  {segment}: {line}")
+    print(f"  {label}: {line}")
     if ok:
-        marked = await mark_suspects(api, segment, read["live"])
-        print(f"  {segment}: {marked['open']:,} open in the corpus — "
-              f"{marked['unlisted']:,} newly unlisted, {marked['listed']:,} listed again")
+        for target in mark_segments or (segment,):
+            marked = await mark_suspects(api, target, read["live"], plan.name)
+            print(f"  {target}: {marked['open']:,} open in the corpus — "
+                  f"{marked['unlisted']:,} newly unlisted, {marked['listed']:,} listed again")
     return ok, line
 
 
@@ -254,7 +297,9 @@ async def main() -> int:
     parser.add_argument("--segments", default=",".join(SEGMENTS))
     parser.add_argument("--delay", type=float, default=0.2, help="seconds between listing pages")
     parser.add_argument("--min-coverage", type=float, default=0.75)
+    parser.add_argument("--source", choices=sorted(PLANS), default=BA.name)
     args = parser.parse_args()
+    plan = PLANS[args.source]
 
     base, token = os.environ.get("ELIGO_API_BASE"), os.environ.get("ELIGO_INGEST_TOKEN")
     if not base or not token:
@@ -271,12 +316,18 @@ async def main() -> int:
     ) as client:
         api = Api(client, delay=args.delay)
         try:
-            if args.list:
+            if args.list and plan.per_segment:
                 for segment in segments:
-                    ok, _ = await list_segment(api, segment, min_coverage=args.min_coverage)
+                    ok, _ = await list_segment(api, segment, min_coverage=args.min_coverage, plan=plan)
                     failed |= not ok
+            elif args.list:
+                ok, _ = await list_segment(
+                    api, segments[0], min_coverage=args.min_coverage, plan=plan,
+                    mark_segments=tuple(segments),
+                )
+                failed |= not ok
             if args.checks:
-                totals = await check_pass(api, budget=args.checks)
+                totals = await check_pass(api, budget=args.checks, source=plan.name)
                 print(f"  checks: {totals['checked']:,} asked — {totals['closed']:,} closed, "
                       f"{totals['live']:,} live, {totals['unknown']:,} no answer")
         except SourceDown as exc:

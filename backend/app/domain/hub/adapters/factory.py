@@ -11,9 +11,11 @@ from collections.abc import Callable
 
 from app.domain.hub.adapters.base import SourceAdapter
 from app.domain.hub.adapters.bundesagentur import BundesagenturAdapter
+from app.domain.hub.adapters.eures import EuresAdapter
 
 _BUILDERS: dict[str, Callable[[], SourceAdapter]] = {
     BundesagenturAdapter.name: BundesagenturAdapter,
+    EuresAdapter.name: EuresAdapter,
 }
 
 
