@@ -40,7 +40,7 @@ from app.domain.hub.spelling import (
     has_other_spelling,
     umlaut_variants,
 )
-from app.domain.hub.adapters.base import SourceAdapter, SourcedPosting, SourceQuery
+from app.domain.hub.adapters.base import FetchResult, SourceAdapter, SourcedPosting, SourceQuery
 from app.domain.hub.vacancy import vacancy_count, vacancy_key
 from app.domain.hub.models import (
     EMPLOYER,
@@ -200,7 +200,19 @@ async def ingest(
         sector=request.sector,
     )
     result = await adapter.fetch(query)
-    segment = request.segment
+    return await merge_fetch(session, result=result, key=key, segment=request.segment)
+
+
+async def merge_fetch(
+    session: AsyncSession, *, result: FetchResult, key: str, segment: str = EMPLOYER
+) -> IngestSummary:
+    """Record one retrieval and merge its records into the corpus.
+
+    Everything after the fetch, shared by every source: the observation, the
+    gate, the opt-out list, identity, the upsert and the recount. `key` is the
+    observation's query fingerprint; `segment` applies to records whose source
+    does not decide their own.
+    """
     rules = await suppression.load(session)
 
     observation = HubObservation(
@@ -420,7 +432,8 @@ async def ingest(
             # Closure deleted its payload: restore the raw copy now, and ask
             # for the ad text and the partner page again.
             row.closed_at = None
-            row.description_fetched_at = None
+            # A source that ships its text (EURES, Personio) has nothing left to fetch.
+            row.description_fetched_at = now if posting.description else None
             row.source_page_fetched_at = None
             row.source_page_status = None
             row.payload = HubPostingPayload(
