@@ -172,6 +172,8 @@ export const EN: Record<string, string> = {
   'Antworten': 'Replies',
   'Anzeige': 'ad',
   'Anzeige bei der Bundesagentur für Arbeit öffnen': 'Open the ad at the Federal Employment Agency',
+  'Anzeige bei EURES öffnen': 'Open the ad on EURES',
+  'Quelle: EURES / ELA': 'Source: EURES / ELA',
   'Anzeige lesen': 'Read advert',
   'Anzeigen': 'ads',
   'Anzeigen mit Text gelesen': 'adverts read with text',

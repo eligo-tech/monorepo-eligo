@@ -161,6 +161,7 @@ def identity_key(
     website_domain: str | None = None,
     postal_code: str | None = None,
     city: str | None = None,
+    area: str | None = None,
 ) -> tuple[str, str] | None:
     """Resolve the strongest available identity as ``(basis, key)``.
 
@@ -183,7 +184,9 @@ def identity_key(
         return "domain", f"domain:{domain}"
 
     normalized = normalize_company_name(name)
-    place = (postal_code or "").strip() or normalize_company_name(city)
+    # `area` only when the source has neither (EURES): never mixed with a
+    # postcode, so a source with postcodes keeps exactly its old keys.
+    place = (postal_code or "").strip() or normalize_company_name(city) or (area or "").strip()
     if normalized and place:
         return "name_place", f"name_place:{normalized}:{place.lower()}"
 

@@ -50,6 +50,13 @@ on:
         description: "Suspects to check at the source (0 = none)"
         required: false
         default: "15000"
+      eures_full:
+        # The first fill of Austria + Switzerland (~89,600 ads, ~1,800 pages,
+        # ~75 min), or after an outage. Nightly it reads the last day only.
+        description: "EURES: read every AT/CH ad, not just the last day's"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   # Never let a slow run overlap the next night's.
@@ -99,8 +106,53 @@ jobs:
   # a known-live control answered. ~8k ads close per day at the source; 15k
   # checks is ~2 h, so the first backlog (~250k closed + ~75k unreachable live
   # ads re-checked every 14-30 days) drains in roughly four weeks.
-  liveness:
+  # Austria + Switzerland from EURES (backend/app/domain/hub/adapters/eures.py).
+  # After the BA ingest, before BA liveness: one writer at a time. Nightly it
+  # reads the last day (~19,500 ads, ~400 pages, measured 2026-11-06). Sundays
+  # it reads EVERYTHING instead (~1,800 pages) — a late or failed night leaves
+  # no gap past a week — and the full listing (~1,800 pages), queueing the open
+  # ads it did not see; every night it checks up to 5,000 of them.
+  eures:
     needs: ingest
+    if: ${{ !cancelled() && github.event.inputs.agencies_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Ingest Austria + Switzerland
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+          FULL_INPUT: ${{ github.event.inputs.eures_full }}
+        run: |
+          extra=()
+          if [ "$FULL_INPUT" = "true" ] || [ "$(date -u +%u)" = "7" ]; then extra=(--full); fi
+          python -m scripts.hub_eures "${extra[@]}"
+
+      - name: Close AT/CH ads the source took down
+        # One unread ingest shard says nothing about which ads closed.
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+          LIST_INPUT: ${{ github.event.inputs.liveness_list }}
+        run: |
+          extra=()
+          if [ "$LIST_INPUT" = "true" ] || [ "$(date -u +%u)" = "7" ]; then extra=(--list); fi
+          python -m scripts.hub_liveness --source eures --checks 5000 "${extra[@]}"
+
+  liveness:
+    needs: [ingest, eures]
     # A failed ingest says nothing about whether ads closed; a CANCELLED run
     # (someone stopped it) must not start five more hours.
     if: ${{ !cancelled() && github.event.inputs.agencies_only != 'true' }}

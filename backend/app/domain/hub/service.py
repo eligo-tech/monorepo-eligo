@@ -108,6 +108,8 @@ def query_key(request: IngestRequest) -> str:
             "size": request.size,
             "include_staffing": request.include_staffing,
     }
+    if request.sector is not None:  # only when set: older keys stay reusable
+        fields["sector"] = request.sector
     # Only a non-default segment joins the fingerprint, so every existing
     # employer observation keeps its key and stays reusable.
     if request.segment != EMPLOYER:
@@ -195,6 +197,7 @@ async def ingest(
         size=request.size,
         include_staffing=request.include_staffing,
         segment=request.segment,
+        sector=request.sector,
     )
     result = await adapter.fetch(query)
     segment = request.segment
@@ -224,14 +227,17 @@ async def ingest(
 
     now = dt.datetime.now(dt.UTC)
     rejected: list[RejectedRecord] = []
-    accepted: list[tuple[SourcedPosting, str, str]] = []  # posting, basis, key
+    accepted: list[tuple[SourcedPosting, str, str, str]] = []  # posting, basis, key, segment
     suppressed = 0
 
     # --- postcondition: per record --------------------------------------
     for posting in result.postings:
+        # The record's own segment when its source decides per ad (EURES has
+        # no staffing filter, so its adapter classifies); otherwise the query's.
+        record_segment = posting.segment or segment
         # The opt-out list first, so a refused record never reaches `rejected`
         # — that list names the company, and naming it re-publishes it.
-        if rules.blocks_company(posting.company.name, kind=segment):
+        if rules.blocks_company(posting.company.name, kind=record_segment):
             suppressed += 1
             continue
         ok, reason = gate.check_posting(posting, now=now)
@@ -249,6 +255,7 @@ async def ingest(
             website_domain=posting.company.website_domain,
             postal_code=posting.company.postal_code,
             city=posting.company.city,
+            area=posting.company.area,
         )
         if identity is None:  # unreachable via check_posting; never trust that
             rejected.append(
@@ -260,16 +267,16 @@ async def ingest(
             )
             continue
         basis, dedupe = identity
-        if segment != EMPLOYER:
+        if record_segment != EMPLOYER:
             # Own namespace: "Die Autobahn GmbH des Bundes" named in an agency's
             # ad must not resolve onto the employer's row.
             dedupe = f"pav:{dedupe}"
-        accepted.append((posting, basis, dedupe))
+        accepted.append((posting, basis, dedupe, record_segment))
 
     # --- merge companies -------------------------------------------------
     # One query for every company in the batch rather than one per posting: a
     # 100-record page touches ~60 distinct employers, most already known.
-    dedupe_keys = {key for _, _, key in accepted}
+    dedupe_keys = {key for _, _, key, _ in accepted}
     existing_companies: dict[str, HubCompany] = {}
     if dedupe_keys:
         rows = await session.execute(
@@ -279,7 +286,7 @@ async def ingest(
 
     company_by_key: dict[str, HubCompany] = dict(existing_companies)
 
-    for posting, basis, key in accepted:
+    for posting, basis, key, record_segment in accepted:
         company = company_by_key.get(key)
         sourced = posting.company
         if company is None:
@@ -300,7 +307,7 @@ async def ingest(
                 industry=sourced.industry,
                 suspected_natural_person=looks_like_natural_person(sourced.name),
                 source=result.source,
-                kind=segment,
+                kind=record_segment,
                 first_seen_at=now,
                 last_seen_at=now,
             )
@@ -335,7 +342,7 @@ async def ingest(
     await session.flush()  # assign company ids
 
     # --- merge postings --------------------------------------------------
-    external_ids = {posting.external_id for posting, _, _ in accepted}
+    external_ids = {posting.external_id for posting, _, _, _ in accepted}
     existing_postings: dict[str, HubJobPosting] = {}
     if external_ids:
         rows = await session.execute(
@@ -350,14 +357,16 @@ async def ingest(
     postings_updated = 0
     posting_external_ids_created: list[str] = []
 
-    for posting, _, key in accepted:
+    for posting, _, key, record_segment in accepted:
         company = company_by_key[key]
         content_hash = _posting_hash(posting)
         row = existing_postings.get(posting.external_id)
 
         if row is None:
+            posting_id = uuid.uuid4()
             session.add(
                 HubJobPosting(
+                    id=posting_id,
                     hub_company_id=company.id,
                     observation_id=observation.id,
                     title=posting.title,
@@ -381,11 +390,16 @@ async def ingest(
                     source_url=posting.source_url,
                     external_id=posting.external_id,
                     content_hash=content_hash,
-                    segment=segment,
+                    segment=record_segment,
+                    # A source that ships the text in its listing (EURES) has
+                    # nothing left to fetch: recorded, so the progress counts agree.
+                    description_fetched_at=now if posting.description else None,
+                    # An ad with no place (all of EURES) counts as itself from
+                    # the start, instead of waiting for the backfill to say so.
                     vacancy_key=vacancy_key(
                         company.normalized_name, posting.title,
                         postal_code=posting.postal_code, city=posting.city, country=posting.country,
-                    ),
+                    ) or f"id:{posting_id.hex}",
                     first_seen_at=now,
                     last_seen_at=now,
                     is_active=True,
@@ -534,6 +548,7 @@ async def ingest(
         posting_external_ids_created=posting_external_ids_created,
         rejected=rejected,
         suppressed=suppressed,
+        dropped=result.dropped,
         notes=notes,
         shard_plan=shard_plan,
     )
@@ -657,7 +672,7 @@ async def fetch_missing_descriptions(
     else:
         stmt = stmt.order_by(HubJobPosting.posted_at.desc().nulls_last())
 
-    from app.domain.hub.adapters.bundesagentur import SourceUnreachable
+    from app.domain.hub.adapters.base import SourceUnreachable
 
     rows = (await session.execute(stmt.limit(limit))).scalars().all()
     rules = await suppression.load(session)
@@ -2321,7 +2336,7 @@ async def company_contacts(
     closed ad is still the person who hired for that team last month.
     """
     from app.domain.hub.contacts import company_mailboxes, extract_contacts, person_key
-    from app.domain.hub.schemas import ba_detail_url
+    from app.domain.hub.schemas import source_detail_url
     from app.domain.managers.models import Manager
 
     anchor = await get_company(session, hub_company_id=hub_company_id, kind=kind)
@@ -2364,7 +2379,7 @@ async def company_contacts(
             (
                 "anzeige",
                 description,
-                ba_detail_url(posting.source, posting.external_id) or posting.source_url,
+                source_detail_url(posting.source, posting.external_id) or posting.source_url,
             ),
             ("quelle", page_text, page_url or posting.source_url),
         ]

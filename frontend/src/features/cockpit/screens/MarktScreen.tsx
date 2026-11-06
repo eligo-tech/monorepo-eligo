@@ -115,6 +115,43 @@ const REGION_LABELS: Record<string, string> = {
   SACHSEN_ANHALT: 'Sachsen-Anhalt',
   SCHLESWIG_HOLSTEIN: 'Schleswig-Holstein',
   THUERINGEN: 'Thüringen',
+  // Austria's Bundesländer — the Bundesagentur's spelling, which EURES rows use too.
+  BURGENLAND: 'Burgenland',
+  KAERNTEN: 'Kärnten',
+  NIEDEROESTERREICH: 'Niederösterreich',
+  OBEROESTERREICH: 'Oberösterreich',
+  SALZBURG: 'Salzburg',
+  STEIERMARK: 'Steiermark',
+  TIROL: 'Tirol',
+  VORARLBERG: 'Vorarlberg',
+  WIEN: 'Wien',
+  // Swiss cantons (EURES).
+  AARGAU: 'Aargau',
+  APPENZELL_AUSSERRHODEN: 'Appenzell Ausserrhoden',
+  APPENZELL_INNERRHODEN: 'Appenzell Innerrhoden',
+  BASEL_LANDSCHAFT: 'Basel-Landschaft',
+  BASEL_STADT: 'Basel-Stadt',
+  BERN: 'Bern',
+  FREIBURG: 'Freiburg',
+  GENF: 'Genf',
+  GLARUS: 'Glarus',
+  GRAUBUENDEN: 'Graubünden',
+  JURA: 'Jura',
+  LUZERN: 'Luzern',
+  NEUENBURG: 'Neuenburg',
+  NIDWALDEN: 'Nidwalden',
+  OBWALDEN: 'Obwalden',
+  SCHAFFHAUSEN: 'Schaffhausen',
+  SCHWYZ: 'Schwyz',
+  SOLOTHURN: 'Solothurn',
+  ST_GALLEN: 'St. Gallen',
+  TESSIN: 'Tessin',
+  THURGAU: 'Thurgau',
+  URI: 'Uri',
+  WAADT: 'Waadt',
+  WALLIS: 'Wallis',
+  ZUERICH: 'Zürich',
+  ZUG: 'Zug',
 }
 
 /** Falls back to title-case for anything the source adds later. */
@@ -355,7 +392,12 @@ function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
         ) : (
           <span className="text-[14px] text-cockpit-text">{role.title}</span>
         )}
-        {role.city && <Chip>{role.city}</Chip>}
+        {/* EURES ads name a region, never a town. */}
+        {role.city ? (
+          <Chip>{role.city}</Chip>
+        ) : (
+          role.region && <Chip>{prettyRegion(role.region)}</Chip>
+        )}
         {role.remote_possible && <Chip tone="lav">{t('Homeoffice')}</Chip>}
         <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
           <span>{dateDe(role.posted_at)}</span>
@@ -371,10 +413,17 @@ function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
               title={
                 role.source_url
                   ? t('Original-Stellenanzeige beim Unternehmen öffnen')
-                  : t('Anzeige bei der Bundesagentur für Arbeit öffnen')
+                  : role.source === 'eures'
+                    ? t('Anzeige bei EURES öffnen')
+                    : t('Anzeige bei der Bundesagentur für Arbeit öffnen')
               }
             >
-              {role.source_url ? t('Quelle') : t('Anzeige')}
+              {/* EURES re-use requires naming the source next to the ad. */}
+              {role.source_url
+                ? t('Quelle')
+                : role.source === 'eures'
+                  ? t('Quelle: EURES / ELA')
+                  : t('Anzeige')}
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
