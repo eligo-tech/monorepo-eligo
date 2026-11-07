@@ -31,7 +31,7 @@ concurrency:
 jobs:
   boards:
     runs-on: ubuntu-latest
-    timeout-minutes: 200  # discovery ≤ 40 min Common Crawl + ≤ 18 min Wayback + sync ≤ 120 min
+    timeout-minutes: 200  # discovery ≤ 40 min Common Crawl + ≤ 26 min Wayback + sync ≤ 120 min
     steps:
       - uses: actions/checkout@v5
 

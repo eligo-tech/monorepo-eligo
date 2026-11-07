@@ -315,6 +315,19 @@ async def test_a_batch_leases_its_boards_and_hands_back_what_it_did_not_reach(mo
     assert len(due) == 2  # the two it never reached, due again now
 
 
+async def test_boards_already_known_are_read_before_new_ones() -> None:
+    """A month's discovery adds thousands of boards; they must not starve the
+    daily refresh of boards whose jobs are already in the corpus."""
+    async with SessionLocal() as s:
+        await ats.add_boards(s, ats="personio", slugs=["new-1", "known-1"], discovered_via="t")
+        board = (await s.execute(select(HubAtsBoard).where(HubAtsBoard.slug == "known-1"))).scalar_one()
+        board.next_fetch_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
+        await s.commit()
+    async with SessionLocal() as s:
+        leased = await ats._lease(s, 1, dt.datetime.now(dt.UTC))
+    assert [b.slug for b in leased] == ["known-1"]
+
+
 async def test_the_source_down_stops_the_batch() -> None:
     async with SessionLocal() as s:
         await ats.add_boards(s, ats="personio", slugs=[f"b{i}" for i in range(5)], discovered_via="t")
@@ -348,13 +361,15 @@ def test_board_slugs_come_from_the_index_answer() -> None:
     assert hub_ats.slugs_from_index(lines) == {"viu-ventures", "timify"}
 
 
-def _discovery_world(*, wayback: httpx.Response | None):
+def _discovery_world(*, wayback: httpx.Response | Exception | None, cc_down: bool = False):
     """Common Crawl knows one board; the Wayback Machine knows it plus two more."""
     sent: list[dict] = []
 
     def source(request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         if url.endswith("collinfo.json"):
+            if cc_down:
+                raise httpx.ConnectError("down", request=request)
             return httpx.Response(200, json=[{"id": "CC-1"}])
         if "showNumPages" in url:
             return httpx.Response(200, json={"pages": 1})
@@ -362,11 +377,16 @@ def _discovery_world(*, wayback: httpx.Response | None):
             return httpx.Response(200, text=json.dumps({"url": "https://viu-ventures.jobs.personio.de/"}))
         if "web.archive.org" in url:
             assert "jobs.personio.de" in url
+            if isinstance(wayback, Exception):
+                raise wayback
             return wayback or httpx.Response(200, text=(
                 "https://viu-ventures.jobs.personio.de/job/1\n"
                 "http://Timify.jobs.personio.de:80/\n"
                 "https://acme-gmbh.jobs.personio.de/xml?language=de\n"
                 "https://www.jobs.personio.de/\n"
+                "https://x.jobs.personio.de.evil.com/\n"
+                "https://a.b.jobs.personio.de/\n"
+                "warc/garbage\n"
             ))
         raise AssertionError(url)
 
@@ -403,6 +423,37 @@ async def test_a_wayback_outage_keeps_what_common_crawl_found(monkeypatch) -> No
     api, cc, sent = _discovery_world(wayback=httpx.Response(503))
     assert await hub_ats.discover(api, cc) == 1
     assert [(b["discovered_via"], b["slugs"]) for b in sent] == [("commoncrawl", ["viu-ventures"])]
+
+
+async def test_a_dropped_wayback_connection_keeps_what_common_crawl_found(monkeypatch) -> None:
+    async def no_wait(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(hub_ats.asyncio, "sleep", no_wait)
+    api, cc, sent = _discovery_world(wayback=httpx.ConnectError("reset"))
+    assert await hub_ats.discover(api, cc) == 1
+
+
+async def test_a_common_crawl_outage_still_reads_the_wayback_machine(monkeypatch) -> None:
+    async def no_wait(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(hub_ats.asyncio, "sleep", no_wait)
+    api, cc, sent = _discovery_world(wayback=None, cc_down=True)
+    assert await hub_ats.discover(api, cc) == 3
+    assert [(b["discovered_via"], b["slugs"]) for b in sent] == [
+        ("wayback", ["acme-gmbh", "timify", "viu-ventures"]),
+    ]
+
+
+async def test_a_wayback_answer_that_never_ends_is_cut_off(monkeypatch) -> None:
+    async def no_wait(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(hub_ats.asyncio, "sleep", no_wait)
+    monkeypatch.setattr(hub_ats, "_WAYBACK_MAX_BYTES", 100)
+    api, cc, sent = _discovery_world(wayback=httpx.Response(200, text="https://big.jobs.personio.de/\n" * 50))
+    assert await hub_ats.discover(api, cc) == 1  # nothing from the oversized answer
 
 
 async def test_the_job_syncs_until_nothing_is_due() -> None:

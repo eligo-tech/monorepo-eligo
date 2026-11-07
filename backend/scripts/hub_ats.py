@@ -44,6 +44,8 @@ _SLUG = re.compile(r"^https?://([a-z0-9][a-z0-9-]{0,99})\.jobs\.personio\.(?:de|
 #: Subdomains that are Personio's own, not an employer's board.
 _NOT_BOARDS = {"www", "api", "app", "static", "assets", "cdn", "help", "support", "jobs", "careers"}
 _CHUNK = 5_000
+_WAYBACK_MAX_BYTES = 64 * 1024 * 1024  # measured answer: ~11 MB
+_WAYBACK_SECONDS = 480  # a whole answer, not one read; measured 50–198 s
 _WAYBACK = "https://web.archive.org/cdx/search/cdx?url=*.jobs.personio.de&fl=original&collapse=urlkey"
 
 
@@ -82,7 +84,11 @@ async def _index(client: httpx.AsyncClient, url: str) -> str:
 
 
 async def _common_crawl(client: httpx.AsyncClient, deadline: float) -> set[str]:
-    crawls = (await client.get(f"{_INDEX}/collinfo.json", timeout=60)).json()[:CRAWLS]
+    try:
+        crawls = (await client.get(f"{_INDEX}/collinfo.json", timeout=60)).json()[:CRAWLS]
+    except (httpx.HTTPError, ValueError) as exc:  # the Wayback Machine still counts
+        print(f"    ! Common Crawl's crawl list did not answer: {exc}", file=sys.stderr)
+        return set()
     slugs: set[str] = set()
     for crawl in crawls:
         if time.monotonic() > deadline:
@@ -104,19 +110,35 @@ async def _common_crawl(client: httpx.AsyncClient, deadline: float) -> set[str]:
     return slugs
 
 
+async def _wayback_text(client: httpx.AsyncClient) -> str | None:
+    async with client.stream("GET", _WAYBACK, timeout=300) as response:
+        if response.status_code != 200:
+            return None
+        body = bytearray()
+        async for chunk in response.aiter_bytes():
+            body += chunk
+            if len(body) > _WAYBACK_MAX_BYTES:
+                print("    ! Wayback answer over the size cap — ignored", file=sys.stderr)
+                return ""
+        return body.decode("utf-8", "replace")
+
+
 async def _wayback(client: httpx.AsyncClient) -> set[str]:
-    """One answer, ~11 MB in ~100 s (measured). Three tries, then give up:
-    an outage here must not cost what Common Crawl already found."""
+    """One answer, ~11 MB in 50–198 s (measured). Three tries, each capped in
+    time and size, then give up: an outage here must not cost what Common
+    Crawl already found."""
     for attempt in range(3):
+        if attempt:
+            await asyncio.sleep(30 * attempt)
         try:
-            response = await client.get(_WAYBACK, timeout=300)
-            if response.status_code == 200:
-                slugs = slugs_from_urls(response.text.splitlines())
-                print(f"  discover: {len(slugs):,} boards in the Wayback Machine")
-                return slugs
-        except httpx.HTTPError:
-            pass
-        await asyncio.sleep(30 * (attempt + 1))
+            text = await asyncio.wait_for(_wayback_text(client), _WAYBACK_SECONDS)
+        except (httpx.HTTPError, TimeoutError):
+            continue
+        if text is None:
+            continue
+        slugs = slugs_from_urls(text.splitlines())
+        print(f"  discover: {len(slugs):,} boards in the Wayback Machine")
+        return slugs
     print("    ! Wayback Machine did not answer — skipped this month", file=sys.stderr)
     return set()
 
@@ -136,7 +158,7 @@ async def _send(api: Api, slugs: set[str], via: str) -> int:
 async def discover(api: Api, client: httpx.AsyncClient, *, minutes: float = 40.0) -> int:
     """Bounded: Common Crawl's index can stall for minutes per page, and the
     sync after it must keep its share of the job's time. The Wayback Machine
-    is one request on its own budget (at most ~18 min with retries)."""
+    is one request on its own budget (at most ~26 min with retries)."""
     found = await _common_crawl(client, time.monotonic() + minutes * 60)
     added = await _send(api, found, "commoncrawl")
     return added + await _send(api, await _wayback(client) - found, "wayback")
