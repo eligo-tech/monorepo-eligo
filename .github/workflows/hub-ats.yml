@@ -5,7 +5,8 @@
 # Daytime, so it never competes with the nightly ingest chain for the
 # database. Each board is one feed request (~1/s), plus one job page per new
 # office. On the 1st of the month it first rediscovers boards from Common
-# Crawl's URL index. A failed run fails the workflow: that is the monitoring.
+# Crawl's and the Wayback Machine's URL indexes. A failed run fails the
+# workflow: that is the monitoring.
 name: Hub · employer boards (Personio)
 
 on:
@@ -30,7 +31,7 @@ concurrency:
 jobs:
   boards:
     runs-on: ubuntu-latest
-    timeout-minutes: 200  # discovery ≤ 40 min (its own budget) + sync ≤ 120 min
+    timeout-minutes: 200  # discovery ≤ 40 min Common Crawl + ≤ 26 min Wayback + sync ≤ 120 min
     steps:
       - uses: actions/checkout@v5
 

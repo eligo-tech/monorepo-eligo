@@ -81,7 +81,9 @@ async def _lease(session: AsyncSession, limit: int, now: dt.datetime) -> list[Hu
         select(HubAtsBoard)
         .where(HubAtsBoard.ats == personio.SOURCE_NAME,
                or_(HubAtsBoard.next_fetch_at.is_(None), HubAtsBoard.next_fetch_at <= now))
-        .order_by(HubAtsBoard.next_fetch_at.is_not(None), HubAtsBoard.next_fetch_at, HubAtsBoard.id)
+        # Known boards first: a month's discovery adds thousands of new ones,
+        # and they must not starve the daily refresh of jobs already held.
+        .order_by(HubAtsBoard.next_fetch_at.is_(None), HubAtsBoard.next_fetch_at, HubAtsBoard.id)
         .limit(limit)
     )
     if session.bind.dialect.name == "postgresql":
