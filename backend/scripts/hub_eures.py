@@ -45,6 +45,11 @@ REGIONS = (
 PAGE_SIZE = 50
 PAGE_CEILING = 200
 _RESULT_CEILING = 10_000
+#: A page the backend refused (422: the source errored for that one request)
+#: or could not serve is asked again after a pause. 2026-11-07: one refused
+#: page cost a 1,134-ad shard and the night; it answered fine minutes later.
+_PAGE_ATTEMPTS = 3
+_PAGE_PAUSE = 30
 
 
 async def ingest_page(api: Api, *, where: str, sector: str | None, since: int | None, page: int) -> dict:
@@ -53,7 +58,18 @@ async def ingest_page(api: Api, *, where: str, sector: str | None, since: int | 
         body["sector"] = sector
     if since is not None:
         body["published_since_days"] = since
-    return await api.call("POST", "/hub/ingest", json=body)
+    for attempt in range(1, _PAGE_ATTEMPTS + 1):
+        try:
+            return await api.call("POST", "/hub/ingest", json=body)
+        except SourceDown:
+            raise
+        except (httpx.HTTPStatusError, RuntimeError) as exc:  # a slice is safe to repeat
+            if attempt == _PAGE_ATTEMPTS:
+                raise
+            print(f"    ~ {where}/{sector or '-'} page {page}: {exc!s:.120} — again in {_PAGE_PAUSE}s",
+                  file=sys.stderr)
+            await asyncio.sleep(_PAGE_PAUSE)
+    raise AssertionError("unreachable")
 
 
 async def read_shard(

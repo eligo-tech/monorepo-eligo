@@ -49,6 +49,12 @@ _ATTEMPTS = 3
 #: Consecutive failed calls before the run concludes the source is down.
 _DOWN_STREAK = 5
 _MARK_CHUNK = 10_000
+#: A source that misanswers a batch is asked again after a pause, this many
+#: times in a row at most. One blip used to fail the night: 2026-11-07, after
+#: 7,275 good checks the control did not answer once, and BA answered normally
+#: a minute later. Three bad batches running is not a blip.
+_TROUBLE_ATTEMPTS = 3
+_TROUBLE_PAUSE = 120
 SEGMENTS = ("employer", "private_recruiter")
 
 
@@ -247,18 +253,31 @@ async def check_pass(api: Api, *, budget: int, batch: int = 25, source: str = BA
     same source harder is never the fix.
     """
     totals = {"checked": 0, "closed": 0, "live": 0, "unknown": 0}
+    trouble = 0
     while totals["checked"] < budget:
         size = min(batch, budget - totals["checked"])
         result = await api.call("POST", "/hub/liveness/check", params={"limit": size, "source": source})
         for key in totals:
             totals[key] += result.get(key, 0)
-        if result.get("control_failed"):
-            raise SourceDown(f"the control ad did not answer live after {totals['checked']} checks")
-        if result.get("source_unreachable"):
-            raise SourceDown(f"source unreachable after {totals['checked']} checks")
         checked = result.get("checked", 0)
-        if checked and not (result.get("closed", 0) + result.get("live", 0)):
-            raise SourceDown(f"{checked} checks in a row got no answer")
+        problem = None
+        if result.get("control_failed"):
+            problem = f"the control ad did not answer live after {totals['checked']} checks"
+        elif result.get("source_unreachable"):
+            problem = f"source unreachable after {totals['checked']} checks"
+        elif checked and not (result.get("closed", 0) + result.get("live", 0)):
+            problem = f"{checked} checks in a row got no answer"
+        if problem:
+            # Nothing was closed on a bad answer (the backend's guard). Pause
+            # and ask again; only a source that stays broken ends the night.
+            trouble += 1
+            if trouble >= _TROUBLE_ATTEMPTS:
+                raise SourceDown(problem)
+            print(f"    ~ {problem} — pausing {_TROUBLE_PAUSE}s, attempt {trouble + 1} of {_TROUBLE_ATTEMPTS}",
+                  file=sys.stderr)
+            await asyncio.sleep(_TROUBLE_PAUSE)
+            continue
+        trouble = 0
         if checked == 0:
             break  # the queue is empty (a time-capped batch returns fewer than asked)
     return totals
