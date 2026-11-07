@@ -165,7 +165,9 @@ async def test_checks_stop_when_the_queue_is_empty() -> None:
     assert totals == {"checked": 32, "closed": 7, "live": 25, "unknown": 0}
 
 
-async def test_a_failed_control_fails_the_run() -> None:
+async def test_a_failed_control_fails_the_run(monkeypatch) -> None:
+    monkeypatch.setattr("scripts.hub_liveness.asyncio.sleep", _no_sleep)
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_answer(0, control_failed=True))
 
@@ -173,8 +175,9 @@ async def test_a_failed_control_fails_the_run() -> None:
         await check_pass(_api(handler), budget=1_000)
 
 
-async def test_a_batch_with_no_answers_at_all_fails_the_run() -> None:
+async def test_a_batch_with_no_answers_at_all_fails_the_run(monkeypatch) -> None:
     """Throttled (429) or blocked: the same night must not keep asking."""
+    monkeypatch.setattr("scripts.hub_liveness.asyncio.sleep", _no_sleep)
     calls: list[int] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -183,10 +186,12 @@ async def test_a_batch_with_no_answers_at_all_fails_the_run() -> None:
 
     with pytest.raises(SourceDown, match="no answer"):
         await check_pass(_api(handler), budget=15_000)
-    assert len(calls) == 1
+    assert len(calls) == 3  # paused twice — a throttle often lifts — then stopped
 
 
-async def test_an_unreachable_source_fails_the_run() -> None:
+async def test_an_unreachable_source_fails_the_run(monkeypatch) -> None:
+    monkeypatch.setattr("scripts.hub_liveness.asyncio.sleep", _no_sleep)
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_answer(3, live=3, source_unreachable=True))
 
@@ -211,3 +216,35 @@ async def test_five_failed_calls_in_a_row_mean_the_source_is_down(monkeypatch) -
 
 async def _no_sleep(_seconds: float) -> None:
     return None
+
+
+# --- a blip is not an outage (run 42290283320, 2026-11-07) -------------------
+# After 7,275 good checks the control ad did not answer live once, and the
+# whole night failed; a minute later BA answered normally. The run must pause
+# and ask again — and still stop when the source stays broken.
+
+
+@pytest.mark.parametrize("flag", ["control_failed", "source_unreachable"])
+async def test_one_blip_pauses_and_the_checks_go_on(monkeypatch, flag: str) -> None:
+    monkeypatch.setattr("scripts.hub_liveness.asyncio.sleep", _no_sleep)
+    answers = iter([_answer(25, closed=5, live=20), _answer(0, **{flag: True}),
+                    _answer(25, closed=1, live=24), _answer(0)])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=next(answers))
+
+    totals = await check_pass(_api(handler), budget=1_000)
+    assert totals["checked"] == 50 and totals["closed"] == 6
+
+
+async def test_a_control_that_keeps_failing_still_fails_the_run(monkeypatch) -> None:
+    monkeypatch.setattr("scripts.hub_liveness.asyncio.sleep", _no_sleep)
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json=_answer(0, control_failed=True))
+
+    with pytest.raises(SourceDown, match="control"):
+        await check_pass(_api(handler), budget=1_000)
+    assert len(calls) == 3  # bounded: paused twice, then gave up

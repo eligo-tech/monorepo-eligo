@@ -81,7 +81,8 @@ async def test_a_page_of_unnamed_employers_is_not_the_end_of_a_shard(capsys) -> 
     assert "not stored — employer not named" in capsys.readouterr().out
 
 
-async def test_a_failed_shard_fails_the_run_but_not_the_others() -> None:
+async def test_a_failed_shard_fails_the_run_but_not_the_others(monkeypatch) -> None:
+    monkeypatch.setattr("scripts.hub_eures.asyncio.sleep", _no_sleep)
     source = _Source({"at13": 60, "ch04": 60})
     inner = source.handler
 
@@ -178,3 +179,42 @@ async def test_a_section_the_facet_names_beyond_u_is_read() -> None:
 
     assert code == 0
     assert ("at31", "v") in {(b["where"], b.get("sector")) for b in source.ingests}
+
+
+# --- a refused page is asked again (run 42290283320, 2026-11-07) -------------
+# One page of at31/f came back 422 (the source errored for a moment) and the
+# whole shard — and the night — failed; the same pages answered fine later.
+
+
+def _refusing(source: _Source, where: str, times: int):
+    refused = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content or b"{}")
+        if body.get("where") == where and body.get("page") == 2 and refused["n"] < times:
+            refused["n"] += 1
+            return httpx.Response(422, json={"detail": "ingest precondition failed: HTTP 503"})
+        return source.handler(request)
+
+    return Api(httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://t"))
+
+
+async def test_a_page_refused_once_is_asked_again(monkeypatch) -> None:
+    monkeypatch.setattr("scripts.hub_eures.asyncio.sleep", _no_sleep)
+    source = _Source({"at13": 120})
+    code = await hub_eures.run(_refusing(source, "at13", times=1), since=1, delay=0)
+
+    assert code == 0
+    assert sorted(b["page"] for b in source.ingests if b["where"] == "at13") == [1, 2, 3]
+
+
+async def test_a_page_refused_every_time_still_fails_the_shard(monkeypatch) -> None:
+    monkeypatch.setattr("scripts.hub_eures.asyncio.sleep", _no_sleep)
+    source = _Source({"at13": 120})
+    code = await hub_eures.run(_refusing(source, "at13", times=99), since=1, delay=0)
+
+    assert code == 1
+
+
+async def _no_sleep(*_args, **_kw) -> None:
+    return None
