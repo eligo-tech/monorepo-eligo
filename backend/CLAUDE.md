@@ -240,7 +240,8 @@ These are enforced in code. Do not route around them.
   gone = 404 + `se.jv.error.notAvailable`.
 - **Employers' own Personio boards** (`adapters/personio.py`, `hub/ats.py`,
   `scripts/hub_ats.py`, daily at 12:37 UTC — `.github/workflows/hub-ats.yml`).
-  Boards are discovered from Common Crawl's URL index (`hub_ats_boards`), never
+  Boards are discovered from Common Crawl's and the Wayback Machine's URL
+  indexes (`hub_ats_boards`), never
   by a user. The feed is a full snapshot: a DACH job it stops listing is closed
   (one empty or unreadable answer closes nothing; 404/410 retires the board).
   Office postcodes come from ONE job page per office (the page's

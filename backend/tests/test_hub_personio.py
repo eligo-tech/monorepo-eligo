@@ -348,6 +348,63 @@ def test_board_slugs_come_from_the_index_answer() -> None:
     assert hub_ats.slugs_from_index(lines) == {"viu-ventures", "timify"}
 
 
+def _discovery_world(*, wayback: httpx.Response | None):
+    """Common Crawl knows one board; the Wayback Machine knows it plus two more."""
+    sent: list[dict] = []
+
+    def source(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.endswith("collinfo.json"):
+            return httpx.Response(200, json=[{"id": "CC-1"}])
+        if "showNumPages" in url:
+            return httpx.Response(200, json={"pages": 1})
+        if "index.commoncrawl.org" in url:
+            return httpx.Response(200, text=json.dumps({"url": "https://viu-ventures.jobs.personio.de/"}))
+        if "web.archive.org" in url:
+            assert "jobs.personio.de" in url
+            return wayback or httpx.Response(200, text=(
+                "https://viu-ventures.jobs.personio.de/job/1\n"
+                "http://Timify.jobs.personio.de:80/\n"
+                "https://acme-gmbh.jobs.personio.de/xml?language=de\n"
+                "https://www.jobs.personio.de/\n"
+            ))
+        raise AssertionError(url)
+
+    def backend(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        sent.append(body)
+        return httpx.Response(200, json={"added": len(body["slugs"])})
+
+    from scripts.hub_liveness import Api
+
+    api = Api(httpx.AsyncClient(transport=httpx.MockTransport(backend), base_url="http://t"))
+    return api, httpx.AsyncClient(transport=httpx.MockTransport(source)), sent
+
+
+async def test_discovery_also_reads_the_wayback_machine(monkeypatch) -> None:
+    async def no_wait(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(hub_ats.asyncio, "sleep", no_wait)
+    api, cc, sent = _discovery_world(wayback=None)
+    assert await hub_ats.discover(api, cc) == 3
+    # Each board is labelled with the source that found it first.
+    assert [(b["discovered_via"], b["slugs"]) for b in sent] == [
+        ("commoncrawl", ["viu-ventures"]),
+        ("wayback", ["acme-gmbh", "timify"]),
+    ]
+
+
+async def test_a_wayback_outage_keeps_what_common_crawl_found(monkeypatch) -> None:
+    async def no_wait(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(hub_ats.asyncio, "sleep", no_wait)
+    api, cc, sent = _discovery_world(wayback=httpx.Response(503))
+    assert await hub_ats.discover(api, cc) == 1
+    assert [(b["discovered_via"], b["slugs"]) for b in sent] == [("commoncrawl", ["viu-ventures"])]
+
+
 async def test_the_job_syncs_until_nothing_is_due() -> None:
     answers = iter([{"boards": 20, "created": 5, "more_due": True}, {"boards": 7, "closed": 1, "more_due": False}])
     calls: list = []
