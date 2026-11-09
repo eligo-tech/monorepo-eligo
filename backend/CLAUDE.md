@@ -266,6 +266,14 @@ These are enforced in code. Do not route around them.
   its jobs' references carry `eu:` and the link opens the right host. New
   boards are synced in the order discovery found them; Greenhouse's EU host
   is discovered first.
+- **Job family** (`hub/families.py`, `hub_job_postings.job_family`): `tech` or
+  `other`, by deterministic rules on the title and the Bundesagentur's four IT
+  `berufsfeld`s — tech = software, data, ML/AI, IT operations and security,
+  product and design of digital products; not mechanical/electrical/automation/
+  sales engineers. Labelled at ingest; older ads by the nightly backfill
+  (`--job-families`, NULL = not yet). The Markt "Tech" filter reads it.
+  Measured 2026-11-09: 33,344 of 702,630 open ads; 120 hand-labelled real
+  titles (`tests/fixtures/families/`) guard precision and recall.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.

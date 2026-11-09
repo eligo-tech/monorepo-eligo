@@ -439,6 +439,22 @@ async def _check_sites(client: httpx.AsyncClient, *, budget: int) -> dict[str, i
 _VACANCY_BATCH = 5_000
 
 
+async def _classify_families(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
+    """Label up to `budget` older open ads tech/other (`hub/families.py`), in
+    batches — the same IO discipline as the vacancy keys."""
+    totals = {"classified": 0, "remaining": 0}
+    while totals["classified"] < budget:
+        size = min(_VACANCY_BATCH, budget - totals["classified"])
+        response = await client.post(f"/hub/job-families/backfill?limit={size}")
+        response.raise_for_status()
+        result = response.json()
+        totals["classified"] += result.get("classified", 0)
+        totals["remaining"] = result.get("remaining", 0)
+        if result.get("classified", 0) < size:
+            break
+    return totals
+
+
 async def _key_vacancies(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
     """Give up to `budget` older open ads their `vacancy_key`, in batches.
     Spread over nights on purpose: one UPDATE of 650k rows would be a disk-IO
@@ -727,6 +743,13 @@ async def main() -> int:
         "backlog drains over nights, new ads are keyed at ingest",
     )
     parser.add_argument(
+        "--job-families",
+        type=int,
+        default=60_000,
+        help="older open ads to label tech/other this run (0 = off); the "
+        "backlog drains over nights, new ads are labelled at ingest",
+    )
+    parser.add_argument(
         "--agencies-only",
         action="store_true",
         help="run ONLY the private-recruiter pass — the backfill: "
@@ -739,7 +762,7 @@ async def main() -> int:
         # 28-day window (~45k detail calls) would outlast the workflow; the
         # hub-descriptions workflow owns that backlog.
         args.agencies, args.profiles, args.descriptions = True, False, False
-        args.partner_pages, args.stale_days, args.vacancy_keys = 0, 0, 0
+        args.partner_pages, args.stale_days, args.vacancy_keys, args.job_families = 0, 0, 0, 0
 
     base = os.environ.get("ELIGO_API_BASE", "").rstrip("/")
     token = os.environ.get("ELIGO_INGEST_TOKEN", "")
@@ -1039,6 +1062,15 @@ async def main() -> int:
             except Exception as exc:
                 print(f"  vacancy-key backfill FAILED: {exc}", file=sys.stderr)
                 failures.append("vacancy-keys")
+
+        # --- tech/other labels for ads that predate them (hub/families.py) ---
+        if args.job_families > 0:
+            try:
+                f = await _classify_families(client, budget=args.job_families)
+                print(f"  Berufsfamilie: +{f['classified']} eingeordnet, {f['remaining']} offen")
+            except Exception as exc:
+                print(f"  job-family backfill FAILED: {exc}", file=sys.stderr)
+                failures.append("job-families")
 
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.

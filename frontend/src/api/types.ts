@@ -302,6 +302,10 @@ export interface FacetValueDTO {
 export interface HubFacetsDTO {
   regions: FacetValueDTO[]
   berufsfelder: FacetValueDTO[]
+  /** Job families — only "tech" today (open vacancies, not ads). */
+  families?: FacetValueDTO[]
+  /** Open ads not yet labelled by the nightly backfill. */
+  families_pending?: number
 }
 
 /** Corpus-wide totals, counted in the database rather than over a page. */

@@ -103,6 +103,9 @@ async def search_hub_employers(
     city: str | None = None,
     region: list[str] | None = Query(default=None, description="Bundesland; repeatable"),
     berufsfeld: list[str] | None = Query(default=None, description="repeatable"),
+    family: list[Literal["tech"]] | None = Query(
+        default=None, description="job family (hub/families.py): tech = software, data, IT, product, design"
+    ),
     min_roles: int = Query(default=0, ge=0),
     min_relevance: int = Query(
         default=1,
@@ -135,6 +138,7 @@ async def search_hub_employers(
             city=city,
             regions=region,
             berufsfelder=berufsfeld,
+            families=family,
             min_roles=min_roles,
             limit=limit,
             cursor=cursor,
@@ -149,6 +153,7 @@ async def search_hub_employers(
                 city=city,
                 regions=region,
                 berufsfelder=berufsfeld,
+                families=family,
                 min_relevance=min_relevance,
             )
             if cursor is None
@@ -624,6 +629,19 @@ async def sync_ats_boards(
     from app.domain.hub import ats
 
     return await ats.sync_due(db, adapter=ats.adapter_for(ats_name), limit=limit)
+
+
+@router.post("/job-families/backfill")
+async def job_families_backfill(
+    limit: int = Query(default=5_000, ge=1, le=10_000),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Label up to `limit` older open ads tech/other. Machine-only: a bounded
+    corpus write the nightly job spreads over nights (disk-IO budget)."""
+    from app.domain.hub import families
+
+    return await families.backfill(db, limit=limit)
 
 
 @router.post("/vacancy-keys/backfill")

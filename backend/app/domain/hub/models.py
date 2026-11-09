@@ -263,6 +263,21 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
             postgresql_where=text("is_active AND vacancy_key IS NULL"),
             sqlite_where=text("is_active AND vacancy_key IS NULL"),
         ),
+        # The job-family backfill's queue (`hub/families.py`); empties as it runs.
+        Index(
+            "ix_hub_posting_unclassified",
+            "id",
+            postgresql_where=text("is_active AND job_family IS NULL"),
+            sqlite_where=text("is_active AND job_family IS NULL"),
+        ),
+        # The Markt "Tech" filter: employers with an open tech role — ~33k of
+        # 700k ads, so a small index the filter can walk instead of the table.
+        Index(
+            "ix_hub_posting_tech",
+            "hub_company_id",
+            postgresql_where=text("is_active AND job_family = 'tech'"),
+            sqlite_where=text("is_active AND job_family = 'tech'"),
+        ),
     )
 
     hub_company_id: Mapped[uuid.UUID] = mapped_column(
@@ -356,6 +371,9 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     # normalized title + place. Counts and lists group by it; NULL until the
     # nightly backfill reaches the row, and such an ad counts as itself.
     vacancy_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # `tech` or `other` (`hub/families.py`, deterministic rules on title and
+    # berufsfeld); NULL until the nightly backfill reaches an older row.
+    job_family: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # SHA-256 of the meaningful fields — an unchanged posting only bumps
     # `last_seen_at` instead of rewriting the row.

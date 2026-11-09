@@ -179,6 +179,10 @@ class HubFacets(BaseModel):
 
     regions: list[FacetValue] = Field(default_factory=list)
     berufsfelder: list[FacetValue] = Field(default_factory=list)
+    #: Job families (`hub/families.py`) — only "tech" today.
+    families: list[FacetValue] = Field(default_factory=list)
+    #: Open ads the nightly backfill has not labelled yet.
+    families_pending: int = 0
 
 
 class HubJobPostingHit(HubJobPostingRead):
