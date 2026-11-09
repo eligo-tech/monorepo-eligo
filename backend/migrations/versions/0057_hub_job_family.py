@@ -1,12 +1,13 @@
-"""Tech roles: `hub_job_postings.job_family`.
+"""Tech roles: `hub_job_postings.job_family` and `job_family_rules`.
 
 `hub/families.py` labels an ad `tech` or `other` with deterministic rules on
 its title and the Bundesagentur's occupational field; the Markt screen filters
-on it. Measured 2026-11-09 on all 702,630 open ads: 33,344 tech.
+on it. Measured 2026-11-09 on all 702,630 open ads: 33,612 tech.
 
 A nullable column without a default: metadata-only, no rewrite of the
 700k-row table. New ads are labelled at ingest; older ones by the nightly
-backfill (queue: `ix_hub_posting_unclassified`), not here — one UPDATE of
+backfill (queue: `ix_hub_posting_unclassified` — never labelled, or labelled
+under an older rules version, so a rule change reaches every open ad), not here — one UPDATE of
 every row would be a deploy-time IO burst. `ix_hub_posting_tech` is the
 filter's index, small by construction. Shared corpus, no personal data.
 
@@ -26,9 +27,14 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _TABLE = "hub_job_postings"
-_COLUMN = "job_family"
+_COLUMNS = {"job_family": sa.String(20), "job_family_rules": sa.Integer()}
+# Written out, not imported from the models: a migration must keep meaning what
+# it meant when it ran. Rules version 1; a bump ships its own migration that
+# rebuilds this index with the new number.
 _INDEXES = {
-    "ix_hub_posting_unclassified": ("id", "is_active AND job_family IS NULL"),
+    "ix_hub_posting_unclassified": (
+        "id", "is_active AND (job_family_rules IS NULL OR job_family_rules < 1)",
+    ),
     "ix_hub_posting_tech": ("hub_company_id", "is_active AND job_family = 'tech'"),
 }
 
@@ -44,8 +50,10 @@ def upgrade() -> None:
         # than queue every read behind it.
         op.execute("SET LOCAL lock_timeout = '10s'")
         op.execute("SET LOCAL statement_timeout = 0")
-    if _COLUMN not in {c["name"] for c in inspector.get_columns(_TABLE)}:
-        op.add_column(_TABLE, sa.Column(_COLUMN, sa.String(20), nullable=True))
+    existing = {c["name"] for c in inspector.get_columns(_TABLE)}
+    for name, type_ in _COLUMNS.items():
+        if name not in existing:
+            op.add_column(_TABLE, sa.Column(name, type_, nullable=True))
     if not postgres:
         for name, (column, where) in _INDEXES.items():
             op.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {_TABLE} ({column}) WHERE {where}")
@@ -73,5 +81,7 @@ def downgrade() -> None:
         return
     for name in _INDEXES:
         op.execute(f"DROP INDEX IF EXISTS {name}")
-    if _COLUMN in {c["name"] for c in inspector.get_columns(_TABLE)}:
-        op.drop_column(_TABLE, _COLUMN)
+    existing = {c["name"] for c in inspector.get_columns(_TABLE)}
+    for name in _COLUMNS:
+        if name in existing:
+            op.drop_column(_TABLE, name)

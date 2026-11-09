@@ -61,6 +61,14 @@ from app.core.database import Base
 from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
 from app.domain.common.types import JSONBDict, JSONDict, JSONList
 
+#: The job-family rules' version (`hub/families.py`). Bumping it re-labels
+#: every open ad through the nightly backfill — and needs a migration that
+#: rebuilds `ix_hub_posting_unclassified`, whose predicate names it
+#: (tests/test_hub_families.py fails until the two agree).
+JOB_FAMILY_RULES = 1
+#: Open ads to (re)label: never labelled, or labelled under older rules.
+UNCLASSIFIED = f"is_active AND (job_family_rules IS NULL OR job_family_rules < {JOB_FAMILY_RULES})"
+
 # Which kind of advertiser a corpus row is. Stamped at ingest from the QUERY
 # that returned it — the source's listing records carry no flag of their own.
 #: An end employer. Every recruiter-facing view shows only these.
@@ -263,12 +271,13 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
             postgresql_where=text("is_active AND vacancy_key IS NULL"),
             sqlite_where=text("is_active AND vacancy_key IS NULL"),
         ),
-        # The job-family backfill's queue (`hub/families.py`); empties as it runs.
+        # The job-family backfill's queue (`hub/families.py`): unlabelled or
+        # labelled under older rules. Empties as it runs.
         Index(
             "ix_hub_posting_unclassified",
             "id",
-            postgresql_where=text("is_active AND job_family IS NULL"),
-            sqlite_where=text("is_active AND job_family IS NULL"),
+            postgresql_where=text(UNCLASSIFIED),
+            sqlite_where=text(UNCLASSIFIED),
         ),
         # The Markt "Tech" filter: employers with an open tech role — ~33k of
         # 700k ads, so a small index the filter can walk instead of the table.
@@ -374,6 +383,8 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     # `tech` or `other` (`hub/families.py`, deterministic rules on title and
     # berufsfeld); NULL until the nightly backfill reaches an older row.
     job_family: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: The rules version that set `job_family` (`JOB_FAMILY_RULES`).
+    job_family_rules: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # SHA-256 of the meaningful fields — an unchanged posting only bumps
     # `last_seen_at` instead of rewriting the row.

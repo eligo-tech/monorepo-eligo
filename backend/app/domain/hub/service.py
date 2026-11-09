@@ -31,6 +31,7 @@ import time
 import uuid
 
 from sqlalchemy import Select, String, and_, case, cast, func, literal, or_, select, update
+from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -44,6 +45,8 @@ from app.domain.hub.adapters.base import FetchResult, SourceAdapter, SourcedPost
 from app.domain.hub.families import job_family
 from app.domain.hub.vacancy import vacancy_count, vacancy_key
 from app.domain.hub.models import (
+    JOB_FAMILY_RULES,
+    UNCLASSIFIED,
     EMPLOYER,
     HubCompany,
     HubCompanyLink,
@@ -413,7 +416,8 @@ async def merge_fetch(
                         company.normalized_name, posting.title,
                         postal_code=posting.postal_code, city=posting.city, country=posting.country,
                     ) or f"id:{posting_id.hex}",
-                    job_family=job_family(posting.title, posting.berufsfeld),
+                    job_family=job_family(posting.title, posting.berufsfeld, source=result.source),
+                    job_family_rules=JOB_FAMILY_RULES,
                     first_seen_at=now,
                     last_seen_at=now,
                     is_active=True,
@@ -490,7 +494,8 @@ async def merge_fetch(
             ) or f"id:{row.id.hex}"
         # From the row's current title and field (either may have changed
         # above); an unchanged value writes nothing.
-        row.job_family = job_family(row.title, row.berufsfeld)
+        row.job_family = job_family(row.title, row.berufsfeld, source=row.source)
+        row.job_family_rules = JOB_FAMILY_RULES
         postings_updated += 1
 
     await session.flush()
@@ -1170,9 +1175,7 @@ async def _corpus_facets(session: AsyncSession) -> dict:
     )
     # Older ads not labelled yet (the nightly backfill's queue): the screen
     # says the tech count is still growing instead of presenting it as whole.
-    pending = await session.scalar(
-        select(func.count(HubJobPosting.id)).where(HubJobPosting.is_active, HubJobPosting.job_family.is_(None))
-    )
+    pending = await session.scalar(select(func.count(HubJobPosting.id)).where(sql_text(UNCLASSIFIED)))
     return {
         "regions": [{"value": v, "count": c} for v, c in regions.all()],
         "berufsfelder": [{"value": v, "count": c} for v, c in fields.all()],

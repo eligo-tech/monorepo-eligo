@@ -270,9 +270,14 @@ These are enforced in code. Do not route around them.
   `other`, by deterministic rules on the title and the Bundesagentur's four IT
   `berufsfeld`s — tech = software, data, ML/AI, IT operations and security,
   product and design of digital products; not mechanical/electrical/automation/
-  sales engineers. Labelled at ingest; older ads by the nightly backfill
-  (`--job-families`, NULL = not yet). The Markt "Tech" filter reads it.
-  Measured 2026-11-09: 33,344 of 702,630 open ads; 120 hand-labelled real
+  sales engineers. A non-tech ROLE (sales, recruiting, buying, law, CNC) always
+  wins; a domain word ("Data Engineer Marketing") never excludes; product/
+  design/research roles count on Ashby/Greenhouse/Lever boards or with a
+  digital qualifier. Labelled at ingest; older ads by the nightly backfill
+  (`--job-families`). `job_family_rules` records the rules version: bump
+  `models.JOB_FAMILY_RULES` (plus a migration rebuilding the queue index) and
+  the backfill re-labels every open ad. The Markt "Tech" filter reads it.
+  Measured 2026-11-09: 33,612 of 702,630 open ads; 120 hand-labelled real
   titles (`tests/fixtures/families/`) guard precision and recall.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as

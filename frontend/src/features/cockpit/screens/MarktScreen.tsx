@@ -865,6 +865,9 @@ export function MarktScreen() {
     setCity(search.city ?? '')
     setRegions(search.regions ?? [])
     setBerufsfelder(search.berufsfelder ?? [])
+    // Saved searches do not store the Tech filter yet: a saved search runs as
+    // it was saved, not narrowed by whatever toggle happens to be on.
+    setTechOnly(false)
     setActiveSaved(search.id)
     setQuery({
       q: search.q ?? '',
@@ -1061,9 +1064,13 @@ export function MarktScreen() {
           <button
             type="button"
             onClick={() => {
-              setTechOnly((v) => !v)
-              // A filter alone is a search: "all open tech roles".
-              if (!query) setQuery({ q: draft.trim(), city: city.trim(), regions, berufsfelder })
+              const next = !techOnly
+              setTechOnly(next)
+              // A filter alone is a search: "all open tech roles" — from the
+              // fields as they are, the same as pressing Suchen. Switched off
+              // with nothing else asked, it returns to the start screen.
+              if (next && !query) setQuery({ q: draft.trim(), city: city.trim(), regions, berufsfelder })
+              if (!next && query && !hasCriteria) setQuery(null)
             }}
             aria-pressed={techOnly}
             title={
@@ -1088,7 +1095,9 @@ export function MarktScreen() {
               </span>
             )}
           </button>
-          {hasCriteria && !alreadySaved && (
+          {/* Not offered while Tech is on: a saved search cannot keep it yet,
+              and "Java" saved from "Java + Tech" would quietly widen. */}
+          {hasCriteria && !alreadySaved && !techOnly && (
             <Button
               onClick={saveCurrent}
               title={t('Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen')}

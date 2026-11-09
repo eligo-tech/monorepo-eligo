@@ -44,10 +44,10 @@ def test_the_rule_agrees_with_hand_labels() -> None:
 
 @pytest.mark.parametrize(("title", "field", "tech"), [
     # decided 2026-11-09: product and design of digital products are tech
-    ("Product Manager (m/w/d)", None, True),
+    ("Product Manager (m/w/d)", None, False),  # no context: any industry (see below)
     ("Product Owner (gn)", None, True),
     ("UX/UI Designer (m/w/d)", None, True),
-    ("Senior Product Designer", None, True),
+    ("Senior Product Designer", None, False),  # no context: any industry (see below)
     ("Produktmanager Digital (m/w/d)", None, True),
     ("Produktmanager Lebensmittel (m/w/d)", None, False),
     ("Grafikdesigner (m/w/d)", None, False),
@@ -80,9 +80,60 @@ def test_the_rule_agrees_with_hand_labels() -> None:
     ("Vertriebsmitarbeiter (m/w/d)", "IT-Systemanalyse, -Anwendungsberatung und -Vertrieb", False),
     ("Programmierer CNC-Drehmaschinen", "Softwareentwicklung und Programmierung", False),
     ("", None, False),
+    # a domain word does not exclude a tech role (review of #226)
+    ("Software Engineer Marketing Platform", None, True),
+    ("Data Engineer Marketing", None, True),
+    ("Marketing Automation Engineer", None, True),
+    ("Java Entwickler Vertriebssysteme", None, True),
+    ("Backend Developer Sales Platform", None, True),
+    ("SAP Berater Einkauf", None, True),
+    ("SAP SD Berater Vertrieb", None, True),
+    ("Data Engineer – Procurement Analytics", None, True),
+    ("Software Developer Recruiting-Software", None, True),
+    ("Kaufmann für IT-System-Management (m/w/d)", None, True),
+    # ...but the ROLE still decides
+    ("Vertriebsmitarbeiter Software (m/w/d)", None, False),
+    ("Sales Manager SaaS (m/w/d)", None, False),
+    ("Einkäufer IT-Hardware (m/w/d)", None, False),
+    # programmers and developers outside software
+    ("Steuerungsprogrammierer (m/w/d)", None, False),
+    ("NC-Programmierer (m/w/d)", None, False),
+    ("Programmierer CAM (m/w/d)", None, False),
+    ("Recipe Developer", None, False),
+    ("Kitchen Developer / Koch (m/w/d)", None, False),
+    ("Talent Developer (m/w/d)", None, False),
+    # product, design, research only for digital products
+    ("Product Manager Lebensmittel (m/w/d)", None, False),
+    ("Product Manager Medizintechnik (m/w/d)", None, False),
+    ("Head of Product Kosmetik", None, False),
+    ("Product Designer Möbel (m/w/d)", None, False),
+    ("Research Scientist Chemie (m/w/d)", None, False),
+    ("Research Scientist, Machine Learning", None, True),
+    ("Senior Product Manager, Platform", None, True),
+    # a qualifier is a word, not a fragment of one
+    ("Logo Developer", None, False),
+    ("Ski Engineer", None, False),
+    ("Thai Engineer", None, False),
+    ("Trust Engineer", None, False),
+    ("Unit Developer Backend", None, True),
+    ("React Native Entwickler (m/w/d)", None, True),
+    ("Junior Consultant SAP FI/CO (m/w/d)", None, True),
+    ("Entwickler (m/w/d) Rechtsanwaltssoftware", None, True),
 ])
 def test_tech_is_decided_by_rules(title, field, tech) -> None:
     assert (families.job_family(title, field) == families.TECH) is tech
+
+
+@pytest.mark.parametrize(("title", "source", "tech"), [
+    # On a tech company's own board (Ashby, Greenhouse, Lever) a plain product
+    # role is a digital product role; elsewhere it needs a digital qualifier.
+    ("Product Manager", "ashby", True),
+    ("Product Designer", "greenhouse", True),
+    ("Product Manager", "bundesagentur", False),
+    ("Product Manager Digital", "bundesagentur", True),
+])
+def test_product_roles_read_the_board_they_come_from(title, source, tech) -> None:
+    assert (families.job_family(title, None, source=source) == families.TECH) is tech
 
 
 # --- ingest, backfill, search -------------------------------------------------------
@@ -121,7 +172,7 @@ async def test_an_ad_is_classified_when_it_comes_in_and_when_its_title_changes()
 async def test_the_backfill_classifies_older_ads_in_batches() -> None:
     async with SessionLocal() as s:
         await service.merge_fetch(s, result=_result("Data Scientist", "Koch (m/w/d)", "UX Designer"), key="t")
-        await s.execute(HubJobPosting.__table__.update().values(job_family=None))
+        await s.execute(HubJobPosting.__table__.update().values(job_family=None, job_family_rules=None))
         await s.commit()
     async with SessionLocal() as s:
         first = await families.backfill(s, limit=2)
@@ -131,6 +182,33 @@ async def test_the_backfill_classifies_older_ads_in_batches() -> None:
         got = dict((await s.execute(select(HubJobPosting.title, HubJobPosting.job_family))).all())
     assert second == {"classified": 1, "remaining": 0}
     assert got == {"Data Scientist": "tech", "Koch (m/w/d)": "other", "UX Designer": "tech"}
+
+
+async def test_a_rule_change_relabels_ads_labelled_under_older_rules() -> None:
+    """Fixing a rule must reach ads that are never re-crawled (review of #226)."""
+    async with SessionLocal() as s:
+        await service.merge_fetch(s, result=_result("Data Engineer Marketing"), key="t")
+        # As an older rules version would have left it.
+        await s.execute(HubJobPosting.__table__.update().values(
+            job_family="other", job_family_rules=families.RULES_VERSION - 1))
+        await s.commit()
+    async with SessionLocal() as s:
+        assert await families.backfill(s, limit=10) == {"classified": 1, "remaining": 0}
+        row = await s.scalar(select(HubJobPosting))
+    assert (row.job_family, row.job_family_rules) == ("tech", families.RULES_VERSION)
+
+
+def test_the_queue_index_names_the_current_rules_version() -> None:
+    """Bumping JOB_FAMILY_RULES without a migration that rebuilds the queue
+    index would leave the planner a predicate the backfill no longer uses."""
+    from app.domain.hub import models
+
+    index = next(i for i in models.HubJobPosting.__table__.indexes if i.name == "ix_hub_posting_unclassified")
+    predicate = str(index.dialect_options["postgresql"]["where"])
+    assert f"< {models.JOB_FAMILY_RULES})" in predicate
+    migrations = sorted(pathlib.Path(models.__file__).parents[3].joinpath("migrations/versions").glob("0*.py"))
+    texts = [p.read_text() for p in migrations]
+    assert any(f"job_family_rules < {models.JOB_FAMILY_RULES})" in t for t in texts)
 
 
 async def test_the_tech_filter_keeps_employers_with_a_tech_role_and_shows_only_those_roles() -> None:
@@ -170,7 +248,7 @@ async def test_stats_count_tech_roles() -> None:
     assert {"value": "tech", "count": 1} in facets["families"]
     assert facets["families_pending"] == 0
     async with SessionLocal() as s:
-        await s.execute(HubJobPosting.__table__.update().values(job_family=None))
+        await s.execute(HubJobPosting.__table__.update().values(job_family_rules=None))
         await s.commit()
         service._corpus_cache.clear()  # facets are cached for minutes by design
         assert (await service.corpus_facets(s))["families_pending"] == 2
