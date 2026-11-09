@@ -1,0 +1,165 @@
+{
+ "apiVersion": "1",
+ "jobs": [
+  {
+   "id": "49e569f0-503e-4e42-a1ba-7e63684e90d3",
+   "title": "Sr Security Engineer | Remote | Europe",
+   "department": "Engineering",
+   "team": "Security",
+   "employmentType": "FullTime",
+   "location": "Berlin Office",
+   "shouldDisplayCompensationOnJobPostings": false,
+   "secondaryLocations": [
+    {
+     "location": "Bosnia",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "Bosnia"
+      }
+     }
+    },
+    {
+     "location": "Norway",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "Norway"
+      }
+     }
+    },
+    {
+     "location": "Estonia",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "Estonia"
+      }
+     }
+    },
+    {
+     "location": "Latvia",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "Latvia"
+      }
+     }
+    }
+   ],
+   "publishedAt": "2026-10-13T13:48:21.468+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "address": {
+    "postalAddress": {
+     "addressRegion": "Berlin-Brandenburg",
+     "addressCountry": "Germany",
+     "addressLocality": "Berlin"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/n8n/49e569f0-503e-4e42-a1ba-7e63684e90d3",
+   "applyUrl": "https://jobs.ashbyhq.com/n8n/49e569f0-503e-4e42-a1ba-7e63684e90d3/application",
+   "descriptionHtml": "<p style=\"min-height:1.5em\"><strong>The AI orchestration of your wildest imagination.</strong></p><p style=\"min-height:1.5em\">n8n is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.</p><p ",
+   "descriptionPlain": "The AI orchestration of your wildest imagination.\n\nn8n is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\n\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - work"
+  },
+  {
+   "id": "b45f4511-fae8-4ea1-ae88-f17d26f13acb",
+   "title": "Sales Enablement Manager (Remote)",
+   "department": "Operations",
+   "team": "Revenue Operations",
+   "employmentType": "FullTime",
+   "location": "Berlin Office",
+   "shouldDisplayCompensationOnJobPostings": false,
+   "secondaryLocations": [
+    {
+     "location": "Norway",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "Norway"
+      }
+     }
+    },
+    {
+     "location": "Netherlands",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "Netherlands"
+      }
+     }
+    },
+    {
+     "location": "Portugal",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "Portugal"
+      }
+     }
+    },
+    {
+     "location": "Germany",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "Germany"
+      }
+     }
+    }
+   ],
+   "publishedAt": "2026-08-19T13:25:18.860+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "address": {
+    "postalAddress": {
+     "addressRegion": "Berlin-Brandenburg",
+     "addressCountry": "Germany",
+     "addressLocality": "Berlin"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/n8n/b45f4511-fae8-4ea1-ae88-f17d26f13acb",
+   "applyUrl": "https://jobs.ashbyhq.com/n8n/b45f4511-fae8-4ea1-ae88-f17d26f13acb/application",
+   "descriptionHtml": "<p style=\"min-height:1.5em\"><strong>The AI orchestration of your wildest imagination.</strong></p><p style=\"min-height:1.5em\">n8n is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.</p><p ",
+   "descriptionPlain": "The AI orchestration of your wildest imagination.\n\nn8n is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\n\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - work"
+  },
+  {
+   "id": "10fa4cac-9045-4f26-a945-9a690616e9b8",
+   "title": "Sales Development Representative - North EMEA",
+   "department": "Sales",
+   "team": "Sales Development",
+   "employmentType": "FullTime",
+   "location": "London Office",
+   "shouldDisplayCompensationOnJobPostings": false,
+   "secondaryLocations": [],
+   "publishedAt": "2026-11-02T09:31:31.698+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Hybrid",
+   "address": {
+    "postalAddress": {
+     "addressRegion": "London",
+     "addressCountry": "United Kingdom",
+     "addressLocality": "London"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/n8n/10fa4cac-9045-4f26-a945-9a690616e9b8",
+   "applyUrl": "https://jobs.ashbyhq.com/n8n/10fa4cac-9045-4f26-a945-9a690616e9b8/application",
+   "descriptionHtml": "<p style=\"min-height:1.5em\"><strong>The AI orchestration of your wildest imagination.</strong></p><p style=\"min-height:1.5em\">n8n is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.</p><p ",
+   "descriptionPlain": "The AI orchestration of your wildest imagination.\n\nn8n is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\n\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - work"
+  },
+  {
+   "id": "f9b60913-84e7-4bf3-9dec-b4c3c06cf5f9",
+   "title": "Pharmacist",
+   "department": "molecule.xyz",
+   "team": "Product",
+   "employmentType": "FullTime",
+   "location": "Germany",
+   "shouldDisplayCompensationOnJobPostings": false,
+   "secondaryLocations": [],
+   "publishedAt": "2026-06-16T10:46:57.693+00:00",
+   "isListed": true,
+   "isRemote": null,
+   "workplaceType": null,
+   "address": null,
+   "jobUrl": "https://jobs.ashbyhq.com/molecule/f9b60913-84e7-4bf3-9dec-b4c3c06cf5f9",
+   "applyUrl": "https://jobs.ashbyhq.com/molecule/f9b60913-84e7-4bf3-9dec-b4c3c06cf5f9/application",
+   "descriptionHtml": "<p style=\"min-height:1.5em\">Molecule and BIO.xyz are building the foundation of Decentralized Science (DeSci) — where biotech meets web3 to make scientific research community-owned, transparent, and faster to market.</p><p style=\"min-height:1.5em\">Molecule provides the infrastructure to turn intellectual property (IP) into programmable, on-chain assets through our IP-NFT framework and evolving protocol stack. This enables researchers, patients, and communities to fund and govern biotech projects",
+   "descriptionPlain": "Molecule and BIO.xyz are building the foundation of Decentralized Science (DeSci) — where biotech meets web3 to make scientific research community-owned, transparent, and faster to market.\n\nMolecule provides the infrastructure to turn intellectual property (IP) into programmable, on-chain assets through our IP-NFT framework and evolving protocol stack. This enables researchers, patients, and communities to fund and govern biotech projects in new, open ways.\n\nBIO.xyz http://Bio.xyz is the coordin"
+  }
+ ]
+}

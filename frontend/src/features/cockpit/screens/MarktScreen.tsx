@@ -89,6 +89,9 @@ const de = (n: number) => n.toLocaleString(locale())
 /** Employers per page. Small enough to scan, large enough to be worth a click. */
 const PAGE_SIZE = 40
 
+// Employers' own job boards: the link opens the employer's ad, not an agency's copy.
+const EMPLOYER_BOARDS = new Set(['personio', 'ashby'])
+
 /** Search words go into a RegExp, so their metacharacters must be inert. */
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -411,7 +414,7 @@ function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
               rel="noreferrer noopener"
               className="flex items-center gap-1 transition-colors hover:text-mint-400"
               title={
-                role.source_url || role.source === 'personio'
+                role.source_url || EMPLOYER_BOARDS.has(role.source)
                   ? t('Original-Stellenanzeige beim Unternehmen öffnen')
                   : role.source === 'eures'
                     ? t('Anzeige bei EURES öffnen')
@@ -419,7 +422,7 @@ function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
               }
             >
               {/* EURES re-use requires naming the source next to the ad. */}
-              {role.source_url || role.source === 'personio'
+              {role.source_url || EMPLOYER_BOARDS.has(role.source)
                 ? t('Quelle')
                 : role.source === 'eures'
                   ? t('Quelle: EURES / ELA')

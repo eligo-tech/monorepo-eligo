@@ -559,8 +559,10 @@ class HubSiteCheck(Base, IDMixin, TimestampMixin):
 class HubAtsBoard(Base, IDMixin, TimestampMixin):
     """One employer's public job board on an applicant-tracking system.
 
-    Personio first (`adapters/personio.py`): each company that switches on
-    Personio's job feed publishes `{slug}.jobs.personio.de/xml`. The board is
+    Personio (`adapters/personio.py`) and Ashby (`adapters/ashby.py`); `ats`
+    names the system. Each company that switches on Personio's job feed
+    publishes `{slug}.jobs.personio.de/xml`; an Ashby company's jobs are at
+    `api.ashbyhq.com/posting-api/job-board/{slug}`. The board is
     the employer's own source — full text, its own offices — and the feed is a
     full snapshot, so a job missing from it is closed (`hub/ats.py`).
 
@@ -581,6 +583,7 @@ class HubAtsBoard(Base, IDMixin, TimestampMixin):
     ats: Mapped[str] = mapped_column(String(30), nullable=False)
     slug: Mapped[str] = mapped_column(String(120), nullable=False)
     #: new · active (DACH jobs) · elsewhere (jobs, none in DACH) · empty · gone · failing
+    #: · unnamed (DACH jobs, but the board page gave no company name — asked weekly)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
     company_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     discovered_via: Mapped[str] = mapped_column(String(60), nullable=False)

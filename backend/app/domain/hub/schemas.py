@@ -30,6 +30,9 @@ def source_detail_url(source: str, external_id: str | None) -> str | None:
     if source == "personio" and ":" in external_id:
         slug, _, job_id = external_id.partition(":")
         return f"https://{quote(slug, safe='')}.jobs.personio.de/job/{quote(job_id, safe='')}?language=de"
+    if source == "ashby" and ":" in external_id:
+        slug, _, job_id = external_id.partition(":")
+        return f"https://jobs.ashbyhq.com/{quote(slug, safe='')}/{quote(job_id, safe='')}"
     if source == "eures":
         return "https://europa.eu/eures/portal/jv-se/jv-details/" + quote(
             external_id, safe=""
@@ -553,6 +556,6 @@ class MarkRequest(BaseModel):
 class AddBoardsRequest(BaseModel):
     """Board slugs a discovery pass found. Bounded: one request, one statement."""
 
-    ats: Literal["personio"] = "personio"
+    ats: Literal["personio", "ashby"] = "personio"
     slugs: list[str] = Field(max_length=5_000)
     discovered_via: str = Field(default="commoncrawl", max_length=60)
