@@ -30,7 +30,6 @@ described as licensed.
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
 import html
 import json
 import re
@@ -39,11 +38,9 @@ from urllib.parse import quote
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
-
-from app.core.config import settings
 from app.core.logging import get_logger
-from app.domain.hub.adapters.base import FetchResult, SourcedCompany, SourcedPosting, SourceUnreachable
+from app.domain.hub.adapters.base import FetchResult, SourcedCompany, SourcedPosting
+from app.domain.hub.adapters.boards import BoardHttp, FeedAnswer, FeedUnreadable
 from app.domain.hub.adapters.eures import staffing_signal
 from app.domain.hub.models import EMPLOYER, PRIVATE_RECRUITER
 
@@ -98,10 +95,6 @@ class Position:
     text: str | None
     employment_type: str | None
     created_at: dt.datetime | None
-
-
-class FeedUnreadable(Exception):
-    """A 200 that is not the feed (an HTML error page, a truncated body)."""
 
 
 def _clean(markup: str) -> str:
@@ -371,54 +364,12 @@ def to_result(
 # ---------------------------------------------------------------------------
 
 
-#: Larger than any feed measured (~125 KB for 29 jobs) by two orders.
-MAX_BODY = 10 * 1024 * 1024
-#: Status for a body over `MAX_BODY`: read as a failure, never as a feed.
-TOO_LARGE = 599
-
-
-@dataclass(frozen=True)
-class FeedAnswer:
-    status: int
-    body: bytes
-
-    @property
-    def content_hash(self) -> str:
-        return hashlib.sha256(self.body).hexdigest()
-
-
-class PersonioAdapter:
+class PersonioAdapter(BoardHttp):
     """Two calls: a board's feed, and one job page per new office."""
 
     name = SOURCE_NAME
-
-    def __init__(
-        self, *, timeout: float | None = None, user_agent: str | None = None,
-        transport: httpx.AsyncBaseTransport | None = None,
-    ) -> None:
-        self._timeout = timeout or settings.hub_http_timeout
-        self._user_agent = user_agent or settings.hub_user_agent
-        #: Tests only.
-        self._transport = transport
-
-    def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            timeout=self._timeout, transport=self._transport, follow_redirects=False,
-            headers={"User-Agent": self._user_agent},
-        )
-
-    async def _get(self, url: str) -> tuple[int, bytes]:
-        """Status and body, the body read no further than `MAX_BODY`."""
-        try:
-            async with self._client() as client, client.stream("GET", url) as response:
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    body += chunk
-                    if len(body) > MAX_BODY:
-                        return TOO_LARGE, b""
-                return response.status_code, bytes(body)
-        except httpx.HTTPError as exc:
-            raise SourceUnreachable(f"{type(exc).__name__} for {url}") from exc
+    #: Larger than any feed measured (~125 KB for 29 jobs) by two orders.
+    max_body = 10 * 1024 * 1024
 
     async def fetch_feed(self, slug: str) -> FeedAnswer:
         return FeedAnswer(*await self._get(feed_url(slug)))

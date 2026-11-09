@@ -248,6 +248,15 @@ These are enforced in code. Do not route around them.
   `office_addresses` app data, schema.org as a fallback), cached on the board —
   so the same job on BA has the same company and vacancy key. Ingest goes
   through `service.merge_fetch`, the shared post-fetch path.
+- **Employers' own Ashby boards** (`adapters/ashby.py`, same `hub/ats.py`
+  sync, `--ats ashby`; the workflow runs one parallel job per board system).
+  Ashby's public posting API is a full snapshot with each job's own address,
+  so no job page is read; the company name comes from the board page title,
+  once per board. Only DACH jobs are kept: the primary location, or a
+  secondary one naming a DACH town — DACH as one country in a remote list is
+  not a DACH job. Boards with no DACH job are re-read monthly. Each board
+  system is a module with the same pure pieces (`valid_slug`, `feed_url`,
+  `external_id`, `parse_feed`, `to_result`) registered in `ats.SOURCES`.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.

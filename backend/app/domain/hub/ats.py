@@ -1,9 +1,10 @@
-"""Employers' own ATS boards → the corpus (Personio first).
+"""Employers' own ATS boards → the corpus (Personio, Ashby).
 
 The nightly job (`scripts/hub_ats.py`, machine-only routes) drives two steps:
 
-1. **Discovery** (`add_boards`): board slugs found in Common Crawl's URL
-   index are added as `new`. Nothing is fetched then.
+1. **Discovery** (`add_boards`): board slugs found in public URL indexes
+   (Common Crawl, the Wayback Machine) are added as `new`. Nothing is
+   fetched then.
 2. **Sync** (`sync_due`): each due board's feed is read — one request — and
    merged through `service.merge_fetch`, the same gate, opt-out list,
    identity ladder and recount every source uses.
@@ -24,6 +25,11 @@ Guards keep a broken answer from emptying a board:
 A board is leased before any HTTP (`next_fetch_at` pushed out and committed),
 so two runs never sync the same board and no transaction spans a request.
 One board failing (a database error included) costs that board, not the batch.
+
+Each source module (`adapters/personio.py`, `adapters/ashby.py`) supplies the
+same pure pieces — `valid_slug`, `feed_url`, `external_id`, `parse_feed`,
+`to_result` — and its adapter the HTTP. Only Personio has offices to resolve
+(its feed names a town, not an address); Ashby jobs carry their address.
 """
 
 from __future__ import annotations
@@ -36,8 +42,9 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.domain.hub.adapters import personio
+from app.domain.hub.adapters import ashby, personio
 from app.domain.hub.adapters.base import SourceUnreachable
+from app.domain.hub.adapters.boards import FeedUnreadable
 from app.domain.hub.models import HubAtsBoard, HubJobPosting, HubObservation, HubPostingPayload
 
 logger = get_logger(__name__)
@@ -61,11 +68,14 @@ UNRESOLVED_RETRY = dt.timedelta(days=7)
 #: Status codes that say "this board publishes nothing here".
 _NO_BOARD = {301, 302, 303, 307, 308, 404, 410}
 _clock = time.monotonic
+#: Board sources by name — the `ats` column of `hub_ats_boards`.
+SOURCES = {personio.SOURCE_NAME: personio, ashby.SOURCE_NAME: ashby}
 
 
 async def add_boards(session: AsyncSession, *, ats: str, slugs: list[str], discovered_via: str) -> dict[str, int]:
     """Add the slugs not yet known. Invalid slugs are refused, not stored."""
-    valid = sorted({s.lower() for s in slugs if personio.valid_slug(s.lower())})
+    source = SOURCES[ats]
+    valid = sorted({s.lower() for s in slugs if source.valid_slug(s.lower())})
     known = set((await session.execute(
         select(HubAtsBoard.slug).where(HubAtsBoard.ats == ats, HubAtsBoard.slug.in_(valid))
     )).scalars()) if valid else set()
@@ -76,10 +86,12 @@ async def add_boards(session: AsyncSession, *, ats: str, slugs: list[str], disco
     return {"added": len(new), "known": len(known), "invalid": len(slugs) - len(valid)}
 
 
-async def _lease(session: AsyncSession, limit: int, now: dt.datetime) -> list[HubAtsBoard]:
+async def _lease(
+    session: AsyncSession, limit: int, now: dt.datetime, ats: str = personio.SOURCE_NAME
+) -> list[HubAtsBoard]:
     stmt = (
         select(HubAtsBoard)
-        .where(HubAtsBoard.ats == personio.SOURCE_NAME,
+        .where(HubAtsBoard.ats == ats,
                or_(HubAtsBoard.next_fetch_at.is_(None), HubAtsBoard.next_fetch_at <= now))
         # Known boards first: a month's discovery adds thousands of new ones,
         # and they must not starve the daily refresh of jobs already held.
@@ -101,9 +113,10 @@ async def _close(session: AsyncSession, board: HubAtsBoard, ids: list[str], why:
         return 0
     from app.domain.hub.liveness import recount_open_postings
 
+    source = SOURCES[board.ats]
     rows = (await session.execute(
         select(HubJobPosting.id, HubJobPosting.hub_company_id).where(
-            HubJobPosting.source == personio.SOURCE_NAME,
+            HubJobPosting.source == source.SOURCE_NAME,
             HubJobPosting.external_id.in_(ids),
             HubJobPosting.is_active,
         )
@@ -112,7 +125,7 @@ async def _close(session: AsyncSession, board: HubAtsBoard, ids: list[str], why:
         return 0
     now = dt.datetime.now(dt.UTC)
     observation = HubObservation(
-        source=personio.SOURCE_NAME, request_url=personio.feed_url(board.slug),
+        source=source.SOURCE_NAME, request_url=source.feed_url(board.slug),
         http_status=board.last_http_status, record_count=len(rows), fetched_at=now,
         note=f"ats: {len(rows)} closed — {why}"[:500],
         payload={"closed": ids[:1000], "board": board.slug},
@@ -146,7 +159,7 @@ def _resolved(offices: dict, office: str | None, now: dt.datetime) -> bool:
 
 
 async def _resolve_offices(
-    adapter, board: HubAtsBoard, positions: list[personio.Position], *, now: dt.datetime, deadline: float
+    adapter, board: HubAtsBoard, positions: list, *, now: dt.datetime, deadline: float
 ) -> None:
     """Read one job page per office this board has not resolved yet. A page
     lists every office of its job, so one page often resolves several.
@@ -183,6 +196,7 @@ async def sync_board(
     """Read one board's feed and bring the corpus in line with it."""
     from app.domain.hub import service
 
+    source = SOURCES[board.ats]
     now = dt.datetime.now(dt.UTC)
     deadline = deadline if deadline is not None else _clock() + 60
     outcome = {"board": board.slug, "created": 0, "updated": 0, "closed": 0}
@@ -197,7 +211,7 @@ async def sync_board(
     board.last_fetched_at = now
 
     if answer.status in _NO_BOARD:
-        positions: list[personio.Position] = []
+        positions: list = []
     elif answer.status != 200:
         _failed(board, now, answer.status)
         await session.commit()
@@ -205,8 +219,8 @@ async def sync_board(
         return outcome
     else:
         try:
-            positions = personio.parse_feed(answer.body)
-        except personio.FeedUnreadable as exc:
+            positions = source.parse_feed(answer.body)
+        except FeedUnreadable as exc:
             _failed(board, now, answer.status)
             await session.commit()
             outcome["error"] = f"unreadable: {exc}"[:200]
@@ -216,8 +230,14 @@ async def sync_board(
         await _resolve_offices(adapter, board, positions, now=now, deadline=deadline)
     except SourceUnreachable:
         pass  # what resolved is on the board already; the rest waits
+    if (board.company_name is None and hasattr(adapter, "fetch_company_name")
+            and any(getattr(p, "place", None) for p in positions)):
+        try:  # one page per board, once — only for a board with a DACH job
+            board.company_name = await adapter.fetch_company_name(board.slug)
+        except SourceUnreachable:
+            pass  # its jobs are dropped as unnamed this time; asked again next sync
     known = {k: v for k, v in (board.offices or {}).items() if v.get("country")}
-    result, listed = personio.to_result(
+    result, listed = source.to_result(
         slug=board.slug, positions=positions, offices=known, fetched_at=now,
         company_name=board.company_name, content_hash=answer.content_hash,
     )
@@ -229,13 +249,13 @@ async def sync_board(
     await session.commit()
 
     if result.postings:
-        summary = await service.merge_fetch(session, result=result, key=f"personio:{board.slug}")
+        summary = await service.merge_fetch(session, result=result, key=f"{source.SOURCE_NAME}:{board.slug}")
         outcome["created"], outcome["updated"] = summary.postings_created, summary.postings_updated
     outcome["dropped"] = result.dropped
 
     previous = set(board.open_ids or [])
     # Listed, but its office has no address (yet): not gone — keep it as it was.
-    pending = {personio.external_id(board.slug, p.job_id) for p in positions
+    pending = {source.external_id(board.slug, p.job_id) for p in positions
                if p.office is not None and p.office not in known}
     snapshot = sorted(set(listed) | (pending & previous))
     if positions:
@@ -257,6 +277,8 @@ async def sync_board(
     unresolved = any(not _resolved(board.offices or {}, p.office, now) for p in positions)
     if board.empty_streak == 1 or unresolved:
         board.next_fetch_at = now + REFRESH["active"]
+    elif board.status == "elsewhere":
+        board.next_fetch_at = now + getattr(source, "ELSEWHERE_REFRESH", REFRESH["elsewhere"])
     else:
         board.next_fetch_at = now + REFRESH.get(board.status, REFRESH["active"])
     await session.commit()
@@ -282,7 +304,7 @@ async def sync_due(
     Boards leased but not reached in time are handed back (due now). The
     budget also bounds job-page reads inside a board."""
     now = dt.datetime.now(dt.UTC)
-    boards = await _lease(session, limit, now)
+    boards = await _lease(session, limit, now, adapter.name)
     totals: dict = {"boards": 0, "created": 0, "updated": 0, "closed": 0, "failed": 0}
     started, streak = _clock(), 0
     deadline = started + time_budget
@@ -320,7 +342,7 @@ async def sync_due(
     # Tells the job whether to call again tonight.
     totals["more_due"] = await session.scalar(
         select(HubAtsBoard.id).where(
-            HubAtsBoard.ats == personio.SOURCE_NAME,
+            HubAtsBoard.ats == adapter.name,
             or_(HubAtsBoard.next_fetch_at.is_(None), HubAtsBoard.next_fetch_at <= dt.datetime.now(dt.UTC)),
         ).limit(1)
     ) is not None

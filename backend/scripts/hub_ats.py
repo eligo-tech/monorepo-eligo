@@ -1,10 +1,10 @@
-"""Employers' own Personio boards → the corpus (`app/domain/hub/ats.py`).
+"""Employers' own job boards (Personio, Ashby) → the corpus (`app/domain/hub/ats.py`).
 
 A scheduled job, over HTTP with the machine credential only — RULE 1, the
 same discipline as `hub_daily.py`.
 
     ELIGO_API_BASE=https://…/api/v1 ELIGO_INGEST_TOKEN=… \\
-      python -m scripts.hub_ats [--discover] [--minutes 90]
+      python -m scripts.hub_ats [--ats personio|ashby] [--discover] [--minutes 90]
 
 **`--discover`** reads Common Crawl's public URL index for every
 `*.jobs.personio.de` / `*.jobs.personio.com` host in the last three crawls and
@@ -14,6 +14,11 @@ discovery then reads the Wayback Machine's URL index for `*.jobs.personio.de`
 (measured 2026-11-07: 6,429 boards, about half still live; the `.com` index
 adds 4 and times out, and both hosts serve the same boards). A board keeps the
 label of the source that found it first.
+
+For **Ashby** (`--ats ashby`), boards are paths, not subdomains:
+`jobs.ashbyhq.com/<slug>/…`. Discovery reads the Wayback Machine's index for
+that host in 36 prefix pieces (`a*` … `9*`): one answer for the whole host
+was cut off at 420 s (measured 2026-11-08: 7,603 boards found when it was).
 
 **Sync** (always) calls `POST /hub/ats/sync` until no board is due or the
 time budget is spent; the backend reads one feed per board, about one a
@@ -47,6 +52,11 @@ _CHUNK = 5_000
 _WAYBACK_MAX_BYTES = 64 * 1024 * 1024  # measured answer: ~11 MB
 _WAYBACK_SECONDS = 480  # a whole answer, not one read; measured 50–198 s
 _WAYBACK = "https://web.archive.org/cdx/search/cdx?url=*.jobs.personio.de&fl=original&collapse=urlkey"
+_ASHBY_PIECE = "https://web.archive.org/cdx/search/cdx?url=jobs.ashbyhq.com/{prefix}*&fl=original&collapse=urlkey"
+_ASHBY_PREFIXES = "abcdefghijklmnopqrstuvwxyz0123456789"
+_ASHBY_SLUG = re.compile(r"^https?://jobs\.ashbyhq\.com(?::\d+)?/([a-z0-9][a-z0-9._-]{0,99})(?:[/?#]|$)", re.I)
+#: Paths on Ashby's board host that are Ashby's own, not an employer's board.
+_ASHBY_NOT_BOARDS = {"api", "b", "meeting", "embed", "_next", "favicon.ico", "robots.txt", "static"}
 
 
 def slugs_from_urls(urls: list[str]) -> set[str]:
@@ -110,8 +120,18 @@ async def _common_crawl(client: httpx.AsyncClient, deadline: float) -> set[str]:
     return slugs
 
 
-async def _wayback_text(client: httpx.AsyncClient) -> str | None:
-    async with client.stream("GET", _WAYBACK, timeout=300) as response:
+def ashby_slugs(urls: list[str]) -> set[str]:
+    """Ashby board slugs: the first path segment on jobs.ashbyhq.com."""
+    found: set[str] = set()
+    for url in urls:
+        match = _ASHBY_SLUG.match(url.strip())
+        if match and match.group(1).lower() not in _ASHBY_NOT_BOARDS:
+            found.add(match.group(1).lower())
+    return found
+
+
+async def _wayback_text(client: httpx.AsyncClient, url: str = _WAYBACK) -> str | None:
+    async with client.stream("GET", url, timeout=300) as response:
         if response.status_code != 200:
             return None
         body = bytearray()
@@ -143,12 +163,38 @@ async def _wayback(client: httpx.AsyncClient) -> set[str]:
     return set()
 
 
-async def _send(api: Api, slugs: set[str], via: str) -> int:
+async def _ashby(client: httpx.AsyncClient, deadline: float) -> set[str]:
+    """Ashby boards in the Wayback Machine, one prefix at a time. A piece that
+    fails is skipped — the next month's discovery asks again."""
+    slugs: set[str] = set()
+    for prefix in _ASHBY_PREFIXES:
+        if time.monotonic() > deadline:
+            print("  discover: time budget spent — sending what was found", file=sys.stderr)
+            break
+        url = _ASHBY_PIECE.format(prefix=prefix)
+        for attempt in range(2):
+            try:
+                text = await asyncio.wait_for(_wayback_text(client, url), _WAYBACK_SECONDS)
+            except (httpx.HTTPError, TimeoutError):
+                text = None
+            if text is not None:
+                slugs |= ashby_slugs(text.splitlines())
+                break
+            if attempt == 0:
+                await asyncio.sleep(30)
+        else:
+            print(f"    ! Wayback piece {prefix}* did not answer", file=sys.stderr)
+        await asyncio.sleep(2)
+    print(f"  discover: {len(slugs):,} Ashby boards in the Wayback Machine")
+    return slugs
+
+
+async def _send(api: Api, slugs: set[str], via: str, ats: str = "personio") -> int:
     added = 0
     ordered = sorted(slugs)
     for i in range(0, len(ordered), _CHUNK):
         result = await api.call("POST", "/hub/ats/boards", json={
-            "ats": "personio", "slugs": ordered[i:i + _CHUNK], "discovered_via": via,
+            "ats": ats, "slugs": ordered[i:i + _CHUNK], "discovered_via": via,
         })
         added += result["added"]
     print(f"  discover: {added:,} new boards from {via} ({len(ordered):,} seen)")
@@ -164,18 +210,22 @@ async def discover(api: Api, client: httpx.AsyncClient, *, minutes: float = 40.0
     return added + await _send(api, await _wayback(client) - found, "wayback")
 
 
-async def sync(api: Api, *, minutes: float, batch: int = 20) -> int:
+async def discover_ashby(api: Api, client: httpx.AsyncClient, *, minutes: float = 40.0) -> int:
+    return await _send(api, await _ashby(client, time.monotonic() + minutes * 60), "wayback", "ashby")
+
+
+async def sync(api: Api, *, minutes: float, batch: int = 20, ats: str = "personio") -> int:
     deadline = time.monotonic() + minutes * 60
     totals = {"boards": 0, "created": 0, "updated": 0, "closed": 0, "failed": 0}
     while time.monotonic() < deadline:
-        result = await api.call("POST", "/hub/ats/sync", params={"limit": batch})
+        result = await api.call("POST", "/hub/ats/sync", params={"limit": batch, "ats": ats})
         for key in totals:
             totals[key] += result.get(key, 0)
         if result.get("source_unreachable"):
-            raise SourceDown(f"Personio unreachable after {totals['boards']} boards")
+            raise SourceDown(f"{ats} unreachable after {totals['boards']} boards")
         if not result.get("more_due") or not result.get("boards"):
             break
-    print(f"  sync: {totals['boards']:,} boards — +{totals['created']:,} new, "
+    print(f"  sync {ats}: {totals['boards']:,} boards — +{totals['created']:,} new, "
           f"~{totals['updated']:,} seen again, {totals['closed']:,} closed, {totals['failed']:,} failed")
     if totals["boards"] >= 20 and totals["failed"] > totals["boards"] / 2:
         print("FAILED: most boards could not be read", file=sys.stderr)
@@ -185,7 +235,8 @@ async def sync(api: Api, *, minutes: float, batch: int = 20) -> int:
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
-    parser.add_argument("--discover", action="store_true", help="find new boards in Common Crawl first")
+    parser.add_argument("--ats", choices=("personio", "ashby"), default="personio", help="which boards")
+    parser.add_argument("--discover", action="store_true", help="find new boards in public URL indexes first")
     parser.add_argument("--minutes", type=float, default=90.0, help="sync time budget")
     args = parser.parse_args()
 
@@ -199,8 +250,8 @@ async def main() -> int:
         api = Api(client)
         try:
             if args.discover:
-                await discover(api, cc)
-            return await sync(api, minutes=args.minutes)
+                await (discover_ashby(api, cc) if args.ats == "ashby" else discover(api, cc))
+            return await sync(api, minutes=args.minutes, ats=args.ats)
         except SourceDown as exc:
             print(f"FAILED: {exc}", file=sys.stderr)
             return 1

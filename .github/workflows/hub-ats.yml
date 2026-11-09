@@ -1,21 +1,29 @@
-# Employers' own Personio boards → the shared corpus
+# Employers' own job boards (Personio, Ashby) → the shared corpus
 # (backend/app/domain/hub/ats.py). A scheduled job only (ARCHITECTURE.md
 # RULE 1), over HTTP with the machine token — no database credentials in CI.
 #
 # Daytime, so it never competes with the nightly ingest chain for the
-# database. Each board is one feed request (~1/s), plus one job page per new
-# office. On the 1st of the month it first rediscovers boards from Common
-# Crawl's and the Wayback Machine's URL indexes. A failed run fails the
-# workflow: that is the monitoring.
-name: Hub · employer boards (Personio)
+# database. One parallel job per board system, each with its own time budget,
+# so a slow system never costs another its daily refresh. Each board is one
+# feed request (~1/s); Personio adds one job page per new office, Ashby one
+# board page per new DACH board (its name). On the 1st of the month each job
+# first rediscovers boards from public URL indexes (Common Crawl, the Wayback
+# Machine). A failed run fails the workflow: that is the monitoring.
+name: Hub · employer boards (Personio, Ashby)
 
 on:
   schedule:
     - cron: "37 12 * * *"
   workflow_dispatch:
     inputs:
+      ats:
+        description: "Which board system"
+        required: false
+        default: all
+        type: choice
+        options: [all, personio, ashby]
       discover:
-        description: "Find new boards in Common Crawl first"
+        description: "Find new boards in public URL indexes first"
         required: false
         default: false
         type: boolean
@@ -31,7 +39,13 @@ concurrency:
 jobs:
   boards:
     runs-on: ubuntu-latest
-    timeout-minutes: 200  # discovery ≤ 40 min Common Crawl + ≤ 26 min Wayback + sync ≤ 120 min
+    strategy:
+      fail-fast: false  # one system failing must not cancel the other's refresh
+      matrix:
+        ats: ${{ fromJSON(github.event.inputs.ats == 'personio' && '["personio"]' || github.event.inputs.ats == 'ashby' && '["ashby"]' || '["personio", "ashby"]') }}
+    # Personio: discovery ≤ 40 min Common Crawl + ≤ 26 min Wayback + sync ≤ 120 min.
+    # Ashby: discovery ≤ 40 min (36 Wayback pieces) + sync ≤ 120 min.
+    timeout-minutes: 200
     steps:
       - uses: actions/checkout@v5
 
@@ -42,16 +56,17 @@ jobs:
       - name: Install httpx
         run: pip install --no-cache-dir "httpx>=0.27"
 
-      - name: Sync employer boards
+      - name: Sync ${{ matrix.ats }} boards
         working-directory: backend
         env:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
           DISCOVER_INPUT: ${{ github.event.inputs.discover }}
           MINUTES_INPUT: ${{ github.event.inputs.minutes }}
+          ATS: ${{ matrix.ats }}
         run: |
           extra=()
           if [ "$DISCOVER_INPUT" = "true" ] || [ "$(date -u +%d)" = "01" ]; then extra=(--discover); fi
           MINUTES="${MINUTES_INPUT:-120}"
           case "$MINUTES" in ''|*[!0-9]*) echo "minutes must be a number"; exit 2;; esac
-          python -m scripts.hub_ats --minutes "$MINUTES" "${extra[@]}"
+          python -m scripts.hub_ats --ats "$ATS" --minutes "$MINUTES" "${extra[@]}"
