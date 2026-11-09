@@ -29,6 +29,7 @@ import {
   Building2,
   Check,
   ChevronDown,
+  Cpu,
   ExternalLink,
   Globe,
   MapPin,
@@ -774,6 +775,9 @@ export function MarktScreen() {
   // "Only where the title says it." For a broad term the tail is incidental
   // mentions, and narrowing beats paging through thousands of them.
   const [titlesOnly, setTitlesOnly] = useState(false)
+  // Tech roles only (backend `hub/families.py`: software, data, IT, product,
+  // design — fixed rules on title and Berufsfeld, no model).
+  const [techOnly, setTechOnly] = useState(false)
   const [activeSaved, setActiveSaved] = useState<string | null>(null)
   const [savedKey, setSavedKey] = useState(0)
 
@@ -790,6 +794,7 @@ export function MarktScreen() {
             berufsfelder: query.berufsfelder,
             limit: PAGE_SIZE,
             minRelevance: titlesOnly ? 3 : 1,
+            families: techOnly ? ['tech'] : undefined,
             correct: !query.exact,
           })
         : Promise.resolve({ items: [], total: 0, next_cursor: null, corrections: [] }),
@@ -800,6 +805,7 @@ export function MarktScreen() {
       query?.berufsfelder.join('|'),
       query?.exact,
       titlesOnly,
+      techOnly,
     ],
   )
   // What the corpus was actually asked, once a thin answer was retried with
@@ -840,13 +846,14 @@ export function MarktScreen() {
         limit: PAGE_SIZE,
         cursor,
         minRelevance: titlesOnly ? 3 : 1,
+        families: techOnly ? ['tech'] : undefined,
       })
       setMore((prev) => [...prev, ...page.items])
       setCursor(page.next_cursor)
     } finally {
       setLoadingMore(false)
     }
-  }, [query, searchedQ, cursor, titlesOnly])
+  }, [query, searchedQ, cursor, titlesOnly, techOnly])
 
   const run = useCallback(() => {
     setActiveSaved(null)
@@ -858,6 +865,9 @@ export function MarktScreen() {
     setCity(search.city ?? '')
     setRegions(search.regions ?? [])
     setBerufsfelder(search.berufsfelder ?? [])
+    // Saved searches do not store the Tech filter yet: a saved search runs as
+    // it was saved, not narrowed by whatever toggle happens to be on.
+    setTechOnly(false)
     setActiveSaved(search.id)
     setQuery({
       q: search.q ?? '',
@@ -897,6 +907,8 @@ export function MarktScreen() {
   )
   const hasCriteria =
     !!query && (!!query.q || !!query.city || query.regions.length > 0 || query.berufsfelder.length > 0)
+  const techCount = facets.data?.families?.find((f) => f.value === 'tech')?.count ?? 0
+  const techPending = facets.data?.families_pending ?? 0
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1049,7 +1061,43 @@ export function MarktScreen() {
             />
             {t('nur Titel-Treffer')}
           </button>
-          {hasCriteria && !alreadySaved && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = !techOnly
+              setTechOnly(next)
+              // A filter alone is a search: "all open tech roles" — from the
+              // fields as they are, the same as pressing Suchen. Switched off
+              // with nothing else asked, it returns to the start screen.
+              if (next && !query) setQuery({ q: draft.trim(), city: city.trim(), regions, berufsfelder })
+              if (!next && query && !hasCriteria) setQuery(null)
+            }}
+            aria-pressed={techOnly}
+            title={
+              t('Nur Tech-Rollen: Software, Daten, IT, Produkt und Design — nach festen Regeln aus Titel und Berufsfeld') +
+              (techPending > 0
+                ? ' · ' + t('Einordnung läuft: {n} ältere Anzeigen noch offen', { n: de(techPending) })
+                : '')
+            }
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[13px] transition-colors',
+              techOnly
+                ? 'border-mint-400/40 bg-mint-400/10 text-cockpit-text'
+                : 'border-cockpit-line text-cockpit-dim hover:text-cockpit-text',
+            )}
+          >
+            <Cpu className={cn('h-3.5 w-3.5', techOnly ? 'text-mint-400' : 'text-cockpit-faint')} />
+            {t('Tech')}
+            {techCount > 0 && (
+              <span className="font-mono text-[12px] text-cockpit-faint">
+                {de(techCount)}
+                {techPending > 0 && '+'}
+              </span>
+            )}
+          </button>
+          {/* Not offered while Tech is on: a saved search cannot keep it yet,
+              and "Java" saved from "Java + Tech" would quietly widen. */}
+          {hasCriteria && !alreadySaved && !techOnly && (
             <Button
               onClick={saveCurrent}
               title={t('Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen')}

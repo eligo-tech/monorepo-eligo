@@ -282,6 +282,8 @@ export const api = {
     city?: string
     regions?: string[]
     berufsfelder?: string[]
+    /** Job families, e.g. ['tech'] (backend `hub/families.py`). */
+    families?: string[]
     minRoles?: number
     limit?: number
     cursor?: string | null
@@ -296,6 +298,7 @@ export const api = {
     // ("Krankenpflege, Rettungsdienst und Geburtshilfe").
     params.regions?.forEach((r) => qs.append('region', r))
     params.berufsfelder?.forEach((b) => qs.append('berufsfeld', b))
+    params.families?.forEach((f) => qs.append('family', f))
     if (params.minRoles) qs.set('min_roles', String(params.minRoles))
     qs.set('limit', String(params.limit ?? 40))
     if (params.cursor) qs.set('cursor', params.cursor)

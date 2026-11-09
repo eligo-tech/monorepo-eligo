@@ -38,6 +38,7 @@ const SAME_IN_BOTH = new Set([
   'Know-how',
   'Mail',
   'Minimum',
+  'Tech',
   'Name (A–Z)',
   'Workspace',
   'Skills',

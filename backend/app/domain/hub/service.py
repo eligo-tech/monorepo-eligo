@@ -31,6 +31,7 @@ import time
 import uuid
 
 from sqlalchemy import Select, String, and_, case, cast, func, literal, or_, select, update
+from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -41,8 +42,11 @@ from app.domain.hub.spelling import (
     umlaut_variants,
 )
 from app.domain.hub.adapters.base import FetchResult, SourceAdapter, SourcedPosting, SourceQuery
+from app.domain.hub.families import job_family
 from app.domain.hub.vacancy import vacancy_count, vacancy_key
 from app.domain.hub.models import (
+    JOB_FAMILY_RULES,
+    UNCLASSIFIED,
     EMPLOYER,
     HubCompany,
     HubCompanyLink,
@@ -412,6 +416,8 @@ async def merge_fetch(
                         company.normalized_name, posting.title,
                         postal_code=posting.postal_code, city=posting.city, country=posting.country,
                     ) or f"id:{posting_id.hex}",
+                    job_family=job_family(posting.title, posting.berufsfeld, source=result.source),
+                    job_family_rules=JOB_FAMILY_RULES,
                     first_seen_at=now,
                     last_seen_at=now,
                     is_active=True,
@@ -486,6 +492,10 @@ async def merge_fetch(
                 company.normalized_name, row.title,
                 postal_code=row.postal_code, city=row.city, country=row.country,
             ) or f"id:{row.id.hex}"
+        # From the row's current title and field (either may have changed
+        # above); an unchanged value writes nothing.
+        row.job_family = job_family(row.title, row.berufsfeld, source=row.source)
+        row.job_family_rules = JOB_FAMILY_RULES
         postings_updated += 1
 
     await session.flush()
@@ -1057,7 +1067,7 @@ async def corpus_stats(session: AsyncSession) -> dict:
     return await _cached("stats", lambda: _corpus_stats(session))
 
 
-async def corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
+async def corpus_facets(session: AsyncSession) -> dict:
     """Filter options with counts (see `_corpus_facets`), cached."""
     return await _cached("facets", lambda: _corpus_facets(session))
 
@@ -1131,7 +1141,7 @@ async def _corpus_stats(session: AsyncSession) -> dict:
     }
 
 
-async def _corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
+async def _corpus_facets(session: AsyncSession) -> dict:
     """Filter options with counts, derived from the corpus itself.
 
     Not a hardcoded taxonomy: the options are what the corpus actually holds, so
@@ -1158,9 +1168,19 @@ async def _corpus_facets(session: AsyncSession) -> dict[str, list[dict]]:
         .group_by(HubJobPosting.berufsfeld)
         .order_by(vacancy_count().desc())
     )
+    tech = await session.scalar(
+        select(vacancy_count()).where(
+            HubJobPosting.is_active.is_(True), HubJobPosting.job_family == "tech", _employer_posting()
+        )
+    )
+    # Older ads not labelled yet (the nightly backfill's queue): the screen
+    # says the tech count is still growing instead of presenting it as whole.
+    pending = await session.scalar(select(func.count(HubJobPosting.id)).where(sql_text(UNCLASSIFIED)))
     return {
         "regions": [{"value": v, "count": c} for v, c in regions.all()],
         "berufsfelder": [{"value": v, "count": c} for v, c in fields.all()],
+        "families": [{"value": "tech", "count": int(tech or 0)}],
+        "families_pending": int(pending or 0),
     }
 
 
@@ -1517,6 +1537,7 @@ async def _search_candidates(
     city: str | None,
     regions: list[str] | None,
     berufsfelder: list[str] | None,
+    families: list[str] | None = None,
 ):
     """Which employers the query matches, and the pieces built along the way.
 
@@ -1592,6 +1613,8 @@ async def _search_candidates(
         posting_filters.append(HubJobPosting.region.in_(regions))
     if berufsfelder:
         posting_filters.append(HubJobPosting.berufsfeld.in_(berufsfelder))
+    if families:
+        posting_filters.append(HubJobPosting.job_family.in_(families))
     if posting_filters:
         candidates = candidates.where(
             HubCompany.id.in_(
@@ -1787,6 +1810,7 @@ async def search_employers(
     city: str | None = None,
     regions: list[str] | None = None,
     berufsfelder: list[str] | None = None,
+    families: list[str] | None = None,
     min_roles: int = 0,
     limit: int = 40,
     roles_per_employer: int = 6,
@@ -1823,7 +1847,7 @@ async def search_employers(
         description_hits,
         posting_filters,
     ) = await _search_candidates(
-        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder
+        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder, families=families
     )
 
     # ONE predicate for what counts as a matching role, used for both the
@@ -2019,6 +2043,7 @@ async def count_employers(
     city: str | None = None,
     regions: list[str] | None = None,
     berufsfelder: list[str] | None = None,
+    families: list[str] | None = None,
     min_relevance: int = 1,
 ) -> int:
     """How many employers the query matches in total.
@@ -2035,7 +2060,7 @@ async def count_employers(
         description_hits,
         posting_filters,
     ) = await _search_candidates(
-        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder
+        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder, families=families
     )
     if min_relevance <= 1:
         # Nothing is excluded, so the cheap shape is also the correct one.
