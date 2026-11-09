@@ -119,6 +119,30 @@ def test_the_rule_agrees_with_hand_labels() -> None:
     ("React Native Entwickler (m/w/d)", None, True),
     ("Junior Consultant SAP FI/CO (m/w/d)", None, True),
     ("Entwickler (m/w/d) Rechtsanwaltssoftware", None, True),
+    # topic phrases never beat a builder role (re-review of #226)
+    ("Webentwickler (m/w/d) Online-Marketing", None, True),
+    ("Software Engineer Social Media Platform", None, True),
+    ("Software Engineer Real Estate Platform", None, True),
+    ("Data Scientist Human Resources", None, True),
+    ("Data Engineer Talent Acquisition Analytics", None, True),
+    ("Full Stack Developer Recipe App", None, True),
+    ("Java Entwickler Auftragsmanagement", None, True),
+    ("Software Developer Key Account Portal", None, True),
+    ("Backend Engineer Contracting Platform", None, True),
+    ("Frontend Developer Unternehmenskommunikation", None, True),
+    ("Cloud Engineer für unser Accountant-Team", None, True),
+    # ...and without a builder role they still exclude
+    ("Referent Unternehmenskommunikation (m/w/d)", None, False),
+    ("Talent Acquisition Partner (m/w/d)", None, False),
+    # a capital "IT" does not make every role IT
+    ("Teamassistenz IT (m/w/d)", None, False),
+    ("Steuerberater IT-Mandate (m/w/d)", None, False),
+    ("Fahrer IT-Logistik (m/w/d)", None, False),
+    ("Innendienst IT-Vertrieb (m/w/d)", None, False),
+    # administrators and compounds
+    ("Datenbank Administrator Oracle (m/w/d)", None, True),
+    ("Salesforce Administrator (m/w/d)", None, True),
+    ("Qualitätsingenieur Software (m/w/d)", None, True),
 ])
 def test_tech_is_decided_by_rules(title, field, tech) -> None:
     assert (families.job_family(title, field) == families.TECH) is tech

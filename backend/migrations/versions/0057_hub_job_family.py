@@ -2,7 +2,7 @@
 
 `hub/families.py` labels an ad `tech` or `other` with deterministic rules on
 its title and the Bundesagentur's occupational field; the Markt screen filters
-on it. Measured 2026-11-09 on all 702,630 open ads: 33,612 tech.
+on it. Measured 2026-11-09 on all 702,630 open ads: 33,573 tech.
 
 A nullable column without a default: metadata-only, no rewrite of the
 700k-row table. New ads are labelled at ingest; older ones by the nightly

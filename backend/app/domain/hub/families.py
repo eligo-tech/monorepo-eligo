@@ -49,28 +49,39 @@ RULES_VERSION = JOB_FAMILY_RULES
 _I = re.IGNORECASE
 
 #: The ROLE is not tech, whatever domain it serves — checked first, always
-#: wins. Role words only: a domain word ("Data Engineer Marketing", "SAP
-#: Berater Einkauf") must never exclude.
+#: wins. The role's head word only: "Vertriebsmitarbeiter Software" is
+#: sales, "Java Entwickler Vertriebssysteme" is not caught here.
 _ROLE_NOT_TECH = re.compile(
     r"\b(?:sales|vertriebs?)[- ]?(?:manager|mitarbeiter\w*|leiter\w*|leitung|ingenieur\w*|engineer|representative|"
     r"rep|berater\w*|consultant|assistent\w*|innendienst|außendienst|director|lead|executive|specialist|spezialist\w*|"
-    r"beauftragte\w*|team)\b|\bpre-?sales[- ](?:engineer|consultant|manager|specialist|spezialist\w*)|\binside sales\b|\bmitarbeiter\w* (?:im )?vertrieb\b|"
-    r"account (?:executive|manager)|key account|\bverkäufer|\baußendienst|"
+    r"beauftragte\w*|team)\b|\bpre-?sales[- ](?:engineer|consultant|manager|specialist|spezialist\w*)|"
+    r"\binside sales\b|\bmitarbeiter\w* (?:im )?vertrieb\b|\bIT[- ]vertrieb|"
+    r"account (?:executive|manager)|key account (?:manager|management|executive|betreuer\w*)|"
+    r"\bverkäufer|\baußendienst|\binnendienst|"
     r"business develop|geschäftsentwickl|"
     r"\brecruiter|\brecruiting[- ](?:manager|specialist|spezialist|partner|coordinator|koordinator|lead)|"
-    r"personalberater|personalreferent|talent acquisition|human resources|\bhr[- ](?:business partner|manager|"
-    r"generalist|referent|specialist)|personalentwickl|organisationsentwickl|"
+    r"personalberater|personalreferent|talent acquisition (?:partner|manager|specialist|lead)|"
+    r"\bhr[- ](?:business partner|manager|generalist|referent|specialist)|personalentwickl|organisationsentwickl|"
     r"\beinkäufer|\bbuyer\b|einkaufs(?:leiter|referent|sachbearbeiter|manager)|strategische[rn]? einkauf|"
     r"procurement (?:manager|specialist|lead)|"
-    r"buchhalter|accountant|\bjurist(?:in)?\b|\brechtsanwält|\brechtsanwalt(?:in)?\b|syndikus|legal counsel|\bit[- ]recht|"
-    r"commercial manager|interne kommunikation|unternehmenskommunikation|auftragsmanagement|"
+    r"buchhalter|steuerberater|\bjurist(?:in)?\b|\brechtsanwält|\brechtsanwalt(?:in)?\b|syndikus|legal counsel|"
+    r"\bit[- ]recht|teamassistenz|\bassistenz\b|sekretär|\bfahrer|kraftfahrer|lagerist|lagermitarbeiter|"
     r"\bmarketing[- ](?:manager|specialist|spezialist|lead|leiter\w*|leitung|assistent\w*|referent\w*|director|"
-    r"coordinator|koordinator\w*)|online[- ]marketing|social media|"
-    r"immobilienentwickl|projektentwickl|real estate|property develop|stadtentwickl|schulentwickl|"
-    r"\bprodukt-?entwickler|product developer|recipe|rezept|kitchen developer|culinary|talent developer|"
-    r"kaufmann|kauffrau|kaufleute|\bcontracting\b|"
+    r"coordinator|koordinator\w*)|"
+    r"immobilienentwickl|property develop|stadtentwickl|schulentwickl|"
+    r"\bprodukt-?entwickler|product developer|recipe developer|rezeptentwickl|kitchen developer|culinary|"
+    r"talent developer|kaufmann|kauffrau|kaufleute|"
     r"(?:steuerungs|\bnc|\bcnc|\bcam|\bsps|\bplc|roboter|maschinen)[- ]?programm|\bplc\b|\bcnc\b|"
     r"programmierer\w*\s*(?:\([^)]*\)\s*)?(?:cnc|cam|nc|sps)\b",
+    _I,
+)
+#: Topics that are not tech — they exclude only a title with no builder role
+#: in it: "Referent Unternehmenskommunikation" is other, "Frontend Developer
+#: Unternehmenskommunikation" is tech.
+_TOPIC_NOT_TECH = re.compile(
+    r"online[- ]marketing|social media|real estate|human resources|talent acquisition|\brecipe|\brezept|"
+    r"auftragsmanagement|projektentwickl|\bcontracting\b|unternehmenskommunikation|interne kommunikation|"
+    r"commercial manager|accountant|key account",
     _I,
 )
 #: The IT-commercial apprenticeship is filed under IT, despite "Kaufmann".
@@ -93,7 +104,7 @@ _STRONG = re.compile(
     rf"\b(?:{_QUALIFIER})(?:[- ][\w.+#]+)?[- ]?(?:{_ROLE_NOUN})"
     # software anywhere next to a builder role ("Entwickler Rechtsanwaltssoftware")
     r"|software\w*\b.*\b(?:entwickler|developer|engineer|programmier|architekt|architect|tester|ingenieur)"
-    r"|\b(?:entwickler|developer|engineer|programmier|ingenieur)\w*\b.*software"
+    r"|(?:entwickler|developer|engineer|programmier|ingenieur)\w*\b.*software"
     # SAP before or after the role
     r"|\bsap\b[- ](?:[\w/]+[- ]){0,2}?(?:berater|consultant|entwickler|developer|basis|inhouse|administrator|"
     r"architekt|architect|modulbetreuer|spezialist|specialist|analyst|experte|expert)"
@@ -106,6 +117,9 @@ _STRONG = re.compile(
     r"|\bki[- ](?:engineer|entwickler|experte|spezialist|manager|berater)"
     r"|\bai[- ](?:engineer|researcher|specialist|architect|developer|scientist)"
     r"|systemadministrat|system administrator|sysadmin|netzwerkadministrat|network administrator|"
+    r"datenbank ?administrat|database ?administrat|"
+    r"\b(?:salesforce|sap|jira|confluence|servicenow|m365|microsoft 365|office 365|azure|aws|linux|windows|"
+    r"citrix|vmware|active directory|exchange)[- ]?admin|"
     r"datenbankadministrat|database administrator|linux[- ]admin|windows[- ]admin|systemintegrat|"
     r"it-systemelektroniker|systemelektroniker für informations"
     r"|\b(?:cloud|solutions?|software|enterprise|daten|data|security|sicherheits|lösungs)[- ]?archite[ck]t"
@@ -154,17 +168,22 @@ def job_family(title: str | None, berufsfeld: str | None = None, *, source: str 
     """`tech` or `other` — never None: an ad passed through here is classified.
 
     In order: the IT-commercial apprenticeship is tech; a non-tech ROLE is
-    other; the Bundesagentur's IT fields, a capital "IT", or a strong tech
-    pattern are tech; a product/design/research role is tech on a tech board
-    or with a digital qualifier; a bare "Developer" is tech."""
+    other; a strong tech pattern is tech whatever the topic; a non-tech TOPIC
+    with no builder role is other; the Bundesagentur's IT fields or a capital
+    "IT" are tech; a product/design/research role is tech on a tech board or
+    with a digital qualifier; a bare "Developer" is tech."""
     text = title or ""
     if _IT_KAUFMANN.search(text):
         return TECH
     if _ROLE_NOT_TECH.search(text):
         return OTHER
-    if berufsfeld in TECH_FIELDS or _IT_WORD.search(text) or _STRONG.search(text):
+    if _STRONG.search(text):
         return TECH
-    if _PRODUCT.search(text) and (source in TECH_BOARDS or _DIGITAL.search(text) or _IT_WORD.search(text)):
+    if _TOPIC_NOT_TECH.search(text):
+        return OTHER
+    if berufsfeld in TECH_FIELDS or _IT_WORD.search(text):
+        return TECH
+    if _PRODUCT.search(text) and (source in TECH_BOARDS or _DIGITAL.search(text)):
         return TECH
     if _BARE.match(_strip_tags(text)):
         return TECH
