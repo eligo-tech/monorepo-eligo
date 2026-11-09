@@ -895,6 +895,15 @@ export const api = {
     }
     return res.json() as Promise<CVExtractionResultDTO>
   },
+
+  /**
+   * Read an attached Zeugnis or Zertifikat for what it attests.
+   *
+   * Returns PROPOSALS, each with the sentence it came from — nothing is
+   * written. Confirming is an ordinary PATCH, as with the transcript.
+   */
+  readDocument: (documentId: string) =>
+    request<CVExtractionResultDTO>(`/documents/${documentId}/read`, { method: 'POST' }),
 }
 
 export { ApiError }

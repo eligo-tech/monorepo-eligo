@@ -163,6 +163,32 @@ async def download_document(
     )
 
 
+@router.post(
+    "/{document_id}/read",
+    response_model=CVExtractionResult,
+    dependencies=[Depends(paid_ai_quota)],
+)
+async def read_document(
+    document_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> CVExtractionResult:
+    """Read an attached Zeugnis or Zertifikat for what it attests.
+
+    Returns PROPOSALS, each with the sentence it was read from. Nothing is
+    written to the candidate — the recruiter confirms, and that PATCH is the
+    human edit the record then holds.
+    """
+    try:
+        return await service.read_reference(
+            db, tenant_id=tenant_id, document_id=document_id
+        )
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found") from exc
+    except PreconditionFailed as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+
 @router.post("/extract-transcript", response_model=CVExtractionResult, dependencies=[Depends(paid_ai_quota)])
 async def extract_transcript(
     file: UploadFile = File(...),

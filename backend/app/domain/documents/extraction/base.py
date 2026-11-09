@@ -148,6 +148,60 @@ TRANSCRIPT_FIELD_ORDER: list[str] = list(TRANSCRIPT_FIELDS.keys())
 #: Every field either source can yield — the one place labels come from.
 FIELD_LABELS: dict[str, str] = {**CV_FIELDS, **QUALIFICATION_ONLY_FIELDS}
 
+# ── Zeugnisse & Zertifikate ─────────────────────────────────────────────────
+#
+# A reference is read for what it attests, and every value comes with the
+# sentence it was read from. The service drops a value whose sentence is not
+# in the document — the quote is what makes the proposal checkable.
+
+
+@dataclass(frozen=True)
+class ReferenceField:
+    """One value read from a Zeugnis or Zertifikat, with its verbatim quote."""
+
+    field: str
+    value: str
+    evidence: str
+    confidence: float
+
+
+ZEUGNIS_FIELDS: dict[str, str] = {
+    "employer": "Arbeitgeber",
+    "role_title": "Position",
+    "period": "Zeitraum",
+    "tasks": "Aufgaben",
+    "skills": "Skills",
+    "leaving_reason": "Beendigung",
+    "assessment_quote": "Leistungsbeurteilung",
+    "assessment_grade": "Gesamtnote (Interpretation)",
+}
+ZERTIFIKAT_FIELDS: dict[str, str] = {
+    "certificate_name": "Zertifikat",
+    "issuer": "Aussteller",
+    "issued_on": "Ausgestellt am",
+    "skills": "Skills",
+}
+#: Which fields each readable kind may yield. A Zertifikat read with Zeugnis
+#: vocabulary ("employer") must not get that value through.
+REFERENCE_FIELDS_BY_KIND: dict[str, dict[str, str]] = {
+    "zeugnis": ZEUGNIS_FIELDS,
+    "zertifikat": ZERTIFIKAT_FIELDS,
+}
+REFERENCE_FIELDS: dict[str, str] = {**ZEUGNIS_FIELDS, **ZERTIFIKAT_FIELDS}
+REFERENCE_FIELD_ORDER: list[str] = list(REFERENCE_FIELDS.keys())
+
+#: Values that must themselves appear in the text — names, dates, titles. The
+#: others (a task summary, a grade) only have to quote a real sentence.
+REFERENCE_VERBATIM_FIELDS = frozenset(
+    {"employer", "role_title", "period", "leaving_reason", "assessment_quote",
+     "certificate_name", "issuer", "issued_on"}
+)
+#: A reading of coded Zeugnissprache, not a fact the document states.
+REFERENCE_INTERPRETED_FIELDS = frozenset({"assessment_grade"})
+#: The German grade scale — the only values an interpretation may take.
+ZEUGNIS_GRADES = ("sehr gut", "gut", "befriedigend", "ausreichend", "mangelhaft")
+
+
 # The subset the canonical Candidate row can store today; the rest are extracted
 # and shown for review (persisting them is a schema follow-up).
 PERSISTABLE_FIELDS = (
@@ -176,3 +230,8 @@ class CVExtractor(Protocol):
     # the caller says so — guessing a salary floor out of a regex would be
     # worse than an empty form.
     def extract_qualification(self, text: str) -> list[ExtractedField]: ...
+
+    # Optional: read a Zeugnis or Zertifikat (`kind`) for `REFERENCE_FIELDS`,
+    # each value with the sentence it came from. Same rule: a provider that
+    # cannot do it yields nothing.
+    def extract_reference(self, text: str, kind: str) -> list[ReferenceField]: ...

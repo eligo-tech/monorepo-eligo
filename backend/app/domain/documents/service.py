@@ -14,6 +14,8 @@ state, never over model text.
 from __future__ import annotations
 
 import asyncio
+import re
+import unicodedata
 
 import uuid
 
@@ -39,7 +41,12 @@ from app.domain.documents.extraction.base import (
     CVSections,
     FIELD_LABELS,
     FIELD_ORDER,
+    REFERENCE_FIELDS_BY_KIND,
+    REFERENCE_INTERPRETED_FIELDS,
+    REFERENCE_VERBATIM_FIELDS,
     TRANSCRIPT_FIELD_ORDER,
+    ZEUGNIS_GRADES,
+    ReferenceField,
 )
 from app.domain.documents.gate import GateOutcome, PreconditionFailed
 from app.domain.documents.schemas import CVExtractionResult, CVField
@@ -513,6 +520,192 @@ async def get_document(
             CandidateDocument.tenant_id == tenant_id,
             CandidateDocument.id == document_id,
         )
+    )
+
+
+# ── Zeugnisse & Zertifikate ─────────────────────────────────────────────────
+
+#: The kinds a reading exists for. A CV has its own path; a transcript too.
+READABLE_KINDS = frozenset(REFERENCE_FIELDS_BY_KIND)
+#: An interpretation never arrives looking surer than this, whatever the model
+#: claims — below the review threshold, so it is always confirmed by a person.
+_INTERPRETATION_CEILING = 0.5
+#: Splits "01.03.2019 – 31.12.2023" / "03/2019 - 12/2023" / "… bis zum …".
+#: A bare hyphen is NOT a separator: it is inside every ISO date, and
+#: "2019-03-01" split into "2019", "03", "01" matched any Zeugnis.
+_RANGE_SPLIT = re.compile(r"\s+-\s+|\s*[–—]\s*|\s+bis\s+(?:zum\s+)?", re.IGNORECASE)
+#: What an assessment sentence talks about. A grade quoting anything else
+#: ("war", "Herr") cites nothing.
+_ASSESSMENT_WORDS = ("zufrieden", "leistung", "erwartung")
+
+
+def _skill_in_text(skill: str, text: str) -> bool:
+    """A skill counts only if the document names it as a word of its own.
+
+    Skills feed the deterministic hard filters, so "Java" must not be read
+    out of "JavaScript", nor "C" out of every text. Whitespace inside a skill
+    ("Spring Boot") may be any run of whitespace, line breaks included.
+    """
+    tokens = unicodedata.normalize("NFKC", skill).split()
+    if not tokens:
+        return False
+    body = r"\s+".join(re.escape(t) for t in tokens)
+    pattern = r"(?<![\w#+])" + body + r"(?![\w#+])"
+    return re.search(pattern, unicodedata.normalize("NFKC", text), re.IGNORECASE) is not None
+
+
+def _value_in_text(f: ReferenceField, text: str) -> bool:
+    """Factual values must be in the document themselves, not only their quote.
+
+    A period is the exception in form, not in rule: "01.03.2019 – 31.12.2023"
+    is never written that way in a Zeugnis ("vom 01.03.2019 bis zum …"), so
+    each end of the range must occur on its own.
+    """
+    if f.field == "period":
+        parts = [p for p in _RANGE_SPLIT.split(f.value) if p and p.strip()]
+        return bool(parts) and all(gate.is_grounded(p, text, min_len=4) for p in parts)
+    return gate.is_grounded(f.value, text)
+
+
+def _ground_reference(
+    raw: list[ReferenceField], text: str, kind: str
+) -> tuple[list[CVField], list[str]]:
+    """Keep what the document supports; say what was dropped and why.
+
+    Deterministic, over the real text — the model's quote is a claim like any
+    other, and it is checked rather than trusted.
+    """
+    labels = REFERENCE_FIELDS_BY_KIND[kind]
+    order = {name: i for i, name in enumerate(labels)}
+    kept: dict[str, CVField] = {}
+    review: list[str] = []
+
+    for f in raw:
+        if f.field not in labels or f.field in kept:
+            continue
+        label = labels[f.field]
+        value = f.value.strip()
+        evidence = f.evidence.strip()
+        if not value:
+            continue
+        if not gate.is_grounded(evidence, text):
+            review.append(f"{label}: Zitat nicht im Dokument gefunden — verworfen")
+            continue
+
+        interpretation = f.field in REFERENCE_INTERPRETED_FIELDS
+        confidence = max(0.0, min(1.0, f.confidence))
+        if f.field == "assessment_grade":
+            value = value.lower()
+            if value not in ZEUGNIS_GRADES:
+                review.append(f"{label}: „{f.value}“ ist keine Zeugnisnote — verworfen")
+                continue
+            cites = unicodedata.normalize("NFKC", evidence).casefold()
+            if len(evidence.split()) < 3 or not any(w in cites for w in _ASSESSMENT_WORDS):
+                review.append(f"{label}: Zitat ist keine Leistungsbeurteilung — verworfen")
+                continue
+            confidence = min(confidence, _INTERPRETATION_CEILING)
+        elif f.field in ("skills", "tasks"):
+            # A list is only as grounded as each of its items: one real quote
+            # must not carry an invented task or skill along with it.
+            check = _skill_in_text if f.field == "skills" else gate.is_grounded
+            items = [s.strip() for s in value.split(";") if s.strip()]
+            found = [s for s in items if check(s, text)]
+            review += [
+                f"{label}: „{s}“ nicht im Dokument gefunden — verworfen"
+                for s in items
+                if s not in found
+            ]
+            if not found:
+                continue
+            value = "; ".join(found)
+        elif f.field in REFERENCE_VERBATIM_FIELDS and not _value_in_text(f, text):
+            review.append(f"{label}: „{value}“ nicht im Dokument gefunden — verworfen")
+            continue
+
+        needs_review = interpretation or confidence < HUMAN_REVIEW_THRESHOLD
+        if needs_review and not interpretation:
+            review.append(f"{label}: unsicher gelesen ({confidence:.0%})")
+        kept[f.field] = CVField(
+            field=f.field,
+            label=label,
+            value=value,
+            confidence=round(confidence, 2),
+            needs_review=needs_review,
+            evidence=evidence,
+            interpretation=interpretation,
+        )
+
+    fields = sorted(kept.values(), key=lambda c: order[c.field])
+    return fields, review
+
+
+def _run_reference_extractor(text: str, kind: str) -> tuple[list[ReferenceField], str]:
+    """Ask the configured provider to read a Zeugnis or Zertifikat.
+
+    The heuristic fallback cannot, and yields nothing rather than guessing —
+    same reasoning as the transcript reader.
+    """
+    extractor = get_cv_extractor()
+    read = getattr(extractor, "extract_reference", None)
+    if read is None:
+        return [], f"{extractor.name} (kann keine Zeugnisse lesen)"
+    try:
+        return read(text, kind), extractor.name
+    except Exception as exc:
+        logger.warning("reference extractor %s failed (%s)", extractor.name, exc)
+        return [], f"{extractor.name} (Fehler: {type(exc).__name__})"
+
+
+async def read_reference(
+    session: AsyncSession, *, tenant_id: uuid.UUID, document_id: uuid.UUID
+) -> CVExtractionResult:
+    """Read an attached Zeugnis or Zertifikat — and PROPOSE.
+
+    The same seam as the transcript: precondition (the file has text) →
+    extract → grounding → confidence gate, and **nothing is written.** The
+    recruiter ticks what is right and the cockpit's ordinary PATCH records it
+    as the human edit it then is. The file is already stored; reading it does
+    not store it again.
+
+    Raises `LookupError` for a document this workspace does not hold, and
+    `PreconditionFailed` for a kind that is not read or a file with no text.
+    """
+    doc = await get_document(session, tenant_id=tenant_id, document_id=document_id)
+    if doc is None:
+        raise LookupError("document not found")
+    if doc.kind not in READABLE_KINDS:
+        raise PreconditionFailed(
+            "nur Zeugnisse und Zertifikate können gelesen werden"
+        )
+
+    if doc.content_type.startswith("image/"):
+        text = ""  # a photo has no text layer; OCR is not built
+    else:
+        text = await asyncio.to_thread(_document_text, doc.content, doc.content_type)
+    notes: list[str] = []
+
+    pre = gate.evaluate(gate.PRECONDITIONS, {"document": {"text_chars": len(text)}})
+    notes += [o.as_note() for o in pre]
+    if any(not o.ok for o in pre):
+        reason = next((o.reason for o in pre if not o.ok), "precondition failed")
+        raise PreconditionFailed(reason or "precondition failed")
+
+    raw, extractor_name = await asyncio.to_thread(_run_reference_extractor, text, doc.kind)
+    notes.append(f"gelesen via {extractor_name}")
+    fields, review_items = _ground_reference(raw, text, doc.kind)
+    if not fields:
+        review_items.append(
+            "keine Angaben aus dem Dokument gelesen — bitte manuell erfassen"
+        )
+    notes.append("Vorschläge — nichts wurde in den Datensatz geschrieben")
+
+    return CVExtractionResult(
+        document_name=doc.filename,
+        fields=fields,
+        review_items=list(dict.fromkeys(review_items)),
+        notes=notes,
+        candidate_id=doc.candidate_id,
+        text_chars=len(text),
     )
 
 

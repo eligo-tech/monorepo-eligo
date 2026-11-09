@@ -43,3 +43,14 @@ def test_email_validator():
     assert gate.email_is_valid("a.b@example.com") is True
     assert gate.email_is_valid("2009 - 2012") is False
     assert gate.email_is_valid(None) is False
+
+def test_grounding_keeps_umlauts_and_folds_eszett() -> None:
+    """`_norm` used to delete every non-ASCII letter: 'Möller' and 'Müller'
+    were the same word, and NFD text failed against its own quote."""
+    import unicodedata
+
+    from app.domain.documents.gate import is_grounded
+
+    assert not is_grounded("Müller GmbH", "bei der Möller GmbH")
+    assert is_grounded("verlässt uns", unicodedata.normalize("NFD", "Er verlässt uns."))
+    assert is_grounded("Straße", "Hauptstrasse 1")

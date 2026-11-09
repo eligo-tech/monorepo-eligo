@@ -1,5 +1,5 @@
-// Everything on file for one candidate — and the one upload that is read
-// rather than only stored.
+// Everything on file for one candidate — and the files that are read rather
+// than only stored: the transcript, and any Zeugnis or Zertifikat.
 //
 // `data/examples/metadata_quailfication.txt` asks for two things the dossier
 // could not hold: the Zeugnisse and Zertifikate a client wants before an
@@ -11,6 +11,11 @@
 // hedged speech ("so um die 100") must not put a number into the record over
 // a recruiter's signature; confirming is a click, and that click is an
 // ordinary edit the receipt can honestly attribute to a person.
+//
+// A Zeugnis or Zertifikat is read the same way, with one addition: every
+// proposal shows the sentence it came from, and the server has already
+// dropped any whose sentence is not in the document. The grade decoded from
+// Zeugnissprache is an interpretation and is shown and stored as one.
 
 import { locale } from '@/i18n/format'
 
@@ -21,6 +26,7 @@ import { Check, Download, FileText, Paperclip, Sparkles } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
 import { ReaddDeclined, withReaddConfirm } from '../../erasure/readd'
+import { buildReferencePatch } from './referenceMerge'
 import type {
   CVExtractionResultDTO,
   CandidateDTO,
@@ -63,6 +69,10 @@ const TO_COLUMN: Record<string, keyof CandidateUpdatePayload> = {
   profile_summary: 'profile_summary',
 }
 
+/** The kinds the server can read for proposals (`POST /documents/{id}/read`). */
+type ReadableKind = 'zeugnis' | 'zertifikat'
+const READABLE: ReadonlySet<DocumentKind> = new Set<DocumentKind>(['zeugnis', 'zertifikat'])
+
 const NUMERIC = new Set(['current_salary', 'salary_minimum', 'expected_salary'])
 
 /** "92.000 €" → 92000. Returns null when nothing numeric is in there, so a
@@ -98,6 +108,9 @@ export function AttachmentsPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [proposals, setProposals] = useState<CVExtractionResultDTO | null>(null)
+  /** What the open proposals were read from — decides how they are confirmed. */
+  const [source, setSource] = useState<'transkript' | ReadableKind>('transkript')
+  const [notice, setNotice] = useState<string | null>(null)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const fileRef = useRef<HTMLInputElement>(null)
   const transcriptRef = useRef<HTMLInputElement>(null)
@@ -136,9 +149,11 @@ export function AttachmentsPanel({
   async function readTranscript(file: File) {
     setBusy(true)
     setError(null)
+    setNotice(null)
     setProposals(null)
     try {
       const result = await api.extractTranscript(candidateId, file)
+      setSource('transkript')
       setProposals(result)
       // Pre-tick what was read plainly; anything hedged stays unticked so it
       // is a decision, not a default.
@@ -156,8 +171,67 @@ export function AttachmentsPanel({
     setBusy(false)
   }
 
+  async function readReference(doc: CandidateDocumentDTO) {
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    setProposals(null)
+    try {
+      const result = await api.readDocument(doc.id)
+      setSource(doc.kind as ReadableKind)
+      setProposals(result)
+      // An interpretation is never a default, whatever its confidence.
+      setChosen(
+        new Set(
+          result.fields
+            .filter((f) => !f.needs_review && !f.interpretation)
+            .map((f) => f.field),
+        ),
+      )
+    } catch (e) {
+      setError(
+        // Only the no-text refusal is a scan; any other 422 says what it is.
+        e instanceof ApiError && e.status === 422 && e.message.includes('OCR')
+          ? t('Dieses Dokument enthält keinen lesbaren Text (Scan oder Foto) — bitte die Angaben von Hand erfassen.')
+          : describe(e),
+      )
+    }
+    setBusy(false)
+  }
+
+  /** Zeugnis/Zertifikat: merged into the record as it is NOW. The PATCH
+   *  replaces whole lists, so the current candidate is read first and the
+   *  write carries its version — a change in between is refused, not lost. */
+  async function confirmReference(kind: ReadableKind) {
+    if (!proposals) return
+    setBusy(true)
+    setError(null)
+    try {
+      const current = await api.candidate(candidateId)
+      const patch = buildReferencePatch(current, proposals.fields, chosen, kind)
+      if (Object.keys(patch).length === 0) {
+        setNotice(t('Alles Ausgewählte steht schon im Datensatz.'))
+        setProposals(null)
+      } else {
+        const updated = await withReaddConfirm((override) =>
+          api.updateCandidate(candidateId, { ...patch, override_suppression: override || undefined }),
+        )
+        onCandidateChanged?.(updated)
+        setProposals(null)
+      }
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 409
+          ? t('Der Datensatz wurde gerade geändert — bitte erneut übernehmen.')
+          : describe(e),
+      )
+    }
+    setBusy(false)
+  }
+
   async function confirmChosen() {
     if (!proposals) return
+    if (source !== 'transkript') return confirmReference(source)
     const patch: CandidateUpdatePayload = {}
     for (const field of proposals.fields) {
       if (!chosen.has(field.field)) continue
@@ -252,6 +326,7 @@ export function AttachmentsPanel({
       </div>
 
       {error && <p className="text-[13px] text-coral-400">{error}</p>}
+      {notice && <p className="text-[13px] text-cockpit-dim">{notice}</p>}
 
       {proposals && (
         <div className="space-y-3 rounded-xl border border-lav-600/50 bg-lav-800/25 p-4">
@@ -260,12 +335,14 @@ export function AttachmentsPanel({
           </p>
           {proposals.fields.length === 0 ? (
             <p className="text-[13px] text-cockpit-dim">
-              {t('Aus dem Transkript konnte nichts sicher gelesen werden — bitte die Felder von Hand erfassen. Die Datei ist gespeichert.')}
+              {source === 'transkript'
+                ? t('Aus dem Transkript konnte nichts sicher gelesen werden — bitte die Felder von Hand erfassen. Die Datei ist gespeichert.')
+                : t('Aus dem Dokument konnte nichts belegt gelesen werden — bitte die Angaben von Hand erfassen.')}
             </p>
           ) : (
             <ul className="space-y-1.5">
               {proposals.fields.map((f) => {
-                const known = f.field in TO_COLUMN
+                const known = source !== 'transkript' || f.field in TO_COLUMN
                 return (
                   <li key={f.field} className="flex items-start gap-2.5">
                     <button
@@ -284,11 +361,25 @@ export function AttachmentsPanel({
                       <Check className="h-3 w-3" />
                     </button>
                     <span className="min-w-0 text-[13px] leading-relaxed text-cockpit-dim">
-                      <span className="text-cockpit-text">{f.label}:</span> {f.value}
-                      {f.needs_review && (
+                      <span className="text-cockpit-text">
+                        {source === 'transkript' ? f.label : t(f.label)}:
+                      </span>{' '}
+                      {f.value}
+                      {f.interpretation ? (
                         <Chip tone="gold" className="ml-2">
-                          unsicher {Math.round(f.confidence * 100)}%
+                          {t('Interpretation')}
                         </Chip>
+                      ) : (
+                        f.needs_review && (
+                          <Chip tone="gold" className="ml-2">
+                            unsicher {Math.round(f.confidence * 100)}%
+                          </Chip>
+                        )
+                      )}
+                      {f.evidence && (
+                        <span className="mt-0.5 block text-[12px] italic text-cockpit-faint">
+                          „{f.evidence}“
+                        </span>
                       )}
                     </span>
                   </li>
@@ -327,6 +418,17 @@ export function AttachmentsPanel({
                 {doc.filename}
               </span>
               <Chip>{KIND_LABEL[doc.kind] ?? doc.kind}</Chip>
+              {READABLE.has(doc.kind) && (
+                <button
+                  type="button"
+                  onClick={() => void readReference(doc)}
+                  disabled={busy}
+                  title={t('Dokument auswerten — schlägt Angaben mit Beleg vor, schreibt nichts')}
+                  className="flex shrink-0 items-center gap-1 text-[12px] text-cockpit-faint transition-colors hover:text-lav-300 disabled:opacity-40"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> {t('Auswerten')}
+                </button>
+              )}
               <span className="shrink-0 font-mono text-[12px] text-cockpit-faint">
                 {kb(doc.byte_size)} · {dateDe(doc.created_at)}
               </span>
