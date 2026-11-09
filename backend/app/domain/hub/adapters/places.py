@@ -120,9 +120,18 @@ def _country_word(segment: str) -> tuple[str, bool] | None:
     return None
 
 
+_US_ZIP = re.compile(r"\s+\d{5}(?:-\d{4})?$")
+
+
+def _bare(segment: str) -> str:
+    """The segment without notes in parentheses or a trailing US ZIP code:
+    "VA (Remote)" → "VA", "NH 03570" → "NH"."""
+    return _US_ZIP.sub("", _PARENS.sub(" ", segment).strip()).strip()
+
+
 def _foreign(segment: str) -> bool:
     raw = segment.strip()
-    texts = [raw, *_PARENS.findall(raw)]
+    texts = [raw, _bare(raw), *_PARENS.findall(raw)]
     return any(_fold(t) in _FOREIGN or t.strip() in _US_CODES for t in texts)
 
 
@@ -144,7 +153,7 @@ def _one(part: str) -> dict[str, Any] | None:
         return None
     named: dict[int, tuple[str, bool]] = {}  # segment index → (country, bare code?)
     for i, seg in enumerate(segments):
-        word = _country_word(seg) or next(
+        word = _country_word(seg) or _country_word(_bare(seg)) or next(
             (w for w in (_country_word(inner) for inner in _PARENS.findall(seg)) if w), None)
         if word:
             named[i] = word
