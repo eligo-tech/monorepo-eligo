@@ -59,6 +59,25 @@ def _lv() -> list:
     ("Remote, US", None),
     ("Remote", None),
     ("Agile Robots SE", None),
+    # US and other look-alikes: a wrong country silently merges companies.
+    ("Vienna, VA", None),
+    ("Vienna, Virginia", None),
+    ("Wien, Virginia", None),
+    ("Geneva, IL", None),
+    ("Geneva, NY", None),
+    ("Remote - Vienna, VA", None),
+    ("New York, NY - Hamburg", None),
+    ("Canada - Hamburg", None),
+    ("Remote (US) - Hamburg", None),
+    ("Wilmington, DE", None),
+    ("Remote - Berlin", ("DEUTSCHLAND", "Berlin", None)),
+    ("Berlin, DE", ("DEUTSCHLAND", "Berlin", None)),
+    ("Vienna", ("OESTERREICH", "Vienna", None)),
+    ("Vienna, Austria", ("OESTERREICH", "Vienna", None)),
+    # A year is not a postcode; a postcode sits next to its town.
+    ("Zurich - Graduate Program 2025", ("SCHWEIZ", "Zurich", None)),
+    ("8001 Zürich, Switzerland", ("SCHWEIZ", "Zürich", "8001")),
+    ("Frankfurt (Oder), Germany", ("DEUTSCHLAND", "Frankfurt (Oder)", None)),
 ])
 def test_a_location_text_is_read_as_a_dach_place_or_not_at_all(text, expected) -> None:
     place = places.dach_place(text)
@@ -111,6 +130,15 @@ def test_a_lever_job_elsewhere_counts_only_with_a_dach_town() -> None:
     assert lever.dach_place(job) is None
     job["categories"]["allLocations"] = ["London", "Berlin"]
     assert lever.dach_place(job)["city"] == "Berlin"
+    # The job says US: its own location text is not read as Austria.
+    job["country"], job["categories"]["location"] = "US", "Vienna, VA"
+    job["categories"]["allLocations"] = ["Vienna, VA"]
+    assert lever.dach_place(job) is None
+
+
+def test_a_lever_board_called_eu_is_refused() -> None:
+    """Its references would read as the EU instance's."""
+    assert not lever.GLOBAL.valid_slug("eu") and lever.EU.valid_slug("eu-startup")
 
 
 @pytest.mark.parametrize("body", [b"<html/>", b'{"ok": false}', b""])

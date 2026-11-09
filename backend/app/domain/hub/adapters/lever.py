@@ -79,10 +79,12 @@ def dach_place(job: dict) -> dict[str, Any] | None:
             town = ""
         return {"country": country, "city": town or None, "postal_code": None, "street": None,
                 "region": None, "label": location}
-    place = places.dach_place(location, *others)
-    if place and (place["city"] or _str(job.get("country")) is None):
-        return place
-    return None
+    if _str(job.get("country")) is None:
+        return places.dach_place(location, *others)
+    # The job names a country outside DACH: its own location is that place;
+    # only another location naming a DACH town makes it a DACH job.
+    place = places.dach_place(*others)
+    return place if place and place["city"] else None
 
 
 def _text(job: dict) -> str | None:
@@ -146,9 +148,9 @@ class _Region:
     def __init__(self, ats: str, api: str, board: str, prefix: str) -> None:
         self.ats, self.api, self.board, self.prefix = ats, api, board, prefix
 
-    @staticmethod
-    def valid_slug(slug: str) -> bool:
-        return bool(_SLUG.match(slug or ""))
+    def valid_slug(self, slug: str) -> bool:
+        """A global board called "eu" would read as the EU instance's."""
+        return bool(_SLUG.match(slug or "")) and not (self.prefix == "" and slug == "eu")
 
     def feed_url(self, slug: str) -> str:
         return f"{self.api}/v0/postings/{quote(slug, safe='')}?mode=json"
