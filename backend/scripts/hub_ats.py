@@ -216,7 +216,7 @@ async def discover_ashby(api: Api, client: httpx.AsyncClient, *, minutes: float 
 
 async def sync(api: Api, *, minutes: float, batch: int = 20, ats: str = "personio") -> int:
     deadline = time.monotonic() + minutes * 60
-    totals = {"boards": 0, "created": 0, "updated": 0, "closed": 0, "failed": 0}
+    totals = {"boards": 0, "created": 0, "updated": 0, "closed": 0, "failed": 0, "unnamed": 0}
     while time.monotonic() < deadline:
         result = await api.call("POST", "/hub/ats/sync", params={"limit": batch, "ats": ats})
         for key in totals:
@@ -226,7 +226,8 @@ async def sync(api: Api, *, minutes: float, batch: int = 20, ats: str = "personi
         if not result.get("more_due") or not result.get("boards"):
             break
     print(f"  sync {ats}: {totals['boards']:,} boards — +{totals['created']:,} new, "
-          f"~{totals['updated']:,} seen again, {totals['closed']:,} closed, {totals['failed']:,} failed")
+          f"~{totals['updated']:,} seen again, {totals['closed']:,} closed, {totals['failed']:,} failed"
+          + (f", {totals['unnamed']:,} with DACH jobs but no company name" if totals["unnamed"] else ""))
     if totals["boards"] >= 20 and totals["failed"] > totals["boards"] / 2:
         print("FAILED: most boards could not be read", file=sys.stderr)
         return 1

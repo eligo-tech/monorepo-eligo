@@ -110,6 +110,9 @@ def _country(value: Any) -> str | None:
 def _place(entry: dict) -> dict[str, Any] | None:
     """One location entry → a DACH place, or None when it is not in DACH."""
     address = ((entry.get("address") or {}).get("postalAddress") or {}) if isinstance(entry, dict) else {}
+    # The location label is read only when it names a country: a town alone
+    # ("Berlin") without an address is rare (country is on 99% of jobs) and
+    # guessing its country from the name is not worth a wrong match.
     country = _country(address.get("addressCountry")) or _country(entry.get("location"))
     if country is None:
         return None

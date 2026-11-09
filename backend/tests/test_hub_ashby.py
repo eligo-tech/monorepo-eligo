@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.domain.hub import ats
 from app.domain.hub.adapters import ashby
+from app.domain.hub.adapters.base import SourceUnreachable
 from app.domain.hub.adapters.boards import FeedAnswer, FeedUnreadable
 from app.domain.hub.models import HubAtsBoard, HubJobPosting
 from app.domain.hub.schemas import source_detail_url
@@ -103,9 +104,10 @@ def test_the_link_opens_the_job_on_the_employers_board() -> None:
 class _AshbyBoard:
     name = "ashby"
 
-    def __init__(self, data: dict | None = None, status: int = 200) -> None:
+    def __init__(self, data: dict | None = None, status: int = 200, company: str | None = "n8n") -> None:
         self.body = json.dumps(data).encode() if data is not None else b""
         self.status = status
+        self.company = company
         self.name_reads = 0
 
     async def fetch_feed(self, slug: str) -> FeedAnswer:
@@ -113,7 +115,9 @@ class _AshbyBoard:
 
     async def fetch_company_name(self, slug: str) -> str | None:
         self.name_reads += 1
-        return "n8n"
+        if self.company == "down":
+            raise SourceUnreachable("ConnectError")
+        return self.company
 
 
 async def _sync(source: _AshbyBoard, slug: str = "n8n") -> dict:
@@ -153,6 +157,55 @@ async def test_a_board_with_no_dach_job_is_looked_at_monthly_and_never_named() -
     due = board.next_fetch_at if board.next_fetch_at.tzinfo else board.next_fetch_at.replace(tzinfo=dt.UTC)
     assert board.status == "elsewhere" and source.name_reads == 0
     assert due - dt.datetime.now(dt.UTC) > dt.timedelta(days=29)
+
+
+async def _ashby_board(slug: str = "n8n") -> HubAtsBoard:
+    async with SessionLocal() as s:
+        return await s.scalar(select(HubAtsBoard).where(HubAtsBoard.ats == "ashby", HubAtsBoard.slug == slug))
+
+
+@pytest.mark.parametrize("company", [None, "down"])
+async def test_a_board_without_a_name_is_marked_and_asked_weekly(company) -> None:
+    async with SessionLocal() as s:
+        await ats.add_boards(s, ats="ashby", slugs=["n8n"], discovered_via="test")
+    first = await _sync(_AshbyBoard(_board_json(), company=company))
+    board = await _ashby_board()
+    due = board.next_fetch_at if board.next_fetch_at.tzinfo else board.next_fetch_at.replace(tzinfo=dt.UTC)
+    assert first["created"] == 0 and first.get("unnamed") is True
+    assert board.status == "unnamed" and due - dt.datetime.now(dt.UTC) > dt.timedelta(days=6)
+    # Named on a later read: its jobs are stored then.
+    later = await _sync(_AshbyBoard(_board_json()))
+    assert later["created"] == 3 and (await _ashby_board()).status == "active"
+
+
+async def test_a_talent_pool_alone_does_not_cost_a_name_lookup() -> None:
+    async with SessionLocal() as s:
+        await ats.add_boards(s, ats="ashby", slugs=["pool-only"], discovered_via="test")
+    data = _board_json()
+    data["jobs"] = [dict(data["jobs"][0], title="Engineering Talent Pool")]
+    source = _AshbyBoard(data)
+    await _sync(source, "pool-only")
+    assert source.name_reads == 0
+
+
+async def test_an_empty_ashby_board_closes_only_on_the_second_answer() -> None:
+    async with SessionLocal() as s:
+        await ats.add_boards(s, ats="ashby", slugs=["n8n"], discovered_via="test")
+    await _sync(_AshbyBoard(_board_json()))
+    once = await _sync(_AshbyBoard({"apiVersion": "1", "jobs": []}))
+    assert once["closed"] == 0
+    twice = await _sync(_AshbyBoard({"apiVersion": "1", "jobs": []}))
+    assert twice["closed"] == 3
+
+
+@pytest.mark.parametrize("answer", [_AshbyBoard(None, status=503), _AshbyBoard(None, status=429),
+                                    _AshbyBoard(None, status=599)])
+async def test_a_failed_ashby_answer_closes_nothing(answer) -> None:
+    async with SessionLocal() as s:
+        await ats.add_boards(s, ats="ashby", slugs=["n8n"], discovered_via="test")
+    await _sync(_AshbyBoard(_board_json()))
+    outcome = await _sync(answer)
+    assert outcome["closed"] == 0 and outcome["error"].startswith("HTTP")
 
 
 async def test_ashby_and_personio_boards_are_leased_apart() -> None:

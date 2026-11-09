@@ -230,8 +230,9 @@ async def sync_board(
         await _resolve_offices(adapter, board, positions, now=now, deadline=deadline)
     except SourceUnreachable:
         pass  # what resolved is on the board already; the rest waits
-    if (board.company_name is None and hasattr(adapter, "fetch_company_name")
-            and any(getattr(p, "place", None) for p in positions)):
+    has_dach_job = any(getattr(p, "place", None) and not personio._NOT_A_JOB.search(p.title)
+                       for p in positions)
+    if board.company_name is None and hasattr(adapter, "fetch_company_name") and has_dach_job:
         try:  # one page per board, once — only for a board with a DACH job
             board.company_name = await adapter.fetch_company_name(board.slug)
         except SourceUnreachable:
@@ -269,14 +270,23 @@ async def sync_board(
     else:
         board.empty_streak = 1  # once: maybe a glitch — close nothing yet
 
+    # DACH jobs, but no name to store them under (the board page did not say
+    # it): visible as its own status, and asked again weekly, not daily.
+    unnamed = bool(listed) and not board.company_name and hasattr(adapter, "fetch_company_name")
     if positions:
         board.status = "active" if snapshot else "elsewhere"
+    if unnamed:
+        board.status = "unnamed"
+        outcome["unnamed"] = True
+        logger.warning("ats: %s board %s has DACH jobs but no company name", board.ats, board.slug)
     elif board.empty_streak >= 2:
         board.status = "gone" if answer.status in _NO_BOARD else "empty"
     # Confirm a first "no jobs" tomorrow, not in a week; same for offices due a read.
     unresolved = any(not _resolved(board.offices or {}, p.office, now) for p in positions)
     if board.empty_streak == 1 or unresolved:
         board.next_fetch_at = now + REFRESH["active"]
+    elif board.status == "unnamed":
+        board.next_fetch_at = now + REFRESH["empty"]
     elif board.status == "elsewhere":
         board.next_fetch_at = now + getattr(source, "ELSEWHERE_REFRESH", REFRESH["elsewhere"])
     else:
@@ -305,7 +315,7 @@ async def sync_due(
     budget also bounds job-page reads inside a board."""
     now = dt.datetime.now(dt.UTC)
     boards = await _lease(session, limit, now, adapter.name)
-    totals: dict = {"boards": 0, "created": 0, "updated": 0, "closed": 0, "failed": 0}
+    totals: dict = {"boards": 0, "created": 0, "updated": 0, "closed": 0, "failed": 0, "unnamed": 0}
     started, streak = _clock(), 0
     deadline = started + time_budget
     for i, board in enumerate(boards):
@@ -326,6 +336,7 @@ async def sync_due(
         totals["boards"] += 1
         for key in ("created", "updated", "closed"):
             totals[key] += outcome.get(key, 0)
+        totals["unnamed"] += bool(outcome.get("unnamed"))
         if outcome.get("error"):
             totals["failed"] += 1
             streak = streak + 1 if outcome["error"] == "unreachable" else 0

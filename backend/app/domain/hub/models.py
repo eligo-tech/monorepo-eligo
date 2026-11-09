@@ -583,6 +583,7 @@ class HubAtsBoard(Base, IDMixin, TimestampMixin):
     ats: Mapped[str] = mapped_column(String(30), nullable=False)
     slug: Mapped[str] = mapped_column(String(120), nullable=False)
     #: new · active (DACH jobs) · elsewhere (jobs, none in DACH) · empty · gone · failing
+    #: · unnamed (DACH jobs, but the board page gave no company name — asked weekly)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
     company_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     discovered_via: Mapped[str] = mapped_column(String(60), nullable=False)
