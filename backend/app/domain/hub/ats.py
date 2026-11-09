@@ -1,4 +1,4 @@
-"""Employers' own ATS boards → the corpus (Personio, Ashby).
+"""Employers' own ATS boards → the corpus (Personio, Ashby, Greenhouse, Lever).
 
 The nightly job (`scripts/hub_ats.py`, machine-only routes) drives two steps:
 
@@ -26,10 +26,10 @@ A board is leased before any HTTP (`next_fetch_at` pushed out and committed),
 so two runs never sync the same board and no transaction spans a request.
 One board failing (a database error included) costs that board, not the batch.
 
-Each source module (`adapters/personio.py`, `adapters/ashby.py`) supplies the
-same pure pieces — `valid_slug`, `feed_url`, `external_id`, `parse_feed`,
+Each source module (`adapters/personio.py`, `ashby.py`, `greenhouse.py`,
+`lever.py` — one per Lever instance) supplies the same pure pieces — `valid_slug`, `feed_url`, `external_id`, `parse_feed`,
 `to_result` — and its adapter the HTTP. Only Personio has offices to resolve
-(its feed names a town, not an address); Ashby jobs carry their address.
+(its feed names a town, not an address); the others carry the job's place.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.domain.hub.adapters import ashby, personio
+from app.domain.hub.adapters import ashby, greenhouse, lever, personio
 from app.domain.hub.adapters.base import SourceUnreachable
 from app.domain.hub.adapters.boards import FeedUnreadable
 from app.domain.hub.models import HubAtsBoard, HubJobPosting, HubObservation, HubPostingPayload
@@ -69,7 +69,26 @@ UNRESOLVED_RETRY = dt.timedelta(days=7)
 _NO_BOARD = {301, 302, 303, 307, 308, 404, 410}
 _clock = time.monotonic
 #: Board sources by name — the `ats` column of `hub_ats_boards`.
-SOURCES = {personio.SOURCE_NAME: personio, ashby.SOURCE_NAME: ashby}
+SOURCES = {
+    personio.SOURCE_NAME: personio,
+    ashby.SOURCE_NAME: ashby,
+    greenhouse.SOURCE_NAME: greenhouse,
+    lever.GLOBAL.ats: lever.GLOBAL,
+    lever.EU.ats: lever.EU,
+}
+
+
+def adapter_for(ats: str):
+    """The HTTP reader for one board system."""
+    if ats == ashby.SOURCE_NAME:
+        return ashby.AshbyAdapter()
+    if ats == greenhouse.SOURCE_NAME:
+        return greenhouse.GreenhouseAdapter()
+    if ats == lever.GLOBAL.ats:
+        return lever.LeverAdapter(lever.GLOBAL)
+    if ats == lever.EU.ats:
+        return lever.LeverAdapter(lever.EU)
+    return personio.PersonioAdapter()
 
 
 async def add_boards(session: AsyncSession, *, ats: str, slugs: list[str], discovered_via: str) -> dict[str, int]:
@@ -95,7 +114,10 @@ async def _lease(
                or_(HubAtsBoard.next_fetch_at.is_(None), HubAtsBoard.next_fetch_at <= now))
         # Known boards first: a month's discovery adds thousands of new ones,
         # and they must not starve the daily refresh of jobs already held.
-        .order_by(HubAtsBoard.next_fetch_at.is_(None), HubAtsBoard.next_fetch_at, HubAtsBoard.id)
+        # New ones in the order they were found (discovery sends the richest
+        # hosts first — Greenhouse's EU boards).
+        .order_by(HubAtsBoard.next_fetch_at.is_(None), HubAtsBoard.next_fetch_at,
+                  HubAtsBoard.created_at, HubAtsBoard.id)
         .limit(limit)
     )
     if session.bind.dialect.name == "postgresql":

@@ -90,7 +90,7 @@ const de = (n: number) => n.toLocaleString(locale())
 const PAGE_SIZE = 40
 
 // Employers' own job boards: the link opens the employer's ad, not an agency's copy.
-const EMPLOYER_BOARDS = new Set(['personio', 'ashby'])
+const EMPLOYER_BOARDS = new Set(['personio', 'ashby', 'greenhouse', 'lever'])
 
 /** Search words go into a RegExp, so their metacharacters must be inert. */
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

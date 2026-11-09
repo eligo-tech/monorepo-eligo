@@ -1,0 +1,180 @@
+{
+ "jobs": [
+  {
+   "absolute_url": "https://job-boards.eu.greenhouse.io/agilerobotsse/jobs/4964865101",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 4517554101,
+   "location": {
+    "name": "Munich, Bavaria, Germany"
+   },
+   "metadata": null,
+   "id": 4964865101,
+   "updated_at": "2026-10-30T10:51:22-04:00",
+   "requisition_id": "R_100359",
+   "title": "Automation Engineer (m/f/d) PLC & Commissioning",
+   "company_name": "Agile Robots SE",
+   "first_published": "2026-09-07T08:51:39-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;div class=&quot;TranslationField-module__fieldItem___g4pRX&quot;&gt;\n&lt;p&gt;Du bist für die SPS-Entwicklung, HMI-Integration und Inbetriebnahme von industriellen Automatisierungs- und Robotiksystemen zuständig. Dabei stellst du sicher, dass die Steuerungslogik, die Schnittstellen und das Systemverhalten in realen Kundenumgebungen zuverlässig funktionieren.&lt;br&gt;&lt;br&gt;Um unsere Projekte reibungslos umzusetzen, arbeiten wir als Team eng mit unseren Kunden und der BÄR Automation GmbH in der Nähe von Heilbronn zusammen. Dafür bist du bereit, im Umfang von ca. 60 % gelegentlich im Inland und Ausland zu reisen.&lt;/p&gt;\n&lt;/div&gt;\n&lt;div class=&quot;TranslationField-module__field",
+   "departments": [
+    {
+     "id": 4080060101,
+     "name": "Industrial Automation & Robotic Applications",
+     "child_ids": [],
+     "parent_id": 4080058101
+    }
+   ],
+   "offices": [
+    {
+     "id": 4042519101,
+     "name": "Munich HQ",
+     "location": "Munich, Bavaria, Germany",
+     "child_ids": [],
+     "parent_id": 4042518101
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  },
+  {
+   "absolute_url": "https://job-boards.eu.greenhouse.io/agilerobotsse/jobs/5016059101",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 4541761101,
+   "location": {
+    "name": "Fürstenfeldbruck, Bavaria, Germany"
+   },
+   "metadata": null,
+   "id": 5016059101,
+   "updated_at": "2026-10-30T10:57:18-04:00",
+   "requisition_id": "R_100663",
+   "title": "Fachkraft für Lagerlogistik",
+   "company_name": "Agile Robots SE",
+   "first_published": "2026-10-27T05:02:51-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;p&gt;Als Mitarbeiter Lagerlogistik (m/w/d) übernehmen Sie an unserem neuen Standort in Fürstenfeldbruck eine zentrale Rolle im Wareneingang und Lagerbetrieb und sorgen für einen reibungslosen Materialfluss zwischen allen relevanten Schnittstellen.&lt;/p&gt;\n&lt;p&gt;&lt;/p&gt;\n&lt;h4&gt;&lt;strong&gt;Deine Aufgaben:&lt;/strong&gt;&lt;/h4&gt;\n&lt;ul&gt;\n&lt;li&gt;Be- und Entladen von Transportfahrzeugen mithilfe von Flurförderzeugen / Gabelstaplern&lt;/li&gt;\n&lt;li&gt;Kontrolle von Mengen, Qualität und Vollständigkeit der Waren anhand von Begleitpapieren&lt;/li&gt;\n&lt;li&gt;Buchung des Wareneingangs im Warenwirtschaftssystem&lt;/li&gt;\n&lt;li&gt;Fachgerechte Einlagerung von Waren unter ",
+   "departments": [
+    {
+     "id": 4071976101,
+     "name": "Production AU & FFB",
+     "child_ids": [],
+     "parent_id": 4071581101
+    }
+   ],
+   "offices": [
+    {
+     "id": 4042714101,
+     "name": "Fuerstenfeldbruck",
+     "location": "Fürstenfeldbruck, Bavaria, Germany",
+     "child_ids": [],
+     "parent_id": 4042518101
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  },
+  {
+   "absolute_url": "https://job-boards.eu.greenhouse.io/agilerobotsse/jobs/4968014101",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": null,
+   "location": {
+    "name": "Agile Robots SE"
+   },
+   "metadata": null,
+   "id": 4968014101,
+   "updated_at": "2026-09-03T09:53:39-04:00",
+   "requisition_id": null,
+   "title": "General Application (m/f/d)",
+   "company_name": "Agile Robots SE",
+   "first_published": "2026-09-03T09:53:39-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;p&gt;&lt;/p&gt;\n&lt;h4&gt;&lt;strong&gt;About the role&lt;/strong&gt;&lt;/h4&gt;\n&lt;p&gt;Agile Robots builds robots that combine AI, software, and hardware into working products, sold to industrial and research customers. Building that requires people across a wide range of disciplines, and our open roles don&#39;t always cover every background that could contribute. If you don&#39;t see a current opening that matches yours but believe your experience fits one of the areas below, we welcome a general application.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Areas we hire into:&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;&lt;strong&gt;Robotics &amp;amp; Automation:&lt;/strong&gt; Mechatronics, mot",
+   "departments": [],
+   "offices": [],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  },
+  {
+   "absolute_url": "https://job-boards.eu.greenhouse.io/agilerobotsse/jobs/4964851101",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 4517547101,
+   "location": {
+    "name": "Kaufbeuren, Bavaria, Germany"
+   },
+   "metadata": null,
+   "id": 4964851101,
+   "updated_at": "2026-10-30T10:51:02-04:00",
+   "requisition_id": "R_100378",
+   "title": "HR Business Partner / Personalreferent (m/w/d)",
+   "company_name": "Agile Robots SE",
+   "first_published": "2026-09-07T02:43:48-04:00",
+   "language": "de",
+   "application_deadline": null,
+   "content": "&lt;p&gt;&lt;span class=&quot;TextRun SCXW209709981 BCX8&quot; lang=&quot;DE-DE&quot; data-contrast=&quot;auto&quot;&gt;&lt;span class=&quot;NormalTextRun SCXW209709981 BCX8&quot;&gt;Für&amp;nbsp;&lt;/span&gt;&lt;span class=&quot;NormalTextRun SCXW209709981 BCX8&quot;&gt;unsere&lt;/span&gt;&lt;span class=&quot;NormalTextRun SCXW209709981 BCX8&quot;&gt;&amp;nbsp;&lt;/span&gt;&lt;span class=&quot;NormalTextRun SCXW209709981 BCX8&quot;&gt;Produktionsstandorte in Kaufbeuren sowie Fürstenfeldbruc&lt;/span&gt;&lt;span class=&quot;NormalTextRun SCXW209709981 BCX8&quot;&gt;k suchen wir ab sofort einen HR Business Partner (m/w/d). Der Schwerpunkt der Tätigkeit liegt&amp;nbsp;&lt;/span&gt;&lt;span cla",
+   "departments": [
+    {
+     "id": 4086310101,
+     "name": "People",
+     "child_ids": [],
+     "parent_id": 4071975101
+    }
+   ],
+   "offices": [
+    {
+     "id": 4042713101,
+     "name": "Kaufbeuren",
+     "location": "Kaufbeuren, Bavaria, Germany",
+     "child_ids": [],
+     "parent_id": 4042518101
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  }
+ ],
+ "meta": {
+  "total": 4
+ }
+}

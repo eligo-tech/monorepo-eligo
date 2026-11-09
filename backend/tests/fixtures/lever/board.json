@@ -1,0 +1,75 @@
+[
+ {
+  "additionalPlain": "In accordance with Austrian legislation, we are disclosing the minimum remuneration fixed for this position is : 60.000,--€ gross per year. The effective salary depends on qualification and experience and may be significantly higher!\n",
+  "additional": "<div>In accordance with Austrian legislation, we are disclosing the minimum remuneration fixed for this position is : 60.000,--€ gross per year. The effective salary depends on qualification and experience and may be significantly higher!</div>",
+  "categories": {
+   "commitment": "Full-time",
+   "department": "Engineering",
+   "location": "Graz",
+   "team": "Deployment Team",
+   "allLocations": [
+    "Graz",
+    "Home Office (Austria)"
+   ]
+  },
+  "createdAt": 1779778545943,
+  "descriptionPlain": "This jobs location is Austria, full remote work is not possible.\n \nSatellite and drone imagery access is on the rise, and traditional image processing methods are struggling to keep up. We’ve never had more data, and yet it’s never been harder to gain meaningful insights. \n \nOur scalable AI platform enables custom model training on global features, providing real-time, on-demand geospatial insight",
+  "description": "<div>This jobs location is Austria, full remote work is not possible.</div>\n<div>&nbsp;</div>\n<div>Satellite and drone imagery access is on the rise, and traditional image processing methods are struggling to keep up. We’ve never had more data, and yet it’s never been harder to gain meaningful insig",
+  "id": "d425eda5-52ca-4e5c-a03d-b506b3ef6d3f",
+  "lists": [
+   {
+    "text": "What you'll do",
+    "content": "\n<li>Embed security into the full engineering lifecycle — from code commit through production deployment</li>\n<li>Build and maintain automated security scanning integrated into our CI/CD pipelines</li>\n<li>Own secrets management, container hardening, and secure baseline configuration across cloud an"
+   },
+   {
+    "text": "Your profile",
+    "content": "\n<li>Hands-on experience with container and Kubernetes security in production environments</li>\n<li>Background working in or alongside regulated or government environments</li>\n<li>Experience integrating security tooling (SAST, DAST, secret scanning, image scanning) into CI/CD pipelines</li>\n<li>Str"
+   }
+  ],
+  "text": "DevSecOps Engineer - Deployment Team",
+  "country": "AT",
+  "workplaceType": "hybrid",
+  "opening": "",
+  "openingPlain": "",
+  "descriptionBody": "<div>This jobs location is Austria, full remote work is not possible.</div>\n<div>&nbsp;</div>\n<div>Satellite and drone imagery access is on the rise, and traditional image processing methods are struggling to keep up. We&rsquo;ve never had more data, and yet it&rsquo;s never been harder to gain mean",
+  "descriptionBodyPlain": "This jobs location is Austria, full remote work is not possible.\n \nSatellite and drone imagery access is on the rise, and traditional image processing methods are struggling to keep up. We’ve never had more data, and yet it’s never been harder to gain meaningful insights. \n \nOur scalable AI platform enables custom model training on global features, providing real-time, on-demand geospatial insights with impressive speed and accuracy. The application turns months of manual work into mere minutes, and with much better results. We work with customers from various domains, from intelligence and defence, local and federal governments, insurance industry, to small and large enterprises, which requires us to have a lot of flexibility on how we deploy and secure our services. \n \nWe kicked off in 2020 and have secured $35 million in series A funding from a lineup of top US and European investors, among which Microsoft M12, Point72 Ventures, Maxar, In-Q-Tel, SAFRAN, and ISAI/Capgemini.  \n \nWe're searching for a DevSecOps Engineer to join our Deployment team. You'll own the security posture of our infrastructure and CI/CD pipelines across radically different environments: AWS for our SaaS offering, multi-cloud deployments for enterprise customers and self-managed customer deployments.\n",
+  "hostedUrl": "https://jobs.eu.lever.co/blackshark/d425eda5-52ca-4e5c-a03d-b506b3ef6d3f",
+  "applyUrl": "https://jobs.eu.lever.co/blackshark/d425eda5-52ca-4e5c-a03d-b506b3ef6d3f/apply"
+ },
+ {
+  "additionalPlain": "The minimum salary is 56.000,--€ gross per year. The effective salary depends on qualification and experience and may be significantly higher!\n",
+  "additional": "<div><span style=\"font-size: 11pt;\">The minimum</span> salary is&nbsp;56.000,--€ gross per year. <span style=\"font-size: 11pt;\">The effective salary depends on qualification and experience and may be significantly higher!</span></div>",
+  "categories": {
+   "commitment": "Full-time",
+   "department": "Engineering",
+   "location": "Graz",
+   "team": "Control Panel",
+   "allLocations": [
+    "Graz"
+   ]
+  },
+  "createdAt": 1788429976481,
+  "descriptionPlain": "Satellite and drone imagery access is on the rise, and traditional image processing methods are struggling to keep up. We've never had more data, turning those pixels into trusted, measurable understanding still takes months of AI work. HUNTR™ reduces this to hours.\n\nWe do not sell models. We provide the infrastructure that lets governments and enterprises build, validate, deploy and operate visua",
+  "description": "<div><span style=\"font-size: 12pt; color: #000000;\">Satellite and drone imagery access is on the rise, and traditional image processing methods are struggling to keep up. We've never had more data, turning those pixels into trusted, measurable understanding still takes months of AI work. HUNTR<span ",
+  "id": "e64c4771-16f2-482b-b67c-6c9074c38612",
+  "lists": [
+   {
+    "text": "Your Mission",
+    "content": "\n<li><span data-contrast=\"auto\">Build the 3D viewer inside the HUNTR application that&nbsp;renders&nbsp;pipeline outputs as 3D Tiles in the browser, on the hardware analysts&nbsp;actually have.</span><span data-ccp-props=\"{&quot;134233117&quot;:false,&quot;134233118&quot;:false,&quot;335559738&quot;"
+   },
+   {
+    "text": "Your Profile",
+    "content": "\n<li><span data-contrast=\"auto\">You have strong practical experience with Vue.js and building complex, stateful single-page applications.</span><span data-ccp-props=\"{&quot;134233117&quot;:false,&quot;134233118&quot;:false,&quot;335559738&quot;:0,&quot;335559739&quot;:0}\">&nbsp;</span></li>\n<li><spa"
+   }
+  ],
+  "text": "Frontend Engineer - 3D Web Service",
+  "country": "AT",
+  "workplaceType": "hybrid",
+  "opening": "",
+  "openingPlain": "",
+  "descriptionBody": "<div><span style=\"font-size: 12pt; color: #000000;\">Satellite and drone imagery access is on the rise, and traditional image processing methods are struggling to keep up. We've never had more data, turning those pixels into trusted, measurable understanding still takes months of AI work. HUNTR<span ",
+  "descriptionBodyPlain": "Satellite and drone imagery access is on the rise, and traditional image processing methods are struggling to keep up. We've never had more data, turning those pixels into trusted, measurable understanding still takes months of AI work. HUNTR™ reduces this to hours.\n\nWe do not sell models. We provide the infrastructure that lets governments and enterprises build, validate, deploy and operate visual models they own. From pixel inputs to operational 2D and 3D outputs, under full sovereign control. Once deployed, every new sensor observation improves the customer's understanding of reality. Wherever the mission takes place, HUNTR™ runs there - from SaaS and private cloud to on-premise, classified networks and edge hardware in the field \n \nWe kicked off in 2020 and have secured $35 million in Series A funding from a lineup of top US and European investors, among which Microsoft M12, Point72 Ventures, Maxar, In-Q-Tel, SAFRAN, and ISAI/Capgemini. \n \nThe HUNTR™ workflow produces 3D outputs alongside 2D detections. Customers who need full simulation fidelity consume those through game engines. Others need to open the result in a browser, navigate it and make decision. We are looking for a Frontend Engineer to build a 3D viewer inside the HUNTR™ application.\n \n",
+  "hostedUrl": "https://jobs.eu.lever.co/blackshark/e64c4771-16f2-482b-b67c-6c9074c38612",
+  "applyUrl": "https://jobs.eu.lever.co/blackshark/e64c4771-16f2-482b-b67c-6c9074c38612/apply"
+ }
+]

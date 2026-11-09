@@ -1,15 +1,15 @@
-# Employers' own job boards (Personio, Ashby) → the shared corpus
+# Employers' own job boards (Personio, Ashby, Greenhouse, Lever) → the shared corpus
 # (backend/app/domain/hub/ats.py). A scheduled job only (ARCHITECTURE.md
 # RULE 1), over HTTP with the machine token — no database credentials in CI.
 #
 # Daytime, so it never competes with the nightly ingest chain for the
 # database. One parallel job per board system, each with its own time budget,
 # so a slow system never costs another its daily refresh. Each board is one
-# feed request (~1/s); Personio adds one job page per new office, Ashby one
-# board page per new DACH board (its name). On the 1st of the month each job
+# feed request (~1/s); Personio adds one job page per new office, Ashby and
+# Lever one board page per new DACH board (its name). On the 1st of the month each job
 # first rediscovers boards from public URL indexes (Common Crawl, the Wayback
 # Machine). A failed run fails the workflow: that is the monitoring.
-name: Hub · employer boards (Personio, Ashby)
+name: Hub · employer boards (Personio, Ashby, Greenhouse, Lever)
 
 on:
   schedule:
@@ -21,7 +21,7 @@ on:
         required: false
         default: all
         type: choice
-        options: [all, personio, ashby]
+        options: [all, personio, ashby, greenhouse, lever-eu, lever]
       discover:
         description: "Find new boards in public URL indexes first"
         required: false
@@ -42,10 +42,11 @@ jobs:
     strategy:
       fail-fast: false  # one system failing must not cancel the other's refresh
       matrix:
-        ats: ${{ fromJSON(github.event.inputs.ats == 'personio' && '["personio"]' || github.event.inputs.ats == 'ashby' && '["ashby"]' || '["personio", "ashby"]') }}
+        ats: ${{ fromJSON(github.event.inputs.ats && github.event.inputs.ats != 'all' && format('["{0}"]', github.event.inputs.ats) || '["personio", "ashby", "greenhouse", "lever-eu", "lever"]') }}
     # Personio: discovery ≤ 40 min Common Crawl + ≤ 26 min Wayback + sync ≤ 120 min.
-    # Ashby: discovery ≤ 40 min (36 Wayback pieces) + sync ≤ 120 min.
-    timeout-minutes: 200
+    # Ashby, Greenhouse, Lever: discovery ≤ 75 min of Wayback pieces (measured
+    # 20–36 s each, 36 per host; one piece may overrun by ≤ 17 min) + sync ≤ 120 min.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v5
 

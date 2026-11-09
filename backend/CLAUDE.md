@@ -257,6 +257,15 @@ These are enforced in code. Do not route around them.
   not a DACH job. Boards with no DACH job are re-read monthly. Each board
   system is a module with the same pure pieces (`valid_slug`, `feed_url`,
   `external_id`, `parse_feed`, `to_result`) registered in `ats.SOURCES`.
+- **Greenhouse and Lever boards** (`adapters/greenhouse.py`, `adapters/lever.py`,
+  same sync). Their locations are free text, read by `adapters/places.py`
+  with three deterministic rules (a DACH country/region segment; a known DACH
+  city as the only or last segment; otherwise not DACH — "Hamburg, NY" and
+  "Basel, Germany" are refused, never guessed). Lever's EU instance is its
+  own board system (`lever-eu`): its boards exist only on `*.eu.lever.co`, so
+  its jobs' references carry `eu:` and the link opens the right host. New
+  boards are synced in the order discovery found them; Greenhouse's EU host
+  is discovered first.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.
