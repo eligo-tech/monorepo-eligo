@@ -559,8 +559,8 @@ class HubSiteCheck(Base, IDMixin, TimestampMixin):
 class HubAtsBoard(Base, IDMixin, TimestampMixin):
     """One employer's public job board on an applicant-tracking system.
 
-    Personio (`adapters/personio.py`) and Ashby (`adapters/ashby.py`); `ats`
-    names the system. Each company that switches on Personio's job feed
+    Personio, Ashby, Greenhouse, Lever and Lever's EU instance (`ats` names the
+    system: personio · ashby · greenhouse · lever · lever-eu; `hub/ats.py`). Each company that switches on Personio's job feed
     publishes `{slug}.jobs.personio.de/xml`; an Ashby company's jobs are at
     `api.ashbyhq.com/posting-api/job-board/{slug}`. The board is
     the employer's own source — full text, its own offices — and the feed is a

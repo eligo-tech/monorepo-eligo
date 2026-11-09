@@ -30,6 +30,13 @@ def source_detail_url(source: str, external_id: str | None) -> str | None:
     if source == "personio" and ":" in external_id:
         slug, _, job_id = external_id.partition(":")
         return f"https://{quote(slug, safe='')}.jobs.personio.de/job/{quote(job_id, safe='')}?language=de"
+    if source == "greenhouse" and ":" in external_id:
+        slug, _, job_id = external_id.partition(":")
+        return f"https://job-boards.greenhouse.io/{quote(slug, safe='')}/jobs/{quote(job_id, safe='')}"
+    if source == "lever":
+        from app.domain.hub.adapters.lever import job_url
+
+        return job_url(external_id)
     if source == "ashby" and ":" in external_id:
         slug, _, job_id = external_id.partition(":")
         return f"https://jobs.ashbyhq.com/{quote(slug, safe='')}/{quote(job_id, safe='')}"
@@ -553,9 +560,13 @@ class MarkRequest(BaseModel):
 # --- employers' ATS boards (hub/ats.py) — operator contracts ------------------
 
 
+#: The board systems `hub/ats.py` reads (`ats.SOURCES`).
+AtsName = Literal["personio", "ashby", "greenhouse", "lever", "lever-eu"]
+
+
 class AddBoardsRequest(BaseModel):
     """Board slugs a discovery pass found. Bounded: one request, one statement."""
 
-    ats: Literal["personio", "ashby"] = "personio"
+    ats: AtsName = "personio"
     slugs: list[str] = Field(max_length=5_000)
     discovered_via: str = Field(default="commoncrawl", max_length=60)

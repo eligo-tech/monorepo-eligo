@@ -24,6 +24,7 @@ from app.domain.searches import service as searches_service
 from app.domain.searches.schemas import CrawlProfile
 from app.domain.hub.schemas import (
     AddBoardsRequest,
+    AtsName,
     ListingRequest,
     ListingResponse,
     LivenessSource,
@@ -614,18 +615,15 @@ async def add_ats_boards(
 @router.post("/ats/sync")
 async def sync_ats_boards(
     limit: int = Query(default=20, ge=1, le=100),
-    ats_name: Literal["personio", "ashby"] = Query(default="personio", alias="ats"),
+    ats_name: AtsName = Query(default="personio", alias="ats"),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Read up to `limit` due boards' feeds and merge them. Machine-only (RULE
     1): an outbound read of employers' public boards, ~60 s per request."""
     from app.domain.hub import ats
-    from app.domain.hub.adapters.ashby import AshbyAdapter
-    from app.domain.hub.adapters.personio import PersonioAdapter
 
-    adapter = AshbyAdapter() if ats_name == "ashby" else PersonioAdapter()
-    return await ats.sync_due(db, adapter=adapter, limit=limit)
+    return await ats.sync_due(db, adapter=ats.adapter_for(ats_name), limit=limit)
 
 
 @router.post("/vacancy-keys/backfill")
