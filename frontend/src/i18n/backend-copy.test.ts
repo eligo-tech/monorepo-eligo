@@ -32,6 +32,7 @@ describe('copy the backend sends', () => {
     expect(kinds).toContain('connector hint')
     expect(kinds).toContain('features label')
     expect(kinds).toContain('features reason')
+    expect(kinds).toContain('reference field label')
     expect(copy.length).toBeGreaterThan(40)
   })
 

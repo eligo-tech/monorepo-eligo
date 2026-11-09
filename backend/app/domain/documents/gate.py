@@ -14,6 +14,7 @@ Flow mirrors laufwise's runbook order:
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 from laufwise.contract.evaluator import BuiltinEvaluator
@@ -59,10 +60,16 @@ def email_is_valid(value: str | None) -> bool:
 
 
 def _norm(s: str) -> str:
-    """Lowercase, alphanumeric-only — collapses the character-spacing that PDF
-    text extraction often introduces ('E d g e l e s s' → 'edgeless') so a
-    substring check is robust."""
-    return re.sub(r"[^a-z0-9]", "", s.lower())
+    """Casefolded letters and digits only — collapses the character-spacing
+    that PDF text extraction often introduces ('E d g e l e s s' → 'edgeless')
+    so a substring check is robust.
+
+    Letters are KEPT, umlauts included. This used to be `[^a-z0-9]`, which
+    deleted every ü/ö/ä: 'Müller' and 'Möller' were the same word, and a PDF
+    carrying decomposed umlauts (a + U+0308) failed against its own quote.
+    NFKC composes those; `casefold` folds ß to 'ss'.
+    """
+    return re.sub(r"[\W_]", "", unicodedata.normalize("NFKC", s).casefold())
 
 
 def is_grounded(value: str | None, source: str, *, min_len: int = 3) -> bool:

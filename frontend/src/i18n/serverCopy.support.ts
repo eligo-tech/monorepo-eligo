@@ -46,6 +46,8 @@ export function serverCopy(): ServerString[] {
   const kpiDefs = read(backend('app', 'domain', 'activity', 'kpis.py'))
   // Feature names and why a feature is off, on the settings screen.
   const features = read(backend('app', 'domain', 'features', 'service.py'))
+  // Field labels of a Zeugnis/Zertifikat reading, rendered as `t(f.label)`.
+  const extraction = read(backend('app', 'domain', 'documents', 'extraction', 'base.py'))
 
   const out: ServerString[] = []
   const push = (source: string, values: string[]) => {
@@ -64,6 +66,9 @@ export function serverCopy(): ServerString[] {
   push('kpis.py reason', all(kpiDefs, /^\s*unavailable_because="([^"]+)"/gm))
   push('features label', all(features, /^\s*label="([^"]+)"/gm))
   push('features reason', all(features, /^\s*reason="([^"]+)"/gm))
+  for (const block of all(extraction, /^(?:ZEUGNIS|ZERTIFIKAT)_FIELDS[^=]*= \{([^}]*)\}/gm)) {
+    push('reference field label', all(block, /"[a-z_]+":\s*"([^"]+)"/g))
+  }
   return out
 }
 

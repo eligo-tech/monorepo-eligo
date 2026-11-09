@@ -21,7 +21,9 @@ from app.domain.documents.extraction.base import (
     EducationEntry,
     ExtractionResult,
     FIELD_ORDER,
+    REFERENCE_FIELD_ORDER,
     TRANSCRIPT_FIELD_ORDER,
+    ReferenceField,
     WorkRole,
 )
 
@@ -173,6 +175,55 @@ _TRANSCRIPT_SCHEMA = {
     },
 }
 
+_REFERENCE_SYSTEM = (
+    "You read a German employment reference (Arbeitszeugnis) or a certificate "
+    "(Zertifikat) about a candidate. The first line of the user message names "
+    "which. Rules:\n"
+    "1. EVIDENCE: every field carries `evidence`, a sentence or phrase copied "
+    "VERBATIM from the document that states the value. Anything you cannot "
+    "quote, omit. Values without a verbatim quote are discarded.\n"
+    "2. Zeugnis fields: `employer` (the issuing company, as written), "
+    "`role_title` (the position held), `period` (start and end date as written, "
+    "joined with ' – '), `tasks` (the main responsibilities, each a phrase "
+    "copied verbatim from the document, '; '-separated), `skills` (technologies, methods or tools the document names, "
+    "'; '-separated, each spelled as in the text), `leaving_reason` (the "
+    "leaving formula verbatim, e.g. 'auf eigenen Wunsch'), `assessment_quote` "
+    "(the overall performance sentence verbatim).\n"
+    "3. `assessment_grade` decodes the coded Zeugnissprache of the performance "
+    "sentence into exactly one of: 'sehr gut', 'gut', 'befriedigend', "
+    "'ausreichend', 'mangelhaft' ('stets zu unserer vollsten Zufriedenheit' = "
+    "sehr gut, 'stets zu unserer vollen Zufriedenheit' = gut, 'zu unserer "
+    "vollen Zufriedenheit' = befriedigend, 'zu unserer Zufriedenheit' = "
+    "ausreichend). Its evidence is that sentence. Omit it if there is none.\n"
+    "4. Zertifikat fields: `certificate_name`, `issuer`, `issued_on` (as "
+    "written), `skills` (as rule 2).\n"
+    "5. Never infer, complete or translate a value. CONFIDENCE in [0,1]: how "
+    "plainly the document states it. No commentary."
+)
+
+_REFERENCE_FIELD_ITEM = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "name": {"type": "string", "enum": REFERENCE_FIELD_ORDER},
+        "value": {"type": "string"},
+        "evidence": {"type": "string"},
+        "confidence": {"type": "number"},
+    },
+    "required": ["name", "value", "evidence", "confidence"],
+}
+
+_REFERENCE_SCHEMA = {
+    "name": "reference_extraction",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"fields": {"type": "array", "items": _REFERENCE_FIELD_ITEM}},
+        "required": ["fields"],
+    },
+}
+
 
 class OpenAIExtractor:
     name = "openai"
@@ -276,3 +327,38 @@ class OpenAIExtractor:
         )
         data = json.loads(response.choices[0].message.content or "{}")
         return self._parse_fields(data.get("fields", []), TRANSCRIPT_FIELD_ORDER)
+
+    def extract_reference(self, text: str, kind: str) -> list[ReferenceField]:
+        """Read a Zeugnis or Zertifikat; every value with its verbatim quote.
+
+        Only the shape is checked here. Whether the quote is really in the
+        document is decided downstream, against the text, in the service.
+        """
+        response = self._client.chat.completions.create(
+            model=self._model,
+            messages=[
+                {"role": "system", "content": _REFERENCE_SYSTEM},
+                {"role": "user", "content": f"Dokumentart: {kind}\n\n{text[:_MAX_CHARS]}"},
+            ],
+            response_format=cast(
+                Any, {"type": "json_schema", "json_schema": _REFERENCE_SCHEMA}
+            ),
+            temperature=0,
+        )
+        data = json.loads(response.choices[0].message.content or "{}")
+        fields: list[ReferenceField] = []
+        seen: set[str] = set()
+        for entry in data.get("fields", []):
+            name = entry.get("name")
+            value = (entry.get("value") or "").strip()
+            if name in REFERENCE_FIELD_ORDER and value and name not in seen:
+                seen.add(name)
+                fields.append(
+                    ReferenceField(
+                        field=name,
+                        value=value,
+                        evidence=(entry.get("evidence") or "").strip(),
+                        confidence=self._clamp(entry.get("confidence", 0.7)),
+                    )
+                )
+        return fields

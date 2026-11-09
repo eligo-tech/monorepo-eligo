@@ -17,6 +17,12 @@ class CVField(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     # Below the agent's threshold → the recruiter must confirm before it's trusted.
     needs_review: bool
+    #: The verbatim sentence the value was read from (Zeugnis/Zertifikat
+    #: reading). Checked to occur in the document before it is returned.
+    evidence: str | None = None
+    #: The value is a reading of the text, not something it states — the
+    #: grade decoded from Zeugnissprache. Shown as such, never pre-ticked.
+    interpretation: bool = False
 
 
 class CVExtractionResult(BaseModel):

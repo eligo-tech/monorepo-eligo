@@ -574,6 +574,12 @@ export interface CVFieldDTO {
   value: string
   confidence: number // 0..1
   needs_review: boolean
+  /** The verbatim sentence the value was read from (Zeugnis/Zertifikat).
+   *  The server drops any proposal whose sentence is not in the document. */
+  evidence?: string | null
+  /** A reading of the text rather than something it states — the grade
+   *  decoded from Zeugnissprache. Never pre-ticked. */
+  interpretation?: boolean
 }
 
 export interface CVExtractionResultDTO {
