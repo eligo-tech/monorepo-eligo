@@ -22,11 +22,12 @@ import { locale } from '@/i18n/format'
 import { t } from '@/i18n'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Check, Download, FileText, Paperclip, Sparkles } from 'lucide-react'
+import { Check, Download, FileText, Loader2, Sparkles, UploadCloud } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
 import { ReaddDeclined, withReaddConfirm } from '../../erasure/readd'
 import { buildReferencePatch } from './referenceMerge'
+import { type ReadableKind, isReadable, readsAfterUpload } from './attachmentRules'
 import type {
   CVExtractionResultDTO,
   CandidateDTO,
@@ -35,7 +36,7 @@ import type {
   DocumentKind,
 } from '@/api/types'
 import { cn } from '@/lib/cn'
-import { Button, SelectInput } from '../../ui/forms'
+import { Button, FieldLabel } from '../../ui/forms'
 import { Chip } from '../../ui/primitives'
 
 const KIND_LABEL: Record<DocumentKind, string> = {
@@ -46,9 +47,9 @@ const KIND_LABEL: Record<DocumentKind, string> = {
   sonstiges: t('Sonstiges'),
 }
 
-const KIND_OPTIONS = (['zeugnis', 'zertifikat', 'cv', 'sonstiges'] as const).map(
-  (value) => ({ value, label: KIND_LABEL[value] }),
-)
+/** What can be attached from the drop zone, in the order a recruiter needs
+ *  them. The transcript has its own button: it is read, not filed. */
+const UPLOAD_KINDS = ['zeugnis', 'zertifikat', 'cv', 'sonstiges'] as const
 
 /** Extracted field name → the candidate column it belongs in.
  *
@@ -68,10 +69,6 @@ const TO_COLUMN: Record<string, keyof CandidateUpdatePayload> = {
   interview_availability: 'interview_availability',
   profile_summary: 'profile_summary',
 }
-
-/** The kinds the server can read for proposals (`POST /documents/{id}/read`). */
-type ReadableKind = 'zeugnis' | 'zertifikat'
-const READABLE: ReadonlySet<DocumentKind> = new Set<DocumentKind>(['zeugnis', 'zertifikat'])
 
 const NUMERIC = new Set(['current_salary', 'salary_minimum', 'expected_salary'])
 
@@ -106,6 +103,9 @@ export function AttachmentsPanel({
   const [docs, setDocs] = useState<CandidateDocumentDTO[] | null>(null)
   const [kind, setKind] = useState<DocumentKind>('zeugnis')
   const [busy, setBusy] = useState(false)
+  /** What the drop zone is doing, so it can say so instead of just greying out. */
+  const [phase, setPhase] = useState<'upload' | 'read' | null>(null)
+  const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [proposals, setProposals] = useState<CVExtractionResultDTO | null>(null)
   /** What the open proposals were read from — decides how they are confirmed. */
@@ -134,16 +134,28 @@ export function AttachmentsPanel({
       ? `Fehlgeschlagen (HTTP ${e.status}).`
       : t('Fehlgeschlagen — keine Antwort vom Server.')
 
+  /** Store the file; a Zeugnis or Zertifikat is then read straight away, so
+   *  the recruiter sees proposals without hunting for a button. */
   async function attach(file: File) {
     setBusy(true)
+    setPhase('upload')
     setError(null)
+    setNotice(null)
+    let doc: CandidateDocumentDTO | null = null
     try {
-      await api.uploadDocument(candidateId, file, kind)
+      doc = await api.uploadDocument(candidateId, file, kind)
       await reload()
     } catch (e) {
       setError(describe(e))
     }
+    setPhase(null)
     setBusy(false)
+    if (!doc) return
+    if (readsAfterUpload(doc.kind, doc.content_type)) {
+      await readReference(doc)
+    } else if (isReadable(doc.kind)) {
+      setNotice(t('Gespeichert. Fotos und Scans können noch nicht gelesen werden — bitte die Angaben von Hand erfassen.'))
+    }
   }
 
   async function readTranscript(file: File) {
@@ -173,6 +185,7 @@ export function AttachmentsPanel({
 
   async function readReference(doc: CandidateDocumentDTO) {
     setBusy(true)
+    setPhase('read')
     setError(null)
     setNotice(null)
     setProposals(null)
@@ -196,6 +209,7 @@ export function AttachmentsPanel({
           : describe(e),
       )
     }
+    setPhase(null)
     setBusy(false)
   }
 
@@ -277,13 +291,52 @@ export function AttachmentsPanel({
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <SelectInput
-          label={t('Art')}
-          value={kind}
-          onChange={(v) => setKind(v as DocumentKind)}
-          options={KIND_OPTIONS}
-        />
+      <div
+        onDragOver={(e) => {
+          e.preventDefault()
+          if (!busy) setDragging(true)
+        }}
+        // Leaving for a child (a chip, the text) is not leaving the zone.
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false)
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragging(false)
+          const file = e.dataTransfer.files?.[0]
+          if (file && !busy) void attach(file)
+        }}
+        className={cn(
+          'space-y-4 rounded-2xl border-2 border-dashed p-4 transition-colors',
+          dragging
+            ? 'border-mint-500 bg-mint-800/20'
+            : 'border-cockpit-line bg-cockpit-inset/40 hover:border-cockpit-edge',
+        )}
+      >
+        <div>
+          <FieldLabel>{t('Art')}</FieldLabel>
+          <div role="radiogroup" aria-label={t('Art')} className="flex flex-wrap gap-1.5">
+            {UPLOAD_KINDS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={kind === value}
+                onClick={() => setKind(value)}
+                disabled={busy}
+                className={cn(
+                  'rounded-full border px-3 py-1 font-mono text-[12px] tracking-[0.04em] transition-colors disabled:opacity-50',
+                  kind === value
+                    ? 'border-mint-500 bg-mint-800/50 text-mint-300'
+                    : 'border-cockpit-line text-cockpit-dim hover:border-cockpit-edge hover:text-cockpit-text',
+                )}
+              >
+                {KIND_LABEL[value]}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <input
           ref={fileRef}
           type="file"
@@ -295,14 +348,36 @@ export function AttachmentsPanel({
             e.target.value = ''
           }}
         />
-        <Button
+        <button
+          type="button"
           onClick={() => fileRef.current?.click()}
           disabled={busy}
-          className="whitespace-nowrap"
+          className="flex w-full flex-col items-center gap-2 rounded-xl px-4 py-6 text-center transition-colors hover:bg-white/[0.02] disabled:cursor-wait"
         >
-          <Paperclip className="h-4 w-4" /> {t('Datei anhängen')}
-        </Button>
+          {busy && phase ? (
+            <Loader2 className="h-6 w-6 animate-spin text-mint-300" />
+          ) : (
+            <UploadCloud className={cn('h-6 w-6', dragging ? 'text-mint-300' : 'text-cockpit-faint')} />
+          )}
+          <span className="text-[14px] text-cockpit-text">
+            {phase === 'upload'
+              ? t('Wird hochgeladen…')
+              : phase === 'read'
+              ? t('Wird ausgewertet…')
+              : t('Datei hier ablegen oder klicken')}
+          </span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-cockpit-faint">
+            {t('PDF, PNG, JPG oder TXT · max. 10 MB')}
+          </span>
+          {isReadable(kind) && !phase && (
+            <span className="text-[12px] text-lav-400">
+              {t('Wird danach ausgewertet — Vorschläge mit Beleg, erst nach Ihrer Bestätigung im Datensatz')}
+            </span>
+          )}
+        </button>
+      </div>
 
+      <div className="flex justify-end">
         <input
           ref={transcriptRef}
           type="file"
@@ -418,13 +493,13 @@ export function AttachmentsPanel({
                 {doc.filename}
               </span>
               <Chip>{KIND_LABEL[doc.kind] ?? doc.kind}</Chip>
-              {READABLE.has(doc.kind) && (
+              {isReadable(doc.kind) && (
                 <button
                   type="button"
                   onClick={() => void readReference(doc)}
                   disabled={busy}
                   title={t('Dokument auswerten — schlägt Angaben mit Beleg vor, schreibt nichts')}
-                  className="flex shrink-0 items-center gap-1 text-[12px] text-cockpit-faint transition-colors hover:text-lav-300 disabled:opacity-40"
+                  className="flex shrink-0 items-center gap-1 text-[12px] text-cockpit-faint transition-colors hover:text-lav-400 disabled:opacity-40"
                 >
                   <Sparkles className="h-3.5 w-3.5" /> {t('Auswerten')}
                 </button>
