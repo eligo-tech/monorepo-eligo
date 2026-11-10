@@ -248,29 +248,6 @@ async def follow_ups(session: AsyncSession, *, tenant_id: uuid.UUID, now: dt.dat
     )
 
 
-async def _workspace_company(
-    session: AsyncSession, *, tenant_id: uuid.UUID, hub_company: HubCompany, actor: str | None
-) -> uuid.UUID:
-    """This workspace's company for an employer: the one adopted at any of its
-    sites, else adopt this site (receipted)."""
-    from app.domain.hub.service import _sibling_company_ids, adopt_company
-
-    sites = await _sibling_company_ids(session, normalized_name=hub_company.normalized_name)
-    link = await session.scalar(
-        select(HubCompanyLink).where(
-            HubCompanyLink.tenant_id == tenant_id,
-            HubCompanyLink.hub_company_id.in_(sites or [hub_company.id]),
-            HubCompanyLink.company_id.is_not(None),
-        )
-    )
-    if link is not None:
-        return link.company_id
-    company, _link, _manager = await adopt_company(
-        session, tenant_id=tenant_id, hub_company_id=hub_company.id, actor=actor
-    )
-    return company.id
-
-
 async def log_call(
     session: AsyncSession,
     *,
@@ -288,6 +265,7 @@ async def log_call(
     from app.domain.common.enums import ConfidenceSource, InteractionType
     from app.domain.erasure import service as erasure
     from app.domain.hub.schemas import source_detail_url
+    from app.domain.hub.service import workspace_company
     from app.domain.managers import service as managers
     from app.domain.managers.models import Manager
     from app.domain.managers.schemas import ManagerCreate, ManagerInteractionCreate
@@ -318,20 +296,31 @@ async def log_call(
         key=lambda m: (m[0].phone_kind == "direct", m[0].phone is not None, m[0].first_name is not None),
     )
     named = next((c for c, _ in mentions if c.first_name), contact)
-    role = contact.role_title or next((c.role_title for c, _ in mentions if c.role_title), None)
+    # Plain values only from here: adopting the employer may commit or roll
+    # back, which expires every loaded row (see `workspace_company`).
+    person = {
+        "full_name": named.full_name, "first_name": named.first_name, "last_name": contact.last_name,
+        "role_title": contact.role_title or next((c.role_title for c, _ in mentions if c.role_title), None),
+        "email": contact.email, "phone": contact.phone,
+        "source_detail": (posting.source_url or source_detail_url(posting.source, posting.external_id)
+                          or f"hub_job_postings/{posting.id}")[:500],
+    }
+    anchor_id, anchor_name, anchor_normalized = anchor.id, anchor.name, anchor.normalized_name
 
     guard = await erasure.person_guard(session, tenant_id)
-    if guard.blocks(company_name=anchor.name, surname=contact.last_name, phone=contact.phone):
+    if guard.blocks(company_name=anchor_name, surname=person["last_name"], phone=person["phone"]):
         raise Erased(person_key)
 
-    company_id = await _workspace_company(session, tenant_id=tenant_id, hub_company=anchor, actor=actor_name)
+    company_id = await workspace_company(
+        session, tenant_id=tenant_id, hub_company_id=anchor_id, normalized_name=anchor_normalized, actor=actor_name
+    )
 
     # The contact may already be in the workspace (saved from Markt, or an
     # earlier call): same company, same surname, and the first name agrees.
     candidates = (
         await session.scalars(select(Manager).where(Manager.tenant_id == tenant_id, Manager.company_id == company_id))
     ).all()
-    first = _fold(named.first_name) if named.first_name else None
+    first = _fold(person["first_name"]) if person["first_name"] else None
     manager = next(
         (
             m for m in candidates
@@ -346,11 +335,9 @@ async def log_call(
             manager = await managers.create_manager(
                 session, tenant_id=tenant_id,
                 payload=ManagerCreate(
-                    company_id=company_id, full_name=named.full_name, first_name=named.first_name,
-                    last_name=contact.last_name, role_title=role, email=contact.email, phone=contact.phone,
-                    source=ConfidenceSource.PUBLIC_WEB,
-                    source_detail=(posting.source_url or source_detail_url(posting.source, posting.external_id)
-                                   or f"hub_job_postings/{posting.id}")[:500],
+                    company_id=company_id, full_name=person["full_name"], first_name=person["first_name"],
+                    last_name=person["last_name"], role_title=person["role_title"], email=person["email"],
+                    phone=person["phone"], source=ConfidenceSource.PUBLIC_WEB, source_detail=person["source_detail"],
                 ),
             )
         except erasure.Suppressed as exc:

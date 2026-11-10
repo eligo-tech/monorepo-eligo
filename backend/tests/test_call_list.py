@@ -120,6 +120,8 @@ async def test_the_first_call_takes_the_person_into_the_workspace(market) -> Non
         manager = await s.get(Manager, result["manager_id"])
         calls = (await s.scalars(select(ManagerInteraction).where(ManagerInteraction.manager_id == manager.id))).all()
     assert company.name == "Eugen Forschner GmbH" and company.tenant_id == TENANT
+    # A cold call is business development: the employer is a prospect.
+    assert company.is_client is False
     assert (manager.full_name, manager.phone, manager.role_title) == (
         "Leonie Denkinger", "+49 7424 943 126", "Sachbearbeiter/in Personal")
     assert manager.source == "public_web" and manager.source_detail == "https://example.invalid/ad"
