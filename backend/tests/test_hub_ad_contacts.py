@@ -236,3 +236,60 @@ async def test_the_nightly_job_reads_in_batches_and_stops_when_the_queue_is_empt
         left["n"] = 100_000
         assert (await _read_ad_contacts(client, budget=7_000))["read"] == 7_000
         assert asked == [5_000, 2_000]
+
+
+# --- review of #231 -----------------------------------------------------------
+
+
+async def test_a_text_fetched_while_the_pass_ran_is_read_again() -> None:
+    """The description pass stamps its fetch time when it fetches and commits
+    later. A read that stamps its own clock would sit after that fetch time and
+    the ad would never be read again."""
+    await _ingest(("a-1", None))
+    fetched_before_the_read = dt.datetime.now(dt.UTC)
+    await _backfill()
+    async with SessionLocal() as s:
+        row = await s.scalar(select(HubJobPosting))
+        row.description_fetched_at = fetched_before_the_read
+        (await s.get(HubPostingPayload, row.id)).description = WOLTER
+        await s.commit()
+    assert await _backfill() == {"read": 1, "contacts": 1, "remaining": 0}
+
+
+async def test_a_suppressed_person_is_not_stored_whatever_the_spelling() -> None:
+    await _ingest(("a-1", "Ihre Ansprechpartnerin: Frau Mst. Wolter, Tel. 0395 5442681"),
+                  ("a-2", "Ansprechpartnerin: Katrin Grümbel\nTel. 0395 5442682"))
+    async with SessionLocal() as s:
+        for name in ("Katrin Wolter", "Katrin Gruembel"):
+            s.add(HubSuppression(scope="person", key=suppression.person_key(name), reason="objection"))
+        await s.commit()
+    await _backfill()
+    assert await _contacts() == []
+
+
+async def test_suppressing_a_person_removes_their_stored_rows_whatever_the_spelling() -> None:
+    await _ingest(("a-1", "Ansprechpartnerin: Katrin Grümbel\nTel. 0395 5442682"), ("a-2", HOTLINE))
+    await _backfill()
+    async with SessionLocal() as s:
+        await suppression.suppress(s, scope="person", name="Katrin Gruembel", reason="objection")
+    assert [c.last_name for c in await _contacts()] == ["Weidner"]
+
+
+async def test_suppressing_a_person_leaves_other_ads_with_the_same_surname_alone() -> None:
+    await _ingest(("a-1", WOLTER), ("a-2", "Ansprechpartner: Jan Wolter\nTel. 0395 5442689"))
+    await _backfill()
+    async with SessionLocal() as s:
+        await suppression.suppress(s, scope="person", name="Katrin Wolter", reason="objection")
+        jan = await s.scalar(select(HubJobPosting).where(HubJobPosting.external_id == "a-2"))
+    assert [c.first_name for c in await _contacts()] == ["Jan"]
+    assert jan.contacts_rules == AD_CONTACT_RULES  # not wiped and re-queued
+
+
+async def test_a_stale_sweep_takes_the_contacts_of_what_it_closes() -> None:
+    await _ingest(("a-1", WOLTER))
+    await _backfill()
+    async with SessionLocal() as s:
+        await s.execute(update(HubJobPosting).values(last_seen_at=dt.datetime.now(dt.UTC) - dt.timedelta(days=60)))
+        await s.commit()
+        await service.deactivate_stale_postings(s, older_than_days=30)
+    assert await _contacts() == []

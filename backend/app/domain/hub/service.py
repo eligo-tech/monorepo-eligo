@@ -613,6 +613,9 @@ async def deactivate_stale_postings(
         .where(HubJobPosting.id.in_(posting_ids))
         .values(is_active=False)
     )
+    from app.domain.hub import ad_contacts
+
+    await ad_contacts.forget(session, posting_ids)  # a closed ad names no one to call
     await session.flush()
 
     # The denormalized signal must follow, or "who is hiring hardest" keeps

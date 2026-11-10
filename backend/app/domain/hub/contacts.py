@@ -107,14 +107,27 @@ _UNIT_WORD = re.compile(
 #: The name is a company if a legal form follows it: "Vision Consulting GmbH".
 _LEGAL_FORM_AFTER = re.compile(r"^ *(?:GmbH|gGmbH|mbH|AG|KG|SE|e\. ?V\.|OHG|UG|GbR|Gmb)\b")
 #: Street-shaped tokens a name must not end in: "Friedrich-Mohr-Straße", "Wahlerstr".
-_STREET = re.compile(r"(?i)(stra(ss|ß)e|str\.?|allee|weg|platz|ring|gasse|damm|ufer)$")
+_STREET = re.compile(r"(?i)(stra(ss|ß)e|str\.?|allee|platz|gasse)$")
+#: Suffixes that also end common surnames — Hering, Döring, Kaufer, Damm.
+#: Taken as a street only when a house number follows or the name already
+#: has two parts before it.
+_STREET_WEAK = re.compile(r"(?i)(weg|ring|damm|ufer)$")
 
 
-def _is_street(token: str) -> bool:
+def _is_street(token: str, *, following: str = "", parts: int = 3) -> bool:
     """A street-shaped token — but a suffix on its own is a surname: "Herr
-    Marco Damm" is a person, "Kurfürstendamm" is an address."""
+    Marco Damm" is a person, "Kurfürstendamm" is an address; and "Herr
+    Thomas Hering" is a person, "Am Hering 4" is not a name at all."""
     m = _STREET.search(token)
-    return bool(m) and m.start() > 0
+    if m and m.start() > 0:
+        return True
+    numbered = bool(re.match(r"^\s*\d", following))
+    m = _STREET_WEAK.search(token)
+    if m and m.start() == 0:
+        # The suffix as a word of its own is a street only before a house
+        # number: "Kreuzberger Ring 46a" — but "Herr Thomas Ring" is a person.
+        return numbered
+    return bool(m) and (parts >= 3 or numbered)
 
 
 #: A business, not a person: "Kontakt:\nBäckerei Sonnenschein", "Frau Cordula
@@ -123,17 +136,36 @@ def _is_street(token: str) -> bool:
 _BUSINESS = re.compile(
     r"(?i)^(bäckerei|konditorei|metzgerei|fleischerei|gasthof|landgasthof|gasthaus|"
     r"hotel|restaurant|café|cafe|bistro|pizzeria|pension|brauerei|weingut|praxis|"
-    r"\w*praxis|kanzlei|\w*kanzlei|apotheke|\w*apotheke|autohaus|friseur\w*|salon|"
+    r"\w*praxis|kanzlei|\w*kanzlei|apotheke|\w*apotheke|autohaus|friseur\w*|"
     r"\w*büro|klinik\w*|\w*klinik|werkstatt|schreinerei|tischlerei|gärtnerei|"
-    r"zahnarztpraxis|pflegedienst|sanitätshaus|optik)$"
+    r"zahnarztpraxis|pflegedienst|sanitätshaus)$"
 )
 
 #: A sentence about the firm's history names an owner, not a contact:
-#: "… hat Herr X die Traditionsfirma von Herrn Y übernommen."
-_HISTORY = re.compile(
-    r"(?i)übernommen|übernahm\b|gegründet|gründete|firmengründer|unternehmensgründer|"
-    r"in (?:\w+ )?generation|verstorben|nachfolge"
+#: "… hat Herr X die Traditionsfirma von Herrn Y übernommen." Three parts must
+#: agree: a history verb (whole words: "nachfolgend" and "Übernahme" are not
+#: history), a firm it happened to, and no contact cue — "Fragen beantwortet
+#: Frau X …, Fahrtkosten werden übernommen" is a contact sentence.
+_HISTORY_VERB = re.compile(
+    r"(?i)\b(?:übernommen|übernahm|gegründet|gründete|verstorben|nachfolge|nachfolger(?:in)?)\b"
+    r"|firmengründer|unternehmensgründer"
 )
+_HISTORY_SUBJECT = re.compile(
+    r"(?i)firma|betrieb|unternehm|geschäft|praxis|kanzlei|inhaber|chefärzt|chefarzt|"
+    r"traditions|im jahre?\b"
+)
+_CONTACT_CUE = re.compile(
+    r"(?i)ansprech|kontakt|fragen|bewerb|wenden|erreich|telefon|\btel\b|e-mail|melde|"
+    r"auskunft|auskünfte"
+)
+
+
+def _is_history(sentence: str) -> bool:
+    return bool(
+        _HISTORY_VERB.search(sentence)
+        and _HISTORY_SUBJECT.search(sentence)
+        and not _CONTACT_CUE.search(sentence)
+    )
 
 #: Words before a name that are grammar, not part of a role: "Ihnen gern die
 #: Teamleitung" → "Teamleitung".
@@ -245,13 +277,16 @@ def _trim_name(raw: str, following: str) -> tuple[str | None, str | None]:
     def bare() -> list[str]:
         return [t for t in tokens if not re.fullmatch(_TITLE, t)]
 
+    trailing = following
     while len(bare()) > 1 and (
         tokens[-1].rstrip(".,") in _NOT_NAMES
         or _ROLE_HINT.search(tokens[-1])
-        or _is_street(tokens[-1])
-        or _BUSINESS.match(tokens[-1])
+        or _is_street(tokens[-1], following=trailing, parts=len(bare()))
+        # A business word ends a name only after a full name: "Cordula Steiner
+        # Gasthof", never "Maria Salon".
+        or (len(bare()) >= 3 and _BUSINESS.match(tokens[-1]))
     ):
-        tokens.pop()
+        trailing = f" {tokens.pop()}{trailing}"
     while len(tokens) > 1 and re.fullmatch(_PARTICLE, tokens[-1]):
         tokens.pop()
     # A third token is only trusted when the name ends cleanly (line end,
@@ -375,7 +410,7 @@ def _national_digits(phone: str) -> int:
 
 #: Service numbers reach a hotline, never a named person. Matched on the
 #: number with spaces and slashes removed, so no word boundary after the code.
-_SERVICE_NUMBER = re.compile(r"^(?:\+49(?:\(0\))?|0)(?:800|180|900|700)")
+_SERVICE_NUMBER = re.compile(r"^(?:\+\d{2}(?:\(0\))?|00\d{2}|0)(?:800|180|900|700)")
 
 
 def phone_kind(phone: str | None) -> str | None:
@@ -385,7 +420,8 @@ def phone_kind(phone: str | None) -> str | None:
     if not phone:
         return None
     compact = re.sub(r"[\s/]", "", phone)
-    if re.search(r"-0$", compact) or _SERVICE_NUMBER.match(compact):
+    # "-0" or a lone trailing " 0": "0271/33583-0", "0711 2525 0".
+    if re.search(r"[\s-]0$", phone.strip()) or _SERVICE_NUMBER.match(compact):
         return "switchboard"
     return "direct"
 
@@ -403,7 +439,7 @@ def _wrapped_surname(text: str, end: int) -> str | None:
     token, rest = m.group(1), text[m.end() : m.end() + 6]
     if (
         token in _NOT_NAMES
-        or _is_street(token)
+        or _is_street(token, following=text[m.end() :], parts=2)
         or _BUSINESS.match(token)
         or _ROLE_HINT.search(token)
         or re.match(r"(?i) *(str\b|str\.|\d|&)", rest)
@@ -432,12 +468,21 @@ def _first_name_elsewhere(text: str, last: str, salutation: str) -> str | None:
     return None
 
 
+#: A sentence end: . ! ? or a line break — but not the dot of a title ("Dr.",
+#: "Mst."), an abbreviation ("z.B.") or an ordinal/date ("3.", "1.1.").
+_SENTENCE_END = re.compile(
+    r"(?<!\bDr)(?<!\bDDr)(?<!\bProf)(?<!\bMag)(?<!\bMst)(?<!\bIng)(?<!\bDipl)(?<!\bmed)"
+    r"(?<!\bz\.B)(?<!\bbzw)(?<!\bca)(?<!\bggf)(?<!\bTel)(?<!\bNr)(?<!\d)[.!?]|\n"
+)
+
+
 def _sentence(text: str, start: int, end: int) -> str:
-    """The sentence around a mention — bounded by . ! ? or a line break, with
-    the dots of a title ("Dr.", "Mst.") not counted as sentence ends."""
-    left = max(text.rfind(c, 0, start) for c in ".!?\n")
-    right = min([i for i in (text.find(c, end) for c in ".!?\n") if i != -1] or [len(text)])
-    return text[left + 1 : right]
+    """The sentence around a mention, bounded by `_SENTENCE_END`."""
+    left = 0
+    for m in _SENTENCE_END.finditer(text, 0, start):
+        left = m.end()
+    right_m = _SENTENCE_END.search(text, end)
+    return text[left : right_m.start() if right_m else len(text)]
 
 
 def _quote(text: str, start: int, end: int) -> str:
@@ -490,7 +535,7 @@ def extract_contacts(text: str | None) -> list[ContactMention]:
             if first:
                 titles = [t for t in name.split() if re.fullmatch(_TITLE, t)]
                 name = " ".join([*titles, first, last])
-        if _HISTORY.search(_sentence(clean, start, end)):
+        if _is_history(_sentence(clean, start, end)):
             return
         window = clean[max(0, start - _WINDOW_BEFORE) : end + _WINDOW_AFTER]
         tail = clean[end : end + _WINDOW_AFTER]

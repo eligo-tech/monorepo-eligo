@@ -262,3 +262,50 @@ def test_a_takeover_offer_to_the_candidate_is_not_company_history() -> None:
 
 def test_noch_fragen_is_not_a_name() -> None:
     assert extract_contacts("Ansprechpartner:\nNoch Fragen\n030 9210 952 00") == []
+
+
+# --- review of ELI-22 PR 1 (#231): recall the precision pass must not cost ---
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bei Fragen wenden Sie sich bitte an die nachfolgend genannte Ansprechpartnerin "
+        "Frau Katrin Wolter, Tel. 0395 5442681.",
+        "Fragen beantwortet Frau Katrin Wolter unter 0395 5442681, Fahrtkosten werden übernommen.",
+        "Frau Katrin Wolter, die unser Team 2019 gegründet hat, freut sich auf Ihre Bewerbung.",
+        "Ihr Ansprechpartner ist Frau Katrin Wolter, die den Betrieb in dritter Generation führt.",
+    ],
+)
+def test_a_contact_sentence_is_not_company_history(text: str) -> None:
+    assert one(text).last_name == "Wolter"
+
+
+def test_history_survives_a_title_dot_in_the_sentence() -> None:
+    assert extract_contacts(
+        "Zum 1.1. suchen wir zur Nachfolge unserer langjährigen Chefärzte Herrn Dr. Udo "
+        "Brenner und Herrn Dr. Jan Kluge eine Leitung."
+    ) == []
+
+
+@pytest.mark.parametrize("surname", ["Hering", "Gehring", "Döring", "Kaufer", "Salon"])
+def test_a_surname_shaped_like_a_street_or_business_is_kept(surname: str) -> None:
+    c = one(f"Ihr Ansprechpartner: Herr Thomas {surname}, Tel. 0395 5442681")
+    assert (c.first_name, c.last_name) == ("Thomas", surname)
+
+
+def test_a_street_after_a_full_name_is_still_cut() -> None:
+    c = one("Frau Sophie Bennicke Ehrenbachstraße 4, 10115 Berlin")
+    assert c.full_name == "Sophie Bennicke"
+
+
+@pytest.mark.parametrize(
+    "number", ["0711 2525 0", "089 12345 0", "0049 800 1234567", "+43 800 123456"]
+)
+def test_more_switchboard_shapes(number: str) -> None:
+    assert one(f"Frau Katrin Wolter\nTelefon {number}\n").phone_kind == "switchboard"
+
+
+def test_a_lone_street_word_before_a_house_number_is_an_address() -> None:
+    c = one("Beispiel Service GmbH Herr Jäger Kreuzberger Ring 46a 65205 Wiesbaden")
+    assert "Ring" not in c.full_name
