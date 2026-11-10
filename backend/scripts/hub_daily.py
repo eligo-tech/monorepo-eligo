@@ -455,6 +455,35 @@ async def _classify_families(client: httpx.AsyncClient, *, budget: int) -> dict[
     return totals
 
 
+#: Waits between attempts when the API is briefly gone — a deploy replaces the
+#: container in well under a minute (2026-11-10: #233 deployed mid-fill).
+_RETRY_WAITS = (15.0, 30.0, 60.0, 120.0)
+
+
+async def _post_retrying(client: httpx.AsyncClient, url: str) -> httpx.Response:
+    """POST an idempotent batch, retrying a 5xx or a dropped connection.
+
+    Only for passes that are safe to repeat — the ad-contacts pass reads a
+    queue and replaces its rows, so a batch that ran but whose answer was lost
+    is simply not in the queue any more. A 4xx (bad token, bad request) is not
+    retried: waiting does not fix it.
+    """
+    for wait in (*_RETRY_WAITS, None):
+        try:
+            response = await client.post(url)
+            if response.status_code < 500:
+                response.raise_for_status()
+                return response
+            if wait is None:
+                response.raise_for_status()
+        except httpx.TransportError:
+            if wait is None:
+                raise
+        print(f"  {url}: API not answering, retry in {wait:.0f}s", file=sys.stderr)
+        await asyncio.sleep(wait)
+    raise AssertionError("unreachable")
+
+
 async def _read_ad_contacts(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
     """Read the persons up to `budget` queued open ads name into
     `hub_ad_contacts` (`hub/ad_contacts.py`), in batches — the same IO
@@ -463,8 +492,7 @@ async def _read_ad_contacts(client: httpx.AsyncClient, *, budget: int) -> dict[s
     totals = {"read": 0, "contacts": 0, "remaining": 0}
     while totals["read"] < budget:
         size = min(_VACANCY_BATCH, budget - totals["read"])
-        response = await client.post(f"/hub/ad-contacts/backfill?limit={size}")
-        response.raise_for_status()
+        response = await _post_retrying(client, f"/hub/ad-contacts/backfill?limit={size}")
         result = response.json()
         totals["read"] += result.get("read", 0)
         totals["contacts"] += result.get("contacts", 0)

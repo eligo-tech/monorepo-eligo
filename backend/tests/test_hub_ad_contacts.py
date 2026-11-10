@@ -293,3 +293,51 @@ async def test_a_stale_sweep_takes_the_contacts_of_what_it_closes() -> None:
         await s.commit()
         await service.deactivate_stale_postings(s, older_than_days=30)
     assert await _contacts() == []
+
+
+async def test_the_nightly_job_survives_a_deploy_mid_run(monkeypatch) -> None:
+    """A deploy replaces the API container: one batch call gets a 502 or a
+    dropped connection (seen 2026-11-10, #233 deployed during the first
+    fill). The pass is idempotent, so the job retries instead of failing."""
+    import httpx
+
+    import scripts.hub_daily as daily
+
+    async def no_wait(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(daily.asyncio, "sleep", no_wait)
+    answers = iter([
+        httpx.Response(200, json={"read": 5_000, "contacts": 900, "remaining": 5_000}),
+        httpx.Response(502),
+        "drop",
+        httpx.Response(200, json={"read": 5_000, "contacts": 800, "remaining": 0}),
+        httpx.Response(200, json={"read": 0, "contacts": 0, "remaining": 0}),
+    ])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        a = next(answers)
+        if a == "drop":
+            raise httpx.RemoteProtocolError("server disconnected", request=request)
+        return a
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://api") as client:
+        assert await daily._read_ad_contacts(client, budget=50_000) == {"read": 10_000, "contacts": 1_700, "remaining": 0}
+
+
+async def test_the_nightly_job_gives_up_when_the_api_stays_down(monkeypatch) -> None:
+    import httpx
+    import pytest as _pytest
+
+    import scripts.hub_daily as daily
+
+    async def no_wait(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(daily.asyncio, "sleep", no_wait)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(503)), base_url="http://api"
+    ) as client:
+        with _pytest.raises(httpx.HTTPStatusError):
+            await daily._read_ad_contacts(client, budget=50_000)
