@@ -7,8 +7,8 @@ metadata-only on Postgres. The follow-up queue index is partial (most
 interactions have no next call). Tenant table — RLS is already on it
 (0003/0005); new columns need no policy of their own.
 
-Revision ID: 0060
-Revises: 0059
+Revision ID: 0061
+Revises: 0060
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0060"
-down_revision: str | None = "0059"
+revision: str = "0061"
+down_revision: str | None = "0060"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
