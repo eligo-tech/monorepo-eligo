@@ -208,3 +208,61 @@ async def test_an_erased_number_is_not_brought_back_under_another_name(market, m
         await s.commit()
     assert "Dengler" not in {r["last_name"] for r in await _market()}
 
+
+
+# --- routes ------------------------------------------------------------------
+
+
+def _client(tenant: uuid.UUID = TENANT):
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.auth import Actor, get_current_actor, get_current_tenant
+    from app.main import app
+
+    app.dependency_overrides[get_current_tenant] = lambda: tenant
+    app.dependency_overrides[get_current_actor] = lambda: Actor(tenant_id=tenant, user_id="u1", name="Dima", role="recruiter", role_known=True)
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+@pytest.fixture(autouse=True)
+def _no_overrides():
+    yield
+    from app.main import app
+
+    app.dependency_overrides.clear()
+
+
+async def test_the_routes_list_log_and_follow_up(market) -> None:
+    from app.core.config import settings
+
+    base = f"{settings.api_v1_prefix}/hub/call-list"
+    async with _client() as c:
+        page = (await c.get(f"{base}/market?phone_only=true")).json()
+        assert [r["last_name"] for r in page["rows"]] == ["Denkinger", "Kraft"]
+        first = page["rows"][0]
+        logged = await c.post(f"{base}/calls", json={
+            "hub_company_id": first["hub_company_id"], "person_key": first["person_key"],
+            "outcome": "call_back", "next_action_at": "2026-11-13T09:00:00Z", "summary": "Donnerstag",
+        })
+        assert logged.status_code == 201, logged.text
+        assert logged.json()["art14_outstanding"] is True
+        follow = (await c.get(f"{base}/follow-ups")).json()
+        assert [(r["full_name"], r["outcome"], r["last_call_by"]) for r in follow] == [
+            ("Leonie Denkinger", "call_back", "Dima")]
+        missing_date = await c.post(f"{base}/calls", json={
+            "hub_company_id": first["hub_company_id"], "person_key": first["person_key"], "outcome": "call_back"})
+        assert missing_date.status_code == 422
+        unknown = await c.post(f"{base}/calls", json={
+            "hub_company_id": first["hub_company_id"], "person_key": "mustermann", "outcome": "voicemail"})
+        assert unknown.status_code == 404
+
+
+async def test_the_routes_are_per_workspace(market) -> None:
+    from app.core.config import settings
+
+    base = f"{settings.api_v1_prefix}/hub/call-list"
+    async with _client() as c:
+        await c.post(f"{base}/calls", json={
+            "hub_company_id": str(market["forschner"]), "person_key": "denkinger", "outcome": "voicemail"})
+    async with _client(OTHER) as c:
+        assert (await c.get(f"{base}/follow-ups")).json() == []

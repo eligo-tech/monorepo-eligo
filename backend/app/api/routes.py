@@ -19,6 +19,7 @@ from app.domain.interviews.router import router as interviews_router
 from app.domain.imports.router import router as imports_router
 from app.domain.tenantsources.router import router as tenantsources_router
 from app.domain.hub.router import router as hub_router
+from app.domain.hub.call_list_router import router as call_list_router
 from app.domain.jobs.router import router as jobs_router
 from app.domain.managers.router import router as managers_router
 from app.domain.matching.router import router as matching_router
@@ -59,6 +60,7 @@ async def me(actor: Actor = Depends(get_current_actor)) -> dict:
 
 
 api_router.include_router(activity_router)
+api_router.include_router(call_list_router)
 api_router.include_router(candidates_router)
 api_router.include_router(companies_router)
 api_router.include_router(documents_router)
