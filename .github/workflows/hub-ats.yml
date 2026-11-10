@@ -69,12 +69,18 @@ jobs:
           DISCOVER_INPUT: ${{ github.event.inputs.discover }}
           MINUTES_INPUT: ${{ github.event.inputs.minutes }}
           HOST_INPUT: ${{ github.event.inputs.discover_host }}
+          ATS_INPUT: ${{ github.event.inputs.ats }}
           ATS: ${{ matrix.ats }}
         run: |
           extra=()
           if [ "$DISCOVER_INPUT" = "true" ] || [ "$(date -u +%d)" = "01" ]; then extra=(--discover); fi
           if [ -n "$HOST_INPUT" ]; then
             case "$HOST_INPUT" in *[!a-z0-9.-]*) echo "discover_host must be a host name"; exit 2;; esac
+            # A host belongs to one system: with "all", the other systems'
+            # jobs would refuse it and lose their refresh. Pick one ats.
+            if [ "$ATS_INPUT" = "all" ] || [ -z "$ATS_INPUT" ]; then
+              echo "discover_host needs a single ats, not all"; exit 2
+            fi
             extra+=(--host "$HOST_INPUT")
           fi
           MINUTES="${MINUTES_INPUT:-120}"

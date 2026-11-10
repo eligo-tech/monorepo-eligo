@@ -285,14 +285,29 @@ async def sync(api: Api, *, minutes: float, batch: int = 20, ats: str = "personi
     return 0
 
 
-async def main() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """The command line, with `--host` checked before any work starts: a host
+    the run cannot honour is an error, never silently ignored."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     parser.add_argument("--ats", choices=("personio", *PATH_HOSTS), default="personio", help="which boards")
     parser.add_argument("--discover", action="store_true", help="find new boards in public URL indexes first")
     parser.add_argument("--host", action="append", default=None,
                         help="discover on this board host only (repeatable; Ashby/Greenhouse/Lever)")
     parser.add_argument("--minutes", type=float, default=90.0, help="sync time budget")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.host:
+        if not args.discover:
+            parser.error("--host only applies with --discover")
+        known = PATH_HOSTS.get(args.ats, ())
+        unknown = [h for h in args.host if h not in known]
+        if unknown:
+            parser.error(f"--host {', '.join(unknown)} is not a {args.ats} board host "
+                         f"(known: {', '.join(known) or 'none — discovered from Common Crawl'})")
+    return args
+
+
+async def main() -> int:
+    args = parse_args()
 
     base, token = os.environ.get("ELIGO_API_BASE"), os.environ.get("ELIGO_INGEST_TOKEN")
     if not base or not token:

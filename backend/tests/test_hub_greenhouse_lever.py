@@ -292,3 +292,20 @@ async def test_discovery_can_be_limited_to_one_host(monkeypatch) -> None:
     assert asked == ["job-boards.greenhouse.io"] and added == 1
     with pytest.raises(ValueError):
         await hub_ats.discover_paths(None, None, "greenhouse", hosts=["jobs.ashbyhq.com"])
+
+
+@pytest.mark.parametrize(("argv", "ok"), [
+    (["--ats", "greenhouse", "--discover", "--host", "job-boards.greenhouse.io"], True),
+    (["--ats", "greenhouse", "--discover", "--host", "job-boards.greenhouse.io",
+      "--host", "job-boards.eu.greenhouse.io"], True),
+    (["--ats", "greenhouse"], True),
+    (["--ats", "greenhouse", "--host", "job-boards.greenhouse.io"], False),  # no --discover
+    (["--ats", "personio", "--discover", "--host", "jobs.personio.de"], False),  # not path-based
+    (["--ats", "ashby", "--discover", "--host", "job-boards.greenhouse.io"], False),  # another system's
+])
+def test_the_command_line_refuses_a_host_it_cannot_honour(argv, ok) -> None:
+    if ok:
+        assert hub_ats.parse_args(argv).ats
+    else:
+        with pytest.raises(SystemExit):
+            hub_ats.parse_args(argv)
