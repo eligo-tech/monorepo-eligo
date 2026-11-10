@@ -121,10 +121,11 @@ export function CommandBar({
         <div className="flex shrink-0 items-center gap-2.5 rounded-xl border border-cockpit-line bg-cockpit-inset px-3 py-1.5">
           {authEnabled ? (
             <>
+              {/* No after…OrganizationUrl: a hash-route redirect never
+                  reloads, and Clerk waited on it forever — black screen
+                  until a refresh. See auth/orgSwitchRedirect.test.ts. */}
               <OrganizationSwitcher
                 hidePersonal
-                afterSelectOrganizationUrl="/#cockpit"
-                afterCreateOrganizationUrl="/#cockpit"
                 appearance={{ elements: { rootBox: 'flex items-center' } }}
               />
               <UserButton afterSignOutUrl="/" />

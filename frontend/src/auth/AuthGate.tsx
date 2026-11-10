@@ -65,8 +65,6 @@ function OrgGate({ children }: { children: ReactNode }) {
       >
         <OrganizationList
           hidePersonal
-          afterSelectOrganizationUrl="/#Kandidaten"
-          afterCreateOrganizationUrl="/#Kandidaten"
         />
       </Screen>
     )
