@@ -309,3 +309,108 @@ def test_more_switchboard_shapes(number: str) -> None:
 def test_a_lone_street_word_before_a_house_number_is_an_address() -> None:
     c = one("Beispiel Service GmbH Herr Jäger Kreuzberger Ring 46a 65205 Wiesbaden")
     assert "Ring" not in c.full_name
+
+
+# --- ELI-22 parser v2: defects seen in the first prod fill (2026-11-10) -------
+
+
+def test_a_website_heading_under_a_contact_heading_is_not_a_person() -> None:
+    assert extract_contacts("Ihr Kontakt\nÜber Uns\nWir sind ein Familienbetrieb.") == []
+
+
+def test_an_upper_case_surname_is_part_of_the_name() -> None:
+    c = one("Bewerbungen nach telefonischer Terminvereinbarung mit Herrn Felix BRANDNER")
+    assert (c.first_name, c.last_name) == ("Felix", "BRANDNER")
+
+
+def test_an_upper_case_surname_alone_after_the_salutation() -> None:
+    c = one("Bewerbungen bitte per Mail z.H. an Herrn NIKOLAIDIS. Kontakt: Hotel Linde")
+    assert (c.salutation, c.last_name) == ("Herr", "NIKOLAIDIS")
+
+
+def test_upper_case_company_words_are_not_a_surname() -> None:
+    assert extract_contacts("Herr GMBH UND CO KG") == []
+
+
+@pytest.mark.parametrize("title", ["Dr. med.", "Dr. med. dent.", "Dr. rer. nat.", "Dr. jur.", "Dr. phil."])
+def test_a_medical_or_academic_title_is_not_the_name(title: str) -> None:
+    c = one(f"Für Rückfragen steht Ihnen gern Frau {title} Anna Brenner zur Verfügung.")
+    assert (c.first_name, c.last_name) == ("Anna", "Brenner")
+
+
+def test_a_title_alone_is_not_a_name() -> None:
+    assert extract_contacts("Für Rückfragen steht Ihnen Frau Dr. gern zur Verfügung.") == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Kontakt\nNORDA Lebensmittelfilialbetrieb Stiftung & Co. KG",
+        "EDEKA Breitenbach",
+        "Kontakt:\nTRAGLE Car Taxi - und Mietwagenunternehmen GmbH",
+        "AWO Landesverband Sachsen-Anhalt e.V.",
+    ],
+)
+def test_upper_case_words_without_a_salutation_are_not_a_person(text: str) -> None:
+    assert extract_contacts(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "first", "last"),
+    [
+        ("Bei Fragen können Sie sich gerne an Frau Mag.a Christine Reiter wenden.", "Christine", "Reiter"),
+        ("z. H. Frau Mag. (FH) Saskia Knauer", "Saskia", "Knauer"),
+        ("Terminvereinbarung mit Frau Dr.in Michaela Gruber, Tel. 03125/2355", "Michaela", "Gruber"),
+        ("Frau Dr.rer.nat. Laura Fröhner", "Laura", "Fröhner"),
+        ("Herr Dr.med. Dirk Arnold", "Dirk", "Arnold"),
+        ("von dem Dekan, Herrn Prof. Dr.-Ing. Thomas Keller, beantwortet", "Thomas", "Keller"),
+        ("Herr Landrat Dr. Richard Sieber", "Richard", "Sieber"),
+    ],
+)
+def test_more_title_forms(text: str, first: str, last: str) -> None:
+    c = one(text)
+    assert (c.first_name, c.last_name) == (first, last)
+
+
+def test_a_postnominal_is_not_the_surname() -> None:
+    c = one("Ihr Ansprechpartner: Herr Heinz Hierl MAS, Bereichsleitung, T: 0732/7897-24967")
+    assert (c.first_name, c.last_name) == ("Heinz", "Hierl")
+
+
+def test_an_upper_case_ordinary_word_after_a_surname_is_not_the_name() -> None:
+    c = one("Persönlich bei Frau Steiner NACH telefonischer Terminvereinbarung unter 0664/420 69 73")
+    assert c.full_name == "Steiner"
+
+
+@pytest.mark.parametrize(
+    ("text", "first", "last"),
+    [
+        ("Fragen beantwortet Ihnen \nFrau Oberärztin Dr. Gabriele Hartl, Tel. +43 5522 303", "Gabriele", "Hartl"),
+        ("unter Leitung von Herrn Chefarzt Privatdozent Dr. Jonas Diehm.", "Jonas", "Diehm"),
+    ],
+)
+def test_a_medical_rank_before_the_name_is_the_role(text: str, first: str, last: str) -> None:
+    c = one(text)
+    assert (c.first_name, c.last_name) == (first, last)
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("Ihr Ansprechpartner: Michael Schliwa Energie Südbayern GmbH Ungsteiner Straße 31", "Michael Schliwa"),
+        ("Ansprechpartnerin: Jana Hasan Randstad Austria GmbH Vogelweiderstraße 33", "Jana Hasan"),
+        ("Beispiel GmbH\nFrau Mirèio Rath da Silva", "Mirèio Rath da Silva"),
+    ],
+)
+def test_a_company_after_the_name_does_not_cost_the_name(text: str, name: str) -> None:
+    assert one(text).full_name == name
+
+
+def test_the_rank_words_before_a_name_are_its_role() -> None:
+    c = one("Sie bitte an Herrn Oberlandeskirchenrat Dr. Thilo Daniel, Tel. (0351) 4692")
+    assert (c.first_name, c.last_name, c.role_title) == ("Thilo", "Daniel", "Oberlandeskirchenrat")
+
+
+@pytest.mark.parametrize("text", ["Kontakt:\nHuman Resources", "Herrn Rabko DIENSTGEBER: Beispiel GmbH"])
+def test_department_and_label_words_are_not_a_name(text: str) -> None:
+    assert all("Resources" not in c.full_name and "DIENSTGEBER" not in c.full_name for c in extract_contacts(text))
