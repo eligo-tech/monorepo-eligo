@@ -614,6 +614,8 @@ export interface ContactCandidateDTO {
   role_title: string | null
   email: string | null
   phone: string | null
+  /** Whether dialling reaches the person or the company's reception (ELI-22). */
+  phone_kind?: 'direct' | 'switchboard' | null
   mention_count: number
   evidence: ContactEvidenceDTO[]
   /** Set when this workspace already holds the person as a manager. */

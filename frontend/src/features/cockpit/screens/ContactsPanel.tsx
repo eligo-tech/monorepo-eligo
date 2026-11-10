@@ -11,7 +11,7 @@ import { locale } from '@/i18n/format'
 
 import { t } from '@/i18n'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, ChevronDown, ExternalLink, Mail, Phone, UserPlus } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
@@ -128,6 +128,14 @@ function ContactRow({
               {contact.phone}
             </a>
           )}
+          {contact.phone && contact.phone_kind === 'switchboard' && (
+            <span
+              className="rounded border border-gold-600/50 px-1.5 text-[11px] text-gold-400"
+              title={t('Die Nummer endet auf -0 oder ist eine Service-Nummer: Sie erreichen die Zentrale, nicht die Person direkt.')}
+            >
+              {t('Zentrale')}
+            </span>
+          )}
           {contact.email && (
             <a href={`mailto:${contact.email}`} className="flex items-center gap-1 hover:text-mint-400">
               <Mail className="h-3.5 w-3.5 text-cockpit-faint" />
@@ -225,16 +233,28 @@ export interface ContactsPanelCompany {
 export function ContactsPanel({
   company,
   onAdopted,
+  onKnownCompany,
+  reload = 0,
 }: {
   company: ContactsPanelCompany
   onAdopted: (companyId: string) => void
+  /** Told once the read shows this workspace already holds the employer. */
+  onKnownCompany?: (companyId: string) => void
+  /** Bump to re-read — e.g. after the host adopted the employer elsewhere. */
+  reload?: number
 }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [art14, setArt14] = useState(false)
   const result = useAsync<CompanyContactsDTO>(
     () => api.hubCompanyContacts(company.hub_company_id),
-    [company.hub_company_id, reloadKey],
+    [company.hub_company_id, reloadKey, reload],
   )
+  // The read knows whether this workspace already holds the employer; tell
+  // the host, so it does not offer to adopt a client a second time.
+  const knownCompanyId = result.data?.company_id ?? null
+  useEffect(() => {
+    if (knownCompanyId) onKnownCompany?.(knownCompanyId)
+  }, [knownCompanyId, onKnownCompany])
 
   const save = async (contact: ContactCandidateDTO) => {
     const data = result.data

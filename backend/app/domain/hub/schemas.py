@@ -450,6 +450,8 @@ class ContactCandidate(BaseModel):
     role_title: str | None
     email: str | None
     phone: str | None
+    #: "direct" | "switchboard" — whether dialling reaches the person (ELI-22).
+    phone_kind: str | None = None
     #: How many of this employer's ads name them — a recruiter named in twelve
     #: ads is the talent-acquisition desk; one named once is a hiring manager.
     mention_count: int
