@@ -21,6 +21,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import hmac
+import re
 import uuid
 from collections.abc import Iterable
 
@@ -82,10 +83,55 @@ def _import_ids(source: str | None, external_id: str | None, merged: Iterable[st
     return ids + [m for m in merged if m]
 
 
-def _keys(tenant_id: uuid.UUID, *, email: str | None, import_ids: list[str]) -> list[tuple[str, str]]:
+def phone_value(phone: str | None) -> str | None:
+    """A phone number as one string however an ad wrote it: "+49 (0) 7424
+    943 126", "0049 7424 943126" and "07424 943126" are one number. DACH
+    country codes become the trunk 0; fewer than 7 digits is not a number."""
+    if not phone:
+        return None
+    raw = phone.strip()
+    digits = re.sub(r"\D", "", raw)
+    if raw.startswith("+") or digits.startswith("00"):
+        digits = digits.lstrip("0")
+        for cc in ("49", "43", "41"):
+            if digits.startswith(cc):
+                digits = "0" + digits[len(cc):].lstrip("0")
+                break
+    return digits if len(digits) >= 7 else None
+
+
+def surname_at_company(company_name: str | None, surname: str | None) -> str | None:
+    """"eugen forschner|denkinger" — the person as a public job ad names them
+    (ELI-22 call list). Deliberately surname-only: "Frau Denkinger" in the
+    next ad is the same person, and blocking a namesake at the same employer
+    is the safe side of an erasure."""
+    from app.domain.hub.contacts import _fold
+    from app.domain.hub.resolution import normalize_company_name
+
+    if not company_name or not surname or not surname.split():
+        return None
+    company = normalize_company_name(company_name)
+    last = re.sub(r"[^a-z-]", "", _fold(surname.split()[-1]))
+    return f"{company}|{last}" if company and last else None
+
+
+def _keys(
+    tenant_id: uuid.UUID,
+    *,
+    email: str | None,
+    import_ids: list[str],
+    phone: str | None = None,
+    person_at: str | None = None,
+) -> list[tuple[str, str]]:
     keys = [("import_id", digest(tenant_id, "import_id", i)) for i in import_ids]
     if email and email.strip():
         keys.append(("email", digest(tenant_id, "email", email)))
+    # ELI-22: ad contacts rarely carry an e-mail; the call list must still
+    # not bring an erased contact back by phone or by name at the employer.
+    if phone_value(phone):
+        keys.append(("phone", digest(tenant_id, "phone", phone_value(phone) or "")))
+    if person_at:
+        keys.append(("surname_at_company", digest(tenant_id, "surname_at_company", person_at)))
     return keys
 
 
@@ -289,11 +335,56 @@ async def erase_manager(
     return await _finish(
         session, tenant_id=t, subject_type="manager", reason=reason,
         requested_on=requested_on, actor_user_id=actor_user_id, actor_name=actor_name,
-        keys=_keys(t, email=boss.email, import_ids=_import_ids(boss.external_source, boss.external_id)),
+        keys=_keys(
+            t, email=boss.email, import_ids=_import_ids(boss.external_source, boss.external_id),
+            phone=boss.phone,
+            person_at=surname_at_company(
+                await _company_name(session, t, boss.company_id), boss.last_name or boss.full_name
+            ),
+        ),
         receipt_ids=receipts,
         deletions=[(ManagerInteraction, notes), (EnrichmentRecord, records),
                    (AgentProposal, proposals), (Manager, [boss.id])],
     )
+
+
+async def _company_name(session: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID | None) -> str | None:
+    from app.domain.companies.models import Company
+
+    if company_id is None:
+        return None
+    return await session.scalar(
+        select(Company.name).where(Company.tenant_id == tenant_id, Company.id == company_id)
+    )
+
+
+class PersonGuard:
+    """Answers "did this workspace erase the person an ad names?" (ELI-22).
+
+    Same contract as `ImportGuard`: loaded once, free for a workspace with no
+    erasures, and a workspace WITH erasures but no key cannot check — the
+    caller gets `NotConfigured` rather than a list that lets them back.
+    """
+
+    def __init__(self, tenant_id: uuid.UUID, digests: set[str]) -> None:
+        self._tenant = tenant_id
+        self._digests = digests
+
+    def blocks(self, *, company_name: str | None, surname: str | None, phone: str | None) -> bool:
+        if not self._digests:
+            return False
+        keys = _keys(
+            self._tenant, email=None, import_ids=[], phone=phone,
+            person_at=surname_at_company(company_name, surname),
+        )
+        return any(d in self._digests for _, d in keys)
+
+
+async def person_guard(session: AsyncSession, tenant_id: uuid.UUID) -> PersonGuard:
+    digests = await active_digests(session, tenant_id)
+    if digests:
+        _key()  # raises NotConfigured
+    return PersonGuard(tenant_id, digests)
 
 
 # --- the import precondition -----------------------------------------------

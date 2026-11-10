@@ -163,6 +163,25 @@ class InteractionType(str, enum.Enum):
 #: What a recruiter may file against a MANAGER (ELI-9), in the order the
 #: ticket lists them. `BRIEFING` and `FEEDBACK` are absent on purpose — both
 #: belong to a mandate and are written in the mandate's own panels.
+class CallOutcome(str, enum.Enum):
+    """How a call to a contact ended (ELI-22 call list).
+
+    The vocabulary the product owner agreed on 2026-11-10. Stored on the
+    `manager_interactions` row of the call itself, with `next_action_at` for
+    the next call — so "who do I call next" is a query over the record.
+    """
+
+    NOT_REACHED = "not_reached"
+    VOICEMAIL = "voicemail"
+    #: Needs a date: a call-back without one never comes due.
+    CALL_BACK = "call_back"
+    #: Wrong person, or no longer there. Takes them off the call list.
+    WRONG_PERSON = "wrong_person"
+    NOT_INTERESTED = "not_interested"
+    MEETING_BOOKED = "meeting_booked"
+    MANDATE = "mandate"
+
+
 MANAGER_INTERACTION_KINDS: tuple[InteractionType, ...] = (
     InteractionType.MEETING,
     InteractionType.CLIENT_CALL,

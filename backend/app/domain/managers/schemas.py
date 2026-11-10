@@ -5,9 +5,10 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.common.enums import (
+    CallOutcome,
     ConfidenceSource,
     InteractionType,
     normalise_interaction_type,
@@ -28,6 +29,15 @@ class ManagerInteractionCreate(BaseModel):
     #: Who was spoken to. Optional: a briefing can be recorded before the
     #: contact is in the record (see migration 0034).
     manager_id: uuid.UUID | None = None
+    #: ELI-22 call list: how the call ended, and when to call again.
+    outcome: CallOutcome | None = None
+    next_action_at: dt.datetime | None = None
+
+    @model_validator(mode="after")
+    def _call_back_has_a_date(self) -> "ManagerInteractionCreate":
+        if self.outcome == CallOutcome.CALL_BACK and self.next_action_at is None:
+            raise ValueError("call_back needs next_action_at — a call-back without a date never comes due")
+        return self
 
 
 class ManagerInteractionRead(BaseModel):
@@ -42,6 +52,8 @@ class ManagerInteractionRead(BaseModel):
     occurred_at: dt.datetime
     summary: str | None
     external_source: str | None = None
+    outcome: str | None = None
+    next_action_at: dt.datetime | None = None
 
     @field_validator("interaction_type", mode="before")
     @classmethod

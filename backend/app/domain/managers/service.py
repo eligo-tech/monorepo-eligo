@@ -347,6 +347,8 @@ async def log_interaction(
         interaction_type=kind,
         occurred_at=occurred_at,
         summary=payload.summary,
+        outcome=payload.outcome.value if payload.outcome else None,
+        next_action_at=payload.next_action_at,
         # ELI-15: who wrote it, so the KPI can be counted per consultant off
         # this row rather than off a copy of it.
         actor_user_id=actor_user_id,
