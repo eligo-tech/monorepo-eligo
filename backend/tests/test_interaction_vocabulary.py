@@ -67,9 +67,16 @@ def test_the_two_lists_are_the_ones_the_ticket_names() -> None:
     assert [k.value for k in MANAGER_INTERACTION_KINDS] == [
         "meeting", "client_call", "business_call", "message", "na", "note",
     ]
+    # "Candidate Qualification" was added to ELI-9 on 2026-11-10 and goes
+    # FIRST — it is the conversation every candidate process starts with.
     assert [k.value for k in CANDIDATE_INTERACTION_KINDS] == [
-        "candidate_call", "message", "na", "note",
+        "candidate_qualification", "candidate_call", "message", "na", "note",
     ]
+
+
+def test_a_qualification_is_filed_on_candidates_only() -> None:
+    """A manager is never qualified; the kind must not be on their menu."""
+    assert InteractionType.CANDIDATE_QUALIFICATION not in MANAGER_INTERACTION_KINDS
 
 
 @pytest.mark.parametrize(
@@ -84,6 +91,9 @@ def test_the_two_lists_are_the_ones_the_ticket_names() -> None:
         ("email", "message"),
         ("note", "note"),
         ("client_call", "client_call"),
+        # The one aiFind note of this kind, now that ELI-9 names it.
+        ("Candidate Qualification", "candidate_qualification"),
+        ("candidate_qualification", "candidate_qualification"),
     ],
 )
 def test_every_spelling_in_the_record_resolves(stored, expected) -> None:
@@ -92,10 +102,10 @@ def test_every_spelling_in_the_record_resolves(stored, expected) -> None:
 
 
 @pytest.mark.parametrize(
-    "stored", ["Job Spec", "Client Canvas", "Candidate Qualification"]
+    "stored", ["Job Spec", "Client Canvas"]
 )
 def test_a_kind_nobody_mapped_keeps_its_own_name(stored) -> None:
-    """45 real notes are in these three, and they are on neither list.
+    """44 real notes are in these two, and they are on neither list.
 
     Absorbing them into `note` would be a silent decision about somebody
     else's data. They pass through, visibly unmapped, until a human says
@@ -113,7 +123,10 @@ def test_being_unreachable_is_not_contact() -> None:
     """
     assert InteractionType.NOT_REACHED.value not in CONTACT_INTERACTION_KINDS
     assert InteractionType.NOTE.value not in CONTACT_INTERACTION_KINDS
-    for reached in ("meeting", "client_call", "business_call", "candidate_call", "message"):
+    for reached in (
+        "meeting", "client_call", "business_call",
+        "candidate_qualification", "candidate_call", "message",
+    ):
         assert reached in CONTACT_INTERACTION_KINDS
 
 

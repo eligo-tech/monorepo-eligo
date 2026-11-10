@@ -55,8 +55,11 @@ class ProposeCandidateNote(BaseModel):
     candidate_id: uuid.UUID = Field(description="The candidate id.")
     text: str = Field(min_length=1, max_length=5000, description="The note, as it should appear in Eligo.")
     job_id: uuid.UUID | None = Field(None, description="The mandate it is about, if any.")
-    interaction_type: Literal["note", "candidate_call", "message"] = Field(
-        "note", description="note · candidate_call · message"
+    interaction_type: Literal[
+        "note", "candidate_qualification", "candidate_call", "message"
+    ] = Field(
+        "note",
+        description="note · candidate_qualification · candidate_call · message",
     )
     reason: str | None = Field(None, max_length=1000, description="Why — shown to the person who confirms.")
 

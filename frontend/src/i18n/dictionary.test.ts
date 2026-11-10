@@ -23,6 +23,7 @@ const SAME_IN_BOTH = new Set([
   // and use them in a German UI, so there is nothing to translate.
   'Business Call',
   'Candidate Call',
+  'Candidate Qualification',
   'Client Call',
   'Meeting Notes',
   'Message',

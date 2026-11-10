@@ -273,6 +273,7 @@ export const EN: Record<string, string> = {
   'Business Calls': 'Business Calls',
   'Business Development': 'Business Development',
   'Candidate Call': 'Candidate Call',
+  'Candidate Qualification': 'Candidate Qualification',
   'Chance': 'Probability',
   'Client Call': 'Client Call',
   'Cockpit': 'Cockpit',
