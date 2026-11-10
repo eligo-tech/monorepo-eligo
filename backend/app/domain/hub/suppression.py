@@ -137,7 +137,7 @@ _GAP = r"[\s*_]+"
 #: name, or "Frau Mst. Wolter" escapes redaction and is stored
 #: (`tests/test_hub_suppressions.py` checks each one).
 _TITLES = (
-    r"(?:(?:(?:Dr|DDr|Prof|med|rer|nat|dent|Dipl|Ing|Mag|Mst)\.[-\w.]*|(?:DI|MBA)(?=\s))\s*)*"
+    r"(?:(?:(?:Dr|DDr|Prof|med|rer|nat|dent|jur|iur|phil|Dipl|Ing|Mag|Mst)\.[-\w.]*|(?:DI|MBA)(?=\s)|\(FH\))\s*)*"
 )
 
 

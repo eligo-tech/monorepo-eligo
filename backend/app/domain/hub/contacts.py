@@ -36,20 +36,51 @@ _LOWER = "a-zäöüßéèáàóòíìúùçñ"
 _TOKEN = rf"[{_UPPER}][{_LOWER}]+(?:-[{_UPPER}][{_LOWER}]+)*"
 #: Nobiliary particles that stay lowercase inside a name: "Anna von Berg".
 _PARTICLE = r"(?:von|van|de|der|den|zu|vom|ten|la|le|di|da)"
+#: A surname as some ads print it, in capitals: "Herrn Felix TSCHOHL". Three
+#: letters or more, so "AG", "KG" and initials never qualify; company words
+#: in capitals are refused in `_trim_name` (`_CAPS_NOT_NAMES`).
+_CAPS = rf"[{_UPPER}]{{3,}}(?:-[{_UPPER}]{{3,}})*"
 #: Academic / professional prefixes, kept as part of the displayed name.
-_TITLE = r"(?:Dr\.|DDr\.|Prof\.|Mag\.|Mst\.|DI|Dipl\.-[A-Z][a-z]+\.|MBA|Ing\.)"
+#: The lowercase parts follow a "Dr.": "Dr. med.", "Dr. rer. nat.".
+#: Written-together and Austrian forms too: "Dr.med.", "Dr.rer.nat.",
+#: "Dr.-Ing.", "Dr.in", "Mag.a", "Mag. (FH)".
+_TITLE = (
+    r"(?:Dr\.|DDr\.|Prof\.|Mag\.|Mst\.|DI|Dipl\.-[A-Z][a-z]+\.|MBA|Ing\."
+    r"|med\.|dent\.|rer\.|nat\.|jur\.|iur\.|phil\."
+    r"|Dr\.med\.|Dr\.med\.dent\.|Dr\.rer\.nat\.|Dr\.phil\.|Dr\.jur\.|Dr\.-Ing\.|Dr\.in|Mag\.a"
+    r"|\(FH\))"
+)
 
 #: Spaces only between tokens, never a line break: a contact block puts the
 #: street on the next line, and "Sophie Bennicke\nEhrenbachstraße" is two
 #: things. The trailing lookahead stops a token being cut mid-word ("GmbH"
 #: must not yield "Gmb").
+#: Titles may also stand between the parts: "Herr Landrat Dr. Richard Sieber"
+#: (the leading role word is split off in `_trim_name`).
 _NAME = (
-    rf"(?:{_TITLE} +)*{_TOKEN}(?: +(?:{_PARTICLE} +)?{_TOKEN}){{0,2}}"
+    rf"(?:{_TITLE} +)*{_TOKEN}(?: +(?:{_TITLE} +)*(?:{_PARTICLE} +)?{_TOKEN}){{0,2}}"
+    rf"(?![{_LOWER}{_UPPER}])"
+)
+#: After a salutation a part may be in capitals: "Herrn Felix TSCHOHL". Only
+#: there — in a heading or after "Kontakt:" a word in capitals is a company
+#: ("EDEKA Breitenbach", "NORMA Lebensmittelfilialbetrieb").
+_NAME_SALUTED = (
+    rf"(?:{_TITLE} +)*(?:{_TOKEN}|{_CAPS})(?: +(?:{_TITLE} +)*(?:{_PARTICLE} +)?(?:{_TOKEN}|{_CAPS})){{0,2}}"
     rf"(?![{_LOWER}{_UPPER}])"
 )
 
+#: A rank between the salutation and the name: "Herr Chefarzt Privatdozent Dr.
+#: Jonas Diehm", "Herrn Oberlandeskirchenrat Dr. Thilo Daniel". Matched by its
+#: ending, so a surname like "Meister" or "Leiter" is never one.
+_RANK = (
+    rf"[{_UPPER}][{_LOWER}]*(?:arzt|ärztin|dozent|dozentin|rat|rätin|meister|meisterin|"
+    r"dekan|dekanin|direktor|direktorin|präsident|präsidentin|redakteur|redakteurin)"
+)
+
 #: "Frau Katrin Wolter", "Herrn Dr. Benjamin Schmidt", "Herr Trippner".
-_SALUTED = re.compile(rf"\b(?P<sal>Frau|Herrn?) +(?P<name>{_NAME})")
+_SALUTED = re.compile(
+    rf"\b(?P<sal>Frau|Herrn?) +(?P<rank>(?:{_RANK} +(?:{_TITLE} +)*){{0,2}})(?P<name>{_NAME_SALUTED})"
+)
 
 #: "Ansprechpartnerin: Jutta Dziobek" — a contact label, then a bare name.
 #: Requires the colon or a line break: "Ansprechpartner für Patienten" is a
@@ -94,8 +125,29 @@ _NOT_NAMES = {
     # Site furniture on partner-board pages, left over after the markup goes.
     "Job", "Jobs", "Cookie", "Cookies", "Einstellungen", "Datenschutz", "Impressum",
     "Kontakt", "Team", "Login", "Menü", "Suche", "Merken", "Teilen",
-    # A heading read as a name: "Ansprechpartner:\nNoch Fragen".
-    "Noch", "Fragen",
+    # A heading read as a name: "Ansprechpartner:\nNoch Fragen", "Ihr
+    # Kontakt\nÜber Uns".
+    "Noch", "Fragen", "Über", "Uns", "Karriere", "Stellenangebote", "Benefits",
+    "Standort", "Standorte", "Profil", "Aufgaben", "Unternehmen",
+    # A title stem left alone when its dot was eaten: "Frau Dr. gern".
+    "Dr", "Prof", "Mag",
+    # Letters after a name: "Birgit Hunyar BSc".
+    "BSc", "MSc", "BA", "MA",
+    # "Human Resources" — a department, not a surname.
+    "Resources", "Human",
+}
+
+#: Words in capitals that are a company line or a label, not a surname.
+_CAPS_NOT_NAMES = {
+    "GMBH", "MBH", "UND", "TEL", "FAX", "MAIL", "KONTAKT", "STR", "STRASSE", "STRAßE",
+    "CEO", "GESCHÄFTSFÜHRUNG", "PERSONAL", "BEWERBUNG", "JOBS", "KARRIERE", "TEAM",
+    # Postnominals: "Heinz Hierl MAS".
+    "MAS", "BSC", "MSC", "MBA", "LLM",
+    # Ordinary words an ad sets in capitals: "Frau Steiner NACH telefonischer …".
+    "NACH", "UNTER", "ODER", "BEI", "MIT", "FÜR", "PER", "VON", "ZUR", "DER", "DIE",
+    "DAS", "BITTE", "AUCH", "NUR", "SIE", "WIR", "IHR",
+    # Labels of the Austrian AMS ad layout: "BEWERBUNG: … DIENSTGEBER: …".
+    "DIENSTGEBER", "ARBEITSORT", "ENTLOHNUNG", "ANSPRECHPARTNER", "ANSPRECHPARTNERIN",
 }
 
 #: A single word after "Frau"/"Herr" that names a unit, not a person:
@@ -186,7 +238,8 @@ _ROLE_HINT = re.compile(
     r"(?i)(leit|referent|recruit|talent|personal|human|people|hr\b|manager|"
     r"direktor|geschäftsführ|inhaber|assistenz|sachbearbeit|business partner|"
     r"ausbild|koordinat|verwaltung|vorstand|bereich|abteilung|team|chef|head|"
-    r"lead|officer|partner|spezialist|berater|pflegedienst|prokurist)"
+    r"lead|officer|partner|spezialist|berater|pflegedienst|prokurist|"
+    r"landrat|bürgermeister|dekan|oberarzt|oberärzt|chefärzt|privatdozent|redakteur|präsident)"
 )
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}")
@@ -270,9 +323,16 @@ def _trim_name(raw: str, following: str) -> tuple[str | None, str | None]:
         return None, None
     tokens = raw.split()
     role = None
-    bare_idx = [i for i, t in enumerate(tokens) if not re.fullmatch(_TITLE, t)]
-    if len(bare_idx) >= 2 and _ROLE_HINT.search(tokens[bare_idx[0]]):
-        role = tokens.pop(bare_idx[0])
+    # Leading role words go to the role — all of them: "Chefarzt Privatdozent
+    # Dr. Jonas Diehm" is Jonas Diehm, Chefarzt Privatdozent.
+    roles: list[str] = []
+    while True:
+        bare_idx = [i for i, t in enumerate(tokens) if not re.fullmatch(_TITLE, t)]
+        if len(bare_idx) >= 2 and _ROLE_HINT.search(tokens[bare_idx[0]]):
+            roles.append(tokens.pop(bare_idx[0]))
+            continue
+        break
+    role = " ".join(roles) or None
 
     def bare() -> list[str]:
         return [t for t in tokens if not re.fullmatch(_TITLE, t)]
@@ -280,6 +340,7 @@ def _trim_name(raw: str, following: str) -> tuple[str | None, str | None]:
     trailing = following
     while len(bare()) > 1 and (
         tokens[-1].rstrip(".,") in _NOT_NAMES
+        or tokens[-1].rstrip(".,") in _CAPS_NOT_NAMES
         or _ROLE_HINT.search(tokens[-1])
         or _is_street(tokens[-1], following=trailing, parts=len(bare()))
         # A business word ends a name only after a full name: "Cordula Steiner
@@ -295,7 +356,12 @@ def _trim_name(raw: str, following: str) -> tuple[str | None, str | None]:
     if len(bare()) == 3 and re.match(rf"^ +[{_UPPER}{_LOWER}]", following):
         tokens.pop()
     names = bare()
-    if not names or names[0] in _NOT_NAMES or tokens[-1] in _NOT_NAMES:
+    if (
+        not names
+        or names[0] in _NOT_NAMES
+        or tokens[-1] in _NOT_NAMES
+        or any(t in _CAPS_NOT_NAMES for t in names)
+    ):
         return None, None
     if any(_UNIT_WORD.search(t) for t in names):
         return None, None
@@ -561,6 +627,9 @@ def extract_contacts(text: str | None) -> list[ContactMention]:
 
     for m in _SALUTED.finditer(clean):
         name, lead_role = _trim_name(m.group("name"), clean[m.end() :])
+        rank = " ".join(t for t in m.group("rank").split() if not re.fullmatch(_TITLE, t))
+        if rank:
+            lead_role = " ".join(p for p in (rank, lead_role) if p)
         if name:
             sal = "Frau" if m.group("sal") == "Frau" else "Herr"
             end = clean.find(name, m.start("name")) + len(name)
