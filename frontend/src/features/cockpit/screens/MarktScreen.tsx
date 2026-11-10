@@ -37,6 +37,7 @@ import {
   Star,
   Trash2,
   UserRound,
+  Users,
   X,
 } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
@@ -51,6 +52,7 @@ import type {
   SavedSearchDTO,
 } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
+import { ContactsPanel } from './ContactsPanel'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { Button, FIELD } from '../ui/forms'
@@ -597,6 +599,9 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
   const [adopted, setAdopted] = useState(false)
   const [art14, setArt14] = useState(false)
   const [saving, setSaving] = useState(false)
+  // The people this employer's ads name, with phone and the ad line — saving
+  // one adopts the employer and creates the manager in one receipted step.
+  const [showContacts, setShowContacts] = useState(false)
   const identity = IDENTITY[hit.resolution_basis] ?? IDENTITY.name_place
   // Tracking is per corpus row; a rolled-up employer is tracked via its first
   // site, which is what the API reports back as `tracked`.
@@ -658,6 +663,14 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
           {/* Beobachten is interest and asserts nothing; this is the crossing
               into the workspace's own record, so it reads as a commitment and
               is confirmed in a dialog rather than fired by one click. */}
+          <Button
+            onClick={() => setShowContacts((v) => !v)}
+            disabled={!anchorId}
+            tone={showContacts ? 'primary' : 'ghost'}
+          >
+            <Users className="h-4 w-4" />
+            {t('Ansprechpartner')}
+          </Button>
           {adopted ? (
             <span className="flex items-center gap-1.5 text-mint-400" title={t('Als Kunde übernommen')}>
               <Check className="h-4 w-4" />
@@ -681,6 +694,15 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
           </span>
         )}
       </p>
+
+      {showContacts && anchorId && (
+        <div className="mt-3 border-t border-cockpit-line/60 pt-3">
+          <ContactsPanel
+            company={{ hub_company_id: anchorId, company_id: null }}
+            onAdopted={() => setAdopted(true)}
+          />
+        </div>
+      )}
 
       {adopting && (
         <AdoptDialog

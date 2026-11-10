@@ -102,6 +102,8 @@ async def test_contacts_are_read_from_every_site_and_merged(employer) -> None:
     assert bennicke["full_name"] == "Sophie Bennicke"
     assert bennicke["mention_count"] == 2
     assert bennicke["phone"] == "+49 7744 57 1660"
+    # The recruiter sees before dialling whether it reaches the person (ELI-22).
+    assert bennicke["phone_kind"] == "direct"
     assert bennicke["role_title"] == "Bereich Personal"
     # Evidence points at the ad, so a recruiter can check the parser.
     assert all(e["url"].startswith("https://www.arbeitsagentur.de/") for e in bennicke["evidence"])

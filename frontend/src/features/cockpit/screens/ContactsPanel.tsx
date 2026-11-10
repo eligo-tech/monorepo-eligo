@@ -128,6 +128,14 @@ function ContactRow({
               {contact.phone}
             </a>
           )}
+          {contact.phone && contact.phone_kind === 'switchboard' && (
+            <span
+              className="rounded border border-gold-600/50 px-1.5 text-[11px] text-gold-400"
+              title={t('Die Nummer endet auf -0 oder ist eine Service-Nummer: Sie erreichen die Zentrale, nicht die Person direkt.')}
+            >
+              {t('Zentrale')}
+            </span>
+          )}
           {contact.email && (
             <a href={`mailto:${contact.email}`} className="flex items-center gap-1 hover:text-mint-400">
               <Mail className="h-3.5 w-3.5 text-cockpit-faint" />

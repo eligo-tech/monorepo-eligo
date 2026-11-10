@@ -2465,6 +2465,7 @@ async def company_contacts(
                     "role_title": mention.role_title,
                     "email": mention.email,
                     "phone": mention.phone,
+                    "phone_kind": mention.phone_kind,
                     "mention_count": 1,
                     "evidence": [evidence],
                     "manager_id": None,
@@ -2483,6 +2484,8 @@ async def company_contacts(
             for field in ("salutation", "role_title", "email", "phone"):
                 if person[field] is None and getattr(mention, field):
                     person[field] = getattr(mention, field)
+                    if field == "phone":
+                        person["phone_kind"] = mention.phone_kind
 
     # This workspace's own view: adopted company, and who it already holds.
     link = await session.scalar(
