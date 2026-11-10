@@ -83,8 +83,10 @@ async def _a_mandate(**kwargs) -> Job:
 # --- the vocabulary ------------------------------------------------------
 
 
-def test_the_two_states_are_the_ones_the_ticket_names() -> None:
-    assert [s.value for s in JobStatus] == ["active", "inactive"]
+def test_the_states_are_the_ones_the_tickets_name() -> None:
+    # ELI-7: active / inactive. ELI-22 (2026-11-10, product owner): `lead`
+    # for an ad taken from Markt — business development, not a mandate.
+    assert [s.value for s in JobStatus] == ["active", "inactive", "lead"]
 
 
 @pytest.mark.parametrize(

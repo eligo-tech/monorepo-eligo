@@ -2343,6 +2343,97 @@ CONTACT_POSTINGS_LIMIT = 300
 CONTACT_EVIDENCE_LIMIT = 5
 
 
+async def adopt_postings(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    posting_ids: list[uuid.UUID],
+    actor: str | None = None,
+) -> list[dict]:
+    """Take public ads into this workspace as LEAD jobs (ELI-22).
+
+    Per ad: the employer is reused if this workspace already holds it at any of
+    its sites, else adopted (`adopt_company` — the receipted crossing); then a
+    `lead` job is created, linked to the ad by `external_source='hub'` and
+    `external_id`, so the same ad never lands twice. A lead is business
+    development, not a mandate (`JobStatus.LEAD`).
+
+    A private recruiter's ad is skipped: the agency is not the hiring employer,
+    and adopting it would put a competitor into Companies as a client. An ad
+    that does not exist is reported, not raised — one stale id must not cost
+    the recruiter the rest of the selection.
+    """
+    from app.domain.common.enums import JobStatus
+    from app.domain.jobs.models import Job
+
+    results: list[dict] = []
+    company_for: dict[str, uuid.UUID] = {}
+    for posting_id in dict.fromkeys(posting_ids):
+        skipped = {"posting_id": posting_id, "created": False, "job_id": None, "company_id": None}
+        posting = await session.get(HubJobPosting, posting_id)
+        if posting is None:
+            results.append({**skipped, "skipped": "not_found"})
+            continue
+        hub_company = await session.get(HubCompany, posting.hub_company_id)
+        if hub_company is None or hub_company.kind != EMPLOYER:
+            results.append({**skipped, "skipped": "agency"})
+            continue
+
+        existing = await session.scalar(
+            select(Job).where(
+                Job.tenant_id == tenant_id,
+                Job.external_source == "hub",
+                Job.external_id == str(posting_id),
+            )
+        )
+        if existing is not None:
+            results.append({
+                "posting_id": posting_id, "created": False, "job_id": existing.id,
+                "company_id": existing.client_company_id, "skipped": None,
+            })
+            continue
+
+        company_id = company_for.get(hub_company.normalized_name)
+        if company_id is None:
+            sites = await _sibling_company_ids(session, normalized_name=hub_company.normalized_name)
+            link = await session.scalar(
+                select(HubCompanyLink).where(
+                    HubCompanyLink.tenant_id == tenant_id,
+                    HubCompanyLink.hub_company_id.in_(sites or [hub_company.id]),
+                    HubCompanyLink.company_id.is_not(None),
+                )
+            )
+            if link is not None:
+                company_id = link.company_id
+            else:
+                company, _link, _manager = await adopt_company(
+                    session, tenant_id=tenant_id, hub_company_id=hub_company.id, actor=actor
+                )
+                company_id = company.id
+            company_for[hub_company.normalized_name] = company_id
+
+        job = Job(
+            tenant_id=tenant_id,
+            title=posting.title[:200],
+            client_company_id=company_id,
+            location=(posting.city or posting.location_text or None),
+            salary_min=posting.salary_min,
+            salary_max=posting.salary_max,
+            salary_currency=posting.salary_currency or "EUR",
+            status=JobStatus.LEAD.value,
+            external_source="hub",
+            external_id=str(posting_id),
+        )
+        session.add(job)
+        await session.flush()
+        results.append({
+            "posting_id": posting_id, "created": True, "job_id": job.id,
+            "company_id": company_id, "skipped": None,
+        })
+    await session.commit()
+    return results
+
+
 async def _sibling_company_ids(
     session: AsyncSession, *, normalized_name: str, kind: str = EMPLOYER
 ) -> list[uuid.UUID]:

@@ -34,6 +34,9 @@ from app.domain.hub.schemas import (
     AgencyPage,
     AgencyProfileRead,
     AdoptCompanyResult,
+    AdoptPostingResult,
+    AdoptPostingsRequest,
+    AdoptPostingsResult,
     CompanyContacts,
     HubJobPostingHit,
     HubSearchPage,
@@ -354,6 +357,28 @@ async def adopt_hub_company(
         hub_company_id=link.hub_company_id,
         manager_id=manager.id if manager else None,
         art14_outstanding=bool(manager and manager.art14_outstanding),
+    )
+
+
+@router.post("/postings/adopt", response_model=AdoptPostingsResult)
+async def adopt_hub_postings(
+    payload: AdoptPostingsRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> AdoptPostingsResult:
+    """Take ads selected on Markt into Jobs as leads (ELI-22).
+
+    A workspace action, not a corpus write: it reads the shared ads and writes
+    this tenant's `companies` (receipted adopt) and `jobs`. Repeating it is
+    harmless — an ad already taken is reported as existing.
+    """
+    results = await service.adopt_postings(db, tenant_id=tenant_id, posting_ids=payload.posting_ids)
+    rows = [AdoptPostingResult(**r) for r in results]
+    return AdoptPostingsResult(
+        created=sum(r.created for r in rows),
+        existing=sum(1 for r in rows if not r.created and r.skipped is None),
+        skipped=sum(1 for r in rows if r.skipped is not None),
+        results=rows,
     )
 
 

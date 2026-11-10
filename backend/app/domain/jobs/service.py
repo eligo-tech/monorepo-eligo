@@ -285,6 +285,13 @@ async def update_job(
                 "Ein inaktives Mandat kann nicht wieder aktiviert werden. "
                 "Legen Sie es als Kopie neu an."
             )
+        if (
+            status_value == JobStatus.LEAD.value
+            and normalise_job_status(job.status) != JobStatus.LEAD.value
+        ):
+            # A lead is where a job starts, never where it goes back to: a
+            # won mandate reported as "lead" would vanish from the KPIs.
+            raise ReopeningRefused("Ein Mandat wird nicht wieder zum Lead.")
 
     # Same rule as on create, and against the RESULTING row: moving a mandate
     # to another client with its old contact still attached would leave the
