@@ -69,6 +69,20 @@ JOB_FAMILY_RULES = 1
 #: Open ads to (re)label: never labelled, or labelled under older rules.
 UNCLASSIFIED = f"is_active AND (job_family_rules IS NULL OR job_family_rules < {JOB_FAMILY_RULES})"
 
+#: Version of the contact parser (`hub/contacts.py`) whose output is stored in
+#: `hub_ad_contacts`. Bump it with a parser change that should reach ads
+#: already read — and ship a migration rebuilding `ix_hub_posting_contacts_due`.
+AD_CONTACT_RULES = 1
+#: The contacts pass's queue (`hub/ad_contacts.py`): open ads never read, read
+#: under older rules, or whose ad text / partner page was fetched after the
+#: last read. Every text write stamps its fetch time, so no write path has to
+#: remember to re-queue the ad.
+CONTACTS_DUE = (
+    "is_active AND (contacts_rules IS NULL OR contacts_rules < "
+    f"{AD_CONTACT_RULES} OR contacts_read_at < description_fetched_at "
+    "OR contacts_read_at < source_page_fetched_at)"
+)
+
 # Which kind of advertiser a corpus row is. Stamped at ingest from the QUERY
 # that returned it — the source's listing records carry no flag of their own.
 #: An end employer. Every recruiter-facing view shows only these.
@@ -287,6 +301,14 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
             postgresql_where=text("is_active AND job_family = 'tech'"),
             sqlite_where=text("is_active AND job_family = 'tech'"),
         ),
+        # The ad-contacts pass's queue (`hub/ad_contacts.py`). Empties as it
+        # runs; refills with each night's new and re-fetched ad texts.
+        Index(
+            "ix_hub_posting_contacts_due",
+            "id",
+            postgresql_where=text(CONTACTS_DUE),
+            sqlite_where=text(CONTACTS_DUE),
+        ),
     )
 
     hub_company_id: Mapped[uuid.UUID] = mapped_column(
@@ -385,6 +407,10 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     job_family: Mapped[str | None] = mapped_column(String(20), nullable=True)
     #: The rules version that set `job_family` (`JOB_FAMILY_RULES`).
     job_family_rules: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: When the contacts pass last read this ad's texts, and under which parser
+    #: version (`AD_CONTACT_RULES`). NULL until the nightly pass reaches it.
+    contacts_read_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    contacts_rules: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # SHA-256 of the meaningful fields — an unchanged posting only bumps
     # `last_seen_at` instead of rewriting the row.
@@ -583,6 +609,54 @@ class HubSiteCheck(Base, IDMixin, TimestampMixin):
     #: vat_id, register, register_court, phone, emails — as published.
     facts: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
     checked_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HubAdContact(Base, IDMixin, TimestampMixin):
+    """A person one public ad names as its contact — "Frau Katrin Wolter
+    (Pflegedienstleitung), 0395 5442681" — as the ad publishes them (ELI-22).
+
+    Derived from `hub_posting_payload` by the nightly pass
+    (`hub/ad_contacts.py`, deterministic `hub/contacts.py`), so a call list can
+    span the market without re-reading 600k ad texts per request. One row per
+    person per ad.
+
+    Shared corpus, no tenant_id — ARCHITECTURE.md RULE 2 (product decision
+    2026-09-18): a person an employer names in a public ad, stored as
+    published (name, role, the phone and e-mail the ad itself gives — never
+    enriched), with provenance (`hub_job_posting_id`, `text_source`,
+    `source_fetched_at`, `quote`). Removed with the ad text: a closed ad, a
+    suppressed person or a suppressed company takes its rows with it
+    (`ad_contacts.forget`). Adopting one into a workspace's `managers` is the
+    crossing that owes the Art. 14 notice.
+    """
+
+    __tablename__ = "hub_ad_contacts"
+    __table_args__ = (
+        UniqueConstraint("hub_job_posting_id", "person_key", name="uq_hub_ad_contact_posting_person"),
+    )
+
+    hub_job_posting_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(), ForeignKey("hub_job_postings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    hub_company_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(), ForeignKey("hub_companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: `contacts.person_key` — folded surname; one person across an employer's ads.
+    person_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    full_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    salutation: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    last_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    role_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    #: "direct" | "switchboard" — whether dialling it reaches the person.
+    phone_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    #: The ad line(s) naming the person — the evidence shown beside them.
+    quote: Mapped[str] = mapped_column(Text, nullable=False)
+    #: "ad" (the posting text) or "page" (the partner-board page).
+    text_source: Mapped[str] = mapped_column(String(10), nullable=False)
+    source_fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class HubAtsBoard(Base, IDMixin, TimestampMixin):

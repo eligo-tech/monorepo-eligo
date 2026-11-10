@@ -436,3 +436,22 @@ async def test_marking_more_than_a_bounded_batch_is_refused() -> None:
             json={"segment": "employer", "unlisted": [str(i) for i in range(10_001)], "listed": []},
         )
     assert r.status_code == 422
+
+
+async def test_a_closed_ad_takes_its_stored_contacts_with_it() -> None:
+    """ELI-22: the people an ad names go with its text (`ad_contacts.forget`)."""
+    from app.domain.hub.models import HubAdContact
+
+    company_id = await _postings({"gone": {}, "live": {}})
+    gone, live = await _row("gone"), await _row("live")
+    async with SessionLocal() as s:
+        for row in (gone, live):
+            s.add(HubAdContact(
+                hub_job_posting_id=row.id, hub_company_id=company_id, person_key=f"p{row.external_id}",
+                full_name="Katrin Wolter", last_name="Wolter", quote="Frau Katrin Wolter", text_source="ad",
+            ))
+        await s.commit()
+    await _check(_Adapter({"gone": "gone", "live": "live"}), limit=10)
+    async with SessionLocal() as s:
+        left = (await s.scalars(select(HubAdContact.hub_job_posting_id))).all()
+    assert left == [live.id]

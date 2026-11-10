@@ -45,6 +45,7 @@ from app.core.logging import get_logger
 from app.domain.hub.adapters import ashby, greenhouse, lever, personio
 from app.domain.hub.adapters.base import SourceUnreachable
 from app.domain.hub.adapters.boards import FeedUnreadable
+from app.domain.hub import ad_contacts
 from app.domain.hub.models import HubAtsBoard, HubJobPosting, HubObservation, HubPostingPayload
 
 logger = get_logger(__name__)
@@ -160,6 +161,7 @@ async def _close(session: AsyncSession, board: HubAtsBoard, ids: list[str], why:
         .values(is_active=False, closed_at=now, check_due_at=None, observation_id=observation.id)
     )
     await session.execute(delete(HubPostingPayload).where(HubPostingPayload.hub_job_posting_id.in_(posting_ids)))
+    await ad_contacts.forget(session, posting_ids)  # the people go with the text
     await recount_open_postings(session, {r.hub_company_id for r in rows})
     return len(rows)
 

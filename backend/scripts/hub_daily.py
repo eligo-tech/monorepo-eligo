@@ -455,6 +455,25 @@ async def _classify_families(client: httpx.AsyncClient, *, budget: int) -> dict[
     return totals
 
 
+async def _read_ad_contacts(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
+    """Read the persons up to `budget` queued open ads name into
+    `hub_ad_contacts` (`hub/ad_contacts.py`), in batches — the same IO
+    discipline as the vacancy keys. Runs after the text passes, so tonight's
+    new ad texts and partner pages are read tonight."""
+    totals = {"read": 0, "contacts": 0, "remaining": 0}
+    while totals["read"] < budget:
+        size = min(_VACANCY_BATCH, budget - totals["read"])
+        response = await client.post(f"/hub/ad-contacts/backfill?limit={size}")
+        response.raise_for_status()
+        result = response.json()
+        totals["read"] += result.get("read", 0)
+        totals["contacts"] += result.get("contacts", 0)
+        totals["remaining"] = result.get("remaining", 0)
+        if result.get("read", 0) < size:
+            break
+    return totals
+
+
 async def _key_vacancies(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
     """Give up to `budget` older open ads their `vacancy_key`, in batches.
     Spread over nights on purpose: one UPDATE of 650k rows would be a disk-IO
@@ -750,6 +769,20 @@ async def main() -> int:
         "backlog drains over nights, new ads are labelled at ingest",
     )
     parser.add_argument(
+        "--ad-contacts",
+        type=int,
+        default=100_000,
+        help="open ads whose named contact persons to read this run (0 = off); "
+        "the first backlog (~635k ads) drains over nights, then each night's "
+        "new and re-fetched texts",
+    )
+    parser.add_argument(
+        "--ad-contacts-only",
+        action="store_true",
+        help="run ONLY the ad-contacts pass, e.g. the first fill: "
+        "`--ad-contacts-only --ad-contacts 700000`",
+    )
+    parser.add_argument(
         "--agencies-only",
         action="store_true",
         help="run ONLY the private-recruiter pass — the backfill: "
@@ -763,12 +796,21 @@ async def main() -> int:
         # hub-descriptions workflow owns that backlog.
         args.agencies, args.profiles, args.descriptions = True, False, False
         args.partner_pages, args.stale_days, args.vacancy_keys, args.job_families = 0, 0, 0, 0
+        args.ad_contacts = 0
 
     base = os.environ.get("ELIGO_API_BASE", "").rstrip("/")
     token = os.environ.get("ELIGO_INGEST_TOKEN", "")
     if not base or not token:
         print("ELIGO_API_BASE and ELIGO_INGEST_TOKEN must be set", file=sys.stderr)
         return 2
+
+    if args.ad_contacts_only:
+        async with httpx.AsyncClient(
+            base_url=base, timeout=120.0, headers={"Authorization": f"Bearer {token}"}
+        ) as client:
+            c = await _read_ad_contacts(client, budget=args.ad_contacts)
+        print(f"Ansprechpartner: {c['read']} Anzeigen gelesen, {c['contacts']} Personen, {c['remaining']} offen")
+        return 0
 
     configured = os.environ.get("ELIGO_HUB_REGIONS", "").strip()
     regions = args.region or (
@@ -1071,6 +1113,15 @@ async def main() -> int:
             except Exception as exc:
                 print(f"  job-family backfill FAILED: {exc}", file=sys.stderr)
                 failures.append("job-families")
+
+        # --- persons named in open ads (hub/ad_contacts.py) — after the text passes ---
+        if args.ad_contacts > 0:
+            try:
+                c = await _read_ad_contacts(client, budget=args.ad_contacts)
+                print(f"  Ansprechpartner: {c['read']} Anzeigen gelesen, {c['contacts']} Personen, {c['remaining']} offen")
+            except Exception as exc:
+                print(f"  ad-contacts pass FAILED: {exc}", file=sys.stderr)
+                failures.append("ad-contacts")
 
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.

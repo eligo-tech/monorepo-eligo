@@ -132,8 +132,13 @@ def _token(folded: str) -> str:
 #: Any markup or line break between two parts of a name: "**Katrin**
 #: Wolter", "Katrin\nWolter".
 _GAP = r"[\s*_]+"
-#: "Dr.", "Prof. Dr. med.", "Dipl.-Ing." between a salutation and the surname.
-_TITLES = r"(?:(?:Dr|Prof|med|rer|nat|dent|Dipl|Ing|Mag)\.[-\w.]*\s*)*"
+#: "Dr.", "Prof. Dr. med.", "Dipl.-Ing.", "Mst.", "DI" between a salutation and
+#: the surname. Must cover every title `contacts._TITLE` reads as part of a
+#: name, or "Frau Mst. Wolter" escapes redaction and is stored
+#: (`tests/test_hub_suppressions.py` checks each one).
+_TITLES = (
+    r"(?:(?:(?:Dr|DDr|Prof|med|rer|nat|dent|Dipl|Ing|Mag|Mst)\.[-\w.]*|(?:DI|MBA)(?=\s))\s*)*"
+)
 
 
 def _person_patterns(key: str) -> list[str]:
@@ -193,6 +198,40 @@ class Suppressions:
         if not text or self._pattern is None:
             return text
         return self._pattern.sub(REDACTED, text)
+
+    @functools.cached_property
+    def _surname_spellings(self) -> tuple[str, ...]:
+        """Each suppressed surname as it may stand in a text: folded
+        ("gruembel") and with umlauts ("grümbel"), lower case."""
+        out: set[str] = set()
+        for key in self.persons:
+            last = key.split()[-1]
+            out |= {last, last.replace("ae", "ä").replace("oe", "ö").replace("ue", "ü").replace("ss", "ß")}
+        return tuple(sorted(out))
+
+    def may_name_someone(self, text: str | None) -> bool:
+        """Cheap prefilter for `redact`: False when no suppressed surname can
+        be in `text`. Running the full pattern over every ad costs ~1 ms per
+        suppressed person per text."""
+        if not text or not self.persons:
+            return False
+        low = text.lower()
+        return any(s in low for s in self._surname_spellings)
+
+    def names(self, first_name: str | None, last_name: str) -> bool:
+        """Whether a parsed person is a suppressed one — by folded name, so
+        "Grümbel" and "Gruembel" are one person. A surname alone ("Frau
+        Wolter") counts when it is a suppressed surname: the formal form names
+        the same person the redaction pattern would have cut."""
+        if not self.persons:
+            return False
+        last = re.sub(r"[^a-z-]", "", _fold(last_name.split()[-1]))
+        first = re.sub(r"[^a-z-]", "", _fold(first_name.split()[0])) if first_name else None
+        for key in self.persons:
+            tokens = key.split()
+            if tokens[-1] == last and (first is None or tokens[0] == first):
+                return True
+        return False
 
     def redact_json(self, value: Any) -> Any:
         """The archived source record, every string in it."""
@@ -290,6 +329,9 @@ async def _remove_company(session: AsyncSession, key: str) -> dict[str, int]:
     await session.execute(
         delete(HubPostingPayload).where(HubPostingPayload.hub_job_posting_id.in_(posting_ids))
     )
+    from app.domain.hub import ad_contacts
+
+    await ad_contacts.forget(session, posting_ids)
     postings = await session.execute(
         delete(HubJobPosting).where(HubJobPosting.hub_company_id.in_(company_ids))
     )
@@ -334,6 +376,7 @@ async def _redact_person(session: AsyncSession, key: str, *, written: str) -> di
     ids = list((await session.execute(candidates)).scalars().all())
 
     redacted = 0
+    changed: list = []
     for start in range(0, len(ids), _BATCH):
         rows = (
             await session.execute(
@@ -349,7 +392,16 @@ async def _redact_person(session: AsyncSession, key: str, *, written: str) -> di
             row.raw = rules.redact_json(row.raw)
             if (row.description, row.source_page_text, row.raw) != before:
                 redacted += 1
+                changed.append(row.hub_job_posting_id)
         await session.flush()
+    # The ads whose text changed were read before the redaction: drop their
+    # stored contacts and re-read the redacted text. And any stored row that
+    # names the person, wherever the text search above missed a spelling.
+    from app.domain.hub import ad_contacts
+
+    for start in range(0, len(changed), _BATCH):
+        await ad_contacts.forget(session, changed[start : start + _BATCH])
+    await ad_contacts.forget_person(session, rules)
 
     # A sole trader trades under their own name — the company row is theirs
     # too, and needs its own `company` suppression. Counted, so the operator

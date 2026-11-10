@@ -466,6 +466,9 @@ async def merge_fetch(
             if row.payload is None:
                 row.payload = HubPostingPayload()
             row.payload.description = rules.redact(posting.description)
+            # The text changed without a fetch stamp: queue the ad for the
+            # contacts pass (`hub/ad_contacts.py`) to read it again.
+            row.contacts_rules = None
             row.occupation = posting.occupation
             row.employment_type = posting.employment_type
             row.location_text = posting.location_text
@@ -610,6 +613,9 @@ async def deactivate_stale_postings(
         .where(HubJobPosting.id.in_(posting_ids))
         .values(is_active=False)
     )
+    from app.domain.hub import ad_contacts
+
+    await ad_contacts.forget(session, posting_ids)  # a closed ad names no one to call
     await session.flush()
 
     # The denormalized signal must follow, or "who is hiring hardest" keeps

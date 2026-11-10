@@ -391,3 +391,29 @@ def test_only_a_real_branch_suffix_is_cut(name: str, key: str) -> None:
 
 def test_an_employer_key_is_its_exact_normalized_name() -> None:
     assert suppression.company_key("Klinikum Musterstadt Standort Nord") == "klinikum musterstadt standort nord"
+
+
+# --- ELI-22 (#231 review): every title the contact parser knows is redacted ---
+
+
+def _parser_title_samples() -> list[str]:
+    """One written example per alternative in `contacts._TITLE`, so a title
+    added to the parser without the redaction knowing it fails here."""
+    import re
+
+    from app.domain.hub.contacts import _TITLE
+
+    body = _TITLE[len("(?:") : -1]
+    samples = []
+    for alt in body.split("|"):
+        sample = alt.replace("[A-Z][a-z]+", "Ing").replace("\\", "")
+        assert re.fullmatch(_TITLE, sample), sample
+        samples.append(sample)
+    return samples
+
+
+@pytest.mark.parametrize("title", _parser_title_samples())
+def test_a_suppressed_person_is_redacted_behind_any_parser_title(title: str) -> None:
+    rules = suppression.Suppressions(persons=(suppression.person_key("Katrin Wolter"),))
+    text = f"Ihre Ansprechpartnerin: Frau {title} Wolter, Tel. 0395 5442681"
+    assert "Wolter" not in (rules.redact(text) or "")
