@@ -37,7 +37,7 @@ _TOKEN = rf"[{_UPPER}][{_LOWER}]+(?:-[{_UPPER}][{_LOWER}]+)*"
 #: Nobiliary particles that stay lowercase inside a name: "Anna von Berg".
 _PARTICLE = r"(?:von|van|de|der|den|zu|vom|ten|la|le|di|da)"
 #: Academic / professional prefixes, kept as part of the displayed name.
-_TITLE = r"(?:Dr\.|Prof\.|Mag\.|DI|Dipl\.-[A-Z][a-z]+\.|MBA|Ing\.)"
+_TITLE = r"(?:Dr\.|DDr\.|Prof\.|Mag\.|Mst\.|DI|Dipl\.-[A-Z][a-z]+\.|MBA|Ing\.)"
 
 #: Spaces only between tokens, never a line break: a contact block puts the
 #: street on the next line, and "Sophie Bennicke\nEhrenbachstraße" is two
@@ -94,6 +94,8 @@ _NOT_NAMES = {
     # Site furniture on partner-board pages, left over after the markup goes.
     "Job", "Jobs", "Cookie", "Cookies", "Einstellungen", "Datenschutz", "Impressum",
     "Kontakt", "Team", "Login", "Menü", "Suche", "Merken", "Teilen",
+    # A heading read as a name: "Ansprechpartner:\nNoch Fragen".
+    "Noch", "Fragen",
 }
 
 #: A single word after "Frau"/"Herr" that names a unit, not a person:
@@ -106,6 +108,32 @@ _UNIT_WORD = re.compile(
 _LEGAL_FORM_AFTER = re.compile(r"^ *(?:GmbH|gGmbH|mbH|AG|KG|SE|e\. ?V\.|OHG|UG|GbR|Gmb)\b")
 #: Street-shaped tokens a name must not end in: "Friedrich-Mohr-Straße", "Wahlerstr".
 _STREET = re.compile(r"(?i)(stra(ss|ß)e|str\.?|allee|weg|platz|ring|gasse|damm|ufer)$")
+
+
+def _is_street(token: str) -> bool:
+    """A street-shaped token — but a suffix on its own is a surname: "Herr
+    Marco Damm" is a person, "Kurfürstendamm" is an address."""
+    m = _STREET.search(token)
+    return bool(m) and m.start() > 0
+
+
+#: A business, not a person: "Kontakt:\nBäckerei Sonnenschein", "Frau Cordula
+#: Steiner Gasthof - Krone". Rejected as the first word of a name, dropped as
+#: the last.
+_BUSINESS = re.compile(
+    r"(?i)^(bäckerei|konditorei|metzgerei|fleischerei|gasthof|landgasthof|gasthaus|"
+    r"hotel|restaurant|café|cafe|bistro|pizzeria|pension|brauerei|weingut|praxis|"
+    r"\w*praxis|kanzlei|\w*kanzlei|apotheke|\w*apotheke|autohaus|friseur\w*|salon|"
+    r"\w*büro|klinik\w*|\w*klinik|werkstatt|schreinerei|tischlerei|gärtnerei|"
+    r"zahnarztpraxis|pflegedienst|sanitätshaus|optik)$"
+)
+
+#: A sentence about the firm's history names an owner, not a contact:
+#: "… hat Herr X die Traditionsfirma von Herrn Y übernommen."
+_HISTORY = re.compile(
+    r"(?i)übernommen|übernahm\b|gegründet|gründete|firmengründer|unternehmensgründer|"
+    r"in (?:\w+ )?generation|verstorben|nachfolge"
+)
 
 #: Words before a name that are grammar, not part of a role: "Ihnen gern die
 #: Teamleitung" → "Teamleitung".
@@ -164,6 +192,8 @@ class ContactMention:
     email: str | None
     phone: str | None
     quote: str
+    #: "direct" | "switchboard" | None — see `phone_kind`.
+    phone_kind: str | None = None
 
 
 # --------------------------------------------------------------------------
@@ -218,7 +248,8 @@ def _trim_name(raw: str, following: str) -> tuple[str | None, str | None]:
     while len(bare()) > 1 and (
         tokens[-1].rstrip(".,") in _NOT_NAMES
         or _ROLE_HINT.search(tokens[-1])
-        or _STREET.search(tokens[-1])
+        or _is_street(tokens[-1])
+        or _BUSINESS.match(tokens[-1])
     ):
         tokens.pop()
     while len(tokens) > 1 and re.fullmatch(_PARTICLE, tokens[-1]):
@@ -232,6 +263,8 @@ def _trim_name(raw: str, following: str) -> tuple[str | None, str | None]:
     if not names or names[0] in _NOT_NAMES or tokens[-1] in _NOT_NAMES:
         return None, None
     if any(_UNIT_WORD.search(t) for t in names):
+        return None, None
+    if any(_BUSINESS.match(t) for t in names):
         return None, None
     return " ".join(tokens), role
 
@@ -318,8 +351,43 @@ def _phone_in(window: str) -> str | None:
     if not m:
         return None
     phone = re.sub(r"\s+", " ", m.group(0)).strip(" /-")
+    # Two numbers in a row ("Hotline 0800 / 4007766 0800 / 4007767") match as
+    # one run of digits. A space then a fresh area code (at least three digits
+    # after the "0": "0800", "0531", "0151", or a "+") after an already
+    # complete number (10+ national digits) starts the second one. A trailing
+    # two-digit group ("+49 151 571 579 07") is the same number. Groups like "+41 41 553 01 65" or "030 9210 952 00" stay whole:
+    # their prefix is too short to be a number on its own.
+    for cut in re.finditer(r" (?=\+\d|0[1-9]\d{2})", phone):
+        if _national_digits(phone[: cut.start()]) >= 10:
+            phone = phone[: cut.start()].strip(" /-")
+            break
     # A postcode + house number reads like a short number; require real length.
     return phone if len(re.sub(r"\D", "", phone)) >= 7 else None
+
+
+def _national_digits(phone: str) -> int:
+    """Digits of the number as dialled inside the country: "+49 (0)160 99 80"
+    is "0160 99 80" — seven, not ten. The country code and the "(0)" would
+    otherwise make a half number look complete."""
+    national = re.sub(r"^\+\d{2}\s*(?:\(0\))?\s*", "0", phone.strip())
+    return len(re.sub(r"\D", "", national))
+
+
+#: Service numbers reach a hotline, never a named person. Matched on the
+#: number with spaces and slashes removed, so no word boundary after the code.
+_SERVICE_NUMBER = re.compile(r"^(?:\+49(?:\(0\))?|0)(?:800|180|900|700)")
+
+
+def phone_kind(phone: str | None) -> str | None:
+    """`direct` or `switchboard`. A German extension "-0" is the reception
+    desk ("0271/33583-0"), and an 0800/0180 number is a hotline: dialling
+    either reaches the company, not the person named next to it."""
+    if not phone:
+        return None
+    compact = re.sub(r"[\s/]", "", phone)
+    if re.search(r"-0$", compact) or _SERVICE_NUMBER.match(compact):
+        return "switchboard"
+    return "direct"
 
 
 _WRAPPED = re.compile(rf" ?\n *({_TOKEN})(?=[ ,(]|$)", re.MULTILINE)
@@ -335,7 +403,8 @@ def _wrapped_surname(text: str, end: int) -> str | None:
     token, rest = m.group(1), text[m.end() : m.end() + 6]
     if (
         token in _NOT_NAMES
-        or _STREET.search(token)
+        or _is_street(token)
+        or _BUSINESS.match(token)
         or _ROLE_HINT.search(token)
         or re.match(r"(?i) *(str\b|str\.|\d|&)", rest)
         or _LEGAL_FORM_AFTER.match(text, m.end())
@@ -361,6 +430,14 @@ def _first_name_elsewhere(text: str, last: str, salutation: str) -> str | None:
         if re.search(rf"(?:{salutation}n?|Ansprechpartner(?:in)?|Kontakt\w*):? *$", lead):
             return token
     return None
+
+
+def _sentence(text: str, start: int, end: int) -> str:
+    """The sentence around a mention — bounded by . ! ? or a line break, with
+    the dots of a title ("Dr.", "Mst.") not counted as sentence ends."""
+    left = max(text.rfind(c, 0, start) for c in ".!?\n")
+    right = min([i for i in (text.find(c, end) for c in ".!?\n") if i != -1] or [len(text)])
+    return text[left + 1 : right]
 
 
 def _quote(text: str, start: int, end: int) -> str:
@@ -413,8 +490,11 @@ def extract_contacts(text: str | None) -> list[ContactMention]:
             if first:
                 titles = [t for t in name.split() if re.fullmatch(_TITLE, t)]
                 name = " ".join([*titles, first, last])
+        if _HISTORY.search(_sentence(clean, start, end)):
+            return
         window = clean[max(0, start - _WINDOW_BEFORE) : end + _WINDOW_AFTER]
         tail = clean[end : end + _WINDOW_AFTER]
+        phone = _phone_in(tail)
         mention = ContactMention(
             full_name=name,
             salutation=salutation,
@@ -422,8 +502,9 @@ def extract_contacts(text: str | None) -> list[ContactMention]:
             last_name=last,
             role_title=lead_role or _role_near(clean, start, end),
             email=_email_for(window, first, last),
-            phone=_phone_in(tail),
+            phone=phone,
             quote=_quote(clean, start, end),
+            phone_kind=phone_kind(phone),
         )
         spans.append((start, end))
         key = _fold(last)
