@@ -602,6 +602,10 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
   // The people this employer's ads name, with phone and the ad line — saving
   // one adopts the employer and creates the manager in one receipted step.
   const [showContacts, setShowContacts] = useState(false)
+  // Bumped when the dialog adopts, so an open contacts panel re-reads and
+  // saves its next person as a manager of the adopted company.
+  const [contactsReload, setContactsReload] = useState(0)
+  const markAdopted = useCallback(() => setAdopted(true), [])
   const identity = IDENTITY[hit.resolution_basis] ?? IDENTITY.name_place
   // Tracking is per corpus row; a rolled-up employer is tracked via its first
   // site, which is what the API reports back as `tracked`.
@@ -700,6 +704,8 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
           <ContactsPanel
             company={{ hub_company_id: anchorId, company_id: null }}
             onAdopted={() => setAdopted(true)}
+            onKnownCompany={markAdopted}
+            reload={contactsReload}
           />
         </div>
       )}
@@ -712,6 +718,7 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
             setAdopting(false)
             setAdopted(true)
             setArt14(result.art14_outstanding)
+            setContactsReload((k) => k + 1)
           }}
         />
       )}
