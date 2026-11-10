@@ -50,8 +50,6 @@ export function TopNav({ active, onChange, lang, onLangChange }: TopNavProps) {
           <div className="flex items-center gap-2 rounded-xl bg-white px-2.5 py-1.5 shadow-pill">
             <OrganizationSwitcher
               hidePersonal
-              afterSelectOrganizationUrl="/#Kandidaten"
-              afterCreateOrganizationUrl="/#Kandidaten"
               appearance={{ elements: { rootBox: 'flex items-center' } }}
             />
             <UserButton afterSignOutUrl="/" />
