@@ -21,8 +21,12 @@
 import { t } from '@/i18n'
 import type { Tone } from './primitives'
 
-/** The two states, in the order they happen. Inactive is final. */
-export const JOB_STATUSES = ['active', 'inactive'] as const
+/** The states, in the order they happen. Inactive is final.
+ *
+ *  `lead` (ELI-22): an ad taken from Markt — business development, not a
+ *  mandate. Not live business (`isLive` is false), it becomes `active` when the
+ *  contract is won or `inactive` when it is not, and nothing goes back to it. */
+export const JOB_STATUSES = ['lead', 'active', 'inactive'] as const
 
 export type JobStatus = (typeof JOB_STATUSES)[number]
 
@@ -50,6 +54,7 @@ export function isLive(value: string | null | undefined): boolean {
 }
 
 export const JOB_STATUS_TONE: Record<string, Tone | undefined> = {
+  lead: 'gold',
   active: 'mint',
   // Inactive keeps the neutral chip: it is the one state that is not news.
   inactive: undefined,
@@ -64,10 +69,21 @@ export const JOB_STATUS_TONE: Record<string, Tone | undefined> = {
  *  page was opened in. */
 export function jobStatusLabel(value: string): string {
   const canonical = jobStatus(value)
+  if (canonical === 'lead') return t('Lead')
   if (canonical === 'active') return t('Aktiv')
   if (canonical === 'inactive') return t('Inaktiv')
   // A value the backend grew and this screen has not learned yet. Showing it
   // raw is ugly on purpose — better than a label that quietly says "Aktiv"
   // about something that is not.
   return value
+}
+
+/** The statuses a job in `value` may be set to — the backend's rules
+ *  (`jobs.service.update_job`): a lead may be won or dropped, a mandate may
+ *  finish, a finished one stays finished, and nothing goes back to lead. */
+export function statusChoices(value: string | null | undefined): JobStatus[] {
+  const current = jobStatus(value)
+  if (current === 'lead') return ['lead', 'active', 'inactive']
+  if (current === 'inactive') return ['inactive']
+  return ['active', 'inactive']
 }

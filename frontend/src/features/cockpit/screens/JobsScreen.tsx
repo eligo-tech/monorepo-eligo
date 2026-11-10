@@ -85,6 +85,19 @@ function StatusPicker({
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
 
+  if (jobStatus(job.status) === 'lead') {
+    // A lead from Markt (ELI-22) is not business yet: it is won or dropped
+    // in the mandate editor, where both moves are offered.
+    return (
+      <span
+        title={t('Lead aus dem Markt — im Mandat auf „Aktiv“ setzen, wenn der Auftrag kommt, sonst auf „Inaktiv“.')}
+        className="cursor-help"
+      >
+        <Chip tone={JOB_STATUS_TONE.lead}>{jobStatusLabel(job.status)}</Chip>
+      </span>
+    )
+  }
+
   if (!isLive(job.status)) {
     return (
       <span

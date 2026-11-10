@@ -16,8 +16,13 @@
 // this product already shipped in English.
 
 export const EN: Record<string, string> = {
+  'Als Lead auswählen': 'Select as a lead',
+  'Als Lead in Jobs übernommen': 'Taken into Jobs as a lead',
+  'Als Lead übernehmen ({n})': 'Add as lead ({n})',
   'Diese Ansicht konnte nicht angezeigt werden': 'This view could not be displayed',
   'Ein Fehler in der Oberfläche. Wechsle die Ansicht oder lade die Seite neu.': 'Something went wrong in the interface. Switch views or reload the page.',
+  'Lead aus dem Markt — im Mandat auf „Aktiv“ setzen, wenn der Auftrag kommt, sonst auf „Inaktiv“.': 'Lead from Markt — set it to "Active" in the mandate when the contract comes in, otherwise to "Inactive".',
+  'Lead': 'Lead',
   'Neu laden': 'Reload',
   ' (wörtlich gesucht)': ' (exact wording)',
   ' für „{query}”': ' for “{query}”',
@@ -1185,6 +1190,7 @@ export const EN: Record<string, string> = {
   '{n} Anzeigen': '{n} ads',
   '{n} Berufsfelder': '{n} occupational fields',
   '{n} Standorte': '{n} branches',
+  '{n} als Lead in Jobs übernommen': '{n} added to Jobs as leads',
   '{n} ausgewählt': '{n} selected',
   '{n} bewertet': '{n} assessed',
   '{n} Datensätze gelöscht': '{n} records erased',
@@ -1201,8 +1207,10 @@ export const EN: Record<string, string> = {
   '{n} offene Anzeigen': '{n} open ads',
   '{n} von {total} Feldern übernommen': '{n} of {total} fields taken over',
   '{n} Zeilen importieren': 'Import {n} rows',
+  '{n} waren schon da': '{n} were already there',
   '{n} × Art.-14-Information offen': '{n} × Art. 14 notice outstanding',
   '{n} übernehmen': 'Adopt {n}',
+  '{n} übersprungen (Agentur oder nicht mehr vorhanden)': '{n} skipped (agency or no longer listed)',
   '{open} offen': '{open} open',
   '{pct} % von € {cap} (Annahme, kein Honorarmodell)': '{pct} % of € {cap} (assumption, no fee model)',
   '{pct}% der Schlüsselfelder sind gegen eine Quelle geprüft': '{pct}% of the key fields are checked against a source',

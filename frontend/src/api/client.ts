@@ -16,6 +16,7 @@ import type {
   HubCompanyDTO,
   HubCompanyLinkDTO,
   HubCorpusStatsDTO,
+  AdoptPostingsResultDTO,
   AdoptResultDTO,
   HubEmployerHitDTO,
   ManagerDTO,
@@ -313,6 +314,13 @@ export const api = {
    * The crossing from shared observation to system-of-record — it goes through
    * the verification gate server-side and leaves a receipt.
    */
+  /** Ads selected on Markt → Jobs as leads, their employer adopted (ELI-22). */
+  adoptHubPostings: (postingIds: string[]) =>
+    request<AdoptPostingsResultDTO>('/hub/postings/adopt', {
+      method: 'POST',
+      body: JSON.stringify({ posting_ids: postingIds }),
+    }),
+
   adoptHubCompany: (
     hubCompanyId: string,
     manager?: {
