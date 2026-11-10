@@ -186,3 +186,53 @@ def test_the_queue_index_names_the_current_rules_version() -> None:
     assert f"contacts_rules < {AD_CONTACT_RULES}" in str(index.dialect_options["postgresql"]["where"])
     migrations = pathlib.Path(models.__file__).parents[3].joinpath("migrations/versions").glob("0*.py")
     assert any(f"contacts_rules < {AD_CONTACT_RULES}" in p.read_text() for p in migrations)
+
+
+# --- the nightly job ---------------------------------------------------------
+
+
+def test_the_pass_is_machine_only() -> None:
+    from tests.test_operator_endpoints import DECLARED_OPERATOR_ROUTES
+
+    assert ("POST", "/hub/ad-contacts/backfill") in DECLARED_OPERATOR_ROUTES
+
+
+async def test_the_route_runs_the_pass_for_the_ingest_token(monkeypatch) -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.config import settings
+    from app.main import app
+
+    monkeypatch.setattr(settings, "ingest_token", "t" * 40)
+    await _ingest(("a-1", WOLTER))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.post(
+            f"{settings.api_v1_prefix}/hub/ad-contacts/backfill?limit=10",
+            headers={"Authorization": f"Bearer {'t' * 40}"},
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"read": 1, "contacts": 1, "remaining": 0}
+
+
+async def test_the_nightly_job_reads_in_batches_and_stops_when_the_queue_is_empty() -> None:
+    import httpx
+
+    from scripts.hub_daily import _read_ad_contacts
+
+    asked: list[int] = []
+    left = {"n": 12_000}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        n = int(request.url.params["limit"])
+        asked.append(n)
+        read = min(n, left["n"])
+        left["n"] -= read
+        return httpx.Response(200, json={"read": read, "contacts": read // 10, "remaining": left["n"]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://api") as client:
+        assert await _read_ad_contacts(client, budget=50_000) == {"read": 12_000, "contacts": 1_200, "remaining": 0}
+        assert asked == [5_000, 5_000, 5_000]
+        asked.clear()
+        left["n"] = 100_000
+        assert (await _read_ad_contacts(client, budget=7_000))["read"] == 7_000
+        assert asked == [5_000, 2_000]

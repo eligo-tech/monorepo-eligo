@@ -644,6 +644,20 @@ async def job_families_backfill(
     return await families.backfill(db, limit=limit)
 
 
+@router.post("/ad-contacts/backfill")
+async def ad_contacts_backfill(
+    limit: int = Query(default=5_000, ge=1, le=10_000),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Read the persons up to `limit` queued open ads name into
+    `hub_ad_contacts` (ELI-22). Machine-only: a bounded corpus write the
+    nightly job repeats until the queue is empty."""
+    from app.domain.hub import ad_contacts
+
+    return await ad_contacts.backfill(db, limit=limit)
+
+
 @router.post("/vacancy-keys/backfill")
 async def vacancy_keys_backfill(
     limit: int = Query(default=5_000, ge=1, le=10_000),

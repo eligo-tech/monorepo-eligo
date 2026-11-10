@@ -46,6 +46,8 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     ("POST", "/hub/vacancy-keys/backfill"),
     # Labels existing ads tech/other — a bounded corpus write.
     ("POST", "/hub/job-families/backfill"),
+    # Stores the persons open ads name (hub_ad_contacts) — a bounded corpus write.
+    ("POST", "/hub/ad-contacts/backfill"),
     ("GET", "/hub/crawl-profiles"),
     ("POST", "/hub/crawl-profiles/mark-crawled"),
     # Rebuilds the agency finder's derived profiles from the corpus.
