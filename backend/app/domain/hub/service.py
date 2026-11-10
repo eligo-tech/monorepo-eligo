@@ -2150,6 +2150,7 @@ async def adopt_company(
     actor: str | None = None,
     manager: dict | None = None,
     kind: str = EMPLOYER,
+    as_prospect: bool = False,
 ) -> tuple[Company, HubCompanyLink, object | None]:
     """Take a corpus company into this tenant's system-of-record.
 
@@ -2198,6 +2199,22 @@ async def adopt_company(
     )
     if link is not None and link.company_id is not None:
         raise AlreadyAdopted(str(link.company_id))
+    # One employer, one company: adopted at ANY of its sites counts. Leads adopt
+    # the ad's site, the Markt card its first site — without this the second
+    # crossing made a second company of the same name (review of #236).
+    sites = await _sibling_company_ids(session, normalized_name=hub_company.normalized_name, kind=kind)
+    elsewhere = await session.scalar(
+        select(HubCompanyLink.company_id)
+        .where(
+            HubCompanyLink.tenant_id == tenant_id,
+            HubCompanyLink.hub_company_id.in_(sites),
+            HubCompanyLink.company_id.is_not(None),
+        )
+        .order_by(HubCompanyLink.created_at)
+        .limit(1)
+    )
+    if elsewhere is not None:
+        raise AlreadyAdopted(str(elsewhere))
 
     company = Company(
         tenant_id=tenant_id,
@@ -2206,7 +2223,8 @@ async def adopt_company(
         location=hub_company.city,
         # Adopting is what makes an observed employer an account. Tracking one
         # is interest; this is the commitment, so it says so on the record.
-        is_client=True,
+        # A lead's employer is a prospect until a mandate is won (ELI-22).
+        is_client=not as_prospect,
         source=f"hub:{hub_company.source}",
     )
     session.add(company)
@@ -2216,11 +2234,11 @@ async def adopt_company(
         link = HubCompanyLink(
             tenant_id=tenant_id,
             hub_company_id=hub_company_id,
-            relationship="client",
+            relationship="prospect" if as_prospect else "client",
         )
         session.add(link)
     link.company_id = company.id
-    link.relationship = "client"
+    link.relationship = "prospect" if as_prospect else "client"
     await session.flush()
 
     async def _prove_it_landed(_session: AsyncSession, _change) -> None:
@@ -2341,6 +2359,135 @@ CONTACT_POSTINGS_LIMIT = 300
 #: Evidence rows kept per person. The count says how often; a handful of
 #: quotes is enough to judge whether the parser read the ad right.
 CONTACT_EVIDENCE_LIMIT = 5
+
+
+async def adopt_postings(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    posting_ids: list[uuid.UUID],
+    actor: str | None = None,
+) -> list[dict]:
+    """Take public ads into this workspace as LEAD jobs (ELI-22).
+
+    Per ad: the employer is reused if this workspace already holds it at any of
+    its sites, else adopted as a PROSPECT (`adopt_company` — the receipted
+    crossing); then a `lead` job is created, linked to the ad by
+    `external_source='hub'` / `external_id` (unique per workspace, migration
+    0020), so the same ad never lands twice. A lead is business development,
+    not a mandate (`JobStatus.LEAD`).
+
+    Each lead is committed as it is made, so a failure later in the selection
+    never leaves an adopted employer without the lead it was adopted for. A
+    concurrent request (double click, two tabs) is absorbed: an employer
+    adopted meanwhile is reused, an ad taken meanwhile is reported as existing.
+
+    A private recruiter's ad is skipped: the agency is not the hiring employer.
+    The ad's salary is NOT copied: it has no period (hourly / monthly /
+    yearly) and the band is a hard matching filter.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.domain.common.enums import JobStatus
+    from app.domain.jobs.models import Job
+
+    async def existing_job(posting_id: uuid.UUID):
+        return await session.scalar(
+            select(Job).where(
+                Job.tenant_id == tenant_id,
+                Job.external_source == "hub",
+                Job.external_id == str(posting_id),
+            )
+        )
+
+    async def workspace_company(hub_company_id: uuid.UUID, normalized_name: str) -> uuid.UUID:
+        sites = await _sibling_company_ids(session, normalized_name=normalized_name)
+        held = await session.scalar(
+            select(HubCompanyLink.company_id)
+            .where(
+                HubCompanyLink.tenant_id == tenant_id,
+                HubCompanyLink.hub_company_id.in_(sites or [hub_company_id]),
+                HubCompanyLink.company_id.is_not(None),
+            )
+            .order_by(HubCompanyLink.created_at)
+            .limit(1)
+        )
+        if held is not None:
+            return held
+        try:
+            company, _link, _manager = await adopt_company(
+                session, tenant_id=tenant_id, hub_company_id=hub_company_id, actor=actor, as_prospect=True
+            )
+            return company.id
+        except (AlreadyAdopted, IntegrityError):
+            # Adopted by a concurrent request between the lookup and ours.
+            await session.rollback()
+            held = await session.scalar(
+                select(HubCompanyLink.company_id)
+                .where(
+                    HubCompanyLink.tenant_id == tenant_id,
+                    HubCompanyLink.hub_company_id.in_(sites or [hub_company_id]),
+                    HubCompanyLink.company_id.is_not(None),
+                )
+                .order_by(HubCompanyLink.created_at)
+                .limit(1)
+            )
+            if held is None:
+                raise
+            return held
+
+    results: list[dict] = []
+    for posting_id in dict.fromkeys(posting_ids):
+        skipped = {"posting_id": posting_id, "created": False, "job_id": None, "company_id": None}
+        posting = await session.get(HubJobPosting, posting_id)
+        if posting is None:
+            results.append({**skipped, "skipped": "not_found"})
+            continue
+        hub_company = await session.get(HubCompany, posting.hub_company_id)
+        if hub_company is None or hub_company.kind != EMPLOYER:
+            results.append({**skipped, "skipped": "agency"})
+            continue
+
+        # Plain values before anything can commit or roll back: a rollback
+        # (absorbing a concurrent request) expires every loaded row, and an
+        # expired attribute read here would be IO outside the event loop.
+        title = posting.title[:200]
+        location = posting.city or posting.location_text or None
+        hub_company_id, normalized_name = hub_company.id, hub_company.normalized_name
+
+        found = await existing_job(posting_id)
+        if found is None:
+            company_id = await workspace_company(hub_company_id, normalized_name)
+            job = Job(
+                tenant_id=tenant_id,
+                title=title,
+                client_company_id=company_id,
+                location=location,
+                status=JobStatus.LEAD.value,
+                external_source="hub",
+                external_id=str(posting_id),
+            )
+            session.add(job)
+            job_id = job.id = job.id or uuid.uuid4()
+            try:
+                await session.commit()
+            except IntegrityError:
+                # Taken by a concurrent request: the unique external identity.
+                await session.rollback()
+                found = await existing_job(posting_id)
+                if found is None:
+                    raise
+            else:
+                results.append({
+                    "posting_id": posting_id, "created": True, "job_id": job_id,
+                    "company_id": company_id, "skipped": None,
+                })
+                continue
+        results.append({
+            "posting_id": posting_id, "created": False, "job_id": found.id,
+            "company_id": found.client_company_id, "skipped": None,
+        })
+    return results
 
 
 async def _sibling_company_ids(

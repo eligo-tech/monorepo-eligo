@@ -16,7 +16,7 @@ import { AlertCircle, X } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { CompanyDTO, JobDTO } from '@/api/types'
 import { Button, SelectInput, TagInput, TextInput } from '../ui/forms'
-import { JOB_STATUSES, isLive, jobStatus, jobStatusLabel } from '../ui/jobStatus'
+import { jobStatus, jobStatusLabel, statusChoices } from '../ui/jobStatus'
 import { Panel } from '../ui/primitives'
 
 // Both option lists are built INSIDE the component on purpose. A `t()` call
@@ -88,7 +88,7 @@ export function MandateEditor({
   // An inactive mandate cannot be reactivated (ELI-7) — the backend answers
   // 409 — so the option is not offered. Leaving it in the list would be a
   // control whose only job is to fail.
-  const statusOptions = (isLive(job.status) ? JOB_STATUSES : (['inactive'] as const)).map(
+  const statusOptions = statusChoices(job.status).map(
     (value) => ({ value, label: jobStatusLabel(value) }),
   )
 
@@ -233,7 +233,7 @@ export function MandateEditor({
                 onChange={(v) => set('status', v)}
                 options={statusOptions}
               />
-              {!isLive(job.status) && (
+              {jobStatus(job.status) === 'inactive' && (
                 <p className="mt-1 font-mono text-[11px] text-cockpit-faint">
                   {t('Inaktiv ist endgültig. Für eine neue Suche das Mandat kopieren.')}
                 </p>

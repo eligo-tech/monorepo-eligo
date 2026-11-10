@@ -353,6 +353,12 @@ class JobStatus(str, enum.Enum):
 
     ACTIVE = "active"
     INACTIVE = "inactive"
+    #: A public job ad taken from Markt (ELI-22): business development, not
+    #: business. Nobody has signed anything, so it is not live business —
+    #: `LIVE_JOB_STATUSES` does not include it and no KPI counts it as a
+    #: mandate. It becomes `active` when the contract is won, or `inactive`
+    #: when it is not; a mandate never goes back to being a lead.
+    LEAD = "lead"
 
 
 #: Spellings in the record and what they mean now. Read off the live

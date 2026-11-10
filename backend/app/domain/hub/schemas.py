@@ -279,6 +279,28 @@ class AdoptCompanyRequest(BaseModel):
     manager: AdoptManagerInput | None = None
 
 
+class AdoptPostingsRequest(BaseModel):
+    """Ads selected on Markt, to land in Jobs as leads (ELI-22)."""
+
+    posting_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class AdoptPostingResult(BaseModel):
+    posting_id: uuid.UUID
+    created: bool
+    job_id: uuid.UUID | None
+    company_id: uuid.UUID | None
+    #: "agency" | "not_found" when the ad was not taken; None otherwise.
+    skipped: str | None = None
+
+
+class AdoptPostingsResult(BaseModel):
+    created: int
+    existing: int
+    skipped: int
+    results: list[AdoptPostingResult]
+
+
 class AdoptCompanyResult(BaseModel):
     """What the crossing produced — company, link, and the contact if given."""
 

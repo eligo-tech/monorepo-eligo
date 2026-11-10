@@ -19,6 +19,9 @@ const SAME_IN_BOTH = new Set([
   'Arbeitsagentur',
   'Briefing',
   'Business Calls',
+  // ELI-22: the job status for an ad taken from Markt — German recruiters
+  // say "Lead" too.
+  'Lead',
   // The ELI-9 note vocabulary. The recruiters named these kinds in English
   // and use them in a German UI, so there is nothing to translate.
   'Business Call',

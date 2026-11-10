@@ -16,6 +16,7 @@ import type {
   HubCompanyDTO,
   HubCompanyLinkDTO,
   HubCorpusStatsDTO,
+  AdoptPostingsResultDTO,
   AdoptResultDTO,
   HubEmployerHitDTO,
   ManagerDTO,
@@ -307,6 +308,13 @@ export const api = {
     if (params.correct === false) qs.set('correct', 'false')
     return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
+
+  /** Ads selected on Markt → Jobs as leads, their employer adopted (ELI-22). */
+  adoptHubPostings: (postingIds: string[]) =>
+    request<AdoptPostingsResultDTO>('/hub/postings/adopt', {
+      method: 'POST',
+      body: JSON.stringify({ posting_ids: postingIds }),
+    }),
 
   /**
    * Take a corpus employer into this workspace, optionally with a contact.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Index, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -16,6 +16,12 @@ class Job(Base, IDMixin, TenantMixin, TimestampMixin):
     """A role a client wants filled."""
 
     __tablename__ = "jobs"
+
+    __table_args__ = (
+        # Declared here as well as in migration 0020, so every database built
+        # by `create_all` (the tests' included) refuses the same ad twice.
+        Index("ix_jobs_external_identity", "tenant_id", "external_source", "external_id", unique=True),
+    )
 
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     client_company_id: Mapped[uuid.UUID | None] = mapped_column(

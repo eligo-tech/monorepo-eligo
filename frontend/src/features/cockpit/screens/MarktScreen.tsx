@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bookmark,
   BookmarkCheck,
+  Briefcase,
   Building2,
   Check,
   ChevronDown,
@@ -375,12 +376,40 @@ function Snippet({ text, terms }: { text: string; terms: string[] }) {
 }
 
 /** One role, expandable to its full ad text when the corpus has it. */
-function RoleRow({ role, terms }: { role: HubJobPostingDTO; terms: string[] }) {
+function RoleRow({
+  role,
+  terms,
+  selected = false,
+  taken = false,
+  onToggle,
+}: {
+  role: HubJobPostingDTO
+  terms: string[]
+  /** Ticked for "Als Lead übernehmen". */
+  selected?: boolean
+  /** Already in this workspace's Jobs as a lead. */
+  taken?: boolean
+  onToggle?: () => void
+}) {
   const [open, setOpen] = useState(false)
   const link = role.source_url ?? role.detail_url
   return (
     <li className="border-b border-cockpit-line/30 pb-1 last:border-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        {onToggle &&
+          (taken ? (
+            <Chip tone="gold" className="px-1.5 py-0">
+              <span title={t('Als Lead in Jobs übernommen')}>{t('Lead')}</span>
+            </Chip>
+          ) : (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggle}
+              aria-label={t('Als Lead auswählen')}
+              className="h-3.5 w-3.5 shrink-0 translate-y-[2px] accent-mint-500"
+            />
+          ))}
         {role.description ? (
           <button
             type="button"
@@ -606,6 +635,48 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
   // saves its next person as a manager of the adopted company.
   const [contactsReload, setContactsReload] = useState(0)
   const markAdopted = useCallback(() => setAdopted(true), [])
+  // Ads ticked to become lead jobs, and the ones already taken (ELI-22).
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [taken, setTaken] = useState<Set<string>>(new Set())
+  const [leadBusy, setLeadBusy] = useState(false)
+  const [leadNote, setLeadNote] = useState<string | null>(null)
+  // A new search can keep this card mounted with other ads: never submit a
+  // ticked ad the recruiter can no longer see.
+  const visibleRoles = hit.matching_roles.map((r) => r.id).join(',')
+  useEffect(() => {
+    const visible = new Set(visibleRoles.split(','))
+    setSelected((prev) => {
+      const kept = [...prev].filter((id) => visible.has(id))
+      return kept.length === prev.size ? prev : new Set(kept)
+    })
+  }, [visibleRoles])
+  const toggleRole = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const takeAsLeads = async () => {
+    setLeadBusy(true)
+    setLeadNote(null)
+    try {
+      const result = await api.adoptHubPostings([...selected])
+      const landed = result.results.filter((r) => r.job_id).map((r) => r.posting_id)
+      setTaken((prev) => new Set([...prev, ...landed]))
+      setSelected(new Set())
+      if (landed.length > 0) setAdopted(true)
+      const parts: string[] = []
+      if (result.created) parts.push(t('{n} als Lead in Jobs übernommen', { n: String(result.created) }))
+      if (result.existing) parts.push(t('{n} waren schon da', { n: String(result.existing) }))
+      if (result.skipped) parts.push(t('{n} übersprungen (Agentur oder nicht mehr vorhanden)', { n: String(result.skipped) }))
+      setLeadNote(parts.join(' · '))
+    } catch {
+      setLeadNote(t('Übernahme fehlgeschlagen.'))
+    } finally {
+      setLeadBusy(false)
+    }
+  }
   const identity = IDENTITY[hit.resolution_basis] ?? IDENTITY.name_place
   // Tracking is per corpus row; a rolled-up employer is tracked via its first
   // site, which is what the API reports back as `tracked`.
@@ -731,7 +802,14 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
       {hit.matching_roles.length > 0 && (
         <ul className="mt-3 space-y-1 border-t border-cockpit-line/60 pt-2.5">
           {hit.matching_roles.map((role) => (
-            <RoleRow key={role.id} role={role} terms={terms} />
+            <RoleRow
+              key={role.id}
+              role={role}
+              terms={terms}
+              selected={selected.has(role.id)}
+              taken={taken.has(role.id)}
+              onToggle={() => toggleRole(role.id)}
+            />
           ))}
           {hit.open_roles > hit.matching_roles.length && (
             <li className="px-0 pt-1 font-mono text-[12px] text-cockpit-faint">
@@ -739,6 +817,17 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
             </li>
           )}
         </ul>
+      )}
+      {(selected.size > 0 || leadNote) && (
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          {selected.size > 0 && (
+            <Button tone="primary" onClick={takeAsLeads} disabled={leadBusy}>
+              <Briefcase className="h-4 w-4" />
+              {t('Als Lead übernehmen ({n})', { n: String(selected.size) })}
+            </Button>
+          )}
+          {leadNote && <span className="text-[12px] text-cockpit-dim">{leadNote}</span>}
+        </div>
       )}
     </Panel>
   )
