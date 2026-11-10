@@ -30,6 +30,7 @@ async def list_jobs(
     tenant_id: uuid.UUID,
     limit: int = 100,
     status: str | None = None,
+    exclude_status: str | None = None,
 ) -> list[Job]:
     """The workspace's mandates, optionally one status only.
 
@@ -44,6 +45,8 @@ async def list_jobs(
         # still saying "closed" is an inactive mandate, and a filter that
         # misses it is worse than one that errors.
         stmt = stmt.where(Job.status.in_(job_status_spellings(status)))
+    if exclude_status:
+        stmt = stmt.where(Job.status.not_in(job_status_spellings(exclude_status)))
     result = await session.execute(stmt.order_by(Job.title).limit(limit))
     return list(result.scalars().all())
 
@@ -95,6 +98,10 @@ async def _check_contact(
 
 async def create_job(session: AsyncSession, *, data: JobCreate) -> Job:
     tenant_id = data.tenant_id or settings.default_tenant_id
+    if normalise_job_status(data.status) == JobStatus.LEAD.value:
+        # A lead is an ad taken from Markt (`hub.adopt_postings`), linked to
+        # it; one typed by hand would be a lead with no ad behind it.
+        raise ReopeningRefused("Ein Lead entsteht aus einer Anzeige im Markt, nicht von Hand.")
     await _check_contact(
         session,
         tenant_id=tenant_id,
@@ -176,6 +183,11 @@ async def copy_job(
 
     Returns None if the mandate does not exist for this tenant.
     """
+    source = await session.scalar(select(Job).where(Job.id == job_id, Job.tenant_id == tenant_id))
+    if source is not None and normalise_job_status(source.status) == JobStatus.LEAD.value:
+        # A copy is ACTIVE: copying a lead would make a mandate without the
+        # lead ever being won (review of #236). Win it in the editor instead.
+        raise ReopeningRefused("Ein Lead wird gewonnen, nicht kopiert.")
     source = await get_job(session, tenant_id=tenant_id, job_id=job_id)
     if source is None:
         return None

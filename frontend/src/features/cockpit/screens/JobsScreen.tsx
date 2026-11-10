@@ -254,8 +254,14 @@ export function JobsScreen({
   // the most open thing in the book and would otherwise fall out of the one
   // number on the screen that says how much business is live.
   const running = rows.filter((j) => isLive(j.status)).length
+  // Leads (ELI-22) are ads taken from Markt, not mandates: counted apart, and
+  // not as "ohne Muss-Kriterien" — a lead has none until it is won.
+  const isLead = (j: JobDTO) => jobStatus(j.status) === 'lead'
+  const leads = rows.filter(isLead).length
+  const mandatesShown = rows.length - leads
+  const mandatesTotal = all.filter((j) => !isLead(j)).length
   const withoutCriteria = all.filter(
-    (j) => (j.must_have_skills ?? []).length === 0,
+    (j) => !isLead(j) && (j.must_have_skills ?? []).length === 0,
   ).length
 
   /** Copy, then open the Suchprofil of the copy.
@@ -367,9 +373,14 @@ export function JobsScreen({
 
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 font-mono text-[13px] text-cockpit-faint">
           <span>
-            <span className="text-cockpit-text">{rows.length}</span>
-            {rows.length === all.length ? t(' Mandate') : t(' von {n} Mandaten', { n: all.length })}
+            <span className="text-cockpit-text">{mandatesShown}</span>
+            {mandatesShown === mandatesTotal ? t(' Mandate') : t(' von {n} Mandaten', { n: mandatesTotal })}
           </span>
+          {leads > 0 && (
+            <span>
+              <span className="text-gold-400">{leads}</span> {t('Leads aus dem Markt')}
+            </span>
+          )}
           <span>
             <span className="text-cockpit-text">{running}</span> {t('laufend')}
           </span>

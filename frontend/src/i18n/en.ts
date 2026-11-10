@@ -16,13 +16,8 @@
 // this product already shipped in English.
 
 export const EN: Record<string, string> = {
-  'Als Lead auswählen': 'Select as a lead',
-  'Als Lead in Jobs übernommen': 'Taken into Jobs as a lead',
-  'Als Lead übernehmen ({n})': 'Add as lead ({n})',
   'Diese Ansicht konnte nicht angezeigt werden': 'This view could not be displayed',
   'Ein Fehler in der Oberfläche. Wechsle die Ansicht oder lade die Seite neu.': 'Something went wrong in the interface. Switch views or reload the page.',
-  'Lead aus dem Markt — im Mandat auf „Aktiv“ setzen, wenn der Auftrag kommt, sonst auf „Inaktiv“.': 'Lead from Markt — set it to "Active" in the mandate when the contract comes in, otherwise to "Inactive".',
-  'Lead': 'Lead',
   'Neu laden': 'Reload',
   ' (wörtlich gesucht)': ' (exact wording)',
   ' für „{query}”': ' for “{query}”',
@@ -57,6 +52,9 @@ export const EN: Record<string, string> = {
   'Alle Berufsfelder': 'All occupational fields',
   'Alle Bundesländer': 'All federal states',
   'Alles Ausgewählte steht schon im Datensatz.': 'Everything selected is already on the record.',
+  'Als Lead auswählen': 'Select as a lead',
+  'Als Lead in Jobs übernommen': 'Taken into Jobs as a lead',
+  'Als Lead übernehmen ({n})': 'Add as lead ({n})',
   'Anzeige öffnen': 'Open ad',
   'Anzeigen ({n})': 'Ads ({n})',
   'Arbeitgeber': 'Employer',
@@ -92,6 +90,9 @@ export const EN: Record<string, string> = {
   'Ketten (über 50 Anzeigen)': 'Chains (over 50 ads)',
   'Kontakt-Domain: {domains}': 'Contact domain: {domains}',
   'Kontakte aus den Anzeigen': 'Contacts named in the ads',
+  'Lead aus dem Markt — im Mandat auf „Aktiv“ setzen, wenn der Auftrag kommt, sonst auf „Inaktiv“.': 'Lead from Markt — set it to "Active" in the mandate when the contract comes in, otherwise to "Inactive".',
+  'Lead': 'Lead',
+  'Leads aus dem Markt': 'leads from Markt',
   'Leistungsbeurteilung': 'Performance assessment',
   'Mehr laden': 'Load more',
   'Mit Kontakt ins CRM übernehmen': 'Add to CRM with contact',

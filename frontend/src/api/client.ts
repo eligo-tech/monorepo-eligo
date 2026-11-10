@@ -309,11 +309,6 @@ export const api = {
     return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
 
-  /**
-   * Take a corpus employer into this workspace, optionally with a contact.
-   * The crossing from shared observation to system-of-record — it goes through
-   * the verification gate server-side and leaves a receipt.
-   */
   /** Ads selected on Markt → Jobs as leads, their employer adopted (ELI-22). */
   adoptHubPostings: (postingIds: string[]) =>
     request<AdoptPostingsResultDTO>('/hub/postings/adopt', {
@@ -321,6 +316,11 @@ export const api = {
       body: JSON.stringify({ posting_ids: postingIds }),
     }),
 
+  /**
+   * Take a corpus employer into this workspace, optionally with a contact.
+   * The crossing from shared observation to system-of-record — it goes through
+   * the verification gate server-side and leaves a receipt.
+   */
   adoptHubCompany: (
     hubCompanyId: string,
     manager?: {

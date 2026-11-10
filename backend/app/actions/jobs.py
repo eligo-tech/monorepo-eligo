@@ -12,7 +12,11 @@ from app.domain.jobs import service as jobs
 
 
 class ListArgs(BaseModel):
-    status: str | None = Field(None, description="Only mandates with this status, e.g. 'active'.")
+    status: str | None = Field(
+        None,
+        description="Only jobs with this status: 'active', 'inactive', or 'lead' (an ad taken from the "
+        "market — business development, not a mandate; leads are listed only when asked for).",
+    )
     limit: int = Field(50, ge=1, le=100)
 
 
@@ -27,8 +31,11 @@ class GetArgs(BaseModel):
     input=ListArgs,
 )
 async def list_jobs(ctx: ActionContext, args: ListArgs) -> JobList:
+    # Leads (ELI-22) are ads taken from Markt, not mandates: listed only when
+    # asked for by status, so Claude never presents one as a client's mandate.
     rows = await jobs.list_jobs(
-        ctx.session, tenant_id=ctx.actor.tenant_id, limit=args.limit, status=args.status
+        ctx.session, tenant_id=ctx.actor.tenant_id, limit=args.limit, status=args.status,
+        exclude_status=None if args.status else "lead",
     )
     return JobList(
         jobs=[JobSummary.model_validate(j) for j in rows],

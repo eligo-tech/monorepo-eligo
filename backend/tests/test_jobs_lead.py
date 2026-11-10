@@ -83,7 +83,6 @@ async def test_selected_ads_land_as_lead_jobs_of_one_adopted_company(forschner) 
     assert {konstrukteur.status, engineer.status} == {JobStatus.LEAD.value}
     assert engineer.title == "Entwicklungsingenieur Embedded Hardware (m/w/d)"
     assert engineer.location == "Spaichingen"
-    assert engineer.salary_min == 60000
     # Linked to its ad, so the same ad never lands twice.
     assert (engineer.external_source, engineer.external_id) == ("hub", str(a1))
     async with SessionLocal() as s:
@@ -187,3 +186,121 @@ async def test_the_route_adopts_for_the_signed_in_workspace(forschner) -> None:
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["created"] == 2 and body["existing"] == 0 and len(body["results"]) == 2
+
+
+# --- review of #236 ------------------------------------------------------------
+
+
+async def test_a_failure_on_one_employer_keeps_the_leads_of_the_others(forschner, monkeypatch) -> None:
+    """Employer X adopted and its lead created, then employer Y fails: X must
+    not be left adopted without its lead."""
+    a1, _, _ = forschner
+    async with SessionLocal() as s:
+        other = await _company(s, "Gasthaus Linde GmbH", normalized="gasthaus linde")
+        y = await _posting(s, other, "Koch (m/w/d)")
+        await s.commit()
+    real = service.adopt_company
+
+    async def flaky(session, *, hub_company_id, **kw):
+        if hub_company_id == other.id:
+            raise RuntimeError("database went away")
+        return await real(session, hub_company_id=hub_company_id, **kw)
+
+    monkeypatch.setattr(service, "adopt_company", flaky)
+    with pytest.raises(RuntimeError):
+        await _adopt(a1, y.id)
+    assert [j.title for j in await _jobs()] == ["Entwicklungsingenieur Embedded Hardware (m/w/d)"]
+
+
+async def test_an_employer_adopted_meanwhile_is_reused_not_a_500(forschner, monkeypatch) -> None:
+    """Another request adopted the employer between our lookup and our adopt."""
+    a1, _, _ = forschner
+    real = service.adopt_company
+
+    async def racing(session, *, tenant_id, hub_company_id, **kw):
+        async with SessionLocal() as other:
+            await real(other, tenant_id=tenant_id, hub_company_id=hub_company_id)
+        return await real(session, tenant_id=tenant_id, hub_company_id=hub_company_id, **kw)
+
+    monkeypatch.setattr(service, "adopt_company", racing)
+    (result,) = await _adopt(a1)
+    assert result["created"] is True
+    async with SessionLocal() as s:
+        assert await s.scalar(select(func.count(Company.id)).where(Company.tenant_id == TENANT)) == 1
+
+
+async def test_the_same_ad_in_two_requests_at_once_is_one_lead_not_an_error(forschner) -> None:
+    import asyncio
+
+    a1, _, _ = forschner
+    results = await asyncio.gather(_adopt(a1), _adopt(a1), return_exceptions=True)
+    assert not [r for r in results if isinstance(r, Exception)]
+    assert len(await _jobs()) == 1
+
+
+async def test_adopting_another_site_of_an_adopted_employer_is_refused(forschner) -> None:
+    """Leads adopt the ad's site; the card adopts its first site. Both are one
+    employer — the second must not create a second company."""
+    a1, _, b1 = forschner
+    await _adopt(a1)
+    async with SessionLocal() as s:
+        site_b = (await s.get(HubJobPosting, b1)).hub_company_id
+        with pytest.raises(service.AlreadyAdopted):
+            await service.adopt_company(s, tenant_id=TENANT, hub_company_id=site_b)
+
+
+async def test_a_lead_makes_the_employer_a_prospect_not_a_client(forschner) -> None:
+    from app.domain.hub.models import HubCompanyLink
+
+    a1, _, _ = forschner
+    await _adopt(a1)
+    async with SessionLocal() as s:
+        company = (await s.scalars(select(Company).where(Company.tenant_id == TENANT))).one()
+        link = (await s.scalars(select(HubCompanyLink).where(HubCompanyLink.tenant_id == TENANT))).one()
+    assert (company.is_client, link.relationship) == (False, "prospect")
+
+
+async def test_an_ads_salary_is_not_taken_as_the_mandates_band(forschner) -> None:
+    """The ad's figure has no period (hourly? monthly? yearly?) and the band is
+    a hard matching filter: leave it for the recruiter."""
+    a1, _, _ = forschner
+    await _adopt(a1)
+    (job,) = await _jobs()
+    assert (job.salary_min, job.salary_max) == (None, None)
+
+
+async def test_a_lead_is_not_copied_into_a_mandate(forschner) -> None:
+    a1, _, _ = forschner
+    await _adopt(a1)
+    (lead,) = await _jobs()
+    async with SessionLocal() as s:
+        with pytest.raises(jobs.ReopeningRefused):
+            await jobs.copy_job(s, tenant_id=TENANT, job_id=lead.id)
+
+
+async def test_a_job_is_not_created_as_a_lead_by_hand() -> None:
+    from app.domain.jobs.schemas import JobCreate
+
+    async with SessionLocal() as s:
+        with pytest.raises(jobs.ReopeningRefused):
+            await jobs.create_job(s, data=JobCreate(tenant_id=TENANT, title="X", status="lead"))
+
+
+async def test_claude_lists_mandates_not_leads(forschner) -> None:
+    from app.actions.jobs import ListArgs, list_jobs
+
+    a1, a2, _ = forschner
+    await _adopt(a1, a2)
+    konstrukteur = (await _jobs())[1]
+    await _set_status(konstrukteur.id, "active")
+
+    class Ctx:
+        def __init__(self, session):
+            self.session = session
+            self.actor = type("A", (), {"tenant_id": TENANT})()
+
+    async with SessionLocal() as s:
+        listed = await list_jobs(Ctx(s), ListArgs())
+        leads = await list_jobs(Ctx(s), ListArgs(status="lead"))
+    assert [j.status for j in listed.jobs] == ["active"]
+    assert [j.status for j in leads.jobs] == ["lead"]

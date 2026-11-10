@@ -640,6 +640,16 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
   const [taken, setTaken] = useState<Set<string>>(new Set())
   const [leadBusy, setLeadBusy] = useState(false)
   const [leadNote, setLeadNote] = useState<string | null>(null)
+  // A new search can keep this card mounted with other ads: never submit a
+  // ticked ad the recruiter can no longer see.
+  const visibleRoles = hit.matching_roles.map((r) => r.id).join(',')
+  useEffect(() => {
+    const visible = new Set(visibleRoles.split(','))
+    setSelected((prev) => {
+      const kept = [...prev].filter((id) => visible.has(id))
+      return kept.length === prev.size ? prev : new Set(kept)
+    })
+  }, [visibleRoles])
   const toggleRole = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev)
@@ -656,7 +666,8 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
       setTaken((prev) => new Set([...prev, ...landed]))
       setSelected(new Set())
       if (landed.length > 0) setAdopted(true)
-      const parts = [t('{n} als Lead in Jobs übernommen', { n: String(result.created) })]
+      const parts: string[] = []
+      if (result.created) parts.push(t('{n} als Lead in Jobs übernommen', { n: String(result.created) }))
       if (result.existing) parts.push(t('{n} waren schon da', { n: String(result.existing) }))
       if (result.skipped) parts.push(t('{n} übersprungen (Agentur oder nicht mehr vorhanden)', { n: String(result.skipped) }))
       setLeadNote(parts.join(' · '))

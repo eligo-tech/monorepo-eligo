@@ -364,7 +364,6 @@ export interface QueryCorrectionDTO {
   to: string
 }
 
-/** What the corpus→CRM crossing produced. */
 /** One ad taken from Markt as a lead job (ELI-22). */
 export interface AdoptPostingResultDTO {
   posting_id: string
@@ -382,6 +381,7 @@ export interface AdoptPostingsResultDTO {
   results: AdoptPostingResultDTO[]
 }
 
+/** What the corpus→CRM crossing produced. */
 export interface AdoptResultDTO {
   company_id: string
   company_name: string
