@@ -5,6 +5,7 @@ import App from './App'
 import { clerkKey } from './auth/config'
 import { ClerkTokenBridge } from './auth/ClerkTokenBridge'
 import { initLang } from './i18n'
+import { ErrorBoundary } from './components/ErrorBoundary'
 // Self-hosted faces for the cockpit typeface switch (no CDN at runtime).
 import '@fontsource/inter/400.css'
 import '@fontsource/inter/500.css'
@@ -31,10 +32,14 @@ const tree = clerkKey ? (
     signUpForceRedirectUrl="/#cockpit"
   >
     <ClerkTokenBridge />
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </ClerkProvider>
 ) : (
-  <App />
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
 )
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
