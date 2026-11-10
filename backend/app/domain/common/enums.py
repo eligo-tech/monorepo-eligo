@@ -98,7 +98,7 @@ class InteractionType(str, enum.Enum):
     """How a recruiter touched a manager or a candidate.
 
     The vocabulary is the one the recruiters named in ELI-9, not a guess:
-    five kinds on a manager, three on a candidate. It replaced a coarser set
+    five kinds on a manager, four on a candidate. It replaced a coarser set
     that could not tell a call to a client under contract from a cold
     business call — which is the distinction the whole of BD turns on, and
     the reason `CALL` is retired rather than reused.
@@ -118,6 +118,11 @@ class InteractionType(str, enum.Enum):
     #: development: generating business, exchanging information, building a
     #: relationship.
     BUSINESS_CALL = "business_call"
+    #: Candidate — the Qualifikationsgespräch: the first, structured
+    #: conversation that qualifies a candidate (motivation, salary, notice,
+    #: mobility). Added to ELI-9 on 2026-11-10, first on the candidate list
+    #: because it is where every candidate process starts.
+    CANDIDATE_QUALIFICATION = "candidate_qualification"
     #: Candidate — a call or video meeting with a candidate.
     CANDIDATE_CALL = "candidate_call"
     #: Either — a LinkedIn or email message, in or out.
@@ -170,6 +175,7 @@ MANAGER_INTERACTION_KINDS: tuple[InteractionType, ...] = (
 #: What a recruiter may file against a CANDIDATE (ELI-9). Shorter on purpose:
 #: a candidate has no business calls and no client calls.
 CANDIDATE_INTERACTION_KINDS: tuple[InteractionType, ...] = (
+    InteractionType.CANDIDATE_QUALIFICATION,
     InteractionType.CANDIDATE_CALL,
     InteractionType.MESSAGE,
     InteractionType.NOT_REACHED,
@@ -179,10 +185,11 @@ CANDIDATE_INTERACTION_KINDS: tuple[InteractionType, ...] = (
 #: The spellings already in the database → what they mean now.
 #:
 #: Left-hand side is what the aiFind import actually wrote, read off the 366
-#: live rows rather than from its documentation. Three of its kinds are
-#: deliberately ABSENT — "Job Spec" (27), "Client Canvas" (17) and
-#: "Candidate Qualification" (1) are on neither list in ELI-9, and folding
-#: them into `NOTE` would destroy a distinction 45 real notes still carry.
+#: live rows rather than from its documentation. Two of its kinds are
+#: deliberately ABSENT — "Job Spec" (27) and "Client Canvas" (17) are on
+#: neither list in ELI-9, and folding them into `NOTE` would destroy a
+#: distinction 44 real notes still carry. ("Candidate Qualification" (1) was
+#: absent too, until ELI-9 named it.)
 #: They stay as they are and display under their own name;
 #: `normalise_interaction_type` returns an unknown value unchanged.
 _LEGACY_INTERACTION_TYPES: dict[str, InteractionType] = {
@@ -190,6 +197,7 @@ _LEGACY_INTERACTION_TYPES: dict[str, InteractionType] = {
     "na": InteractionType.NOT_REACHED,
     "bd call": InteractionType.BUSINESS_CALL,
     "meeting notes": InteractionType.MEETING,
+    "candidate qualification": InteractionType.CANDIDATE_QUALIFICATION,
     "e-mail": InteractionType.MESSAGE,
     "email": InteractionType.MESSAGE,
 }
@@ -227,6 +235,7 @@ CONTACT_INTERACTION_KINDS = frozenset(
         InteractionType.MEETING.value,
         InteractionType.CLIENT_CALL.value,
         InteractionType.BUSINESS_CALL.value,
+        InteractionType.CANDIDATE_QUALIFICATION.value,
         InteractionType.CANDIDATE_CALL.value,
         InteractionType.MESSAGE.value,
         InteractionType.BRIEFING.value,

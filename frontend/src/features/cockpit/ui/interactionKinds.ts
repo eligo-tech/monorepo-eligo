@@ -23,8 +23,10 @@ export const MANAGER_INTERACTION_KINDS = [
 ] as const
 
 /** What may be filed against a CANDIDATE. Shorter: a candidate has no
- *  business calls and no client calls. */
+ *  business calls and no client calls. The Qualifikationsgespräch comes
+ *  first — it is where every candidate process starts (ELI-9, 2026-11-10). */
 export const CANDIDATE_INTERACTION_KINDS = [
+  'candidate_qualification',
   'candidate_call',
   'message',
   'na',
@@ -52,6 +54,8 @@ export function interactionLabel(value: string): string {
       return t('Client Call')
     case 'business_call':
       return t('Business Call')
+    case 'candidate_qualification':
+      return t('Candidate Qualification')
     case 'candidate_call':
       return t('Candidate Call')
     case 'message':
