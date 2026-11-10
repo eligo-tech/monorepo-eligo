@@ -11,6 +11,7 @@ import { t } from '@/i18n'
 
 import { useCallback, useEffect, useState } from 'react'
 import { cn } from '@/lib/cn'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { CommandBar } from './CommandBar'
 import { ReaddHost } from './erasure/ReaddHost'
 import { CockpitScreen } from './screens/CockpitScreen'
@@ -167,6 +168,9 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
           screen === 'cockpit' ? 'px-0' : 'mx-auto max-w-[1560px] px-6',
         )}
       >
+        {/* A crash in one screen stays in that screen: the command bar above
+            keeps working, and moving to another screen clears it. */}
+        <ErrorBoundary resetKey={`${screen}/${detail ?? ''}`}>
         {screen === 'cockpit' && (
           <CockpitScreen
             state={state}
@@ -199,6 +203,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         )}
         {screen === 'tracking' && <TrackingScreen me={me} />}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
+        </ErrorBoundary>
       </main>
     </div>
   )

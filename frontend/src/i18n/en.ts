@@ -16,6 +16,9 @@
 // this product already shipped in English.
 
 export const EN: Record<string, string> = {
+  'Diese Ansicht konnte nicht angezeigt werden': 'This view could not be displayed',
+  'Ein Fehler in der Oberfläche. Wechsle die Ansicht oder lade die Seite neu.': 'Something went wrong in the interface. Switch views or reload the page.',
+  'Neu laden': 'Reload',
   ' (wörtlich gesucht)': ' (exact wording)',
   ' für „{query}”': ' for “{query}”',
   ' Mandate': ' mandates',
