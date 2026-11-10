@@ -44,6 +44,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.domain.hub import ad_contacts
 from app.domain.hub.models import HubCompany, HubJobPosting, HubObservation, HubPostingPayload
 
 logger = get_logger(__name__)
@@ -253,6 +254,7 @@ async def check_batch(
             )
         )
         await session.execute(delete(HubPostingPayload).where(HubPostingPayload.hub_job_posting_id.in_(ids)))
+        await ad_contacts.forget(session, ids)  # the people go with the text
         await recount_open_postings(session, {r.hub_company_id for r in gone})
     for rows, due in (
         ([r for r in verdicts["live"] if r.live_checked_at is None], done + RECHECK_FIRST),

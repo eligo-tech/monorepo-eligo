@@ -290,6 +290,9 @@ async def _remove_company(session: AsyncSession, key: str) -> dict[str, int]:
     await session.execute(
         delete(HubPostingPayload).where(HubPostingPayload.hub_job_posting_id.in_(posting_ids))
     )
+    from app.domain.hub import ad_contacts
+
+    await ad_contacts.forget(session, posting_ids)
     postings = await session.execute(
         delete(HubJobPosting).where(HubJobPosting.hub_company_id.in_(company_ids))
     )
@@ -350,6 +353,13 @@ async def _redact_person(session: AsyncSession, key: str, *, written: str) -> di
             if (row.description, row.source_page_text, row.raw) != before:
                 redacted += 1
         await session.flush()
+    if ids:
+        # Stored contacts were read from the unredacted text: drop them, and
+        # the next pass re-reads the redacted one.
+        from app.domain.hub import ad_contacts
+
+        for start in range(0, len(ids), _BATCH):
+            await ad_contacts.forget(session, ids[start : start + _BATCH])
 
     # A sole trader trades under their own name — the company row is theirs
     # too, and needs its own `company` suppression. Counted, so the operator
