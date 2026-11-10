@@ -270,3 +270,25 @@ def test_board_slugs_come_from_wayback_paths() -> None:
     assert hub_ats.path_slugs("jobs.eu.lever.co", [
         f"https://jobs.eu.lever.co/blackshark/{LV_GRAZ}", "http://jobs.eu.lever.co:80/Zoi?lever-source=x",
     ]) == {"blackshark", "zoi"}
+
+
+async def test_discovery_can_be_limited_to_one_host(monkeypatch) -> None:
+    """boards.greenhouse.io alone spends a run's budget; a run for one host
+    reaches job-boards.greenhouse.io instead of never getting there."""
+    asked: list[str] = []
+    sent: list[dict] = []
+
+    async def fake_paths(client, host, deadline):
+        asked.append(host)
+        return {f"{host.split('.')[0]}-board"}
+
+    async def fake_send(api, slugs, via, ats="personio"):
+        sent.append({"via": via, "slugs": sorted(slugs), "ats": ats})
+        return len(slugs)
+
+    monkeypatch.setattr(hub_ats, "_paths", fake_paths)
+    monkeypatch.setattr(hub_ats, "_send", fake_send)
+    added = await hub_ats.discover_paths(None, None, "greenhouse", hosts=["job-boards.greenhouse.io"])
+    assert asked == ["job-boards.greenhouse.io"] and added == 1
+    with pytest.raises(ValueError):
+        await hub_ats.discover_paths(None, None, "greenhouse", hosts=["jobs.ashbyhq.com"])

@@ -4,7 +4,7 @@ A scheduled job, over HTTP with the machine credential only — RULE 1, the
 same discipline as `hub_daily.py`.
 
     ELIGO_API_BASE=https://…/api/v1 ELIGO_INGEST_TOKEN=… \\
-      python -m scripts.hub_ats [--ats personio|ashby|greenhouse|lever-eu|lever] [--discover] [--minutes 90]
+      python -m scripts.hub_ats [--ats personio|ashby|greenhouse|lever-eu|lever] [--discover [--host H]] [--minutes 90]
 
 **`--discover`** reads Common Crawl's public URL index for every
 `*.jobs.personio.de` / `*.jobs.personio.com` host in the last three crawls and
@@ -239,12 +239,24 @@ async def discover(api: Api, client: httpx.AsyncClient, *, minutes: float = 40.0
     return added + await _send(api, await _wayback(client) - found, "wayback")
 
 
-async def discover_paths(api: Api, client: httpx.AsyncClient, ats: str, *, minutes: float = 75.0) -> int:
+async def discover_paths(
+    api: Api, client: httpx.AsyncClient, ats: str, *, minutes: float = 75.0, hosts: list[str] | None = None
+) -> int:
     """Each host's boards are sent as soon as that host is read, so the
-    richest host's boards are found — and later read — first."""
+    richest host's boards are found — and later read — first.
+
+    `hosts` limits a run to some of the system's hosts: boards.greenhouse.io
+    alone spends a run's budget (measured 2026-11-09), so job-boards.greenhouse.io
+    is only reached by a run of its own."""
+    chosen = list(PATH_HOSTS[ats])
+    if hosts:
+        unknown = [h for h in hosts if h not in chosen]
+        if unknown:
+            raise ValueError(f"not a {ats} host: {', '.join(unknown)} (known: {', '.join(chosen)})")
+        chosen = [h for h in chosen if h in hosts]
     deadline = time.monotonic() + minutes * 60
     added, seen = 0, set()
-    for host in PATH_HOSTS[ats]:
+    for host in chosen:
         if time.monotonic() > deadline:
             break
         found = await _paths(client, host, deadline) - seen
@@ -277,6 +289,8 @@ async def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     parser.add_argument("--ats", choices=("personio", *PATH_HOSTS), default="personio", help="which boards")
     parser.add_argument("--discover", action="store_true", help="find new boards in public URL indexes first")
+    parser.add_argument("--host", action="append", default=None,
+                        help="discover on this board host only (repeatable; Ashby/Greenhouse/Lever)")
     parser.add_argument("--minutes", type=float, default=90.0, help="sync time budget")
     args = parser.parse_args()
 
@@ -290,7 +304,8 @@ async def main() -> int:
         api = Api(client)
         try:
             if args.discover:
-                await (discover(api, cc) if args.ats == "personio" else discover_paths(api, cc, args.ats))
+                await (discover(api, cc) if args.ats == "personio"
+                       else discover_paths(api, cc, args.ats, hosts=args.host))
             return await sync(api, minutes=args.minutes, ats=args.ats)
         except SourceDown as exc:
             print(f"FAILED: {exc}", file=sys.stderr)
