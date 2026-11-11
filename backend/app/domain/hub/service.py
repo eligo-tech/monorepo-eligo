@@ -2185,6 +2185,19 @@ async def adopt_company(
             )
         except erasure.Suppressed:
             manager = None
+    if manager is not None:
+        # And by direct phone / surname at this employer (ELI-22): an ad
+        # contact rarely carries the e-mail the line above can check.
+        from app.domain.erasure import service as erasure
+
+        corpus_name = await session.scalar(select(HubCompany.name).where(HubCompany.id == hub_company_id))
+        guard = await erasure.person_guard(session, tenant_id)
+        full = (manager.get("full_name") or "").strip()
+        if guard.blocks(
+            company_name=corpus_name, surname=manager.get("last_name") or full,
+            phone=manager.get("phone"), email=manager.get("email"),
+        ):
+            manager = None
     from app.domain.managers.models import Manager
 
     hub_company = await get_company(session, hub_company_id=hub_company_id, kind=kind)
@@ -2361,6 +2374,52 @@ CONTACT_POSTINGS_LIMIT = 300
 CONTACT_EVIDENCE_LIMIT = 5
 
 
+async def workspace_company(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    hub_company_id: uuid.UUID,
+    normalized_name: str,
+    actor: str | None = None,
+) -> uuid.UUID:
+    """This workspace's company for an employer (ELI-22): the one adopted at
+    any of its sites, else this site adopted as a PROSPECT (receipted).
+
+    Commits when it adopts. A concurrent adoption (double click, two tabs, a
+    lead and a call at once) is absorbed by re-reading the link — callers must
+    not hold loaded rows across this call (a rollback expires them).
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    async def held() -> uuid.UUID | None:
+        sites = await _sibling_company_ids(session, normalized_name=normalized_name)
+        return await session.scalar(
+            select(HubCompanyLink.company_id)
+            .where(
+                HubCompanyLink.tenant_id == tenant_id,
+                HubCompanyLink.hub_company_id.in_(sites or [hub_company_id]),
+                HubCompanyLink.company_id.is_not(None),
+            )
+            .order_by(HubCompanyLink.created_at)
+            .limit(1)
+        )
+
+    found = await held()
+    if found is not None:
+        return found
+    try:
+        company, _link, _manager = await adopt_company(
+            session, tenant_id=tenant_id, hub_company_id=hub_company_id, actor=actor, as_prospect=True
+        )
+        return company.id
+    except (AlreadyAdopted, IntegrityError):
+        await session.rollback()
+        found = await held()
+        if found is None:
+            raise
+        return found
+
+
 async def adopt_postings(
     session: AsyncSession,
     *,
@@ -2400,42 +2459,6 @@ async def adopt_postings(
             )
         )
 
-    async def workspace_company(hub_company_id: uuid.UUID, normalized_name: str) -> uuid.UUID:
-        sites = await _sibling_company_ids(session, normalized_name=normalized_name)
-        held = await session.scalar(
-            select(HubCompanyLink.company_id)
-            .where(
-                HubCompanyLink.tenant_id == tenant_id,
-                HubCompanyLink.hub_company_id.in_(sites or [hub_company_id]),
-                HubCompanyLink.company_id.is_not(None),
-            )
-            .order_by(HubCompanyLink.created_at)
-            .limit(1)
-        )
-        if held is not None:
-            return held
-        try:
-            company, _link, _manager = await adopt_company(
-                session, tenant_id=tenant_id, hub_company_id=hub_company_id, actor=actor, as_prospect=True
-            )
-            return company.id
-        except (AlreadyAdopted, IntegrityError):
-            # Adopted by a concurrent request between the lookup and ours.
-            await session.rollback()
-            held = await session.scalar(
-                select(HubCompanyLink.company_id)
-                .where(
-                    HubCompanyLink.tenant_id == tenant_id,
-                    HubCompanyLink.hub_company_id.in_(sites or [hub_company_id]),
-                    HubCompanyLink.company_id.is_not(None),
-                )
-                .order_by(HubCompanyLink.created_at)
-                .limit(1)
-            )
-            if held is None:
-                raise
-            return held
-
     results: list[dict] = []
     for posting_id in dict.fromkeys(posting_ids):
         skipped = {"posting_id": posting_id, "created": False, "job_id": None, "company_id": None}
@@ -2457,7 +2480,10 @@ async def adopt_postings(
 
         found = await existing_job(posting_id)
         if found is None:
-            company_id = await workspace_company(hub_company_id, normalized_name)
+            company_id = await workspace_company(
+                session, tenant_id=tenant_id, hub_company_id=hub_company_id,
+                normalized_name=normalized_name, actor=actor,
+            )
             job = Job(
                 tenant_id=tenant_id,
                 title=title,

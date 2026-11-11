@@ -18,6 +18,9 @@ import type {
   HubCorpusStatsDTO,
   AdoptPostingsResultDTO,
   AdoptResultDTO,
+  CallListPageDTO,
+  CallResultDTO,
+  FollowUpDTO,
   HubEmployerHitDTO,
   ManagerDTO,
   ManagerInteractionDTO,
@@ -396,12 +399,38 @@ export const api = {
       occurred_at?: string
       candidate_id?: string | null
       job_id?: string | null
+      /** ELI-22: how a call ended, and when to call again. */
+      outcome?: string | null
+      next_action_at?: string | null
     },
   ) =>
     request<ManagerInteractionDTO>(`/managers/${id}/interactions`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  /** Call list (ELI-22): people open ads name, not yet called here. */
+  callListMarket: (params: { q?: string; phoneOnly?: boolean; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams()
+    if (params.q) qs.set('q', params.q)
+    if (params.phoneOnly) qs.set('phone_only', 'true')
+    qs.set('limit', String(params.limit ?? 50))
+    qs.set('offset', String(params.offset ?? 0))
+    return request<CallListPageDTO>(`/hub/call-list/market?${qs}`)
+  },
+
+  /** Call list: this workspace's calls, due call-backs first. */
+  callListFollowUps: () => request<FollowUpDTO[]>('/hub/call-list/follow-ups'),
+
+  /** One call to a person from the market tab; the first takes them in. */
+  logCall: (body: {
+    hub_company_id: string
+    person_key: string
+    outcome: string
+    summary?: string | null
+    next_action_at?: string | null
+  }) =>
+    request<CallResultDTO>('/hub/call-list/calls', { method: 'POST', body: JSON.stringify(body) }),
 
   /** Records that the subject has been informed. Its own call, not a PATCH
    *  field: it asserts something happened in the world. */

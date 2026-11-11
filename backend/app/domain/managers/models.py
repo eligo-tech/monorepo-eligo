@@ -25,7 +25,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -127,6 +127,17 @@ class ManagerInteraction(Base, IDMixin, TenantMixin, TimestampMixin):
     """
 
     __tablename__ = "manager_interactions"
+    __table_args__ = (
+        # The call list's follow-up queue: calls with a next date, per
+        # workspace. Partial — most interactions have no next call.
+        Index(
+            "ix_manager_interactions_next_action",
+            "tenant_id",
+            "next_action_at",
+            postgresql_where=text("next_action_at IS NOT NULL"),
+            sqlite_where=text("next_action_at IS NOT NULL"),
+        ),
+    )
 
     #: Nullable since migration 0034: a BRIEFING belongs to the mandate, and
     #: a mandate whose contact is not recorded yet is an ordinary state — the
@@ -168,5 +179,10 @@ class ManagerInteraction(Base, IDMixin, TenantMixin, TimestampMixin):
     #: same row instead of appending the conversation again.
     external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     external_source: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+    #: How the call ended (`CallOutcome`) and when to call again — ELI-22's
+    #: call list. NULL for interactions that are not calls with an outcome.
+    outcome: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    next_action_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     manager: Mapped["Manager"] = relationship("Manager", back_populates="interactions")

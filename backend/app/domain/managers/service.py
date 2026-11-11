@@ -190,12 +190,24 @@ async def create_manager(
     to another tenant's company — RLS would not catch it, because the write
     itself is perfectly valid for the writer's own tenant.
     """
-    await _own_company(session, tenant_id=tenant_id, company_id=payload.company_id)
+    company = await _own_company(session, tenant_id=tenant_id, company_id=payload.company_id)
     from app.domain.erasure import service as erasure
 
     await erasure.guard_readd(
         session, tenant_id=tenant_id, email=payload.email, override=payload.override_suppression
     )
+    if not payload.override_suppression:
+        # ELI-22: ad contacts rarely carry an e-mail — the erased person is
+        # also recognised by direct phone and by surname at this employer.
+        # The recruiter's override (they came back of their own accord) wins.
+        guard = await erasure.person_guard(session, tenant_id)
+        names = await erasure.employer_names(session, tenant_id, company.id)
+        on = guard.erased_on(
+            company_name=names[0] if names else company.name, other_names=tuple(names[1:]),
+            surname=payload.last_name or payload.full_name, phone=payload.phone,
+        )
+        if on is not None:
+            raise erasure.Suppressed(on)
 
     manager = Manager(
         tenant_id=tenant_id,
@@ -347,6 +359,8 @@ async def log_interaction(
         interaction_type=kind,
         occurred_at=occurred_at,
         summary=payload.summary,
+        outcome=payload.outcome.value if payload.outcome else None,
+        next_action_at=payload.next_action_at,
         # ELI-15: who wrote it, so the KPI can be counted per consultant off
         # this row rather than off a copy of it.
         actor_user_id=actor_user_id,
