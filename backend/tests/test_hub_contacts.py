@@ -414,3 +414,159 @@ def test_the_rank_words_before_a_name_are_its_role() -> None:
 @pytest.mark.parametrize("text", ["Kontakt:\nHuman Resources", "Herrn Rabko DIENSTGEBER: Beispiel GmbH"])
 def test_department_and_label_words_are_not_a_name(text: str) -> None:
     assert all("Resources" not in c.full_name and "DIENSTGEBER" not in c.full_name for c in extract_contacts(text))
+
+
+# --- ELI-25: a name without "Frau"/"Herr" and without "Label:" ------------
+# Measured 2026-11-11 on 1/16 of the open corpus: about 30% of the ads that
+# name a person wrote the name bare, in a sentence or under a label without a
+# colon, and v2 found nobody. A bare name is only taken with evidence: a
+# contact phrase right before it and a phone or e-mail right after it, or a
+# personal e-mail that spells the same name.
+
+
+@pytest.mark.parametrize(
+    ("text", "first", "last", "phone"),
+    [
+        (
+            "Home-Office-Möglichkeit Kontakt\nFür Fragen steht Janet Jürgens telefonisch unter +49 5491 666 2834\n"
+            "oder auch über WhatsApp unter +49 151 51446810 gerne zur Verfügung.",
+            "Janet", "Jürgens", "+49 5491 666 2834",
+        ),
+        (
+            "Kontakt:  Für Rückfragen steht ihnen gerne Beate Bremauer unter Tel. 089/45832-146 zur Verfügung.",
+            "Beate", "Bremauer", "089/45832-146",
+        ),
+        (
+            "Fragen zur Stellenausschreibung beantwortet Ihnen Doreen Hennig aus unserer Personalabteilung unter 0151/18957922.",
+            "Doreen", "Hennig", "0151/18957922",
+        ),
+        (
+            "Bei Fragen melde dich gerne bei: Céline Ortz (HR Manager) Telefon: +49 711 1640 1254 Mail: karriere@bw-p.de",
+            "Céline", "Ortz", "+49 711 1640 1254",
+        ),
+        (
+            "Ansprechpartner Lennart Stutz Leiter der Vertriebsorganisation Tel. 0160 96300257",
+            "Lennart", "Stutz", "0160 96300257",
+        ),
+        (
+            "IHR KONTAKT Tobias Neugebauer Bereichsleiter Personalvermittlung +49 (0) 69 27 29 881 – 15 bewerbung@teic.de",
+            "Tobias", "Neugebauer", None,
+        ),
+        (
+            "Für Rückfragen steht Dir gerne Ursula Friedsam unter +49 8651-71511-0 zur Verfügung.",
+            "Ursula", "Friedsam", "+49 8651-71511-0",
+        ),
+        (
+            "Zur Stelle wende Dich telefonisch an Monika Schmidt, Einrichtungsleitung Evangelischer Beratungsdienst, unter 089 / 287 78 69 - 0",
+            "Monika", "Schmidt", None,
+        ),
+    ],
+)
+def test_a_bare_name_in_a_contact_phrase_with_a_number(text: str, first: str, last: str, phone: str | None) -> None:
+    c = one(text)
+    assert (c.salutation, c.first_name, c.last_name) == (None, first, last)
+    if phone:
+        assert c.phone == phone
+    else:
+        assert c.phone
+
+
+@pytest.mark.parametrize(
+    ("text", "first", "last", "email"),
+    [
+        (
+            "Ansprechpartner  ### Tanja Hilt  t.hilt@globus.net  +49(6851)803 105",
+            "Tanja", "Hilt", "t.hilt@globus.net",
+        ),
+        (
+            "ERGO Beratung und Vertrieb AG Mirjam Barthel - Personalberaterin mirjam.barthel@ergo.de 0155-65793268",
+            "Mirjam", "Barthel", "mirjam.barthel@ergo.de",
+        ),
+        (
+            "Bewerbungen bitte an Stephanie Christ (Beauftragte Aus- und Weiterbildung) s.christ@schwitzers.com",
+            "Stephanie", "Christ", "s.christ@schwitzers.com",
+        ),
+        (
+            "Kontakt zu uns Ann-Christin Göttsch ann-christin.goettsch@dis-ag.com +49 431 7299 0846",
+            "Ann-Christin", "Göttsch", "ann-christin.goettsch@dis-ag.com",
+        ),
+    ],
+)
+def test_a_bare_name_spelled_by_its_own_email(text: str, first: str, last: str, email: str) -> None:
+    c = one(text)
+    assert (c.salutation, c.first_name, c.last_name, c.email) == (None, first, last, email)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "📞 Sie haben noch Fragen? Melden Sie sich gerne telefonisch unter 02507 - 981 729 oder per Mail an bewerbung@x.de",
+        "Nehmen Sie bei Fragen gerne zu uns Kontakt auf!  Tel.: 035265 649740 Mail: personal-rg@x.de",
+        "Dein Ansprechpartner Recruiting Team 069-405625-427 Referenznummer: KP1",
+        "Hörmann KG Verkaufsgesellschaft Horststraße 2-4 33803 Steinhagen Telefon +49 5204 915-3042",
+        "PARTZSCH Spezialdrähte GmbH Personalabteilung Ossig Nr. 9 D-04741 Roßwein OT Ossig Telefon +49(0) 3431 7166-158",
+        "Für Rückfragen stehen wir Ihnen gerne unter 0160 / 97996011 zur Verfügung.",
+        "Kontakt zu uns Chemnitz Office & Management chemnitz-office@dis-ag.com +493716905730",
+        "In deiner REWE Christian Chauviere oHG sorgst du dafür, dass sich deine Kund:innen wohlfühlen.",
+        "Kontakt Personalabteilung Klinikum Nord Telefon 0911 398-0",
+    ],
+)
+def test_no_bare_name_without_a_person(text: str) -> None:
+    assert extract_contacts(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("Kontakt Ihre Ansprechperson Lena Fischer\nTel. 0211/506699-26 Lena.Fischer@permacon.de", "Lena Fischer"),
+        ("Wenn Du noch Fragen hast, wende Dich gerne an: Laura Marie Köster und Matthias Biss Tel. 04342 8882-0", "Laura Marie Köster"),
+        ("Bei Fragen melden Sie sich gerne bei Yvonne van Pinxteren in der Recruiting-Abteilung unter 089 278 131 49.", "Yvonne van Pinxteren"),
+    ],
+)
+def test_a_bare_name_is_not_cut_short(text: str, name: str) -> None:
+    assert extract_contacts(text)[0].full_name == name
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Kontaktdaten: Kreis Unna: 02303/2807111 Kreis-unna.berufsberatung@arbeitsagentur.de",
+        "Gerne steht Ihnen die Leitung der Gebäudereinigung unter der Telefonnummer 0151/15171624 zur Verfügung.",
+        "Für Fragen stehen wir Ihnen gern zur Verfügung: Zu den Aufgabeninhalten der Stelle (Tel. 0351/48 46 120)",
+    ],
+)
+def test_a_place_or_a_unit_is_not_a_bare_name(text: str) -> None:
+    assert extract_contacts(text) == []
+
+
+def test_a_bare_name_with_an_unknown_first_name_is_left_to_the_model() -> None:
+    # The rules take a bare name only if its first name is in first_names.txt.
+    # "Hussien" is not; the AI fallback reads ads like this one.
+    text = "Ihre Bewerbung richten Sie bitte direkt an Hussien Bader: h.bader@apotheke-am-hit.de"
+    assert extract_contacts(text) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bei Rückfragen steht Ihnen Kita Ruth-Grohe-Haus unter 02372/10485 kita-ruth-grohe-haus@awo-ha-mk.de zur Verfügung",
+        "Für Fragen steht Ihnen der Sachgebiet Pädagogik unter 04791 930-2830 zur Verfügung.",
+        "Ihre Bewerbungsunterlagen schicken Sie bitte per Mail an erdbau.schinagl@gmail.com Erdbau Schinagl",
+    ],
+)
+def test_a_unit_that_looks_like_a_name_is_not_one(text: str) -> None:
+    assert extract_contacts(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("Ansprechpartner: Alexander Kreis, Tel. +49 (0)160-99 80 35 48, alexander.kreis@ruhr-placement.com", "Alexander Kreis"),
+        ("Ansprechpartnerin: Jennifer Schweizer Auskunft unter 061 733 0770", "Jennifer Schweizer"),
+        ("Ansprechpartnerin: Micaela Iozzo Bewerbungen bitte an jobs@example.ch", "Micaela Iozzo"),
+        ("Ansprechpartnerin: Kim Isabell Schönenberger und Team", "Kim Isabell Schönenberger"),
+        ("Ein Fahrtgeldzuschuss. Ansprechpartner Linda Schwenke Senior Recruiter 0211 302061-276", "Linda Schwenke"),
+    ],
+)
+def test_a_third_name_part_only_after_two_first_names_or_a_particle(text: str, name: str) -> None:
+    assert extract_contacts(text)[0].full_name == name

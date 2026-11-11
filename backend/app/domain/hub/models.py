@@ -72,7 +72,7 @@ UNCLASSIFIED = f"is_active AND (job_family_rules IS NULL OR job_family_rules < {
 #: Version of the contact parser (`hub/contacts.py`) whose output is stored in
 #: `hub_ad_contacts`. Bump it with a parser change that should reach ads
 #: already read — and ship a migration rebuilding `ix_hub_posting_contacts_due`.
-AD_CONTACT_RULES = 2
+AD_CONTACT_RULES = 3
 #: The contacts pass's queue (`hub/ad_contacts.py`): open ads never read, read
 #: under older rules, or whose ad text / partner page was fetched after the
 #: last read. Every text write stamps its fetch time, so no write path has to
