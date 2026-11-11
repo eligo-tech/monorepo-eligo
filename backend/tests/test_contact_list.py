@@ -100,3 +100,20 @@ async def test_a_search_for_wildcard_characters_matches_them_literally() -> None
     async with SessionLocal() as s:
         assert (await call_list.contacts(s, tenant_id=TENANT, q="_", now=NOW))["rows"] == []
         assert (await call_list.contacts(s, tenant_id=TENANT, q="%", now=NOW))["rows"] == []
+
+
+async def test_every_way_to_reach_a_contact_is_returned() -> None:
+    """A contact without a phone is reached through a network: stored profile
+    links travel with the row (ELI-23)."""
+    async with SessionLocal() as s:
+        c = Company(tenant_id=TENANT, name="STW GmbH")
+        s.add(c)
+        await s.flush()
+        s.add(Manager(tenant_id=TENANT, company_id=c.id, full_name="Nicole Lauchner", stage="bus_dev",
+                      linkedin_url="https://www.linkedin.com/in/nicole-lauchner",
+                      xing_url="https://www.xing.com/profile/Nicole_Lauchner"))
+        await s.commit()
+    async with SessionLocal() as s:
+        (row,) = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
+    assert row["linkedin_url"] == "https://www.linkedin.com/in/nicole-lauchner"
+    assert row["xing_url"] == "https://www.xing.com/profile/Nicole_Lauchner"

@@ -47,7 +47,7 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'markt', label: t('Markt') },
   // ELI-22: from "who is hiring" to "who do I call".
   // ELI-23: new contacts from Markt, not yet vetted managers.
-  { key: 'kontakte', label: t('Bus-Dev-Kontakte') },
+  { key: 'kontakte', label: t('Kontakte') },
   { key: 'managers', label: 'Manager' },
   { key: 'jobs', label: t('Jobs') },
   { key: 'kandidaten', label: t('Kandidaten') },

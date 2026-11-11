@@ -20,6 +20,7 @@ import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
 import { Button } from '../ui/forms'
+import { linkedInSearchUrl, xingSearchUrl } from '../ui/contactReach'
 
 export const dateDe = (iso: string | null) =>
   iso
@@ -42,26 +43,28 @@ const PUBLIC_SOURCE = 'public_web'
  * sites' terms — so the recruiter opens the search, checks the profile, and
  * the match is a human judgement.
  */
-const searchTerms = (contact: ContactCandidateDTO, company: string) =>
-  encodeURIComponent(
-    [contact.first_name, contact.last_name, company.replace(/\b(GmbH|AG|SE|KG|& Co\.?|KGaA|mbH|e\.V\.)\b/g, '')]
-      .filter(Boolean)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim(),
-  )
-export const linkedInSearch = (c: ContactCandidateDTO, company: string) =>
-  `https://www.linkedin.com/search/results/people/?keywords=${searchTerms(c, company)}`
-export const xingSearch = (c: ContactCandidateDTO, company: string) =>
-  `https://www.xing.com/search/members?keywords=${searchTerms(c, company)}`
+const fullName = (c: ContactCandidateDTO) => [c.first_name, c.last_name].filter(Boolean).join(' ')
+export const linkedInSearch = (c: ContactCandidateDTO, company: string) => linkedInSearchUrl(fullName(c), company)
+export const xingSearch = (c: ContactCandidateDTO, company: string) => xingSearchUrl(fullName(c), company)
 
-export function NetworkLink({ href, label, className }: { href: string; label: string; className: string }) {
+export function NetworkLink({
+  href,
+  label,
+  className,
+  profile = false,
+}: {
+  href: string
+  label: string
+  className: string
+  /** A stored profile rather than a people search. */
+  profile?: boolean
+}) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title={t('Auf {site} suchen', { site: label })}
+      title={profile ? t('Profil auf {site} öffnen', { site: label }) : t('Auf {site} suchen', { site: label })}
       className="flex items-center gap-1.5 rounded-lg border border-cockpit-line px-2.5 py-1.5 text-[12px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
     >
       <span
@@ -362,9 +365,9 @@ export function ContactsPanel({
 
       {art14 && (
         <p className="text-[12px] leading-relaxed text-gold-400">
-          {t('Kontakt übernommen. Er stammt aus einer öffentlichen Anzeige — eine Information nach Art. 14 DSGVO ist fällig und bei den Bus-Dev-Kontakten vorgemerkt.')}{' '}
+          {t('Kontakt übernommen. Er stammt aus einer öffentlichen Anzeige — eine Information nach Art. 14 DSGVO ist fällig und bei den Kontakten vorgemerkt.')}{' '}
           <a href="#kontakte" className="underline hover:text-mint-400">
-            {t('In den Bus-Dev-Kontakten ansehen')}
+            {t('In den Kontakten ansehen')}
           </a>
         </p>
       )}

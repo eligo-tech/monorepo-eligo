@@ -75,6 +75,7 @@ class ContactRow(BaseModel):
     phone: str | None
     email: str | None
     linkedin_url: str | None
+    xing_url: str | None = None
     added_at: dt.datetime | None
     source: str
     source_detail: str | None
