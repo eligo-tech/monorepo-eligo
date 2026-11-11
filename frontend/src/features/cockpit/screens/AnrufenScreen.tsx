@@ -14,7 +14,7 @@
 import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ExternalLink, Mail, Phone, PhoneCall, Search } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { CallListRowDTO, FollowUpDTO } from '@/api/types'
@@ -242,6 +242,10 @@ export function AnrufenScreen() {
   const [phoneOnly, setPhoneOnly] = useState(true)
   const [rows, setRows] = useState<CallListRowDTO[]>([])
   const [hasMore, setHasMore] = useState(false)
+  const [nextOffset, setNextOffset] = useState(0)
+  // Only the newest request may write the list: a "Mehr laden" still in
+  // flight when the filter changes must not append the old search's rows.
+  const latest = useRef(0)
   const [followUps, setFollowUps] = useState<FollowUpDTO[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -249,16 +253,19 @@ export function AnrufenScreen() {
 
   const loadMarket = useCallback(
     async (offset: number) => {
+      const mine = ++latest.current
       setLoading(true)
       setError(null)
       try {
         const page = await api.callListMarket({ q: query, phoneOnly, offset, limit: 50 })
+        if (mine !== latest.current) return
         setRows((prev) => (offset === 0 ? page.rows : [...prev, ...page.rows]))
         setHasMore(page.has_more)
+        setNextOffset(page.next_offset)
       } catch (e) {
-        setError(e instanceof Error ? e.message.slice(0, 200) : String(e))
+        if (mine === latest.current) setError(e instanceof Error ? e.message.slice(0, 200) : String(e))
       } finally {
-        setLoading(false)
+        if (mine === latest.current) setLoading(false)
       }
     },
     [query, phoneOnly],
@@ -348,7 +355,7 @@ export function AnrufenScreen() {
           )}
           {hasMore && (
             <div className="mt-3">
-              <Button onClick={() => loadMarket(rows.length)} disabled={loading}>
+              <Button onClick={() => loadMarket(nextOffset)} disabled={loading}>
                 {t('Mehr laden')}
               </Button>
             </div>

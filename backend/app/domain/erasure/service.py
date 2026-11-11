@@ -89,7 +89,8 @@ def phone_value(phone: str | None) -> str | None:
     country codes become the trunk 0; fewer than 7 digits is not a number."""
     if not phone:
         return None
-    raw = phone.strip()
+    # "Tel. +49 30 …": the label before the number must not hide its "+".
+    raw = re.sub(r"^[^\d+]+", "", phone.strip())
     digits = re.sub(r"\D", "", raw)
     if raw.startswith("+") or digits.startswith("00"):
         digits = digits.lstrip("0")
@@ -115,23 +116,33 @@ def surname_at_company(company_name: str | None, surname: str | None) -> str | N
     return f"{company}|{last}" if company and last else None
 
 
+def _direct(phone: str | None) -> str | None:
+    """A number only if it reaches the person: a reception ("-0") or a
+    hotline is shared by everyone at the employer, and fingerprinting it
+    would take every colleague off the call list with the erased person."""
+    from app.domain.hub.contacts import phone_kind
+
+    return phone if phone and phone_kind(phone) == "direct" else None
+
+
 def _keys(
     tenant_id: uuid.UUID,
     *,
     email: str | None,
     import_ids: list[str],
     phone: str | None = None,
-    person_at: str | None = None,
+    person_at: str | list[str] | None = None,
 ) -> list[tuple[str, str]]:
     keys = [("import_id", digest(tenant_id, "import_id", i)) for i in import_ids]
     if email and email.strip():
         keys.append(("email", digest(tenant_id, "email", email)))
     # ELI-22: ad contacts rarely carry an e-mail; the call list must still
     # not bring an erased contact back by phone or by name at the employer.
-    if phone_value(phone):
-        keys.append(("phone", digest(tenant_id, "phone", phone_value(phone) or "")))
-    if person_at:
-        keys.append(("surname_at_company", digest(tenant_id, "surname_at_company", person_at)))
+    if phone_value(_direct(phone)):
+        keys.append(("phone", digest(tenant_id, "phone", phone_value(_direct(phone)) or "")))
+    for value in dict.fromkeys([person_at] if isinstance(person_at, str) else (person_at or [])):
+        if value:
+            keys.append(("surname_at_company", digest(tenant_id, "surname_at_company", value)))
     return keys
 
 
@@ -338,9 +349,13 @@ async def erase_manager(
         keys=_keys(
             t, email=boss.email, import_ids=_import_ids(boss.external_source, boss.external_id),
             phone=boss.phone,
-            person_at=surname_at_company(
-                await _company_name(session, t, boss.company_id), boss.last_name or boss.full_name
-            ),
+            # Keyed on the employer as the ads name it (the hub link), and on
+            # the workspace's own name for it — a renamed company or one
+            # created by hand must still hold the person back.
+            person_at=[
+                surname_at_company(name, boss.last_name or boss.full_name)
+                for name in await employer_names(session, t, boss.company_id)
+            ],
         ),
         receipt_ids=receipts,
         deletions=[(ManagerInteraction, notes), (EnrichmentRecord, records),
@@ -348,14 +363,23 @@ async def erase_manager(
     )
 
 
-async def _company_name(session: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID | None) -> str | None:
+async def employer_names(session: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID | None) -> list[str]:
+    """The employer's names: the workspace's own, and the corpus name of every
+    hub company linked to it (tenant-scoped link)."""
     from app.domain.companies.models import Company
+    from app.domain.hub.models import HubCompany, HubCompanyLink
 
     if company_id is None:
-        return None
-    return await session.scalar(
-        select(Company.name).where(Company.tenant_id == tenant_id, Company.id == company_id)
-    )
+        return []
+    own = await session.scalar(select(Company.name).where(Company.tenant_id == tenant_id, Company.id == company_id))
+    linked = (
+        await session.scalars(
+            select(HubCompany.name)
+            .join(HubCompanyLink, HubCompanyLink.hub_company_id == HubCompany.id)
+            .where(HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id == company_id)
+        )
+    ).all()
+    return [n for n in (own, *linked) if n]
 
 
 class PersonGuard:
@@ -366,25 +390,44 @@ class PersonGuard:
     caller gets `NotConfigured` rather than a list that lets them back.
     """
 
-    def __init__(self, tenant_id: uuid.UUID, digests: set[str]) -> None:
+    def __init__(self, tenant_id: uuid.UUID, digests: dict[str, dt.date]) -> None:
         self._tenant = tenant_id
         self._digests = digests
 
-    def blocks(self, *, company_name: str | None, surname: str | None, phone: str | None) -> bool:
+    def blocks(self, **kw) -> bool:
+        return self.erased_on(**kw) is not None
+
+    def erased_on(
+        self,
+        *,
+        company_name: str | None,
+        surname: str | None,
+        phone: str | None,
+        email: str | None = None,
+        other_names: tuple[str, ...] = (),
+    ) -> dt.date | None:
+        """When the person asked to be erased, or None if they did not."""
         if not self._digests:
-            return False
+            return None
         keys = _keys(
-            self._tenant, email=None, import_ids=[], phone=phone,
-            person_at=surname_at_company(company_name, surname),
+            self._tenant, email=email, import_ids=[], phone=phone,
+            person_at=[surname_at_company(n, surname) for n in (company_name, *other_names)],
         )
-        return any(d in self._digests for _, d in keys)
+        dates = [self._digests[d] for _, d in keys if d in self._digests]
+        return max(dates) if dates else None
 
 
 async def person_guard(session: AsyncSession, tenant_id: uuid.UUID) -> PersonGuard:
-    digests = await active_digests(session, tenant_id)
-    if digests:
+    rows = (
+        await session.execute(
+            select(TenantSuppression.digest, ErasureRequest.requested_on)
+            .join(ErasureRequest, ErasureRequest.id == TenantSuppression.request_id)
+            .where(TenantSuppression.tenant_id == tenant_id, TenantSuppression.lifted_at.is_(None))
+        )
+    ).all()
+    if rows:
         _key()  # raises NotConfigured
-    return PersonGuard(tenant_id, digests)
+    return PersonGuard(tenant_id, {d: on for d, on in rows})
 
 
 # --- the import precondition -----------------------------------------------

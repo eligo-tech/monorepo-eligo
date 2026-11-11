@@ -33,6 +33,8 @@ from app.domain.hub.models import EMPLOYER, HubAdContact, HubCompany, HubCompany
 
 #: Outcomes after which a person is not called again from the list.
 _OFF_THE_LIST = ("wrong_person",)
+#: Follow-ups shown at most — the most recently called first.
+_FOLLOW_UP_LIMIT = 500
 
 
 class NotOnTheList(LookupError):
@@ -125,39 +127,52 @@ async def market(
     if called:
         stmt = stmt.where(~tuple_(HubCompany.normalized_name, HubAdContact.person_key).in_(list(called)))
 
-    # Erased persons are filtered after the page is read (their fingerprints
-    # are keyed hashes, not something SQL can compare): read a little more
-    # than a page so a filtered row does not shorten it.
-    groups = (await session.execute(stmt.limit(limit + 1 + 20).offset(offset))).all()
+    # Erased persons are filtered after the groups are read (their
+    # fingerprints are keyed hashes, not something SQL can compare). The
+    # window is read with spare rows, and `next_offset` counts the GROUPS
+    # consumed — not the rows shown — so the next page starts exactly after
+    # this one however many were filtered.
+    window = limit * 2 + 20
+    groups = (await session.execute(stmt.limit(window).offset(offset))).all()
 
-    rows: list[dict] = []
-    for normalized, key, count in groups:
-        mentions = (
+    details: dict[tuple[str, str], list[Any]] = {}
+    if groups:
+        found = (
             await session.execute(
                 select(
+                    HubCompany.normalized_name, HubAdContact.person_key,
                     HubAdContact.full_name, HubAdContact.first_name, HubAdContact.last_name,
                     HubAdContact.salutation, HubAdContact.role_title, HubAdContact.phone,
                     HubAdContact.phone_kind, HubAdContact.email, HubAdContact.quote,
                     HubAdContact.hub_company_id, HubCompany.name.label("company_name"),
-                    HubJobPosting.id.label("posting_id"), HubJobPosting.title.label("posting_title"),
+                    HubJobPosting.title.label("posting_title"),
                     HubJobPosting.source, HubJobPosting.source_url, HubJobPosting.external_id,
-                    HubJobPosting.first_seen_at,
                 )
                 .join(HubJobPosting, HubJobPosting.id == HubAdContact.hub_job_posting_id)
                 .join(HubCompany, HubCompany.id == HubAdContact.hub_company_id)
                 .where(
-                    HubCompany.normalized_name == normalized,
-                    HubAdContact.person_key == key,
+                    tuple_(HubCompany.normalized_name, HubAdContact.person_key).in_([(g[0], g[1]) for g in groups]),
                     HubJobPosting.is_active,
                 )
                 .order_by(HubJobPosting.first_seen_at.desc())
             )
         ).all()
+        for m in found:
+            details.setdefault((m.normalized_name, m.person_key), []).append(m)
+
+    rows: list[dict] = []
+    consumed = 0
+    for normalized, key, count in groups:
+        if len(rows) == limit:
+            break
+        consumed += 1
+        mentions = details.get((normalized, key))
         if not mentions:
             continue
         best = _best(mentions)
         named = next((m for m in mentions if m.first_name), best)
-        if guard.blocks(company_name=best.company_name, surname=best.last_name, phone=best.phone):
+        email = best.email or next((m.email for m in mentions if m.email), None)
+        if guard.blocks(company_name=best.company_name, surname=best.last_name, phone=best.phone, email=email):
             continue
         rows.append({
             "hub_company_id": best.hub_company_id,
@@ -170,17 +185,15 @@ async def market(
             "role_title": best.role_title or next((m.role_title for m in mentions if m.role_title), None),
             "phone": best.phone,
             "phone_kind": best.phone_kind,
-            "email": best.email or next((m.email for m in mentions if m.email), None),
+            "email": email,
             "open_ads": count,
             "posting_title": best.posting_title,
             "quote": best.quote,
             "source_url": best.source_url or source_detail_url(best.source, best.external_id),
             "reach": "named_phone" if best.phone else "named",
         })
-        if len(rows) == limit + 1:
-            break
-    has_more = len(rows) > limit
-    return {"rows": rows[:limit], "has_more": has_more, "offset": offset, "limit": limit}
+    has_more = consumed < len(groups) or len(groups) == window
+    return {"rows": rows, "has_more": has_more, "offset": offset, "next_offset": offset + consumed, "limit": limit}
 
 
 async def follow_ups(session: AsyncSession, *, tenant_id: uuid.UUID, now: dt.datetime | None = None) -> list[dict]:
@@ -189,23 +202,34 @@ async def follow_ups(session: AsyncSession, *, tenant_id: uuid.UUID, now: dt.dat
     from app.domain.managers.models import Manager, ManagerInteraction
 
     now = now or dt.datetime.now(dt.UTC)
-    latest = (
-        select(ManagerInteraction.manager_id, func.max(ManagerInteraction.occurred_at).label("at"))
+    # The latest call per contact — ties on `occurred_at` broken by when the
+    # row was written, then by id, so "wrong person" logged last always wins.
+    ranked = (
+        select(
+            ManagerInteraction.id,
+            func.row_number()
+            .over(
+                partition_by=ManagerInteraction.manager_id,
+                order_by=(
+                    ManagerInteraction.occurred_at.desc(),
+                    ManagerInteraction.created_at.desc(),
+                    ManagerInteraction.id.desc(),
+                ),
+            )
+            .label("rank"),
+        )
         .where(ManagerInteraction.tenant_id == tenant_id, ManagerInteraction.outcome.is_not(None))
-        .group_by(ManagerInteraction.manager_id)
         .subquery()
     )
     rows = (
         await session.execute(
             select(ManagerInteraction, Manager, Company.name)
-            .join(latest, (latest.c.manager_id == ManagerInteraction.manager_id) & (latest.c.at == ManagerInteraction.occurred_at))
+            .join(ranked, (ranked.c.id == ManagerInteraction.id) & (ranked.c.rank == 1))
             .join(Manager, Manager.id == ManagerInteraction.manager_id)
             .join(Company, Company.id == Manager.company_id)
-            .where(
-                ManagerInteraction.tenant_id == tenant_id,
-                Manager.tenant_id == tenant_id,
-                ManagerInteraction.outcome.is_not(None),
-            )
+            .where(ManagerInteraction.tenant_id == tenant_id, Manager.tenant_id == tenant_id)
+            .order_by(ManagerInteraction.occurred_at.desc())
+            .limit(_FOLLOW_UP_LIMIT)
         )
     ).all()
 
@@ -222,7 +246,7 @@ async def follow_ups(session: AsyncSession, *, tenant_id: uuid.UUID, now: dt.dat
             "company_id": manager.company_id,
             "company_name": company_name,
             "full_name": manager.full_name,
-            "last_name": manager.last_name or manager.full_name.split()[-1],
+            "last_name": manager.last_name or (manager.full_name.split() or [""])[-1],
             "role_title": manager.role_title,
             "phone": manager.phone,
             "email": manager.email,
@@ -248,6 +272,64 @@ async def follow_ups(session: AsyncSession, *, tenant_id: uuid.UUID, now: dt.dat
     )
 
 
+async def _held_company(
+    session: AsyncSession, *, tenant_id: uuid.UUID, normalized_name: str, anchor_id: uuid.UUID
+) -> uuid.UUID | None:
+    """This workspace's company for the employer, if it holds one — read only."""
+    from app.domain.hub.service import _sibling_company_ids
+
+    sites = await _sibling_company_ids(session, normalized_name=normalized_name)
+    return await session.scalar(
+        select(HubCompanyLink.company_id)
+        .where(
+            HubCompanyLink.tenant_id == tenant_id,
+            HubCompanyLink.hub_company_id.in_(sites or [anchor_id]),
+            HubCompanyLink.company_id.is_not(None),
+        )
+        .order_by(HubCompanyLink.created_at)
+        .limit(1)
+    )
+
+
+async def _existing_manager(
+    session: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID, key: str, first_name: str | None
+):
+    """The manager this ad person already is, or None.
+
+    Same surname at the same company, and: the first names agree — or, when
+    the ad gives none ("Frau Weber"), there is exactly ONE such manager and it
+    came from an ad too. A hand-saved "Peter Weber" is not the "Frau Weber" an
+    ad names; a wrong merge would put the call on someone else's history.
+    """
+    from app.domain.common.enums import ConfidenceSource
+    from app.domain.managers.models import Manager
+
+    same = [
+        m
+        for m in (
+            await session.scalars(
+                select(Manager)
+                .where(Manager.tenant_id == tenant_id, Manager.company_id == company_id)
+                .order_by(Manager.created_at, Manager.id)
+            )
+        ).all()
+        if _surname_key(m.last_name, m.full_name) == key
+    ]
+    def first_of(m) -> str | None:
+        # A hand-saved "Anna Kraft" may have no first_name field filled.
+        if m.first_name:
+            return _fold(m.first_name)
+        parts = (m.full_name or "").split()
+        return _fold(parts[0]) if len(parts) > 1 else None
+
+    if first_name:
+        first = _fold(first_name)
+        return next((m for m in same if first_of(m) == first), None) or next(
+            (m for m in same if not m.first_name and m.source == ConfidenceSource.PUBLIC_WEB.value), None
+        )
+    return same[0] if len(same) == 1 and (same[0].first_name is None or same[0].source == ConfidenceSource.PUBLIC_WEB.value) else None
+
+
 async def log_call(
     session: AsyncSession,
     *,
@@ -267,7 +349,6 @@ async def log_call(
     from app.domain.hub.schemas import source_detail_url
     from app.domain.hub.service import workspace_company
     from app.domain.managers import service as managers
-    from app.domain.managers.models import Manager
     from app.domain.managers.schemas import ManagerCreate, ManagerInteractionCreate
 
     call = ManagerInteractionCreate(
@@ -307,30 +388,26 @@ async def log_call(
     }
     anchor_id, anchor_name, anchor_normalized = anchor.id, anchor.name, anchor.normalized_name
 
-    guard = await erasure.person_guard(session, tenant_id)
-    if guard.blocks(company_name=anchor_name, surname=person["last_name"], phone=person["phone"]):
-        raise Erased(person_key)
+    # The contact may already be in the workspace (saved from Markt, an
+    # earlier call, or re-added by hand after an erasure with the recruiter's
+    # confirmation): look before adopting anything.
+    held = await _held_company(session, tenant_id=tenant_id, normalized_name=anchor_normalized, anchor_id=anchor_id)
+    manager = await _existing_manager(session, tenant_id, held, person_key, person["first_name"]) if held else None
 
-    company_id = await workspace_company(
-        session, tenant_id=tenant_id, hub_company_id=anchor_id, normalized_name=anchor_normalized, actor=actor_name
-    )
-
-    # The contact may already be in the workspace (saved from Markt, or an
-    # earlier call): same company, same surname, and the first name agrees.
-    candidates = (
-        await session.scalars(select(Manager).where(Manager.tenant_id == tenant_id, Manager.company_id == company_id))
-    ).all()
-    first = _fold(person["first_name"]) if person["first_name"] else None
-    manager = next(
-        (
-            m for m in candidates
-            if _surname_key(m.last_name, m.full_name) == person_key
-            and (first is None or not m.first_name or _fold(m.first_name) == first)
-        ),
-        None,
-    )
     created = False
+    company_id = held
     if manager is None:
+        # A new person: never one this workspace erased (e-mail, direct
+        # phone, or surname at this employer).
+        guard = await erasure.person_guard(session, tenant_id)
+        if guard.blocks(
+            company_name=anchor_name, surname=person["last_name"], phone=person["phone"], email=person["email"]
+        ):
+            raise Erased(person_key)
+        company_id = await workspace_company(
+            session, tenant_id=tenant_id, hub_company_id=anchor_id, normalized_name=anchor_normalized,
+            actor=actor_name,
+        )
         try:
             manager = await managers.create_manager(
                 session, tenant_id=tenant_id,

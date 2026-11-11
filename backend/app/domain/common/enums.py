@@ -160,9 +160,6 @@ class InteractionType(str, enum.Enum):
     FEEDBACK = "feedback"
 
 
-#: What a recruiter may file against a MANAGER (ELI-9), in the order the
-#: ticket lists them. `BRIEFING` and `FEEDBACK` are absent on purpose — both
-#: belong to a mandate and are written in the mandate's own panels.
 class CallOutcome(str, enum.Enum):
     """How a call to a contact ended (ELI-22 call list).
 
@@ -182,6 +179,9 @@ class CallOutcome(str, enum.Enum):
     MANDATE = "mandate"
 
 
+#: What a recruiter may file against a MANAGER (ELI-9), in the order the
+#: ticket lists them. `BRIEFING` and `FEEDBACK` are absent on purpose — both
+#: belong to a mandate and are written in the mandate's own panels.
 MANAGER_INTERACTION_KINDS: tuple[InteractionType, ...] = (
     InteractionType.MEETING,
     InteractionType.CLIENT_CALL,

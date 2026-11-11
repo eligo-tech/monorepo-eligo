@@ -1216,6 +1216,9 @@ export interface CallListPageDTO {
   rows: CallListRowDTO[]
   has_more: boolean
   offset: number
+  /** Where the next page starts — counted in the server's groups, so persons
+   *  it filtered out (erased) neither repeat nor go missing. */
+  next_offset: number
   limit: number
 }
 

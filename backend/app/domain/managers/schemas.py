@@ -34,6 +34,13 @@ class ManagerInteractionCreate(BaseModel):
     next_action_at: dt.datetime | None = None
 
     @model_validator(mode="after")
+    def _outcome_belongs_to_a_call(self) -> "ManagerInteractionCreate":
+        calls = {InteractionType.BUSINESS_CALL, InteractionType.CLIENT_CALL, InteractionType.CANDIDATE_CALL}
+        if self.outcome is not None and self.interaction_type not in calls:
+            raise ValueError("an outcome belongs to a call")
+        return self
+
+    @model_validator(mode="after")
     def _call_back_has_a_date(self) -> "ManagerInteractionCreate":
         if self.outcome == CallOutcome.CALL_BACK and self.next_action_at is None:
             raise ValueError("call_back needs next_action_at — a call-back without a date never comes due")

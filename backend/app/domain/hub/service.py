@@ -2185,6 +2185,19 @@ async def adopt_company(
             )
         except erasure.Suppressed:
             manager = None
+    if manager is not None:
+        # And by direct phone / surname at this employer (ELI-22): an ad
+        # contact rarely carries the e-mail the line above can check.
+        from app.domain.erasure import service as erasure
+
+        corpus_name = await session.scalar(select(HubCompany.name).where(HubCompany.id == hub_company_id))
+        guard = await erasure.person_guard(session, tenant_id)
+        full = (manager.get("full_name") or "").strip()
+        if guard.blocks(
+            company_name=corpus_name, surname=manager.get("last_name") or full,
+            phone=manager.get("phone"), email=manager.get("email"),
+        ):
+            manager = None
     from app.domain.managers.models import Manager
 
     hub_company = await get_company(session, hub_company_id=hub_company_id, kind=kind)

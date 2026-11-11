@@ -76,3 +76,8 @@ async def test_an_interaction_without_an_outcome_is_still_fine(manager_id) -> No
         )
     read = ManagerInteractionRead.model_validate(row)
     assert (read.outcome, read.next_action_at) == (None, None)
+
+
+def test_an_outcome_belongs_to_a_call() -> None:
+    with pytest.raises(ValidationError):
+        ManagerInteractionCreate(interaction_type=InteractionType.MEETING, outcome="voicemail")

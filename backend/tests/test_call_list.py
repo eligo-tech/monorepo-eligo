@@ -268,3 +268,158 @@ async def test_the_routes_are_per_workspace(market) -> None:
             "hub_company_id": str(market["forschner"]), "person_key": "denkinger", "outcome": "voicemail"})
     async with _client(OTHER) as c:
         assert (await c.get(f"{base}/follow-ups")).json() == []
+
+
+# --- review of the call list ---------------------------------------------------
+
+
+@pytest.fixture
+def key(monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "suppression_key", "k" * 40)
+
+
+SURNAMES = ["Albers", "Brandt", "Claasen", "Dietz", "Ebert", "Fuchs", "Gerber", "Hahn", "Imhof", "Jäger",
+            "Kühn", "Lorenz"]
+
+
+async def _many(n: int) -> uuid.UUID:
+    """One employer naming n people (letter-only surnames: names are folded
+    to letters for fingerprints), each with a direct line."""
+    async with SessionLocal() as s:
+        co = await _employer(s, "Grossbetrieb AG", "grossbetrieb")
+        for i in range(n):
+            p = await _ad(s, co, f"Stelle {i}")
+            s.add(_person(p, "Kim", SURNAMES[i], phone=f"0711 1000{i:03d}", kind="direct"))
+        await s.commit()
+        return co.id
+
+
+async def test_paging_skips_no_one_and_repeats_no_one_around_an_erased_person(key) -> None:
+    co = await _many(12)
+    first = await _call(co, "brandt", "not_reached")
+    await _erase_manager(first["manager_id"], "Kim Brandt")
+    seen: list[str] = []
+    offset = 0
+    async with SessionLocal() as s:
+        while True:
+            page = await call_list.market(s, tenant_id=TENANT, limit=4, offset=offset)
+            seen += [r["last_name"] for r in page["rows"]]
+            if not page["has_more"]:
+                break
+            offset = page["next_offset"]
+    assert sorted(seen) == sorted(n for n in SURNAMES if n != "Brandt")
+
+
+async def test_an_erased_switchboard_number_does_not_hide_the_colleagues(market, key) -> None:
+    """Erasing someone reached through the reception must not take everyone
+    else at that employer behind the same reception off the list."""
+    async with SessionLocal() as s:
+        linde = await s.get(HubCompany, market["linde"])
+        p = await _ad(s, linde, "Spüler")
+        s.add(_person(p, "Paul", "Brandt", phone="030 2295 0", kind="switchboard"))
+        await s.commit()
+    first = await _call(market["linde"], "kraft", "not_reached")
+    await _erase_manager(first["manager_id"], "Anna Kraft")
+    assert "Brandt" in {r["last_name"] for r in await _market()}
+
+
+async def test_erasure_holds_after_the_company_was_renamed(market, key) -> None:
+    # No phone: only the surname-at-employer fingerprint can hold her back.
+    async with SessionLocal() as s:
+        for row in (await s.scalars(select(HubAdContact).where(HubAdContact.last_name == "Denkinger"))).all():
+            row.phone, row.phone_kind = None, None
+        await s.commit()
+    first = await _call(market["forschner"], "denkinger", "not_reached")
+    async with SessionLocal() as s:
+        (await s.get(Company, first["company_id"])).name = "Forschner (Spaichingen)"
+        await s.commit()
+    await _erase_manager(first["manager_id"], "Leonie Denkinger")
+    assert "Denkinger" not in {r["last_name"] for r in await _market()}
+
+
+async def test_a_surname_only_ad_does_not_land_on_a_hand_saved_namesake(market) -> None:
+    """"Frau Weber" in an ad is not the "Peter Weber" a recruiter saved by hand."""
+    from app.domain.managers import service as managers
+    from app.domain.managers.schemas import ManagerCreate
+
+    async with SessionLocal() as s:
+        weber_ad = (await s.scalars(select(HubAdContact).where(HubAdContact.last_name == "Weber"))).one()
+        weber_ad.first_name, weber_ad.full_name = None, "Weber"
+        await s.commit()
+    first = await _call(market["linde"], "kraft", "not_reached")
+    async with SessionLocal() as s:
+        peter = await managers.create_manager(
+            s, tenant_id=TENANT, payload=ManagerCreate(company_id=first["company_id"], full_name="Peter Weber",
+                                                       first_name="Peter", last_name="Weber"))
+    result = await _call(market["linde"], "weber", "voicemail")
+    assert result["manager_id"] != peter.id and result["created_manager"] is True
+
+
+async def test_an_erased_person_does_not_come_back_through_markt_or_by_hand(market, key) -> None:
+    from app.domain.erasure import service as erasure
+    from app.domain.hub import service as hub
+    from app.domain.managers import service as managers
+    from app.domain.managers.schemas import ManagerCreate
+
+    first = await _call(market["linde"], "kraft", "not_reached")
+    await _erase_manager(first["manager_id"], "Anna Kraft")
+    # Markt "Ansprechpartner" on an adopted employer → createManager.
+    async with SessionLocal() as s:
+        with pytest.raises(erasure.Suppressed):
+            await managers.create_manager(s, tenant_id=TENANT, payload=ManagerCreate(
+                company_id=first["company_id"], full_name="Anna Kraft", last_name="Kraft", phone="030 2295 0"))
+    # The recruiter confirms she came back of her own accord: allowed.
+    async with SessionLocal() as s:
+        back = await managers.create_manager(s, tenant_id=TENANT, payload=ManagerCreate(
+            company_id=first["company_id"], full_name="Anna Kraft", last_name="Kraft",
+            override_suppression=True))
+    # …and calls to her are logged on that record, not refused.
+    again = await _call(market["linde"], "kraft", "meeting_booked")
+    assert again["manager_id"] == back.id
+    # Markt adopt-with-contact on a not-yet-adopted employer drops the person.
+    async with SessionLocal() as s:
+        other = await _employer(s, "Gasthaus Linde GmbH", "gasthaus linde", city="Potsdam")
+        await s.commit()
+    # (a fresh workspace has nothing erased: the person is created there)
+    async with SessionLocal() as s:
+        _c, _l, m = await hub.adopt_company(s, tenant_id=OTHER, hub_company_id=other.id,
+                                            manager={"full_name": "Anna Kraft", "phone": "030 2295 0"})
+    assert m is not None
+
+
+async def test_the_market_guard_reads_the_email_too(market, key) -> None:
+    async with SessionLocal() as s:
+        row = (await s.scalars(select(HubAdContact).where(HubAdContact.last_name == "Weber"))).one()
+        row.email = "jan.weber@linde.example"
+        await s.commit()
+    first = await _call(market["linde"], "weber", "not_reached")
+    async with SessionLocal() as s:
+        m = await s.get(Manager, first["manager_id"])
+        m.email, m.last_name, m.full_name = "jan.weber@linde.example", "Weber-Lang", "Jan Weber-Lang"
+        await s.commit()
+    await _erase_manager(first["manager_id"], "Jan Weber-Lang")
+    assert "Weber" not in {r["last_name"] for r in await _market()}
+
+
+async def test_follow_ups_take_the_latest_call_even_on_a_tie(market) -> None:
+    at = dt.datetime(2026, 11, 11, 9, 0, tzinfo=dt.UTC)
+    first = await _call(market["linde"], "kraft", "call_back", next_action_at=at + dt.timedelta(days=1))
+    async with SessionLocal() as s:
+        call = (await s.scalars(select(ManagerInteraction).where(ManagerInteraction.manager_id == first["manager_id"]))).one()
+        call.occurred_at = at
+        # Same call time, written a moment later (e.g. a correction).
+        s.add(ManagerInteraction(tenant_id=TENANT, manager_id=first["manager_id"], interaction_type="business_call",
+                                 occurred_at=at, outcome="wrong_person",
+                                 created_at=dt.datetime.now(dt.UTC) + dt.timedelta(seconds=5)))
+        await s.commit()
+    async with SessionLocal() as s:
+        assert await call_list.follow_ups(s, tenant_id=TENANT, now=NOW) == []
+
+
+def test_a_prefixed_international_number_is_the_national_one() -> None:
+    from app.domain.erasure.service import phone_value
+
+    assert phone_value("Tel. +49 30 1234567") == phone_value("030 1234567") == "0301234567"
+
