@@ -289,7 +289,7 @@ _PHONE = re.compile(r"(?<![\w/])(?:\+\d{2}[\s(]*0?\)?\s*|0)\d{2,5}[\s/-]*\d[\d\s
 
 #: Local parts that name a function, not a person: bewerbung@, jobs@, hr@ …
 _GENERIC_LOCAL = re.compile(
-    r"(?i)^(bewerbung|bewerbungen|jobs?|karriere|career|careers|hr|personal|"
+    r"(?i)^(bewerbung|bewerbungen|bewerben|jobs?|karriere|career|careers|hr|personal|"
     r"personalabteilung|info|recruiting|recruitment|talent|apply|application|"
     r"datenschutz|privacy|kontakt|contact|office|mail|post|service|team|"
     r"verwaltung|zentrale|sekretariat|ausbildung|stellen|noreply|no-reply)"

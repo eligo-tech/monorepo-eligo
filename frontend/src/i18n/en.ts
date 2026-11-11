@@ -664,6 +664,8 @@ export const EN: Record<string, string> = {
   'Kontakt': 'Contact',
   'Kontakt suchen oder neuen Namen eingeben…': 'Search for a contact or type a new name…',
   'Kontakte': 'Contacts',
+  'KI': 'AI',
+  'Von der KI erkannt. Name und Kontaktdaten stehen wörtlich in der Anzeige — die Belegstelle ist unten.': 'Found by the AI. The name and contact details appear word for word in the ad — the passage is below.',
   'Keine Person namentlich erkannt — die Kontaktdaten aus den Anzeigen stehen unten, mit der Stelle, an der sie stehen.': 'No person recognised by name — the contact details from the ads are below, with the passage they appear in.',
   'Weitere Kontaktdaten aus den Anzeigen': 'More contact details from the ads',
   'Telefonnummern und E-Mail-Adressen aus den Anzeigen, zu denen kein Name erkannt wurde. Das Zitat zeigt, wo sie stehen.': 'Phone numbers and e-mail addresses from the ads with no recognised name. The quote shows where they appear.',

@@ -309,6 +309,13 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
             postgresql_where=text(CONTACTS_DUE),
             sqlite_where=text(CONTACTS_DUE),
         ),
+        # The model pass's queue (ELI-25): small, so the partial index is too.
+        Index(
+            "ix_hub_posting_contacts_model_due",
+            "id",
+            postgresql_where=text("contacts_model_due"),
+            sqlite_where=text("contacts_model_due"),
+        ),
     )
 
     hub_company_id: Mapped[uuid.UUID] = mapped_column(
@@ -411,6 +418,14 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
     #: version (`AD_CONTACT_RULES`). NULL until the nightly pass reaches it.
     contacts_read_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     contacts_rules: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ELI-25: the rules named nobody, but the ad gives a phone number or
+    #: e-mail — the model pass (`hub/contact_model.py`) should read it. Set by
+    #: the contacts pass, cleared by the model pass once the model answered.
+    contacts_model_due: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    #: When the model last read this ad (NULL: never).
+    contacts_model_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # SHA-256 of the meaningful fields — an unchanged posting only bumps
     # `last_seen_at` instead of rewriting the row.
@@ -657,6 +672,12 @@ class HubAdContact(Base, IDMixin, TimestampMixin):
     #: "ad" (the posting text) or "page" (the partner-board page).
     text_source: Mapped[str] = mapped_column(String(10), nullable=False)
     source_fetched_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: "rules" (`hub/contacts.py`) or "model" (`hub/contact_model.py`: the
+    #: model proposed it, the deterministic checks found it word for word in
+    #: the ad next to its contact data). Shown, so a recruiter knows.
+    found_by: Mapped[str] = mapped_column(
+        String(10), default="rules", server_default="rules", nullable=False
+    )
 
 
 class HubAtsBoard(Base, IDMixin, TimestampMixin):

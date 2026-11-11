@@ -2678,6 +2678,7 @@ async def company_contacts(
                     "mention_count": 1,
                     "evidence": [evidence],
                     "manager_id": None,
+                    "found_by": "rules",
                 }
                 continue
             if first_in_posting:
@@ -2695,6 +2696,70 @@ async def company_contacts(
                     person[field] = getattr(mention, field)
                     if field == "phone":
                         person["phone_kind"] = mention.phone_kind
+
+    # ELI-25: people the nightly model pass found where the rules named
+    # nobody — stored, because a model is not called on a page load. Each
+    # passed the deterministic checks (`hub/contact_model.ground`).
+    from app.domain.hub.models import HubAdContact
+
+    by_posting = {posting.id: (posting, page_url) for posting, _, _, page_url in rows}
+    if by_posting:
+        found = (
+            await session.execute(
+                select(HubAdContact).where(
+                    HubAdContact.hub_job_posting_id.in_(list(by_posting)),
+                    HubAdContact.found_by == "model",
+                )
+            )
+        ).scalars()
+        counted: set[tuple[str, uuid.UUID]] = set()
+        for c in found:
+            if rules.names(c.first_name, c.last_name):
+                continue
+            posting, page_url = by_posting[c.hub_job_posting_id]
+            origin = "quelle" if c.text_source == "page" else "anzeige"
+            url = (
+                (page_url or posting.source_url)
+                if origin == "quelle"
+                else source_detail_url(posting.source, posting.external_id) or posting.source_url
+            )
+            evidence = {
+                "posting_id": posting.id,
+                "posting_title": posting.title,
+                "origin": origin,
+                "url": url,
+                "posted_at": posting.posted_at,
+                "is_active": posting.is_active,
+                "quote": c.quote,
+            }
+            key = person_key(c.first_name, c.last_name)
+            person = people.get(key)
+            if person is None:
+                people[key] = {
+                    "key": key,
+                    "full_name": c.full_name,
+                    "salutation": c.salutation,
+                    "first_name": c.first_name,
+                    "last_name": c.last_name,
+                    "role_title": c.role_title,
+                    "email": c.email,
+                    "phone": c.phone,
+                    "phone_kind": c.phone_kind,
+                    "mention_count": 1,
+                    "evidence": [evidence],
+                    "manager_id": None,
+                    "found_by": "model",
+                }
+                counted.add((key, posting.id))
+                continue
+            if (key, posting.id) not in counted:
+                counted.add((key, posting.id))
+                person["mention_count"] += 1
+            if len(person["evidence"]) < CONTACT_EVIDENCE_LIMIT:
+                person["evidence"].append(evidence)
+            for field in ("first_name", "salutation", "role_title", "email", "phone"):
+                if person[field] is None and getattr(c, field):
+                    person[field] = getattr(c, field)
 
     # This workspace's own view: adopted company, and who it already holds.
     link = await session.scalar(

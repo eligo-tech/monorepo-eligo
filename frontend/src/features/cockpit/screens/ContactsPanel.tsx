@@ -115,6 +115,14 @@ function ContactRow({
               <span className="text-cockpit-faint">{contact.salutation} </span>
             )}
             {contact.full_name}
+            {contact.found_by === 'model' && (
+              <span
+                className="ml-2 rounded border border-cockpit-edge px-1.5 align-middle font-mono text-[10px] uppercase tracking-[0.08em] text-cockpit-faint"
+                title={t('Von der KI erkannt. Name und Kontaktdaten stehen wörtlich in der Anzeige — die Belegstelle ist unten.')}
+              >
+                {t('KI')}
+              </span>
+            )}
           </p>
           {contact.role_title && (
             <p className="text-[13px] text-cockpit-dim">{contact.role_title}</p>

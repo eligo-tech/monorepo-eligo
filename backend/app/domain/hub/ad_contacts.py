@@ -37,7 +37,7 @@ from sqlalchemy import bindparam, delete, func, insert, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.hub import suppression
-from app.domain.hub.contacts import ContactMention, extract_contacts, person_key
+from app.domain.hub.contacts import ContactMention, extract_contacts, person_key, unnamed_reach
 from app.domain.hub.models import (
     AD_CONTACT_RULES,
     CONTACTS_DUE,
@@ -102,18 +102,23 @@ def _read(rows: list, rules: suppression.Suppressions) -> tuple[list[dict], list
     values: list[dict[str, Any]] = []
     stamps: list[dict[str, Any]] = []
     for r in rows:
-        values += [
-            {"hub_job_posting_id": r.id, "hub_company_id": r.hub_company_id, **p}
-            for p in _people(
-                [
-                    ("ad", r.description, r.description_fetched_at),
-                    ("page", r.source_page_text, r.source_page_fetched_at),
-                ],
-                rules,
-            )
-        ]
+        people = _people(
+            [
+                ("ad", r.description, r.description_fetched_at),
+                ("page", r.source_page_text, r.source_page_fetched_at),
+            ],
+            rules,
+        )
+        values += [{"hub_job_posting_id": r.id, "hub_company_id": r.hub_company_id, **p} for p in people]
         seen = [_utc(t) for t in (r.description_fetched_at, r.source_page_fetched_at) if t]
-        stamps.append({"b_id": r.id, "b_read_at": max(seen, default=_NOTHING_READ)})
+        # ELI-25: nobody named, but a phone or e-mail given — the model pass
+        # (`hub/contact_model.py`) reads it. Re-reading an ad re-decides.
+        model_due = not people and any(
+            unnamed_reach(body) for body in (r.description, r.source_page_text) if body
+        )
+        stamps.append(
+            {"b_id": r.id, "b_read_at": max(seen, default=_NOTHING_READ), "b_model_due": model_due}
+        )
     return values, stamps
 
 
@@ -161,7 +166,11 @@ async def backfill(session: AsyncSession, *, limit: int) -> dict[str, int]:
         await connection.execute(
             update(table)
             .where(table.c.id == bindparam("b_id"))
-            .values(contacts_read_at=bindparam("b_read_at"), contacts_rules=AD_CONTACT_RULES),
+            .values(
+                contacts_read_at=bindparam("b_read_at"),
+                contacts_rules=AD_CONTACT_RULES,
+                contacts_model_due=bindparam("b_model_due"),
+            ),
             stamps,
         )
         stored = len(values)

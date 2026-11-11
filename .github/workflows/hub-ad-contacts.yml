@@ -17,6 +17,10 @@ on:
         description: "Open ads to read this run (batches of 5,000)"
         required: false
         default: "700000"
+      model_budget:
+        description: "Ads the rules named nobody in to ask the model about (ELI-25; 0 = off)"
+        required: false
+        default: "100000"
 
 concurrency:
   # Same group as the nightly ingest: one writer on the corpus at a time.
@@ -43,4 +47,7 @@ jobs:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
           BUDGET: ${{ github.event.inputs.budget }}
-        run: python -m scripts.hub_daily --ad-contacts-only --ad-contacts "${BUDGET:-700000}"
+          MODEL_BUDGET: ${{ github.event.inputs.model_budget }}
+        run: >-
+          python -m scripts.hub_daily --ad-contacts-only --ad-contacts "${BUDGET:-700000}"
+          --ad-contacts-model "${MODEL_BUDGET:-100000}"
