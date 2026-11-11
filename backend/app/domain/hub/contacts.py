@@ -26,6 +26,8 @@ import dataclasses
 import re
 import unicodedata
 
+from app.domain.hub.first_names import FIRST_NAMES
+
 # --------------------------------------------------------------------------
 # Building blocks
 # --------------------------------------------------------------------------
@@ -111,6 +113,41 @@ _HEADED = re.compile(
     rf"(?P<name>{_NAME}) *(?=$|[,/(|–]| - )"
 )
 
+#: ELI-25 — a bare name, written without "Frau"/"Herr" and without "Label:".
+#: About 30% of the ads that name a person do it this way (measured
+#: 2026-11-11): "Für Fragen steht Janet Jürgens telefonisch unter +49 …",
+#: "Ansprechpartner Lennart Stutz … Tel. 0160 …", "Tanja Hilt t.hilt@…".
+#: German capitalises every noun, so a bare capitalised pair is no evidence
+#: on its own. It is taken only with evidence on both sides: a contact phrase
+#: right before it (`_FRAME`) and a phone or e-mail right after it, or a
+#: personal e-mail that spells the same name (`_email_spells`).
+_FRAME = re.compile(
+    r"(?i)\b(?:steht|stehen|beantwortet|beantworten|melde|melden|wende|wenden|"
+    r"erreichst|erreichen|kontaktiere|kontaktieren|schreib\w*|persönlich durch|"
+    r"z\. ?hd?\.|zu händen|ansprechpartner\w*|ansprechperson|kontaktperson\w*|"
+    r"kontakt|contact|recruiter\w*|bewerbung(?:en)?\b[^.\n]{0,40}?\ban)(?![\w])"
+)
+#: How far after a contact phrase the name may start, and how far after the
+#: name its phone or e-mail must start.
+_FRAME_GAP = 60
+#: Words that end a name rather than continue it.
+_GRAMMAR_AFTER = re.compile(
+    r"^ +(?:und|oder|in|im|aus|unter|ist|steht|stehen|telefonisch|per|gerne?|zur|mit)\b"
+)
+#: First names seen after "Frau"/"Herr" in the corpus (see the file header).
+_FIRST_NAMES = FIRST_NAMES
+
+
+def _known_first(name: str) -> bool:
+    """"Ann-Christin" counts if the whole or its first part is known."""
+    first = [t for t in name.split() if not re.fullmatch(_TITLE, t)][0]
+    return first in _FIRST_NAMES or first.split("-")[0] in _FIRST_NAMES
+_REACH_GAP = 150
+_BARE = re.compile(rf"(?<![{_UPPER}{_LOWER}\-.@])(?:{_NAME})")
+#: Pronouns and fillers a bare-name match picks up in front of the name:
+#: "beantwortet Ihnen Doreen Hennig", "wende Dich … an".
+_LEADING_FILLER = {"Ihnen", "Ihr", "Ihre", "Dir", "Dich", "Euch", "Sie", "Du", "Uns"}
+
 #: Words that follow "Frau"/"Herr" without being a name, or that a greedy name
 #: match swallows from the next sentence.
 _NOT_NAMES = {
@@ -135,6 +172,9 @@ _NOT_NAMES = {
     "BSc", "MSc", "BA", "MA",
     # "Human Resources" — a department, not a surname.
     "Resources", "Human",
+    # ELI-25: words a bare-name match meets in an address or a unit line.
+    "Nr", "OT", "Office", "Management", "Dich", "Dir", "Euch", "Zu",
+    "Landkreis", "Stadt", "Gemeinde", "Senior", "Junior",
 }
 
 #: Words in capitals that are a company line or a label, not a surname.
@@ -157,7 +197,7 @@ _UNIT_WORD = re.compile(
 )
 
 #: The name is a company if a legal form follows it: "Vision Consulting GmbH".
-_LEGAL_FORM_AFTER = re.compile(r"^ *(?:GmbH|gGmbH|mbH|AG|KG|SE|e\. ?V\.|OHG|UG|GbR|Gmb)\b")
+_LEGAL_FORM_AFTER = re.compile(r"^ *(?:GmbH|gGmbH|mbH|AG|KG|SE|e\. ?V\.|OHG|oHG|e\. ?K\.|UG|GbR|Gmb)\b")
 #: Street-shaped tokens a name must not end in: "Friedrich-Mohr-Straße", "Wahlerstr".
 _STREET = re.compile(r"(?i)(stra(ss|ß)e|str\.?|allee|platz|gasse)$")
 #: Suffixes that also end common surnames — Hering, Döring, Kaufer, Damm.
@@ -353,7 +393,15 @@ def _trim_name(raw: str, following: str) -> tuple[str | None, str | None]:
     # A third token is only trusted when the name ends cleanly (line end,
     # comma, bracket). "Anna Maria Lombardo\n" is a name; "Isabella Luczak
     # Hausbank München" runs on into the next words.
-    if len(bare()) == 3 and re.match(rf"^ +[{_UPPER}{_LOWER}]", following):
+    # Grammar after it ("Laura Marie Köster und …", "Yvonne van Pinxteren in
+    # der …") means the name ended, so the third token stays.
+    # ... but only after two first names ("Kim Isabell Schönenberger") or a
+    # particle ("Gwladys le Bars"); "Jennifer Schweizer Auskunft unter …" is a
+    # name and a noun.
+    keeps_third = len(bare()) == 3 and _GRAMMAR_AFTER.match(following) and (
+        bare()[1] in _FIRST_NAMES or any(re.fullmatch(_PARTICLE, t) for t in tokens)
+    )
+    if len(bare()) == 3 and re.match(rf"^ +[{_UPPER}{_LOWER}]", following) and not keeps_third:
         tokens.pop()
     names = bare()
     if (
@@ -569,6 +617,63 @@ def _quote(text: str, start: int, end: int) -> str:
 # --------------------------------------------------------------------------
 
 
+def _bare_name_at(text: str, start: int, stop: int) -> tuple[int, int, str, str | None] | None:
+    """The first full name (first + last) starting in text[start:stop], within
+    one sentence: (start, end, name, leading role)."""
+    region_end = stop
+    m_end = _SENTENCE_END.search(text, start, stop)
+    if m_end:
+        region_end = m_end.start()
+    for m in _BARE.finditer(text, start, region_end + 40):
+        if m.start() >= region_end:
+            break
+        tokens = _strip_lead(m.group(0).split())
+        if len(tokens) < 2 or any(t in ("Frau", "Herr", "Herrn") for t in tokens):
+            continue
+        raw = " ".join(tokens)
+        begin = text.find(raw, m.start())
+        name, role = _trim_name(raw, text[begin + len(raw) :])
+        if name and not name[0].isupper():
+            name = " ".join(_strip_lead(name.split())) or None
+        if name and len([t for t in name.split() if not re.fullmatch(_TITLE, t)]) >= 2:
+            first = text.find(name, begin)
+            return first, first + len(name), name, role
+    return None
+
+
+def _strip_lead(tokens: list[str]) -> list[str]:
+    """Drop what a bare-name match picks up in front of the name: pronouns
+    ("Ihnen Doreen Hennig"), a label ("Ansprechperson Lena Fischer") and a
+    lower-case particle left by a role word ("Leitung der …")."""
+    while tokens and (
+        tokens[0] in _LEADING_FILLER
+        or _LABEL_WORD.match(tokens[0])
+        or re.fullmatch(_PARTICLE, tokens[0])
+    ):
+        tokens = tokens[1:]
+    return tokens
+
+
+def _email_spells(email: str, name: str) -> bool:
+    """`t.hilt@` / `mirjam.barthel@` / `ann-christin.goettsch@` spell Tanja
+    Hilt, Mirjam Barthel, Ann-Christin Göttsch: the surname, and the first
+    name or its initial."""
+    local = _fold(email.split("@")[0])
+    if _GENERIC_LOCAL.match(local):
+        return False
+    first, last = _split(name)
+    if not first:
+        return False
+    surname = _fold(last.split()[-1])
+    given = _fold(first)
+    return len(surname) > 2 and surname in local and (given in local or local.startswith(given[0]))
+
+
+def _reach_after(text: str, end: int) -> bool:
+    tail = text[end : end + _REACH_GAP]
+    return bool(_phone_in(tail) or _EMAIL.search(tail))
+
+
 def extract_contacts(text: str | None) -> list[ContactMention]:
     """Every person an ad text names as a contact, in order of appearance.
 
@@ -651,6 +756,26 @@ def extract_contacts(text: str | None) -> list[ContactMention]:
         if name and len([p for p in name.split() if not re.fullmatch(_TITLE, p)]) >= 2:
             start = clean.find(name, m.start("name"))
             add(start, start + len(name), name, None, lead_role)
+
+    # ELI-25: a bare name in a contact phrase, with a phone or e-mail after it.
+    for m in _FRAME.finditer(clean):
+        hit = _bare_name_at(clean, m.end(), m.end() + _FRAME_GAP)
+        if hit and _known_first(hit[2]) and _reach_after(clean, hit[1]):
+            add(hit[0], hit[1], hit[2], None, hit[3])
+
+    # ELI-25: a bare name its own e-mail spells, just before or after it.
+    for e in _EMAIL.finditer(clean):
+        for m in _BARE.finditer(clean, max(0, e.start() - 120), min(len(clean), e.end() + 80)):
+            tokens = _strip_lead(m.group(0).split())
+            if len(tokens) < 2:
+                continue
+            raw = " ".join(tokens)
+            begin = clean.find(raw, m.start())
+            name, role = _trim_name(raw, clean[begin + len(raw) :])
+            if name and _known_first(name) and _email_spells(e.group(0), name):
+                start = clean.find(name, begin)
+                add(start, start + len(name), name, None, role)
+                break
 
     return sorted(found.values(), key=lambda c: clean.find(c.full_name))
 
