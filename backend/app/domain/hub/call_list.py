@@ -296,6 +296,7 @@ async def contacts(
             "phone": manager.phone,
             "email": manager.email,
             "linkedin_url": manager.linkedin_url,
+            "xing_url": manager.xing_url,
             "added_at": aware(manager.created_at),
             "source": manager.source,
             "source_detail": manager.source_detail,

@@ -1,4 +1,4 @@
-// "Bus-Dev-Kontakte" (ELI-23): NEW contacts taken from Markt — people a public
+// "Kontakte" (ELI-23): NEW contacts taken from Markt — people a public
 // job ad names — not yet vetted managers. Contact details and the date they
 // were taken over, newest first; filter or group by company. A call can be
 // logged per contact, and once the first contact is done "Zu Managern" moves
@@ -22,6 +22,8 @@ import {
   canSaveCall,
   needsDate,
 } from '../ui/callOutcomes'
+import { networkLinks } from '../ui/contactReach'
+import { NetworkLink } from './ContactsPanel'
 
 const when = (iso: string | null) =>
   iso
@@ -142,6 +144,7 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
       setMoving(false)
     }
   }
+  const links = networkLinks(row)
   const promote = async () => {
     setMoving(true)
     setMoveFailed(false)
@@ -173,7 +176,7 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
               disabled={moving}
               className="font-mono text-[11px] text-cockpit-faint underline hover:text-mint-400"
             >
-              {t('Information versendet')}
+              {t('Als informiert markieren')}
             </button>
           </>
         )}
@@ -190,11 +193,8 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
             {row.email}
           </a>
         )}
-        {row.linkedin_url && (
-          <a href={row.linkedin_url} target="_blank" rel="noreferrer noopener" className="hover:text-mint-400">
-            LinkedIn
-          </a>
-        )}
+        <NetworkLink href={links.linkedin.href} profile={links.linkedin.profile} label="LinkedIn" className="bg-[#0a66c2]" />
+        <NetworkLink href={links.xing.href} profile={links.xing.profile} label="XING" className="bg-[#006567]" />
         {row.source === 'public_web' && row.source_detail?.startsWith('http') && (
           <a href={row.source_detail} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1 hover:text-mint-400">
             <ExternalLink className="h-3 w-3" />
@@ -328,7 +328,7 @@ function ContactsTab() {
         <p className="text-[13px] text-cockpit-dim">
           {filtering
             ? t('Keine Kontakte für diese Auswahl.')
-            : t('Noch keine Bus-Dev-Kontakte — im Markt bei einem Unternehmen „Ansprechpartner“ öffnen und eine Person übernehmen.')}
+            : t('Noch keine Kontakte — im Markt bei einem Unternehmen „Ansprechpartner“ öffnen und eine Person übernehmen.')}
         </p>
       ) : grouped ? (
         [...groups.entries()].map(([id, { name, people }]) => (
@@ -360,7 +360,7 @@ export function ContactListScreen() {
   return (
     <div className="space-y-5">
       <SectionHeader
-        title={t('Bus-Dev-Kontakte')}
+        title={t('Kontakte')}
         hint={t('Neue Kontakte aus dem Markt — noch keine geprüften Manager. Nach dem Erstkontakt „Zu Managern“.')}
         icon={<Users className="h-4 w-4" />}
       />

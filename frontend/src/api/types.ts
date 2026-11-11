@@ -1258,6 +1258,7 @@ export interface ContactRowDTO {
   phone: string | null
   email: string | null
   linkedin_url: string | null
+  xing_url: string | null
   added_at: string | null
   source: string
   source_detail: string | null
