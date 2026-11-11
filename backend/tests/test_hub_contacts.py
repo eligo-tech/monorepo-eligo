@@ -570,3 +570,45 @@ def test_a_unit_that_looks_like_a_name_is_not_one(text: str) -> None:
 )
 def test_a_third_name_part_only_after_two_first_names_or_a_particle(text: str, name: str) -> None:
     assert extract_contacts(text)[0].full_name == name
+
+
+# --- ELI-25 safety net: contact data with no recognised name ---------------
+# A phone or personal e-mail in an ad must never be lost because the parser
+# could not name its owner. `unnamed_reach` returns what no named person in
+# the same text claims: the company card shows it as "from the ad, no name
+# recognised".
+
+from app.domain.hub.contacts import unnamed_reach  # noqa: E402
+
+
+def test_a_number_nobody_claims_is_kept() -> None:
+    text = "Ihre Bewerbung richten Sie bitte direkt an Hussien Bader: h.bader@apotheke-am-hit.de oder 0711 123456"
+    reach = unnamed_reach(text)
+    assert [(r.kind, r.value) for r in reach] == [("email", "h.bader@apotheke-am-hit.de"), ("phone", "0711 123456")]
+    assert "Hussien Bader" in reach[0].quote
+
+
+def test_a_named_persons_number_is_not_repeated() -> None:
+    text = "Für Fragen steht Janet Jürgens telefonisch unter +49 5491 666 2834 zur Verfügung. Zentrale: 05491 6660"
+    assert [(r.kind, r.value) for r in unnamed_reach(text)] == [("phone", "05491 6660")]
+
+
+def test_a_company_mailbox_and_a_fax_are_not_unnamed_reach() -> None:
+    text = "Bewerbungen an bewerbung@firma.de, Fax 0711 99887766. Tel. 0711 998877-0"
+    assert [(r.kind, r.value, r.phone_kind) for r in unnamed_reach(text)] == [("phone", "0711 998877-0", "switchboard")]
+
+
+def test_no_reach_in_an_empty_text() -> None:
+    assert unnamed_reach(None) == [] and unnamed_reach("") == []
+
+
+@pytest.mark.parametrize(
+    ("text", "email"),
+    [
+        ("Unsere E-Mail-Adresse lautet: ag@riepe.comSie erreichen uns auch telefonisch", "ag@riepe.com"),
+        ("an email to our Inclusion Officer at inclusion@deliveryhero.cominclude it in your", "inclusion@deliveryhero.com"),
+        ("per Mail an m.arndt@fine-wall-berlin.de.", "m.arndt@fine-wall-berlin.de"),
+    ],
+)
+def test_an_email_glued_to_the_next_word_is_cut_at_its_domain(text: str, email: str) -> None:
+    assert [r.value for r in unnamed_reach(text) if r.kind == "email"] == [email]

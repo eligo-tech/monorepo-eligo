@@ -620,8 +620,20 @@ export interface CompanyContactsDTO {
   company_id: string | null
   contacts: ContactCandidateDTO[]
   mailboxes: { email: string; mention_count: number }[]
+  /** ELI-25: phone numbers / e-mails no recognised person claims. */
+  unnamed?: UnnamedReachDTO[]
   postings_scanned: number
   postings_with_text: number
+}
+
+export interface UnnamedReachDTO {
+  kind: 'phone' | 'email'
+  value: string
+  phone_kind: string | null
+  mention_count: number
+  quote: string
+  url: string | null
+  posting_title: string
 }
 
 /** One checklist step of a candidate's process — the tracker as data. */

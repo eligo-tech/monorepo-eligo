@@ -317,6 +317,7 @@ export function ContactsPanel({
   }
   const data = result.data
   if (!data) return null
+  const unnamed = data.unnamed ?? []
 
   return (
     <div className="space-y-3">
@@ -331,7 +332,9 @@ export function ContactsPanel({
         <p className="max-w-2xl text-[13px] leading-relaxed text-cockpit-dim">
           {data.postings_with_text === 0
             ? t('Für dieses Unternehmen liegen noch keine Anzeigentexte vor. Der nächtliche Lauf lädt sie nach; danach erscheinen hier die genannten Ansprechpartner.')
-            : t('Keine der Anzeigen nennt eine Person — nur Firmenpostfächer. Das ist bei großen Arbeitgebern mit zentralem Recruiting häufig.')}
+            : unnamed.length > 0
+              ? t('Keine Person namentlich erkannt — die Kontaktdaten aus den Anzeigen stehen unten, mit der Stelle, an der sie stehen.')
+              : t('Keine der Anzeigen nennt eine Person — nur Firmenpostfächer. Das ist bei großen Arbeitgebern mit zentralem Recruiting häufig.')}
         </p>
       ) : (
         <ul>
@@ -344,6 +347,49 @@ export function ContactsPanel({
             />
           ))}
         </ul>
+      )}
+
+      {unnamed.length > 0 && (
+        <div className="space-y-1.5 border-t border-cockpit-line/60 pt-2.5">
+          <p
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint"
+            title={t('Telefonnummern und E-Mail-Adressen aus den Anzeigen, zu denen kein Name erkannt wurde. Das Zitat zeigt, wo sie stehen.')}
+          >
+            {t('Weitere Kontaktdaten aus den Anzeigen')}
+          </p>
+          <ul className="space-y-1">
+            {unnamed.map((u) => (
+              <li key={`${u.kind}:${u.value}`} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[12px] text-cockpit-dim">
+                <a
+                  href={u.kind === 'phone' ? `tel:${u.value.replace(/[^\d+]/g, '')}` : `mailto:${u.value}`}
+                  className="flex items-center gap-1 hover:text-mint-400"
+                >
+                  {u.kind === 'phone' ? (
+                    <Phone className="h-3.5 w-3.5 text-cockpit-faint" />
+                  ) : (
+                    <Mail className="h-3.5 w-3.5 text-cockpit-faint" />
+                  )}
+                  {u.value}
+                </a>
+                {u.phone_kind === 'switchboard' && (
+                  <span className="rounded border border-gold-600/50 px-1.5 text-[11px] text-gold-400">{t('Zentrale')}</span>
+                )}
+                <span className="text-cockpit-faint">
+                  in {de(u.mention_count)} {u.mention_count === 1 ? t('Anzeige') : t('Anzeigen')}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-sans text-[12px] text-cockpit-faint" title={u.quote}>
+                  „{u.quote}“
+                </span>
+                {u.url && (
+                  <a href={u.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-cockpit-faint hover:text-mint-400">
+                    <ExternalLink className="h-3 w-3" />
+                    {t('Anzeige')}
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {data.mailboxes.length > 0 && (

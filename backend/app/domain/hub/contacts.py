@@ -801,3 +801,67 @@ def person_key(first_name: str | None, last_name: str) -> str:
     surname at one employer is rarer than one person written two ways.
     """
     return _fold(last_name.split()[-1])
+
+
+@dataclasses.dataclass(frozen=True)
+class UnnamedReach:
+    """A phone number or personal e-mail in an ad that no recognised person
+    claims (ELI-25 safety net). Shown on the company card as "from the ad, no
+    name recognised", so contact data is never lost to the parser."""
+
+    kind: str  # "phone" | "email"
+    value: str
+    phone_kind: str | None
+    quote: str
+
+
+#: The text after an e-mail is sometimes glued to it: "ag@riepe.comSie
+#: erreichen …", "inclusion@deliveryhero.cominclude it". Cut at a common
+#: top-level domain when more letters follow it.
+_GLUED_TLD = re.compile(r"(?i)^(.*\.(?:com|de|at|ch|org|net|eu|info|biz))[a-z]+$")
+
+
+def _tidy_email(email: str) -> str:
+    email = email.rstrip(".")
+    m = _GLUED_TLD.match(email)
+    return m.group(1) if m else email
+
+
+#: "Fax 0711 …", "Fax: …", "Telefax …" — a number nobody answers.
+_FAX_BEFORE = re.compile(r"(?i)(?:tele)?fax\.?\s*:?\s*$")
+
+
+def unnamed_reach(text: str | None) -> list[UnnamedReach]:
+    """Every phone and personal e-mail in `text` that `extract_contacts`
+    does not attribute to a named person, in order of appearance. Function
+    mailboxes (`bewerbung@` …) are `company_mailboxes`' job and fax numbers
+    are left out."""
+    if not text:
+        return []
+    clean = _clean(text)
+    named = extract_contacts(text)
+    claimed_phones = {re.sub(r"\D", "", c.phone) for c in named if c.phone}
+    claimed_emails = {c.email.lower() for c in named if c.email}
+    found: list[tuple[int, UnnamedReach]] = []
+    seen: set[str] = set()
+    for m in _EMAIL.finditer(clean):
+        email = _tidy_email(m.group(0))
+        low = email.lower()
+        if _GENERIC_LOCAL.match(low.split("@")[0]) or low in claimed_emails or low in seen:
+            continue
+        seen.add(low)
+        found.append((m.start(), UnnamedReach("email", email, None, _quote(clean, m.start(), m.end()))))
+    for m in _PHONE.finditer(clean):
+        if _FAX_BEFORE.search(clean[max(0, m.start() - 12) : m.start()]):
+            continue
+        phone = _phone_in(clean[m.start() : m.end() + 1])
+        if not phone:
+            continue
+        digits = re.sub(r"\D", "", phone)
+        if digits in claimed_phones or digits in seen:
+            continue
+        seen.add(digits)
+        found.append(
+            (m.start(), UnnamedReach("phone", phone, phone_kind(phone), _quote(clean, m.start(), m.end())))
+        )
+    return [r for _, r in sorted(found, key=lambda x: x[0])]
