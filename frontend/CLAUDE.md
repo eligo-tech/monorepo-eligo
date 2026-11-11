@@ -31,8 +31,8 @@ src/
 │   ├── CommandBar.tsx          # wordmark, search, status chips, typeface switch, Clerk controls
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
 │   ├── useTypeface.ts          # the Jet · Mono · Heli switch
-│   ├── screens/                # CockpitScreen · MarktScreen · ProjekteScreen · JobsScreen
-│   │   ├── ContactsPanel.tsx   # "Anreichern": contacts read out of a company's public ads
+│   ├── screens/                # CockpitScreen · MarktScreen · ContactListScreen (Kontakte) · ManagerScreen · JobsScreen
+│   │   ├── ContactsPanel.tsx   # Markt "Ansprechpartner": people a company's public ads name → adopt
 │   │   ├── MandateEditor.tsx   # "Mandat bearbeiten" — the Suchprofil, from the Jobs list
 │   │   ├── MandateView.tsx     # the per-job workspace ("Mandat & Kandidatensuche")
 │   │   ├── mandate/            # its nine panels (Stammdaten · Feedback · Aktivität · …)
@@ -72,19 +72,17 @@ mandate) → Nächste beste Aktionen → 03 Jobscoring → 04 Wettbewerb.
 `kandidatenwelt`: the whole book of business, the pool it draws on, then one
 candidate's world. ←/→ moves between them; the URL hash names the active one.
 
-The client-side funnel runs `markt` → `projekte`: search the shared corpus,
-keep the employers worth watching ("Beobachten"), then group them under a name.
-There was briefly a flat `workspace` screen between the two; it listed every
-watched company and nothing else, which projects subsumed. `resolveScreen`
-maps the retired hash onto `projekte` so old links still land somewhere.
-Companies watched but in no project appear at the foot of Projekte — a saved
-thing must never be visible only inside a picker.
-**Projekte is the shortlist and the enrichment step**: every company on it
-should end up with a contact person, and the row says so either way. Two ways
-in, both landing in `managers` with provenance and the Art. 14 flag —
-`ContactsPanel` reads the people the company's own ads name, and "Person
-hinzufügen" takes one the recruiter found (a LinkedIn profile today, a data
-provider later). A name is the only required field.
+The client-side funnel runs `markt` → `kontakte` → `managers` (ELI-23).
+Markt searches the shared corpus; on a company card "Ansprechpartner" lists the
+people its public ads name, and adopting one creates the company and a
+`managers` row with `stage = bus_dev`, provenance (the ad URL) and the Art. 14
+flag. **Kontakte** lists only those bus-dev contacts — never imports or
+hand-entered people — with phone, e-mail, LinkedIn/XING (stored profile, else a
+people search) and the adoption date. After the first contact "Zu Managern"
+promotes the same record to the Manager screen. Companies are a filter/grouping
+on Kontakte, not a screen of their own. Workspace, Projekte and Anrufen are
+retired: `resolveScreen` maps their hashes onto `kontakte`, and `tracking`
+onto `cockpit`, so old links still land somewhere.
 
 ### Parked surfaces
 

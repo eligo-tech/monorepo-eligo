@@ -235,7 +235,7 @@ export function ManagerScreen() {
       <section className="space-y-5">
         <SectionHeader
           index="01"
-          title={t('Kontakte')}
+          title={t('Alle Manager')}
           hint={
             managers.loading
               ? t('lädt…')

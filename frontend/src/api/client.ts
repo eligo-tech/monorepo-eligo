@@ -4,34 +4,23 @@ import type {
   AgencyDetailDTO,
   AgencyPageDTO,
   AgencyVerdict,
-  ConsultantDTO,
   EraseBody,
   ErasureRequestDTO,
-  TrackingDTO,
   JobSpecProposalDTO,
   CandidateDTO,
   CandidateUpdatePayload,
   CompanyDTO,
   CVExtractionResultDTO,
-  HubCompanyDTO,
   HubCompanyLinkDTO,
   HubCorpusStatsDTO,
   AdoptPostingsResultDTO,
   AdoptResultDTO,
-  CallListPageDTO,
   ContactPageDTO,
-  CallResultDTO,
-  FollowUpDTO,
-  HubEmployerHitDTO,
   ManagerDTO,
   ManagerInteractionDTO,
   HubSearchPageDTO,
   HubFacetsDTO,
-  HubJobPostingDTO,
   SavedSearchDTO,
-  ProjectDTO,
-  ProjectDetailDTO,
-  ProjectCandidateDTO,
   CompanyContactsDTO,
   AssessmentDTO,
   AssessmentWriteDTO,
@@ -125,7 +114,6 @@ async function upload<T>(
 }
 
 export const api = {
-  health: () => request<{ status: string }>('/health'),
   /** The pool, with the size of the WHOLE pool alongside it.
    *
    *  The cockpit searches and filters these rows in the browser, so a page
@@ -217,30 +205,6 @@ export const api = {
       body: JSON.stringify(title ? { title } : {}),
     }),
 
-  /** Ist vs. Ziel for one period (ELI-15). `who` is "team", a Clerk user
-   *  id, or "unassigned" — the events imported history has no author for. */
-  tracking: (period: string, who = 'team') =>
-    request<TrackingDTO>(
-      `/activity/tracking?period=${encodeURIComponent(period)}&who=${encodeURIComponent(who)}`,
-    ),
-
-  /** Who the per-consultant switch can switch to — derived from events, not
-   *  from a roster: there is no users table, membership lives in Clerk. */
-  consultants: () => request<ConsultantDTO[]>('/activity/consultants'),
-
-  /** Set a goal. Admin only; `actor_user_id: null` is the workspace default
-   *  that anybody without their own number inherits. */
-  setTarget: (body: {
-    kpi: string
-    period: string
-    value: number
-    actor_user_id: string | null
-  }) =>
-    request<unknown>('/activity/targets', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-
   /** Read a job advert into a proposed Suchprofil (ELI-6).
    *
    *  Creates nothing: the answer fills the form in and the recruiter saves
@@ -263,15 +227,6 @@ export const api = {
    *  imported book runs to hundreds, so a caller building a name lookup must
    *  ask for all of them or most rows resolve to nothing. */
   companies: (limit = 500) => request<CompanyDTO[]>(`/companies?limit=${limit}`),
-  /** Market corpus: companies aggregated from public sources, most actively
-   *  hiring first. Distinct from /companies, which is the tenant's own CRM. */
-  hubCompanies: (params?: { q?: string; hiringOnly?: boolean; limit?: number }) => {
-    const qs = new URLSearchParams()
-    if (params?.q) qs.set('q', params.q)
-    if (params?.hiringOnly) qs.set('hiring_only', 'true')
-    qs.set('limit', String(params?.limit ?? 200))
-    return request<HubCompanyDTO[]>(`/hub/companies?${qs}`)
-  },
   /** Corpus totals, counted server-side. Never derive these from a page. */
   hubStats: () => request<HubCorpusStatsDTO>('/hub/stats'),
 
@@ -412,17 +367,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  /** Call list (ELI-22): people open ads name, not yet called here. */
-  callListMarket: (params: { q?: string; phoneOnly?: boolean; limit?: number; offset?: number }) => {
-    const qs = new URLSearchParams()
-    if (params.q) qs.set('q', params.q)
-    if (params.phoneOnly) qs.set('phone_only', 'true')
-    qs.set('limit', String(params.limit ?? 50))
-    qs.set('offset', String(params.offset ?? 0))
-    return request<CallListPageDTO>(`/hub/call-list/market?${qs}`)
-  },
-
-  /** Kontaktliste (ELI-23): every contact in this workspace, newest first. */
+  /** Kontakte (ELI-23): contacts taken from Markt (stage bus_dev), newest first. */
   callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean }) => {
     const qs = new URLSearchParams()
     if (params.companyId) qs.set('company_id', params.companyId)
@@ -431,19 +376,6 @@ export const api = {
     return request<ContactPageDTO>(`/hub/call-list/contacts?${qs}`)
   },
 
-  /** Call list: this workspace's calls, due call-backs first. */
-  callListFollowUps: () => request<FollowUpDTO[]>('/hub/call-list/follow-ups'),
-
-  /** One call to a person from the market tab; the first takes them in. */
-  logCall: (body: {
-    hub_company_id: string
-    person_key: string
-    outcome: string
-    summary?: string | null
-    next_action_at?: string | null
-  }) =>
-    request<CallResultDTO>('/hub/call-list/calls', { method: 'POST', body: JSON.stringify(body) }),
-
   /** ELI-23: move a bus-dev contact to Managers after the first contact. */
   promoteManager: (id: string) => request<ManagerDTO>(`/managers/${id}/promote`, { method: 'POST' }),
 
@@ -451,77 +383,6 @@ export const api = {
    *  field: it asserts something happened in the world. */
   markManagerArt14Notified: (id: string) =>
     request<ManagerDTO>(`/managers/${id}/art14-notified`, { method: 'POST' }),
-
-  // --- Projects: named groupings of target companies ---------------------
-
-  projects: () => request<ProjectDTO[]>('/projects'),
-
-  /** A project needs a name and nothing else. 409 if the name is taken. */
-  createProject: (name: string) =>
-    request<ProjectDTO>('/projects', {
-      method: 'POST',
-      body: JSON.stringify({ name }),
-    }),
-
-  project: (id: string) => request<ProjectDetailDTO>(`/projects/${id}`),
-
-  renameProject: (id: string, name: string) =>
-    request<ProjectDTO>(`/projects/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name }),
-    }),
-
-  async deleteProject(id: string): Promise<void> {
-    const res = await fetch(`${BASE}/projects/${id}`, {
-      method: 'DELETE',
-      headers: await authHeaders(),
-    })
-    if (!res.ok) throw new ApiError(res.status, res.statusText)
-  },
-
-  /** Watched employers that are in no project yet. */
-  unassignedWatched: () => request<ProjectCandidateDTO[]>('/projects/unassigned'),
-
-  /** Watched employers not yet in this project. */
-  projectCandidates: (id: string) =>
-    request<ProjectCandidateDTO[]>(`/projects/${id}/candidates`),
-
-  /** Put corpus companies in the project. Idempotent; returns the project. */
-  addProjectCompanies: (id: string, hubCompanyIds: string[]) =>
-    request<ProjectDetailDTO>(`/projects/${id}/companies`, {
-      method: 'POST',
-      body: JSON.stringify({ hub_company_ids: hubCompanyIds }),
-    }),
-
-  /** Attach a person to a company in a project. A name is enough; `source`
-   *  decides the Art. 14 obligation and defaults to "found by us". */
-  addProjectContact: (
-    projectId: string,
-    hubCompanyId: string,
-    body: {
-      full_name: string
-      role_title?: string | null
-      email?: string | null
-      phone?: string | null
-      linkedin_url?: string | null
-      source?: string
-      source_detail?: string | null
-      /** Erased here on request and come back of their own accord (409 otherwise). */
-      override_suppression?: boolean
-    },
-  ) =>
-    request<ManagerDTO>(
-      `/projects/${projectId}/companies/${hubCompanyId}/contacts`,
-      { method: 'POST', body: JSON.stringify(body) },
-    ),
-
-  async removeProjectCompany(id: string, hubCompanyId: string): Promise<void> {
-    const res = await fetch(`${BASE}/projects/${id}/companies/${hubCompanyId}`, {
-      method: 'DELETE',
-      headers: await authHeaders(),
-    })
-    if (!res.ok) throw new ApiError(res.status, res.statusText)
-  },
 
   /** This workspace's standing market questions. */
   savedSearches: () => request<SavedSearchDTO[]>('/searches'),
@@ -544,14 +405,6 @@ export const api = {
     })
     if (!res.ok) throw new ApiError(res.status, res.statusText)
   },
-
-  /** Run a saved search against the corpus. Read-only. */
-  savedSearchResults: (id: string) =>
-    request<HubEmployerHitDTO[]>(`/searches/${id}/results?limit=40`),
-
-  /** Open roles for one hub company. */
-  hubCompanyPostings: (id: string) =>
-    request<HubJobPostingDTO[]>(`/hub/companies/${id}/postings?limit=200`),
 
   /** Agency finder: ranked agencies, best first. 404 outside the
    *  `agency_finder_tenants` allowlist — see `agencyCopy.probeAgencyFinder`. */
