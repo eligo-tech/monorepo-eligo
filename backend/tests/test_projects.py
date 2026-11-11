@@ -543,3 +543,20 @@ async def test_adopting_an_ad_skips_a_contact_this_workspace_erased(corpus, monk
         )
     assert company is not None  # the company is still adopted
     assert manager is None      # the person is not
+
+
+async def test_a_contact_from_a_public_ad_starts_as_bus_dev_and_a_given_one_as_manager(corpus) -> None:
+    """ELI-23: every way a public-ad person enters the workspace makes a
+    bus-dev contact — this older project endpoint included."""
+    project_id = await _project()
+    async with SessionLocal() as s:
+        await service.add_companies(s, tenant_id=TENANT, project_id=project_id, hub_company_ids=[corpus["mgm"]])
+        from_ad = await service.add_contact(
+            s, tenant_id=TENANT, project_id=project_id, hub_company_id=corpus["mgm"],
+            payload=AddContactRequest(full_name="Leonie Denkinger", source=ConfidenceSource.PUBLIC_WEB),
+        )
+        given = await service.add_contact(
+            s, tenant_id=TENANT, project_id=project_id, hub_company_id=corpus["mgm"],
+            payload=AddContactRequest(full_name="Petra Vogel", source=ConfidenceSource.SELF_REPORTED),
+        )
+    assert (from_ad.stage, given.stage) == ("bus_dev", "manager")

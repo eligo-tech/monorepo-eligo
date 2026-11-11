@@ -128,6 +128,20 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
   const [calling, setCalling] = useState(false)
   const [moving, setMoving] = useState(false)
   const [moveFailed, setMoveFailed] = useState(false)
+  // GDPR Art. 14: the notice is owed from adoption, not from vetting — so it
+  // is recorded here, before the person ever reaches Managers.
+  const markNotified = async () => {
+    setMoving(true)
+    setMoveFailed(false)
+    try {
+      await api.markManagerArt14Notified(row.manager_id)
+      onCalled()
+    } catch {
+      setMoveFailed(true)
+    } finally {
+      setMoving(false)
+    }
+  }
   const promote = async () => {
     setMoving(true)
     setMoveFailed(false)
@@ -147,11 +161,21 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
         {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
         {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
         {row.art14_outstanding && (
-          <Chip tone="gold">
-            <span title={t('Aus einer öffentlichen Anzeige übernommen — die Information nach Art. 14 DSGVO steht noch aus.')}>
-              {t('Art. 14 offen')}
-            </span>
-          </Chip>
+          <>
+            <Chip tone="gold">
+              <span title={t('Aus einer öffentlichen Anzeige übernommen — die Information nach Art. 14 DSGVO steht noch aus.')}>
+                {t('Art. 14 offen')}
+              </span>
+            </Chip>
+            <button
+              type="button"
+              onClick={markNotified}
+              disabled={moving}
+              className="font-mono text-[11px] text-cockpit-faint underline hover:text-mint-400"
+            >
+              {t('Information versendet')}
+            </button>
+          </>
         )}
         <span className="ml-auto font-mono text-[12px] text-cockpit-faint">
           {showCompany && <>{row.company_name} · </>}
@@ -191,10 +215,12 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
         {!calling && (
           <span className="ml-auto flex items-center gap-2">
             {moveFailed && <span className="text-coral-400">{t('Speichern fehlgeschlagen.')}</span>}
-            <Button onClick={promote} disabled={moving}>
-              <UserCheck className="h-4 w-4" />
-              <span title={t('Erstkontakt erledigt — als Manager übernehmen.')}>{t('Zu Managern')}</span>
-            </Button>
+            <span title={t('Erstkontakt erledigt — als Manager übernehmen.')}>
+              <Button onClick={promote} disabled={moving}>
+                <UserCheck className="h-4 w-4" />
+                {t('Zu Managern')}
+              </Button>
+            </span>
             <Button onClick={() => setCalling(true)}>
               <PhoneCall className="h-4 w-4" />
               {t('Anruf erfassen')}
