@@ -341,6 +341,10 @@ async def _remove_company(session: AsyncSession, key: str) -> dict[str, int]:
     memberships = await session.execute(
         delete(ProjectCompany).where(ProjectCompany.hub_company_id.in_(company_ids))
     )
+    # ELI-30: an employer's Impressum checks hold its phone and VAT id.
+    from app.domain.hub.models import HubSiteCheck
+
+    await session.execute(delete(HubSiteCheck).where(HubSiteCheck.hub_company_id.in_(ids)))
     companies = await session.execute(delete(HubCompany).where(HubCompany.id.in_(ids)))
     # The agency finder's derived profile goes with it, not at the next
     # nightly rebuild.

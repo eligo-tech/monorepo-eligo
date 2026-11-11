@@ -279,6 +279,15 @@ These are enforced in code. Do not route around them.
   the backfill re-labels every open ad. The Markt "Tech" filter reads it.
   Measured 2026-11-09: 33,573 of 702,630 open ads; 120 hand-labelled real
   titles (`tests/fixtures/families/`) guard precision and recall.
+- **Employers' Impressum** (`hub/employer_sites.py`, `POST /hub/employers/sites/check`,
+  daily at 15:23 UTC — `.github/workflows/hub-employer-sites.yml`, ELI-30). The
+  last contact fallback: website from the ads (text + BA `externeURL`) →
+  Impressum (same `SiteFetcher`) → kept only when `names_firm` holds. Phone,
+  VAT id (DE/ATU/CHE) and register (HRA/HRB, Austrian FN) go on the
+  `hub_site_checks` row (`hub_company_id` set); website, VAT and register are
+  backfilled onto `hub_companies` only where empty. Employers no ad names a
+  person for come first; sole traders are never checked. Measured 2026-11-11:
+  164/1,000 employers verified, 140 with a phone.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.

@@ -594,7 +594,10 @@ SITE_NOT_NAMED = "not_named"  # an Impressum, but someone else's
 SITE_NO_IMPRESSUM = "no_impressum"  # no readable Impressum found
 SITE_BLOCKED = "blocked"  # robots.txt, or an unsafe link/redirect
 SITE_ERROR = "error"  # network failure — retried after a week
-SITE_STATUSES = (SITE_VERIFIED, SITE_NOT_NAMED, SITE_NO_IMPRESSUM, SITE_BLOCKED, SITE_ERROR)
+#: ELI-30, employers only: no ad names a usable website (domain ""). New ads
+#: may, so it is asked again after a month.
+SITE_NO_DOMAIN = "no_domain"
+SITE_STATUSES = (SITE_VERIFIED, SITE_NOT_NAMED, SITE_NO_IMPRESSUM, SITE_BLOCKED, SITE_ERROR, SITE_NO_DOMAIN)
 
 
 class HubSiteCheck(Base, IDMixin, TimestampMixin):
@@ -616,6 +619,11 @@ class HubSiteCheck(Base, IDMixin, TimestampMixin):
 
     domain: Mapped[str] = mapped_column(String(253), nullable=False, index=True)
     group_key: Mapped[str] = mapped_column(String(300), nullable=False, index=True)
+    #: ELI-30: the employer this check is for (group_key "employer:<id>").
+    #: Null for agency checks, which are keyed by the agency's group.
+    hub_company_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(), ForeignKey("hub_companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     impressum_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     observation_id: Mapped[uuid.UUID | None] = mapped_column(

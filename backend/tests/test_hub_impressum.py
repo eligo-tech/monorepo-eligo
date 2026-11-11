@@ -204,3 +204,41 @@ def test_the_court_belongs_to_the_register_it_sits_next_to() -> None:
 def test_an_unparseable_port_is_unsafe_not_a_crash() -> None:
     for url in ("https://firma.de:abc/impressum", "https://firma.de:99999/"):
         assert safe_url(url, "firma.de") is False
+
+
+# --- Austria (ELI-30) --------------------------------------------------------
+# Captured 2026-11-11 from employers' sites in the ELI-30 sample; people
+# replaced. An Austrian Impressum has a UID (ATU + 8 digits) and a
+# Firmenbuch number (FN + digits + check letter) at a Landes-/Handelsgericht,
+# never an HRB — before this, all three read as "not an Impressum".
+
+
+@pytest.mark.parametrize(
+    "fixture, vat, register, court, phone, firm",
+    [
+        ("alois_mayr_at", "ATU31821909", ("FN", "56945v"), "Innsbruck", "+43 5332 795-0", "Alois Mayr Bauwaren GmbH"),
+        ("sem_gmbh_at", "ATU72082729", ("FN", "466505m"), "Wien", "+43 01 6002210",
+         "SEM Energie- und Gebäudemanagement GmbH"),
+        ("woegler_bau_at", None, ("FN", "36141z"), "Korneuburg", "+43 (0)2249 / 2241", "Wögler Baugesellschaft m.b.H."),
+    ],
+)
+def test_an_austrian_impressum(fixture, vat, register, court, phone, firm) -> None:
+    text = _page(fixture)
+    facts = parse_impressum(text)
+    assert facts.is_impressum
+    assert facts.vat_id == vat
+    assert (facts.register_type, facts.register_number) == register
+    assert facts.register_court == court
+    assert facts.phone == phone
+    assert names_firm(text, [firm])
+
+
+def test_a_swiss_uid_is_read() -> None:
+    facts = parse_impressum("Muster AG\nBahnhofstrasse 1\n8001 Zürich\nUID: CHE-123.456.789 MWST\nTel. 044 123 45 67")
+    assert facts.is_impressum
+    assert facts.vat_id == "CHE123456789"
+
+
+def test_an_italian_tax_number_is_not_a_vat_id() -> None:
+    # euroclima.com: "MwSt.Nr.: IT 00 628 930 216" — not a DACH id, not read.
+    assert parse_impressum("Euroclima AG\nMwSt.Nr.: IT 00 628 930 216\nHandelsregister Bozen").vat_id is None

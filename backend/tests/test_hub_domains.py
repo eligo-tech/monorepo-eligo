@@ -11,6 +11,8 @@ company record: only the Impressum naming the firm (PR7) verifies one.
 
 from __future__ import annotations
 
+import pytest
+
 from app.domain.hub.domains import (
     domain_candidates,
     extract_domains,
@@ -130,3 +132,25 @@ def test_a_domain_spelling_the_whole_firm_name_matches_even_if_short_or_generic(
 
 def test_a_firm_named_after_its_city_does_not_own_the_citys_domain() -> None:
     assert not domain_candidates([("p", "https://www.berlin.de/x")], firm_names=["Berlin Personal GmbH"])[0]["name_match"]
+
+
+# ELI-30: job boards measured in 1,000 employers' ads (2026-11-11). Each one's
+# Impressum names the board, so it cost a fetch and blocked the second try.
+@pytest.mark.parametrize(
+    "board",
+    [
+        "azubi.de", "gute-jobs.de", "ausbildung.de", "studyflix.de", "jobs4us.de",
+        "awo-jobs.de", "genau-mein-job.de", "kalaydo.de", "jobblitz.de",
+        "jobs-oberlausitz.de", "karriere-suedwestfalen.de", "ams.at", "hokify.at",
+        "hamburger-jobanzeiger.de", "wuerzburger-jobanzeiger.de", "aachener-jobanzeiger.de",
+    ],
+)
+def test_a_job_board_is_never_an_employers_website(board: str) -> None:
+    ads = [("p1", f"Bewerben Sie sich auf www.{board}/job/123 oder an bewerbung@muster-bau.de")]
+    assert [c["domain"] for c in domain_candidates(ads, firm_names=["Muster Bau GmbH"])] == ["muster-bau.de"]
+
+
+def test_an_employers_own_jobs_domain_stays_a_candidate() -> None:
+    # Measured: KANN GmbH Baustoffwerke's own site is kann-jobs.de (verified).
+    ads = [("p1", "Mehr unter www.kann-jobs.de")]
+    assert [c["domain"] for c in domain_candidates(ads, firm_names=["KANN GmbH Baustoffwerke"])] == ["kann-jobs.de"]

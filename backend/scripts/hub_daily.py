@@ -435,6 +435,40 @@ async def _check_sites(client: httpx.AsyncClient, *, budget: int) -> dict[str, i
     return totals
 
 
+#: Employers per request. The server stops waiting after 90 s, so a batch
+#: stays inside the 120 s read timeout whatever the sites do.
+_EMPLOYER_SITE_BATCH = 20
+
+
+async def _check_employer_sites(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
+    """ELI-30: up to `budget` employers' Impressum (phone, VAT id, register),
+    in batches. Stops when the server has nothing left to check."""
+    totals = {"checked": 0, "verified": 0, "not_named": 0, "no_impressum": 0,
+              "blocked": 0, "error": 0, "no_domain": 0}
+    empty = 0
+    while totals["checked"] < budget:
+        size = min(_EMPLOYER_SITE_BATCH, budget - totals["checked"])
+        response = await client.post(f"/hub/employers/sites/check?limit={size}")
+        response.raise_for_status()
+        result = response.json()
+        for key in totals:
+            totals[key] += result.get(key, 0)
+        # A batch can finish nothing when every site in it is slow; two in a
+        # row means there is nothing left, not bad luck.
+        empty = empty + 1 if result.get("checked", 0) == 0 else 0
+        if empty >= 2:
+            break
+    return totals
+
+
+def _print_employer_sites(e: dict[str, int]) -> None:
+    print(
+        f"Arbeitgeber-Impressum: {e['checked']} geprüft, {e['verified']} bestätigt, "
+        f"{e['no_domain']} ohne Website, {e['not_named']} fremdes Impressum, "
+        f"{e['no_impressum']} ohne Impressum, {e['blocked']} gesperrt, {e['error']} Fehler"
+    )
+
+
 #: Ads keyed per request: one bulk UPDATE, well inside the proxy's timeout.
 _VACANCY_BATCH = 5_000
 
@@ -852,6 +886,14 @@ async def main() -> int:
         "`--ad-contacts-only --ad-contacts 700000`",
     )
     parser.add_argument(
+        "--employer-sites-only",
+        type=int,
+        default=0,
+        metavar="N",
+        help="run ONLY the employers' Impressum check (ELI-30) for up to N "
+        "employers — the daily hub-employer-sites workflow",
+    )
+    parser.add_argument(
         "--agencies-only",
         action="store_true",
         help="run ONLY the private-recruiter pass — the backfill: "
@@ -873,6 +915,13 @@ async def main() -> int:
     if not base or not token:
         print("ELIGO_API_BASE and ELIGO_INGEST_TOKEN must be set", file=sys.stderr)
         return 2
+
+    if args.employer_sites_only > 0:
+        async with httpx.AsyncClient(
+            base_url=base, timeout=120.0, headers={"Authorization": f"Bearer {token}"}
+        ) as client:
+            _print_employer_sites(await _check_employer_sites(client, budget=args.employer_sites_only))
+        return 0
 
     if args.ad_contacts_only:
         async with httpx.AsyncClient(
