@@ -18,6 +18,7 @@ import { CockpitScreen } from './screens/CockpitScreen'
 import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
 import { EinstellungenScreen } from './screens/EinstellungenScreen'
 import { TrackingScreen } from './screens/TrackingScreen'
+import { AnrufenScreen } from './screens/AnrufenScreen'
 import { JobsScreen } from './screens/JobsScreen'
 import { ManagerScreen } from './screens/ManagerScreen'
 import { MarktScreen } from './screens/MarktScreen'
@@ -33,6 +34,7 @@ import { useTypeface } from './useTypeface'
 export type ScreenKey =
   | 'cockpit'
   | 'markt'
+  | 'anrufen'
   | 'projekte'
   | 'agenturen'
   | 'managers'
@@ -47,6 +49,8 @@ export type ScreenKey =
 export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'cockpit', label: t('Cockpit') },
   { key: 'markt', label: t('Markt') },
+  // ELI-22: from "who is hiring" to "who do I call".
+  { key: 'anrufen', label: t('Anrufen') },
   { key: 'projekte', label: t('Projekte') },
   { key: 'managers', label: 'Manager', placeholder: true },
   { key: 'jobs', label: t('Jobs') },
@@ -201,6 +205,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
             onPipelineChanged={state.reload}
           />
         )}
+        {screen === 'anrufen' && <AnrufenScreen />}
         {screen === 'tracking' && <TrackingScreen me={me} />}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
         </ErrorBoundary>

@@ -1190,3 +1190,57 @@ export interface AgencyDetailDTO {
   postings: HubJobPostingDTO[]
   contacts: CompanyContactsDTO
 }
+
+/** ELI-22 call list — "Anrufen": a person open ads name, not yet called here. */
+export interface CallListRowDTO {
+  hub_company_id: string
+  person_key: string
+  company_name: string
+  full_name: string
+  first_name: string | null
+  last_name: string
+  salutation: 'Frau' | 'Herr' | null
+  role_title: string | null
+  phone: string | null
+  phone_kind: 'direct' | 'switchboard' | null
+  email: string | null
+  open_ads: number
+  posting_title: string
+  quote: string
+  source_url: string | null
+  /** "named_phone" | "named" — the status box. */
+  reach: 'named_phone' | 'named'
+}
+
+export interface CallListPageDTO {
+  rows: CallListRowDTO[]
+  has_more: boolean
+  offset: number
+  limit: number
+}
+
+/** "Wiedervorlage": a contact this workspace has called, with the last outcome. */
+export interface FollowUpDTO {
+  manager_id: string
+  company_id: string
+  company_name: string
+  full_name: string
+  last_name: string
+  role_title: string | null
+  phone: string | null
+  email: string | null
+  outcome: string
+  summary: string | null
+  last_call_at: string | null
+  last_call_by: string | null
+  next_action_at: string | null
+  due: boolean
+}
+
+export interface CallResultDTO {
+  manager_id: string
+  company_id: string
+  interaction_id: string | null
+  created_manager: boolean
+  art14_outstanding: boolean
+}
