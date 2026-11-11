@@ -1247,3 +1247,37 @@ export interface CallResultDTO {
   created_manager: boolean
   art14_outstanding: boolean
 }
+
+/** ELI-23 Kontaktliste — "Kontakte": a contact in this workspace. */
+export interface ContactRowDTO {
+  manager_id: string
+  company_id: string
+  company_name: string
+  full_name: string
+  role_title: string | null
+  phone: string | null
+  email: string | null
+  linkedin_url: string | null
+  added_at: string | null
+  source: string
+  source_detail: string | null
+  art14_outstanding: boolean
+  last_outcome: string | null
+  last_call_at: string | null
+  last_call_by: string | null
+  next_action_at: string | null
+  due: boolean
+}
+
+export interface CompanyFacetDTO {
+  company_id: string
+  name: string
+  contacts: number
+}
+
+export interface ContactPageDTO {
+  rows: ContactRowDTO[]
+  total: number
+  truncated: boolean
+  companies: CompanyFacetDTO[]
+}

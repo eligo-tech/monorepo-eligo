@@ -17,12 +17,10 @@ import { ReaddHost } from './erasure/ReaddHost'
 import { CockpitScreen } from './screens/CockpitScreen'
 import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
 import { EinstellungenScreen } from './screens/EinstellungenScreen'
-import { TrackingScreen } from './screens/TrackingScreen'
-import { AnrufenScreen } from './screens/AnrufenScreen'
+import { ContactListScreen } from './screens/ContactListScreen'
 import { JobsScreen } from './screens/JobsScreen'
 import { ManagerScreen } from './screens/ManagerScreen'
 import { MarktScreen } from './screens/MarktScreen'
-import { ProjekteScreen } from './screens/ProjekteScreen'
 import { AgenturenScreen } from './screens/agenturen/AgenturenScreen'
 import { probeAgencyFinder, withAgencyScreen } from './screens/agenturen/agencyCopy'
 import { api } from '@/api/client'
@@ -34,13 +32,11 @@ import { useTypeface } from './useTypeface'
 export type ScreenKey =
   | 'cockpit'
   | 'markt'
-  | 'anrufen'
-  | 'projekte'
+  | 'kontakte'
   | 'agenturen'
   | 'managers'
   | 'jobs'
   | 'kandidaten'
-  | 'tracking'
   | 'einstellungen'
 
 // The order the product reads in: the book of business, then the market it
@@ -50,12 +46,10 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'cockpit', label: t('Cockpit') },
   { key: 'markt', label: t('Markt') },
   // ELI-22: from "who is hiring" to "who do I call".
-  { key: 'anrufen', label: t('Anrufen') },
-  { key: 'projekte', label: t('Projekte') },
-  { key: 'managers', label: 'Manager', placeholder: true },
+  { key: 'kontakte', label: t('Kontaktliste') },
+  { key: 'managers', label: 'Manager' },
   { key: 'jobs', label: t('Jobs') },
   { key: 'kandidaten', label: t('Kandidaten') },
-  { key: 'tracking', label: t('Tracking') },
   { key: 'einstellungen', label: t('Einstellungen') },
 ]
 
@@ -68,7 +62,14 @@ export const isScreenKey = (v: string): v is ScreenKey =>
 
 /** Links and bookmarks from before Projekte replaced the flat Workspace list.
  *  One line is cheaper than a dead hash that silently lands on the cockpit. */
-const RETIRED: Record<string, ScreenKey> = { workspace: 'projekte' }
+// ELI-23: Projekte and Anrufen became the Kontaktliste; Tracking left the
+// menu (its data and screen file stay; the KPIs are not deleted).
+const RETIRED: Record<string, ScreenKey> = {
+  workspace: 'kontakte',
+  projekte: 'kontakte',
+  anrufen: 'kontakte',
+  tracking: 'cockpit',
+}
 
 /** `#cockpit/<jobId>`: the screen, then what it is focused on.
  *
@@ -184,7 +185,6 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
           />
         )}
         {screen === 'markt' && <MarktScreen />}
-        {screen === 'projekte' && <ProjekteScreen />}
         {screen === 'agenturen' && agencyFinder && (
           <AgenturenScreen
             agencyId={detail}
@@ -205,8 +205,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
             onPipelineChanged={state.reload}
           />
         )}
-        {screen === 'anrufen' && <AnrufenScreen />}
-        {screen === 'tracking' && <TrackingScreen me={me} />}
+        {screen === 'kontakte' && <ContactListScreen />}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
         </ErrorBoundary>
       </main>

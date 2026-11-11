@@ -196,6 +196,132 @@ async def market(
     return {"rows": rows, "has_more": has_more, "offset": offset, "next_offset": offset + consumed, "limit": limit}
 
 
+def _contains(text: str) -> str:
+    """A LIKE pattern for "contains", with % and _ taken literally."""
+    escaped = text.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _latest_calls(tenant_id: uuid.UUID):
+    """Subquery: each manager's latest call with an outcome (rank 1), ties
+    broken by when the row was written, then by id."""
+    from app.domain.managers.models import ManagerInteraction
+
+    return (
+        select(
+            ManagerInteraction.id.label("interaction_id"),
+            ManagerInteraction.manager_id,
+            func.row_number()
+            .over(
+                partition_by=ManagerInteraction.manager_id,
+                order_by=(
+                    ManagerInteraction.occurred_at.desc(),
+                    ManagerInteraction.created_at.desc(),
+                    ManagerInteraction.id.desc(),
+                ),
+            )
+            .label("rank"),
+        )
+        .where(ManagerInteraction.tenant_id == tenant_id, ManagerInteraction.outcome.is_not(None))
+        .subquery()
+    )
+
+
+async def contacts(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    company_name: str | None = None,
+    q: str | None = None,
+    due_only: bool = False,
+    limit: int = 500,
+    now: dt.datetime | None = None,
+) -> dict:
+    """The Contact List's "Kontakte" tab (ELI-23): every contact in this
+    workspace, newest first — company, when added, where from (an adopted ad
+    contact carries the ad as `source_detail`), and the last call.
+
+    `companies` is the facet the screen filters and groups by — every company
+    this workspace holds contacts at, most contacts first. Companies are not a
+    screen of their own: they are how this list is cut, for a recruiter and
+    for an agent (`contacts.list`).
+    """
+    from app.domain.companies.models import Company
+    from app.domain.managers.models import Manager, ManagerInteraction
+
+    now = now or dt.datetime.now(dt.UTC)
+    latest = _latest_calls(tenant_id)
+    base = (
+        select(Manager, Company.name, ManagerInteraction)
+        .join(Company, Company.id == Manager.company_id)
+        .outerjoin(latest, (latest.c.manager_id == Manager.id) & (latest.c.rank == 1))
+        .outerjoin(ManagerInteraction, ManagerInteraction.id == latest.c.interaction_id)
+        .where(Manager.tenant_id == tenant_id, Company.tenant_id == tenant_id)
+    )
+    if company_id is not None:
+        base = base.where(Manager.company_id == company_id)
+    if company_name and company_name.strip():
+        base = base.where(func.lower(Company.name).like(_contains(company_name), escape="\\"))
+    if q and q.strip():
+        like = _contains(q)
+        base = base.where(or_(
+            func.lower(Manager.full_name).like(like, escape="\\"),
+            func.lower(Company.name).like(like, escape="\\"),
+            func.lower(func.coalesce(Manager.role_title, "")).like(like, escape="\\"),
+        ))
+    if due_only:
+        base = base.where(ManagerInteraction.next_action_at.is_not(None), ManagerInteraction.next_action_at <= now)
+
+    total = await session.scalar(select(func.count()).select_from(base.subquery()))
+    # NULLS LAST: Postgres would put a row without a date first ("newest").
+    found = (
+        await session.execute(base.order_by(Manager.created_at.desc().nulls_last(), Manager.full_name).limit(limit))
+    ).all()
+
+    def aware(value: dt.datetime | None) -> dt.datetime | None:
+        return value.replace(tzinfo=dt.UTC) if value is not None and value.tzinfo is None else value
+
+    rows = []
+    for manager, company, call in found:
+        nxt = aware(call.next_action_at) if call else None
+        rows.append({
+            "manager_id": manager.id,
+            "company_id": manager.company_id,
+            "company_name": company,
+            "full_name": manager.full_name,
+            "role_title": manager.role_title,
+            "phone": manager.phone,
+            "email": manager.email,
+            "linkedin_url": manager.linkedin_url,
+            "added_at": aware(manager.created_at),
+            "source": manager.source,
+            "source_detail": manager.source_detail,
+            "art14_outstanding": bool(manager.art14_outstanding),
+            "last_outcome": call.outcome if call else None,
+            "last_call_at": aware(call.occurred_at) if call else None,
+            "last_call_by": call.actor_name if call else None,
+            "next_action_at": nxt,
+            "due": nxt is not None and nxt <= now,
+        })
+
+    facet = (
+        await session.execute(
+            select(Company.id, Company.name, func.count(Manager.id).label("n"))
+            .join(Manager, Manager.company_id == Company.id)
+            .where(Company.tenant_id == tenant_id, Manager.tenant_id == tenant_id)
+            .group_by(Company.id, Company.name)
+            .order_by(func.count(Manager.id).desc(), Company.name)
+        )
+    ).all()
+    return {
+        "rows": rows,
+        "total": int(total or 0),
+        "truncated": int(total or 0) > len(rows),
+        "companies": [{"company_id": cid, "name": name, "contacts": n} for cid, name, n in facet],
+    }
+
+
 async def follow_ups(session: AsyncSession, *, tenant_id: uuid.UUID, now: dt.datetime | None = None) -> list[dict]:
     """"Wiedervorlage": the latest call per contact, due call-backs first."""
     from app.domain.companies.models import Company
