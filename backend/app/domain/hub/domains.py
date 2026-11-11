@@ -76,7 +76,14 @@ _NOT_A_FIRM = {
     "successfactors.eu", "workday.com", "myworkdayjobs.com", "jobs.de",
     "interamt.de", "bund.de", "medi-jobs.de", "pflegejobs.de", "jobvector.de",
     "absolventa.de", "stellenwerk.de", "yourfirm.de", "staufenbiel.de",
+    # ELI-30: boards measured in 1,000 employers' ads (2026-11-11).
+    "azubi.de", "gute-jobs.de", "ausbildung.de", "studyflix.de", "jobs4us.de",
+    "awo-jobs.de", "genau-mein-job.de", "kalaydo.de", "jobblitz.de",
+    "jobs-oberlausitz.de", "karriere-suedwestfalen.de", "ams.at", "hokify.at",
 }
+
+#: Regional ad papers' boards: hamburger-jobanzeiger.de, aachener-jobanzeiger.de …
+_BOARD_LABEL = re.compile(r"jobanzeiger$")
 
 #: Words too generic to tie a domain to a firm ("Personal Partner GmbH" must
 #: not claim personalwerk.de, "Berlin Pflege Plus" must not claim
@@ -122,6 +129,7 @@ def _usable(domain: str) -> bool:
         domain not in _FREEMAIL
         and domain not in _NOT_A_FIRM
         and not domain.endswith(".jobs")  # a TLD for job boards
+        and not _BOARD_LABEL.search(domain.split(".")[0])
     )
 
 

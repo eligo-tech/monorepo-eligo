@@ -35,12 +35,27 @@ from app.domain.hub.resolution import normalize_company_name
 
 _VAT = re.compile(r"\bDE\s?(\d{3})\s?(\d{3})\s?(\d{3})\b")
 _REGISTER = re.compile(r"\b(HR[AB])\s*(?:-?\s*Nr\.?)?\s*[:.]?\s*(\d{1,7})\b")
+#: Austria (ELI-30): UID "ATU" + 8 digits; Firmenbuch number = digits + a
+#: check letter ("FN 56945v", "Firmenbuch: Innsbruck FN 56945v",
+#: "Firmenbuch: 36141z"). Switzerland: UID "CHE-123.456.789".
+_VAT_AT = re.compile(r"\bATU\s?(\d{8})\b")
+_VAT_CH = re.compile(r"\bCHE[-\s]?(\d{3})\.?(\d{3})\.?(\d{3})\b")
+_FIRMENBUCH = re.compile(
+    r"\b(?:FN|Firmenbuch(?:nummer)?\s*:?)\s*(?:([A-ZÄÖÜ][a-zäöüß]+)\s+)?(?:FN\s*)?(\d{1,6})\s?([a-z])\b"
+)
+#: "Handelsgericht Wien", "Handelgericht: Korneuburg" (sic, measured),
+#: "Firmenbuchgericht: Landesgericht Krems/Donau".
+_COURT_AT = re.compile(
+    r"(?:Firmenbuchgericht|Landesgericht|Handelsgericht|Handelgericht)\s*:?\s*"
+    r"(?:Landesgericht\s+|Handelsgericht\s+)?([A-ZÄÖÜ][\wäöüß]+)"
+)
 _COURT = re.compile(
     r"Amtsgericht\s*:?\s*([A-ZÄÖÜ][\wäöüß]+"
     r"(?:\s(?:am|an der|im|in der|ob der)\s[A-ZÄÖÜ][\wäöüß]+|-[A-ZÄÖÜ][\wäöüß]+)?)"
 )
 #: "Telefax" starts with "Tel" — the label must end where the word does.
-_PHONE_LABEL = re.compile(r"^(?:Telefon|Tel\.|Tel\b|Fon\b|Phone)\s*\.?:?\s*(.*)$", re.IGNORECASE)
+#: "t: +43 …" / "T 0731 …" — a lone T, as several measured sites write it.
+_PHONE_LABEL = re.compile(r"^(?:Telefon|Tel\.|Tel\b|Fon\b|Phone|T\b)\s*\.?:?\s*(.*)$", re.IGNORECASE)
 _PHONE = re.compile(r"(?:\+\s?)?\(?\d[\d\s()/.\-–]{5,}\d")
 _EMAIL = re.compile(r"([\w.+-]+)\s*(?:@|\(at\)|\[at\])\s*([\w-]+(?:\.[\w-]+)+)", re.IGNORECASE)
 #: Function mailboxes — the company's channel, not a person's.
@@ -51,7 +66,8 @@ _GENERIC_LOCAL = re.compile(
 )
 _LEGAL_MARKER = re.compile(
     r"\bHR[AB]\b|\bUSt|Umsatzsteuer|Vertreten durch|Geschäftsführ|Inhaber|"
-    r"Amtsgericht|Registergericht|Handelsregister",
+    r"Amtsgericht|Registergericht|Handelsregister|"
+    r"\bUID\b|\bATU\d|Firmenbuch|Handelsgericht|Landesgericht|\bFN\s?\d",
     re.IGNORECASE,
 )
 _PEOPLE_LABEL = re.compile(
@@ -130,8 +146,14 @@ def parse_impressum(text: str | None) -> ImpressumFacts:
     body = "\n".join(lines)
     markers = sum(1 for line in lines if _LEGAL_MARKER.search(line))
     vat = _VAT.search(body)
+    vat_id = "DE" + "".join(vat.groups()) if vat else None
+    if vat_id is None and (at := _VAT_AT.search(body)):
+        vat_id = "ATU" + at.group(1)
+    if vat_id is None and (ch := _VAT_CH.search(body)):
+        vat_id = "CHE" + "".join(ch.groups())
     register = _REGISTER.search(body)
-    if not (vat or register or markers >= 2):
+    firmenbuch = None if register else _FIRMENBUCH.search(body)
+    if not (vat_id or register or firmenbuch or markers >= 2):
         return ImpressumFacts(is_impressum=False)
 
     # The court beside THIS register — a GmbH & Co. KG also names its general
@@ -140,6 +162,10 @@ def parse_impressum(text: str | None) -> ImpressumFacts:
     if register:
         nearby = body[max(0, register.start() - 80) : register.end() + 80]
         court = _COURT.search(nearby) or _COURT.search(body)
+    elif firmenbuch:
+        court = _COURT_AT.search(body)
+        if court is None and firmenbuch.group(1):
+            court = firmenbuch  # "Firmenbuch: Innsbruck FN 56945v" — group 1 is the court
     phone = None
     for i, line in enumerate(lines):
         m = _PHONE_LABEL.match(line)
@@ -156,9 +182,11 @@ def parse_impressum(text: str | None) -> ImpressumFacts:
 
     return ImpressumFacts(
         is_impressum=True,
-        vat_id="DE" + "".join(vat.groups()) if vat else None,
-        register_type=register.group(1) if register else None,
-        register_number=register.group(2) if register else None,
+        vat_id=vat_id,
+        register_type=register.group(1) if register else ("FN" if firmenbuch else None),
+        register_number=(
+            register.group(2) if register else (firmenbuch.group(2) + firmenbuch.group(3) if firmenbuch else None)
+        ),
         register_court=court.group(1) if court else None,
         phone=phone,
         emails=emails,
@@ -200,7 +228,10 @@ def names_firm(text: str | None, firm_names: list[str]) -> bool:
     return False
 
 
-_LEGAL_FORM = re.compile(r"\b(?:gmbh|mbh|ag|ug|kg|ohg|gbr|e\.\s?k\.?|se|kgaa|e\.\s?v\.|partg)\b")
+_LEGAL_FORM = re.compile(
+    r"\b(?:gmbh|mbh|gesmbh|ag|ug|kg|ohg|gbr|e\.\s?k\.?|se|kgaa|e\.\s?v\.|partg)\b"
+    r"|\bm\.\s?b\.\s?h\b"  # Austrian "Gesellschaft m.b.H."
+)
 
 
 def _joined(firm_names: list[str]) -> set[str]:

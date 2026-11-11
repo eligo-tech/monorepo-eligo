@@ -206,7 +206,7 @@ class SiteFetcher:
         return SitePage(url, current, STATUS_BLOCKED, None, "too many redirects")
 
 
-def _company_facts(facts) -> dict:
+def company_facts(facts) -> dict:
     """What may be stored: company facts only — never `facts.people`."""
     register = (
         f"{facts.register_type} {facts.register_number}" if facts.register_number else None
@@ -329,7 +329,7 @@ async def _check_one(session, fetcher, profile, domain, now, checks) -> str:
     # A sole trader's VAT id and phone are a natural person's data: for them
     # only the website (a business fact) is kept.
     sole_trader = any(c.suspected_natural_person for c in companies)
-    stored = _company_facts(facts) if status == SITE_VERIFIED and not sole_trader else {}
+    stored = company_facts(facts) if status == SITE_VERIFIED and not sole_trader else {}
     if status == SITE_VERIFIED:
         # Backfill only — a fact already on record outranks this one.
         for company in companies:

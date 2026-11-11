@@ -798,6 +798,21 @@ async def check_agency_sites(
         return await sites.check_agency_sites(db, fetcher=fetcher, limit=limit)
 
 
+@router.post("/employers/sites/check")
+async def check_employer_sites(
+    limit: int = Query(default=20, ge=1, le=50),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """ELI-30: an employer's switchboard phone, VAT id and register from its
+    own Impressum. Machine-only (RULE 1): the daily job calls it in batches;
+    one batch stops waiting after `employer_sites.BATCH_SECONDS`."""
+    from app.domain.hub import employer_sites, sites
+
+    async with sites.SiteFetcher() as fetcher:
+        return await employer_sites.check_employer_sites(db, fetcher=fetcher, limit=limit)
+
+
 @router.get("/agencies", response_model=AgencyPage)
 async def list_agencies(
     verdict: list[str] = Query(default=["agency", "unclear"]),
