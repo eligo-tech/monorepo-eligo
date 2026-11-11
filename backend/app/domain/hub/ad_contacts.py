@@ -88,6 +88,7 @@ def _people(
             "role_title": m.role_title[:200] if m.role_title else None,
             "phone": m.phone[:60] if m.phone else None,
             "phone_kind": m.phone_kind,
+            "mobile": m.mobile[:60] if m.mobile else None,
             "email": m.email[:320] if m.email else None,
             "quote": m.quote,
             "text_source": origin,

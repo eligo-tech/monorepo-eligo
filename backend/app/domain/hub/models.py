@@ -666,6 +666,8 @@ class HubAdContact(Base, IDMixin, TimestampMixin):
     phone: Mapped[str | None] = mapped_column(String(60), nullable=True)
     #: "direct" | "switchboard" — whether dialling it reaches the person.
     phone_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: ELI-25: a mobile written beside the landline, in the same sentence.
+    mobile: Mapped[str | None] = mapped_column(String(60), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     #: The ad line(s) naming the person — the evidence shown beside them.
     quote: Mapped[str] = mapped_column(Text, nullable=False)

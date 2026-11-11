@@ -12,7 +12,7 @@ import { locale } from '@/i18n/format'
 import { t } from '@/i18n'
 
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, ExternalLink, Mail, Phone, UserPlus } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, Mail, Phone, Smartphone, UserPlus } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 import type { CompanyContactsDTO, ContactCandidateDTO } from '@/api/types'
@@ -147,6 +147,16 @@ function ContactRow({
               {t('Zentrale')}
             </span>
           )}
+          {contact.mobile && (
+            <a
+              href={`tel:${contact.mobile.replace(/[^\d+]/g, '')}`}
+              className="flex items-center gap-1 hover:text-mint-400"
+              title={t('Mobil')}
+            >
+              <Smartphone className="h-3.5 w-3.5 text-cockpit-faint" />
+              {contact.mobile}
+            </a>
+          )}
           {contact.email && (
             <a href={`mailto:${contact.email}`} className="flex items-center gap-1 hover:text-mint-400">
               <Mail className="h-3.5 w-3.5 text-cockpit-faint" />
@@ -274,7 +284,8 @@ export function ContactsPanel({
       full_name: contact.full_name,
       role_title: contact.role_title,
       email: contact.email,
-      phone: contact.phone,
+      // A manager has one number: the office line, else the mobile (ELI-25).
+      phone: contact.phone ?? contact.mobile ?? null,
       source: PUBLIC_SOURCE,
       // The ad itself — the answer to "where did you get my data?".
       source_detail: (contact.evidence[0]?.url ?? `hub_job_postings/${contact.evidence[0]?.posting_id}`).slice(0, 500),

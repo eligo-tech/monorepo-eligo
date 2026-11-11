@@ -230,3 +230,23 @@ async def test_a_person_the_model_found_is_shown_and_marked(employer) -> None:
     assert by_last["Bader"]["evidence"][0]["url"].startswith("https://www.arbeitsagentur.de/")
     assert by_last["Bennicke"]["found_by"] == "rules"
     assert "0711 123456" not in {u["value"] for u in result["unnamed"]}
+
+
+async def test_the_recruiters_mobile_is_on_the_person_not_unnamed(employer) -> None:
+    anchor, weizen = employer
+    async with SessionLocal() as s:
+        company = await s.get(HubCompany, weizen)
+        s.add(
+            _posting(
+                company,
+                "Embedded Software Engineer (m/w/d)",
+                "Für Fragen steht Janet Jürgens telefonisch unter +49 5491 666 2834 oder auch über WhatsApp "
+                "unter +49 151 51446810 gerne zur Verfügung.",
+                days_ago=1,
+            )
+        )
+        await s.commit()
+        result = await service.company_contacts(s, tenant_id=TENANT, hub_company_id=anchor)
+    jurgens = next(c for c in result["contacts"] if c["last_name"] == "Jürgens")
+    assert (jurgens["phone"], jurgens["mobile"]) == ("+49 5491 666 2834", "+49 151 51446810")
+    assert "+49 151 51446810" not in {u["value"] for u in result["unnamed"]}

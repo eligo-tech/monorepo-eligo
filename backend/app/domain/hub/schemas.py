@@ -474,6 +474,8 @@ class ContactCandidate(BaseModel):
     phone: str | None
     #: "direct" | "switchboard" — whether dialling reaches the person (ELI-22).
     phone_kind: str | None = None
+    #: ELI-25: their mobile, when the ad writes one beside the landline.
+    mobile: str | None = None
     #: How many of this employer's ads name them — a recruiter named in twelve
     #: ads is the talent-acquisition desk; one named once is a hiring manager.
     mention_count: int
