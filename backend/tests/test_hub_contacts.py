@@ -612,3 +612,45 @@ def test_no_reach_in_an_empty_text() -> None:
 )
 def test_an_email_glued_to_the_next_word_is_cut_at_its_domain(text: str, email: str) -> None:
     assert [r.value for r in unnamed_reach(text) if r.kind == "email"] == [email]
+
+
+# --- ELI-25: the recruiter's mobile, written next to their landline --------
+
+
+def test_a_mobile_in_the_same_sentence_is_the_persons() -> None:
+    c = one(
+        "Für Fragen steht Janet Jürgens telefonisch unter +49 5491 666 2834\n"
+        "oder auch über WhatsApp unter +49 151 51446810 gerne zur Verfügung."
+    )
+    assert (c.phone, c.mobile) == ("+49 5491 666 2834", "+49 151 51446810")
+    assert unnamed_reach(
+        "Für Fragen steht Janet Jürgens telefonisch unter +49 5491 666 2834 oder auch über WhatsApp unter +49 151 51446810 gerne zur Verfügung."
+    ) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "mobile"),
+    [
+        ("Frau Anna Berger, Tel. 0662 123456, Mobil 0664 1234567", "0664 1234567"),
+        ("Herr Marco Rossi, Tel. 044 123 45 67, mobile +41 79 123 45 67", "+41 79 123 45 67"),
+        ("Frau Katrin Wolter, Telefon 0395 5442681", None),
+        # A landline second number is not a mobile.
+        ("Frau Katrin Wolter, Tel. 0395 5442681 oder 0395 5442682", None),
+    ],
+)
+def test_only_a_mobile_number_is_the_mobile(text: str, mobile: str | None) -> None:
+    assert one(text).mobile == mobile
+
+
+def test_a_number_in_the_next_sentence_is_not_the_persons_mobile() -> None:
+    c = one("Frau Katrin Wolter, Telefon 0395 5442681. Unser Fahrdienst ist erreichbar unter 0151 1234567.")
+    assert c.mobile is None
+
+
+def test_the_next_persons_mobile_is_not_taken() -> None:
+    found = extract_contacts(
+        "Hast du noch Fragen zur Stelle? Dann melde Dich einfach bei Peter Bolte unter der Telefonnummer "
+        "+49 171-1456836 oder bei Sabine Schulte unter +4915153123067."
+    )
+    bolte = next(c for c in found if c.last_name == "Bolte")
+    assert bolte.mobile is None

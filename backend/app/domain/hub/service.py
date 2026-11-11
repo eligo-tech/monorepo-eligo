@@ -2675,6 +2675,7 @@ async def company_contacts(
                     "email": mention.email,
                     "phone": mention.phone,
                     "phone_kind": mention.phone_kind,
+                    "mobile": mention.mobile,
                     "mention_count": 1,
                     "evidence": [evidence],
                     "manager_id": None,
@@ -2691,7 +2692,7 @@ async def company_contacts(
             if person["first_name"] is None and mention.first_name:
                 person["first_name"] = mention.first_name
                 person["full_name"] = mention.full_name
-            for field in ("salutation", "role_title", "email", "phone"):
+            for field in ("salutation", "role_title", "email", "phone", "mobile"):
                 if person[field] is None and getattr(mention, field):
                     person[field] = getattr(mention, field)
                     if field == "phone":
@@ -2745,6 +2746,7 @@ async def company_contacts(
                     "email": c.email,
                     "phone": c.phone,
                     "phone_kind": c.phone_kind,
+                    "mobile": c.mobile,
                     "mention_count": 1,
                     "evidence": [evidence],
                     "manager_id": None,
@@ -2757,7 +2759,7 @@ async def company_contacts(
                 person["mention_count"] += 1
             if len(person["evidence"]) < CONTACT_EVIDENCE_LIMIT:
                 person["evidence"].append(evidence)
-            for field in ("first_name", "salutation", "role_title", "email", "phone"):
+            for field in ("first_name", "salutation", "role_title", "email", "phone", "mobile"):
                 if person[field] is None and getattr(c, field):
                     person[field] = getattr(c, field)
 
@@ -2790,7 +2792,7 @@ async def company_contacts(
         key=lambda p: (-p["mention_count"], p["last_name"].lower()),
     )
     # A value one ad leaves unnamed may be a named person's in another ad.
-    claimed = {_reach_key("phone", p["phone"]) for p in contacts if p["phone"]} | {
+    claimed = {_reach_key("phone", n) for p in contacts for n in (p["phone"], p.get("mobile")) if n} | {
         _reach_key("email", p["email"]) for p in contacts if p["email"]
     }
     unnamed_list = sorted(

@@ -319,6 +319,9 @@ class ContactMention:
     quote: str
     #: "direct" | "switchboard" | None — see `phone_kind`.
     phone_kind: str | None = None
+    #: ELI-25: a mobile number written in the same sentence after the
+    #: landline ("… oder auch über WhatsApp unter +49 151 …").
+    mobile: str | None = None
 
 
 # --------------------------------------------------------------------------
@@ -512,6 +515,47 @@ def _phone_in(window: str) -> str | None:
             break
     # A postcode + house number reads like a short number; require real length.
     return phone if len(re.sub(r"\D", "", phone)) >= 7 else None
+
+
+#: Mobile networks: DE 015x/016x/017x, AT 0650–0699, CH 075–079, and the
+#: same after +49 / +43 / +41.
+_MOBILE_CC = (("49", r"1[5-7]"), ("43", r"6[5-9]"), ("41", r"7[5-9]"))
+_MOBILE_NATIONAL = re.compile(r"01[5-7]\d{0,2}|06(?:5\d|6\d|7\d|8\d|9\d)|07[5-9]")
+#: The end of a sentence after a contact's number: a full stop, then a capital.
+_NEXT_PERSON = re.compile(rf"\b([{_UPPER}][{_LOWER}]+) +[{_UPPER}][{_LOWER}]+")
+_NUMBER_SENTENCE_END = re.compile(r"[.!?](?=\s+[A-ZÄÖÜ])|\b(?:Frau|Herrn?)\b")
+
+
+def is_mobile(phone: str | None) -> bool:
+    if not phone:
+        return False
+    compact = re.sub(r"[^\d+]", "", phone)
+    for cc, rule in _MOBILE_CC:
+        for prefix in (f"+{cc}", f"00{cc}"):
+            if compact.startswith(prefix):
+                return bool(re.match(rule, compact[len(prefix) :].lstrip("0")))
+    first = re.split(r"[\s/-]", phone.strip(), maxsplit=1)[0]
+    return bool(_MOBILE_NATIONAL.fullmatch(first))
+
+
+def _mobile_after(text: str, end: int, phone: str | None) -> str | None:
+    """A mobile number after the person in the same sentence, other than
+    their `phone` — the recruiter's own handy beside the office line."""
+    region = text[end : end + _WINDOW_AFTER]
+    stop = _NUMBER_SENTENCE_END.search(region)
+    if stop:
+        region = region[: stop.start()]
+    # Another person's name starts their own numbers: "… oder bei Sabine Schulte unter …".
+    for m in _NEXT_PERSON.finditer(region):
+        if m.group(1) in FIRST_NAMES:
+            region = region[: m.start()]
+            break
+    taken = re.sub(r"\D", "", phone) if phone else None
+    for m in _PHONE.finditer(region):
+        number = _phone_in(region[m.start() : m.end() + 1])
+        if number and is_mobile(number) and re.sub(r"\D", "", number) != taken:
+            return None if phone is None else number
+    return None
 
 
 def _national_digits(phone: str) -> int:
@@ -721,6 +765,7 @@ def extract_contacts(text: str | None) -> list[ContactMention]:
             phone=phone,
             quote=_quote(clean, start, end),
             phone_kind=phone_kind(phone),
+            mobile=_mobile_after(clean, end, phone),
         )
         spans.append((start, end))
         key = _fold(last)
@@ -840,7 +885,7 @@ def unnamed_reach(text: str | None) -> list[UnnamedReach]:
         return []
     clean = _clean(text)
     named = extract_contacts(text)
-    claimed_phones = {re.sub(r"\D", "", c.phone) for c in named if c.phone}
+    claimed_phones = {re.sub(r"\D", "", n) for c in named for n in (c.phone, c.mobile) if n}
     claimed_emails = {c.email.lower() for c in named if c.email}
     found: list[tuple[int, UnnamedReach]] = []
     seen: set[str] = set()

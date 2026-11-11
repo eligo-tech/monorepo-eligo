@@ -608,6 +608,8 @@ export interface ContactCandidateDTO {
   phone: string | null
   /** Whether dialling reaches the person or the company's reception (ELI-22). */
   phone_kind?: 'direct' | 'switchboard' | null
+  /** ELI-25: the recruiter's mobile, written beside the landline. */
+  mobile?: string | null
   mention_count: number
   evidence: ContactEvidenceDTO[]
   /** Set when this workspace already holds the person as a manager. */
