@@ -19,6 +19,8 @@ from app.actions import catalog  # noqa: F401 — registers the actions
 from app.actions.core import REGISTRY, ActionContext, ActionNotFound
 from app.core.auth import RECRUITER, Actor
 from app.core.database import SessionLocal
+from app.domain.companies.models import Company
+from app.domain.managers.models import Manager
 from app.domain.candidates.models import Candidate
 from app.domain.common.enums import ReceiptAction
 from app.domain.hub.models import HubCompany, HubJobPosting
@@ -46,6 +48,7 @@ READS = [
     "reporting.funnel",
     "market.postings",
     "proposals.list",
+    "contacts.list",
 ]
 
 #: PR 4: what an agent may propose. Covered in test_actions_proposals.py.
@@ -75,6 +78,17 @@ async def seeded() -> dict:
         bob = Candidate(tenant_id=a, full_name="Bob Weber", city="Hamburg", skills=["java"])
         other = Candidate(tenant_id=b, full_name="Other Workspace Person", skills=["python"])
         job = Job(tenant_id=a, title="Senior Data Engineer", must_have_skills=["python"])
+        # ELI-23: a contact with every kind of data an agent must not see.
+        client = Company(tenant_id=a, name="Bergfreunde GmbH")
+        s.add(client)
+        await s.flush()
+        s.add(Manager(tenant_id=a, company_id=client.id, full_name="Petra Vogel", role_title="CTO",
+                      email=SECRETS["email"], phone=SECRETS["phone"], notes=SECRETS["notes"],
+                      street=SECRETS["street"], source="public_web"))
+        other_client = Company(tenant_id=b, name="Other Workspace Client GmbH")
+        s.add(other_client)
+        await s.flush()
+        s.add(Manager(tenant_id=b, company_id=other_client.id, full_name="Other Workspace Person"))
         other_job = Job(tenant_id=b, title="Other Workspace Job")
         s.add_all([anna, bob, other, job, other_job])
         await s.flush()
@@ -217,3 +231,13 @@ async def test_pipeline_shows_the_process(seeded) -> None:
 async def test_provenance_names_the_field_not_the_value(seeded) -> None:
     out = await _call("candidates.get", seeded["a"], {"candidate_id": str(seeded["anna"])})
     assert {p["field"] for p in out["provenance"]} == {"email", "phone", "salary"}
+
+
+async def test_contacts_list_gives_agents_who_and_where_but_no_contact_data(seeded) -> None:
+    """ELI-23: an agent can ask "who do we know at Bergfreunde, and who is due
+    a call" — never how to reach them (no e-mail, phone, address)."""
+    out = await _call("contacts.list", seeded["a"], {"company": "bergfreunde"})
+    (petra,) = out["contacts"]
+    assert (petra["full_name"], petra["company_name"], petra["role_title"]) == ("Petra Vogel", "Bergfreunde GmbH", "CTO")
+    assert {"email", "phone", "street", "notes"}.isdisjoint(petra)
+    assert (await _call("contacts.list", seeded["a"], {"company": "nobody here"}))["contacts"] == []

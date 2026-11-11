@@ -74,6 +74,29 @@ class CandidateList(_Out):
     truncated: bool
 
 
+class ContactSummary(BaseModel):
+    """A contact as an agent may see them (ELI-23): who, where, and the call
+    state. No e-mail, phone, address, LinkedIn or notes — see module doc."""
+
+    manager_id: uuid.UUID
+    full_name: str
+    role_title: str | None = None
+    company_id: uuid.UUID
+    company_name: str
+    added_at: dt.datetime | None = None
+    source: str
+    last_outcome: str | None = None
+    last_call_at: dt.datetime | None = None
+    next_action_at: dt.datetime | None = None
+    due: bool = False
+
+
+class ContactList(_Out):
+    contacts: list[ContactSummary]
+    total: int
+    truncated: bool
+
+
 class CandidateDetail(_Out):
     candidate: CandidateSummary
     profile_summary: str | None = None

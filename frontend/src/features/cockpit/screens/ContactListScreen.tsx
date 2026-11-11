@@ -1,4 +1,8 @@
-// "Anrufen" — the call list (ELI-22): who to call next, and what happened.
+// "Kontaktliste" — the workspace's contacts and the call list (ELI-22/23).
+//
+// Kontakte — everyone in this workspace, newest first; a person adopted on
+// Markt lands here. Filter or group by company (companies are how this list is
+// cut, not a screen of their own).
 //
 // Two tabs over the backend's `/hub/call-list`:
 //   * Anrufen — people open job ads name, across the market, that this
@@ -15,9 +19,9 @@ import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ExternalLink, Mail, Phone, PhoneCall, Search } from 'lucide-react'
+import { Building2, ExternalLink, Mail, Phone, PhoneCall, Search, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
-import type { CallListRowDTO, FollowUpDTO } from '@/api/types'
+import type { CallListRowDTO, ContactPageDTO, ContactRowDTO, FollowUpDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Button, FIELD, SelectInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader, SegmentedControl } from '../ui/primitives'
@@ -29,7 +33,7 @@ import {
   needsDate,
 } from '../ui/callOutcomes'
 
-type Tab = 'market' | 'follow_ups'
+type Tab = 'contacts' | 'market' | 'follow_ups'
 
 const when = (iso: string | null) =>
   iso
@@ -45,8 +49,9 @@ const when = (iso: string | null) =>
 /** `datetime-local` → ISO in the browser's time zone. */
 const toIso = (local: string) => (local ? new Date(local).toISOString() : null)
 
-function PhoneLink({ phone, kind }: { phone: string | null; kind?: string | null }) {
-  if (!phone) return <span className="text-cockpit-faint">{t('keine Nummer im Inserat')}</span>
+function PhoneLink({ phone, kind, fromAd = false }: { phone: string | null; kind?: string | null; fromAd?: boolean }) {
+  if (!phone)
+    return <span className="text-cockpit-faint">{fromAd ? t('keine Nummer im Inserat') : t('keine Nummer')}</span>
   return (
     <span className="flex items-center gap-2">
       <a
@@ -145,7 +150,7 @@ function MarketRow({ row, onCalled }: { row: CallListRowDTO; onCalled: (art14: b
         </span>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <PhoneLink phone={row.phone} kind={row.phone_kind} />
+        <PhoneLink phone={row.phone} kind={row.phone_kind} fromAd />
         {row.email && (
           <a href={`mailto:${row.email}`} className="flex items-center gap-1 font-mono text-[12px] text-cockpit-dim hover:text-mint-400">
             <Mail className="h-3.5 w-3.5 text-cockpit-faint" />
@@ -235,8 +240,187 @@ function FollowUpRow({ row, onCalled }: { row: FollowUpDTO; onCalled: () => void
   )
 }
 
-export function AnrufenScreen() {
-  const [tab, setTab] = useState<Tab>('market')
+const day = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+
+/** One contact in this workspace — how to reach them, where they came from,
+ *  and how the last call went. */
+function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCompany: boolean; onCalled: () => void }) {
+  const [calling, setCalling] = useState(false)
+  return (
+    <li className={cn('border-b border-cockpit-line/40 py-3 last:border-0', row.due && 'bg-gold-500/[0.04]')}>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-[15px] font-medium text-cockpit-text">{row.full_name}</span>
+        {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
+        {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
+        {row.art14_outstanding && (
+          <Chip tone="gold">
+            <span title={t('Aus einer öffentlichen Anzeige übernommen — die Information nach Art. 14 DSGVO steht noch aus.')}>
+              {t('Art. 14 offen')}
+            </span>
+          </Chip>
+        )}
+        <span className="ml-auto font-mono text-[12px] text-cockpit-faint">
+          {showCompany && <>{row.company_name} · </>}
+          {t('hinzugefügt am {date}', { date: day(row.added_at) })}
+        </span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[12px] text-cockpit-dim">
+        <PhoneLink phone={row.phone} />
+        {row.email && (
+          <a href={`mailto:${row.email}`} className="flex items-center gap-1 hover:text-mint-400">
+            <Mail className="h-3.5 w-3.5 text-cockpit-faint" />
+            {row.email}
+          </a>
+        )}
+        {row.linkedin_url && (
+          <a href={row.linkedin_url} target="_blank" rel="noreferrer noopener" className="hover:text-mint-400">
+            LinkedIn
+          </a>
+        )}
+        {row.source === 'public_web' && row.source_detail?.startsWith('http') && (
+          <a href={row.source_detail} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1 hover:text-mint-400">
+            <ExternalLink className="h-3 w-3" />
+            {t('aus Anzeige')}
+          </a>
+        )}
+        {row.last_call_at && (
+          <span>
+            {t('Zuletzt')}: {when(row.last_call_at)}
+            {row.last_call_by ? ` · ${row.last_call_by}` : ''}
+          </span>
+        )}
+        {row.next_action_at && (
+          <span className={row.due ? 'text-gold-400' : undefined}>
+            {row.due ? t('Fällig seit') : t('Nächster Anruf')}: {when(row.next_action_at)}
+          </span>
+        )}
+        {!calling && (
+          <Button onClick={() => setCalling(true)} className="ml-auto">
+            <PhoneCall className="h-4 w-4" />
+            {t('Anruf erfassen')}
+          </Button>
+        )}
+      </div>
+      {calling && (
+        <CallForm
+          onCancel={() => setCalling(false)}
+          onSave={async (outcome, nextAt, note) => {
+            await api.logManagerInteraction(row.manager_id, {
+              interaction_type: 'business_call',
+              summary: note,
+              outcome,
+              next_action_at: nextAt,
+            })
+            setCalling(false)
+            onCalled()
+          }}
+        />
+      )}
+    </li>
+  )
+}
+
+/** "Kontakte": everyone in this workspace, newest first — a person adopted on
+ *  Markt lands here. Cut by company (filter) or seen per company (grouped):
+ *  companies are how this list is sliced, not a screen of their own. */
+function ContactsTab({ reloadKey, onCalled }: { reloadKey: number; onCalled: () => void }) {
+  const [page, setPage] = useState<ContactPageDTO | null>(null)
+  const [companyId, setCompanyId] = useState('')
+  const [q, setQ] = useState('')
+  const [query, setQuery] = useState('')
+  const [dueOnly, setDueOnly] = useState(false)
+  const [grouped, setGrouped] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const latest = useRef(0)
+  const [bump, setBump] = useState(0)
+
+  useEffect(() => {
+    const mine = ++latest.current
+    api
+      .callListContacts({ companyId: companyId || undefined, q: query || undefined, dueOnly })
+      .then((p) => mine === latest.current && setPage(p))
+      .catch((e) => mine === latest.current && setError(e instanceof Error ? e.message.slice(0, 200) : String(e)))
+  }, [companyId, query, dueOnly, reloadKey, bump])
+
+  const rows = page?.rows ?? []
+  const groups = new Map<string, ContactRowDTO[]>()
+  if (grouped) for (const r of rows) groups.set(r.company_name, [...(groups.get(r.company_name) ?? []), r])
+  const called = () => {
+    setBump((b) => b + 1)
+    onCalled()
+  }
+
+  return (
+    <Panel className="p-4">
+      <form
+        className="mb-3 flex flex-wrap items-center gap-3"
+        onSubmit={(e) => {
+          e.preventDefault()
+          setQuery(q.trim())
+        }}
+      >
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-cockpit-faint" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Name, Rolle oder Unternehmen')} className={cn(FIELD, 'pl-8')} />
+        </div>
+        <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className={cn(FIELD, 'w-auto min-w-[200px]')} aria-label={t('Unternehmen')}>
+          <option value="">{t('Alle Unternehmen')}</option>
+          {(page?.companies ?? []).map((c) => (
+            <option key={c.company_id} value={c.company_id}>
+              {c.name} ({c.contacts})
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-[13px] text-cockpit-dim">
+          <input type="checkbox" checked={dueOnly} onChange={(e) => setDueOnly(e.target.checked)} className="accent-mint-500" />
+          {t('nur fällige Rückrufe')}
+        </label>
+        <label className="flex items-center gap-2 text-[13px] text-cockpit-dim">
+          <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="accent-mint-500" />
+          {t('nach Unternehmen gruppieren')}
+        </label>
+        <Button type="submit">{t('Suchen')}</Button>
+      </form>
+      {error && <p className="text-[13px] text-coral-400">{error}</p>}
+      {page && (
+        <p className="mb-2 font-mono text-[12px] text-cockpit-faint">
+          {page.truncated
+            ? t('{n} von {total} Kontakten', { n: String(rows.length), total: String(page.total) })
+            : t('{n} Kontakte', { n: String(page.total) })}
+        </p>
+      )}
+      {page && rows.length === 0 ? (
+        <p className="text-[13px] text-cockpit-dim">{t('Noch keine Kontakte — im Markt eine Person übernehmen oder im Tab „Aus Anzeigen“ anrufen.')}</p>
+      ) : grouped ? (
+        [...groups.entries()].map(([name, people]) => (
+          <div key={name} className="mb-3">
+            <h3 className="flex items-center gap-2 border-b border-cockpit-line/60 pb-1 text-[14px] font-medium text-cockpit-text">
+              <Building2 className="h-4 w-4 text-cockpit-faint" />
+              {name}
+              <span className="font-mono text-[12px] text-cockpit-faint">{people.length}</span>
+            </h3>
+            <ul>
+              {people.map((r) => (
+                <ContactRow key={r.manager_id} row={r} showCompany={false} onCalled={called} />
+              ))}
+            </ul>
+          </div>
+        ))
+      ) : (
+        <ul>
+          {rows.map((r) => (
+            <ContactRow key={r.manager_id} row={r} showCompany onCalled={called} />
+          ))}
+        </ul>
+      )}
+    </Panel>
+  )
+}
+
+export function ContactListScreen() {
+  const [tab, setTab] = useState<Tab>('contacts')
+  const [contactsReload, setContactsReload] = useState(0)
   const [q, setQ] = useState('')
   const [query, setQuery] = useState('')
   const [phoneOnly, setPhoneOnly] = useState(true)
@@ -291,16 +475,17 @@ export function AnrufenScreen() {
   return (
     <div className="space-y-5">
       <SectionHeader
-        title={t('Anrufen')}
-        hint={t('Wer in offenen Anzeigen als Ansprechpartner genannt ist — und was beim letzten Anruf herauskam.')}
-        icon={<PhoneCall className="h-4 w-4" />}
+        title={t('Kontaktliste')}
+        hint={t('Ihre Kontakte, wer in offenen Anzeigen als Ansprechpartner genannt ist — und was beim letzten Anruf herauskam.')}
+        icon={<Users className="h-4 w-4" />}
       />
 
       <SegmentedControl<Tab>
         value={tab}
         onChange={setTab}
         options={[
-          { key: 'market', label: t('Anrufen') },
+          { key: 'contacts', label: t('Kontakte') },
+          { key: 'market', label: t('Aus Anzeigen') },
           { key: 'follow_ups', label: due ? t('Wiedervorlage ({n} fällig)', { n: String(due) }) : t('Wiedervorlage') },
         ]}
       />
@@ -312,7 +497,9 @@ export function AnrufenScreen() {
       )}
       {error && <p className="text-[13px] text-coral-400">{error}</p>}
 
-      {tab === 'market' ? (
+      {tab === 'contacts' ? (
+        <ContactsTab reloadKey={contactsReload} onCalled={() => void loadFollowUps()} />
+      ) : tab === 'market' ? (
         <Panel className="p-4">
           <form
             className="mb-3 flex flex-wrap items-center gap-3"
@@ -348,6 +535,8 @@ export function AnrufenScreen() {
                     setRows((prev) => prev.filter((r) => r !== row))
                     if (owes) setArt14(true)
                     void loadFollowUps()
+                    // The person is a contact now: the Kontakte tab re-reads.
+                    setContactsReload((k) => k + 1)
                   }}
                 />
               ))}

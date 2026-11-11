@@ -66,6 +66,39 @@ class FollowUpRow(BaseModel):
     due: bool
 
 
+class ContactRow(BaseModel):
+    manager_id: uuid.UUID
+    company_id: uuid.UUID
+    company_name: str
+    full_name: str
+    role_title: str | None
+    phone: str | None
+    email: str | None
+    linkedin_url: str | None
+    added_at: dt.datetime | None
+    source: str
+    source_detail: str | None
+    art14_outstanding: bool
+    last_outcome: str | None
+    last_call_at: dt.datetime | None
+    last_call_by: str | None
+    next_action_at: dt.datetime | None
+    due: bool
+
+
+class CompanyFacet(BaseModel):
+    company_id: uuid.UUID
+    name: str
+    contacts: int
+
+
+class ContactPage(BaseModel):
+    rows: list[ContactRow]
+    total: int
+    truncated: bool
+    companies: list[CompanyFacet]
+
+
 class CallIn(BaseModel):
     hub_company_id: uuid.UUID
     person_key: str = Field(min_length=1, max_length=120)
@@ -93,6 +126,20 @@ async def market(
 ) -> MarketPage:
     """"Anrufen": persons open ads name that this workspace has not called."""
     return MarketPage(**await call_list.market(db, tenant_id=tenant_id, q=q, phone_only=phone_only, limit=limit, offset=offset))
+
+
+@router.get("/contacts", response_model=ContactPage)
+async def contacts(
+    company_id: uuid.UUID | None = None,
+    q: str | None = Query(default=None, max_length=120),
+    due_only: bool = False,
+    limit: int = Query(default=500, ge=1, le=1000),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ContactPage:
+    """"Kontakte": every contact in this workspace, newest first (ELI-23)."""
+    return ContactPage(**await call_list.contacts(
+        db, tenant_id=tenant_id, company_id=company_id, q=q, due_only=due_only, limit=limit))
 
 
 @router.get("/follow-ups", response_model=list[FollowUpRow])

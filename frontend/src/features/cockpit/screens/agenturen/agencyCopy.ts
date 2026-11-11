@@ -106,13 +106,13 @@ export function appendPage<T extends { id: string }>(shown: T[], page: T[], offs
  *  would answer with its default, agency + unclear, under three dark toggles.) */
 export const nothingSelected = (verdicts: readonly string[]) => verdicts.length === 0
 
-/** The screen list, with Agenturen after Projekte when this workspace may see it. */
+/** The screen list, with Agenturen after Markt when this workspace may see it. */
 export function withAgencyScreen<K extends string, O extends { key: K | 'agenturen'; label: string }>(
   screens: O[],
   allowed: boolean,
 ): (O | { key: 'agenturen'; label: string })[] {
   if (!allowed) return screens
-  const at = screens.findIndex((o) => o.key === 'projekte')
+  const at = screens.findIndex((o) => o.key === 'markt')
   const entry = { key: 'agenturen' as const, label: t('Agenturen') }
   return at < 0 ? [...screens, entry] : [...screens.slice(0, at + 1), entry, ...screens.slice(at + 1)]
 }

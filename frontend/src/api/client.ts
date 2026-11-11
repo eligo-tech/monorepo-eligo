@@ -19,6 +19,7 @@ import type {
   AdoptPostingsResultDTO,
   AdoptResultDTO,
   CallListPageDTO,
+  ContactPageDTO,
   CallResultDTO,
   FollowUpDTO,
   HubEmployerHitDTO,
@@ -417,6 +418,15 @@ export const api = {
     qs.set('limit', String(params.limit ?? 50))
     qs.set('offset', String(params.offset ?? 0))
     return request<CallListPageDTO>(`/hub/call-list/market?${qs}`)
+  },
+
+  /** Kontaktliste (ELI-23): every contact in this workspace, newest first. */
+  callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean }) => {
+    const qs = new URLSearchParams()
+    if (params.companyId) qs.set('company_id', params.companyId)
+    if (params.q) qs.set('q', params.q)
+    if (params.dueOnly) qs.set('due_only', 'true')
+    return request<ContactPageDTO>(`/hub/call-list/contacts?${qs}`)
   },
 
   /** Call list: this workspace's calls, due call-backs first. */

@@ -62,11 +62,12 @@ describe('who sees the Agenturen tab', () => {
   it('is inserted after Projekte only when allowed', () => {
     const screens = [
       { key: 'markt' as const, label: 'Markt' },
-      { key: 'projekte' as const, label: 'Projekte' },
+      { key: 'kontakte' as const, label: 'Kontaktliste' },
       { key: 'jobs' as const, label: 'Jobs' },
     ]
-    expect(withAgencyScreen(screens, false).map((s) => s.key)).toEqual(['markt', 'projekte', 'jobs'])
-    expect(withAgencyScreen(screens, true).map((s) => s.key)).toEqual(['markt', 'projekte', 'agenturen', 'jobs'])
+    expect(withAgencyScreen(screens, false).map((s) => s.key)).toEqual(['markt', 'kontakte', 'jobs'])
+    // ELI-23: after Markt — the agency finder is a market view.
+    expect(withAgencyScreen(screens, true).map((s) => s.key)).toEqual(['markt', 'agenturen', 'kontakte', 'jobs'])
   })
 })
 
