@@ -196,6 +196,12 @@ async def market(
     return {"rows": rows, "has_more": has_more, "offset": offset, "next_offset": offset + consumed, "limit": limit}
 
 
+def _contains(text: str) -> str:
+    """A LIKE pattern for "contains", with % and _ taken literally."""
+    escaped = text.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def _latest_calls(tenant_id: uuid.UUID):
     """Subquery: each manager's latest call with an outcome (rank 1), ties
     broken by when the row was written, then by id."""
@@ -256,16 +262,22 @@ async def contacts(
     if company_id is not None:
         base = base.where(Manager.company_id == company_id)
     if company_name and company_name.strip():
-        base = base.where(func.lower(Company.name).like(f"%{company_name.strip().lower()}%"))
+        base = base.where(func.lower(Company.name).like(_contains(company_name), escape="\\"))
     if q and q.strip():
-        like = f"%{q.strip().lower()}%"
-        base = base.where(or_(func.lower(Manager.full_name).like(like), func.lower(Company.name).like(like),
-                              func.lower(func.coalesce(Manager.role_title, "")).like(like)))
+        like = _contains(q)
+        base = base.where(or_(
+            func.lower(Manager.full_name).like(like, escape="\\"),
+            func.lower(Company.name).like(like, escape="\\"),
+            func.lower(func.coalesce(Manager.role_title, "")).like(like, escape="\\"),
+        ))
     if due_only:
         base = base.where(ManagerInteraction.next_action_at.is_not(None), ManagerInteraction.next_action_at <= now)
 
     total = await session.scalar(select(func.count()).select_from(base.subquery()))
-    found = (await session.execute(base.order_by(Manager.created_at.desc(), Manager.full_name).limit(limit))).all()
+    # NULLS LAST: Postgres would put a row without a date first ("newest").
+    found = (
+        await session.execute(base.order_by(Manager.created_at.desc().nulls_last(), Manager.full_name).limit(limit))
+    ).all()
 
     def aware(value: dt.datetime | None) -> dt.datetime | None:
         return value.replace(tzinfo=dt.UTC) if value is not None and value.tzinfo is None else value

@@ -241,3 +241,14 @@ async def test_contacts_list_gives_agents_who_and_where_but_no_contact_data(seed
     assert (petra["full_name"], petra["company_name"], petra["role_title"]) == ("Petra Vogel", "Bergfreunde GmbH", "CTO")
     assert {"email", "phone", "street", "notes"}.isdisjoint(petra)
     assert (await _call("contacts.list", seeded["a"], {"company": "nobody here"}))["contacts"] == []
+
+
+def test_an_agent_sees_exactly_these_contact_fields() -> None:
+    """A field added to ContactSummary later (say `email`) must be a decision,
+    not a silent leak: this list changes only on purpose."""
+    from app.actions.schemas import ContactSummary
+
+    assert set(ContactSummary.model_fields) == {
+        "manager_id", "full_name", "role_title", "company_id", "company_name", "added_at", "source",
+        "last_outcome", "last_call_at", "next_action_at", "due",
+    }

@@ -43,7 +43,7 @@ async def _seed() -> dict:
 
 
 async def test_newest_first_with_company_source_and_last_call() -> None:
-    ids = await _seed()
+    await _seed()
     async with SessionLocal() as s:
         page = await call_list.contacts(s, tenant_id=TENANT, now=NOW)
     rows = page["rows"]
@@ -93,3 +93,10 @@ async def test_the_route() -> None:
         app.dependency_overrides.clear()
     assert resp.status_code == 200, resp.text
     assert [r["full_name"] for r in resp.json()["rows"]] == ["Nazlican Özcan", "Nicole Lauchner"]
+
+
+async def test_a_search_for_wildcard_characters_matches_them_literally() -> None:
+    await _seed()
+    async with SessionLocal() as s:
+        assert (await call_list.contacts(s, tenant_id=TENANT, q="_", now=NOW))["rows"] == []
+        assert (await call_list.contacts(s, tenant_id=TENANT, q="%", now=NOW))["rows"] == []
