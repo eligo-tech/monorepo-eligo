@@ -11,7 +11,7 @@ import { locale } from '@/i18n/format'
 import { useEffect, useRef, useState } from 'react'
 import { Building2, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
-import type { ContactPageDTO, ContactRowDTO } from '@/api/types'
+import type { ContactPageDTO, ContactRowDTO, SwitchboardDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Button, FIELD, SelectInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
@@ -23,6 +23,8 @@ import {
   needsDate,
 } from '../ui/callOutcomes'
 import { networkLinks } from '../ui/contactReach'
+import { leadPhone } from '../ui/switchboard'
+import { ImpressumBadge, SwitchboardLine } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
 
 const when = (iso: string | null) =>
@@ -126,7 +128,19 @@ const day = (iso: string | null) =>
 
 /** One contact in this workspace — how to reach them, where they came from,
  *  and how the last call went. */
-function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCompany: boolean; onCalled: () => void }) {
+function ContactRow({
+  row,
+  showCompany,
+  onCalled,
+  switchboard,
+}: {
+  row: ContactRowDTO
+  showCompany: boolean
+  onCalled: () => void
+  /** ELI-30: the company's Impressum switchboard, dialled when the lead has no number. */
+  switchboard?: SwitchboardDTO | null
+}) {
+  const reach = leadPhone(row.phone, switchboard)
   const [calling, setCalling] = useState(false)
   const [moving, setMoving] = useState(false)
   const [moveFailed, setMoveFailed] = useState(false)
@@ -186,7 +200,10 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
         </span>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[12px] text-cockpit-dim">
-        <PhoneLink phone={row.phone} />
+        <span className="flex items-center gap-2">
+          <PhoneLink phone={reach.phone} />
+          {reach.fromImpressum && <ImpressumBadge />}
+        </span>
         {row.email && (
           <a href={`mailto:${row.email}`} className="flex items-center gap-1 hover:text-mint-400">
             <Mail className="h-3.5 w-3.5 text-cockpit-faint" />
@@ -290,6 +307,7 @@ function ContactsTab({ view }: { view: ContactView }) {
 
   const rows = page?.rows ?? []
   const groups = grouped ? groupByCompany(rows) : []
+  const boards = new Map((page?.companies ?? []).map((c) => [c.company_id, c.switchboard ?? null]))
   const filtering = Boolean(companyId || query || dueOnly)
   const called = () => setBump((b) => b + 1)
 
@@ -342,9 +360,14 @@ function ContactsTab({ view }: { view: ContactView }) {
               {name}
               <span className="font-mono text-[12px] text-cockpit-faint">{people.length}</span>
             </h3>
+            {boards.get(id) && (
+              <div className="pt-1.5">
+                <SwitchboardLine board={boards.get(id)!} />
+              </div>
+            )}
             <ul>
               {people.map((r) => (
-                <ContactRow key={r.manager_id} row={r} showCompany={false} onCalled={called} />
+                <ContactRow key={r.manager_id} row={r} showCompany={false} onCalled={called} switchboard={boards.get(r.company_id)} />
               ))}
             </ul>
           </div>
@@ -352,7 +375,7 @@ function ContactsTab({ view }: { view: ContactView }) {
       ) : (
         <ul>
           {rows.map((r) => (
-            <ContactRow key={r.manager_id} row={r} showCompany onCalled={called} />
+            <ContactRow key={r.manager_id} row={r} showCompany onCalled={called} switchboard={boards.get(r.company_id)} />
           ))}
         </ul>
       )}

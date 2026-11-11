@@ -626,6 +626,8 @@ export interface CompanyContactsDTO {
   mailboxes: { email: string; mention_count: number }[]
   /** ELI-25: phone numbers / e-mails no recognised person claims. */
   unnamed?: UnnamedReachDTO[]
+  /** ELI-30: the switchboard from the employer's own Impressum, if verified. */
+  switchboard?: SwitchboardDTO | null
   postings_scanned: number
   postings_with_text: number
 }
@@ -1123,6 +1125,19 @@ export interface CompanyFacetDTO {
   company_id: string
   name: string
   contacts: number
+  /** ELI-30: the company's switchboard from its own Impressum, if verified. */
+  switchboard?: SwitchboardDTO | null
+}
+
+/** ELI-30: as the employer's own Impressum publishes it. */
+export interface SwitchboardDTO {
+  phone: string | null
+  vat_id: string | null
+  register: string | null
+  register_court: string | null
+  impressum_url: string | null
+  domain: string
+  checked_at: string
 }
 
 export interface ContactPageDTO {

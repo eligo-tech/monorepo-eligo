@@ -21,6 +21,7 @@ import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
 import { Button } from '../ui/forms'
 import { linkedInSearchUrl, xingSearchUrl } from '../ui/contactReach'
+import { SwitchboardLine } from '../ui/SwitchboardLine'
 
 export const dateDe = (iso: string | null) =>
   iso
@@ -353,7 +354,9 @@ export function ContactsPanel({
             ? t('Für dieses Unternehmen liegen noch keine Anzeigentexte vor. Der nächtliche Lauf lädt sie nach; danach erscheinen hier die genannten Ansprechpartner.')
             : unnamed.length > 0
               ? t('Keine Person namentlich erkannt — die Kontaktdaten aus den Anzeigen stehen unten, mit der Stelle, an der sie stehen.')
-              : t('Keine der Anzeigen nennt eine Person — nur Firmenpostfächer. Das ist bei großen Arbeitgebern mit zentralem Recruiting häufig.')}
+              : data.switchboard
+                ? t('Keine der Anzeigen nennt eine Person — unten steht die Zentrale laut Impressum des Unternehmens.')
+                : t('Keine der Anzeigen nennt eine Person — nur Firmenpostfächer. Das ist bei großen Arbeitgebern mit zentralem Recruiting häufig.')}
         </p>
       ) : (
         <ul>
@@ -408,6 +411,18 @@ export function ContactsPanel({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {data.switchboard && (
+        <div className="space-y-1.5 border-t border-cockpit-line/60 pt-2.5">
+          <p
+            className="font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint"
+            title={t('Aus dem Impressum der eigenen Website des Unternehmens — nur gezeigt, wenn das Impressum das Unternehmen als Betreiber nennt.')}
+          >
+            {t('Zentrale laut Impressum')}
+          </p>
+          <SwitchboardLine board={data.switchboard} />
         </div>
       )}
 

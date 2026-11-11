@@ -18,6 +18,7 @@ from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.common.enums import CallOutcome
 from app.domain.hub import call_list
+from app.domain.hub.schemas import Switchboard
 
 router = APIRouter(prefix="/hub/call-list", tags=["hub"])
 
@@ -91,6 +92,8 @@ class CompanyFacet(BaseModel):
     company_id: uuid.UUID
     name: str
     contacts: int
+    #: ELI-30: the company's switchboard from its own Impressum, if verified.
+    switchboard: Switchboard | None = None
 
 
 class ContactPage(BaseModel):
