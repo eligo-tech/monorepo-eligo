@@ -257,7 +257,9 @@ async def contacts(
         .join(Company, Company.id == Manager.company_id)
         .outerjoin(latest, (latest.c.manager_id == Manager.id) & (latest.c.rank == 1))
         .outerjoin(ManagerInteraction, ManagerInteraction.id == latest.c.interaction_id)
-        .where(Manager.tenant_id == tenant_id, Company.tenant_id == tenant_id)
+        # ELI-23: the Bus-Dev-Kontakte — new contacts from Markt, not yet
+        # moved to Managers.
+        .where(Manager.tenant_id == tenant_id, Company.tenant_id == tenant_id, Manager.stage == "bus_dev")
     )
     if company_id is not None:
         base = base.where(Manager.company_id == company_id)
@@ -309,7 +311,7 @@ async def contacts(
         await session.execute(
             select(Company.id, Company.name, func.count(Manager.id).label("n"))
             .join(Manager, Manager.company_id == Company.id)
-            .where(Company.tenant_id == tenant_id, Manager.tenant_id == tenant_id)
+            .where(Company.tenant_id == tenant_id, Manager.tenant_id == tenant_id, Manager.stage == "bus_dev")
             .group_by(Company.id, Company.name)
             .order_by(func.count(Manager.id).desc(), Company.name)
         )

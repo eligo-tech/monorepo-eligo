@@ -38,6 +38,8 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     """A hiring manager or client contact at one of this tenant's companies."""
 
     __tablename__ = "managers"
+    #: ELI-23: the Bus-Dev list and the Manager screen each read one stage.
+    __table_args__ = (Index("ix_managers_tenant_stage", "tenant_id", "stage"),)
 
     company_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("companies.id"), nullable=False, index=True
@@ -95,6 +97,13 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     external_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     external_source: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="active", nullable=False)
+    #: ELI-23: "bus_dev" — a new contact taken from Markt (a public ad), not
+    #: yet vetted; listed under Bus-Dev-Kontakte. "manager" — a vetted contact
+    #: (imported, entered by hand, or moved over after the first contact).
+    #: Same record either way: provenance and the Art. 14 duty travel with it.
+    stage: Mapped[str] = mapped_column(String(20), default="manager", server_default="manager", nullable=False)
+    #: When a bus-dev contact was moved to Managers.
+    promoted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     interactions: Mapped[list["ManagerInteraction"]] = relationship(
         "ManagerInteraction",

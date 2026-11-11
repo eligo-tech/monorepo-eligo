@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,7 @@ async def list_managers(
     company_id: uuid.UUID | None = Query(default=None),
     q: str | None = Query(default=None, description="name, role or company"),
     limit: int = Query(default=100, ge=1, le=1000),
+    stage: Literal["bus_dev", "manager"] | None = Query(default=None, description="ELI-23: bus_dev | manager"),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> list[ManagerRead]:
@@ -39,10 +41,10 @@ async def list_managers(
     page, not about the query.
     """
     rows = await service.list_managers(
-        db, tenant_id=tenant_id, company_id=company_id, q=q, limit=limit
+        db, tenant_id=tenant_id, company_id=company_id, q=q, limit=limit, stage=stage
     )
     response.headers["X-Total-Count"] = str(
-        await service.count_managers(db, tenant_id=tenant_id, company_id=company_id)
+        await service.count_managers(db, tenant_id=tenant_id, company_id=company_id, stage=stage)
     )
     return [ManagerRead.model_validate(r) for r in rows]
 
@@ -118,6 +120,19 @@ async def mark_art14_notified(
     row = await service.mark_art14_notified(
         db, tenant_id=tenant_id, manager_id=manager_id
     )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
+    return ManagerRead.model_validate(row)
+
+
+@router.post("/{manager_id}/promote", response_model=ManagerRead)
+async def promote_manager(
+    manager_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerRead:
+    """Move a bus-dev contact to Managers after the first contact (ELI-23)."""
+    row = await service.promote_manager(db, tenant_id=tenant_id, manager_id=manager_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
     return ManagerRead.model_validate(row)

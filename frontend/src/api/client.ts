@@ -347,7 +347,9 @@ export const api = {
   managersPage: async (
     limit = 1000,
   ): Promise<{ items: ManagerDTO[]; total: number }> => {
-    const res = await fetch(`${BASE}/managers?limit=${limit}`, {
+    // ELI-23: the Manager screen lists vetted managers; bus-dev contacts from
+    // Markt have their own list until they are moved over.
+    const res = await fetch(`${BASE}/managers?limit=${limit}&stage=manager`, {
       headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     })
     if (!res.ok) {
@@ -441,6 +443,9 @@ export const api = {
     next_action_at?: string | null
   }) =>
     request<CallResultDTO>('/hub/call-list/calls', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** ELI-23: move a bus-dev contact to Managers after the first contact. */
+  promoteManager: (id: string) => request<ManagerDTO>(`/managers/${id}/promote`, { method: 'POST' }),
 
   /** Records that the subject has been informed. Its own call, not a PATCH
    *  field: it asserts something happened in the world. */

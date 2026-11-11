@@ -82,13 +82,13 @@ async def seeded() -> dict:
         client = Company(tenant_id=a, name="Bergfreunde GmbH")
         s.add(client)
         await s.flush()
-        s.add(Manager(tenant_id=a, company_id=client.id, full_name="Petra Vogel", role_title="CTO",
+        s.add(Manager(tenant_id=a, company_id=client.id, full_name="Petra Vogel", role_title="CTO", stage="bus_dev",
                       email=SECRETS["email"], phone=SECRETS["phone"], notes=SECRETS["notes"],
                       street=SECRETS["street"], source="public_web"))
         other_client = Company(tenant_id=b, name="Other Workspace Client GmbH")
         s.add(other_client)
         await s.flush()
-        s.add(Manager(tenant_id=b, company_id=other_client.id, full_name="Other Workspace Person"))
+        s.add(Manager(tenant_id=b, company_id=other_client.id, full_name="Other Workspace Person", stage="bus_dev"))
         other_job = Job(tenant_id=b, title="Other Workspace Job")
         s.add_all([anna, bob, other, job, other_job])
         await s.flush()

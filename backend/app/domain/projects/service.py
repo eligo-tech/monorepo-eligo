@@ -482,6 +482,10 @@ async def add_contact(
         source=payload.source.value,
         source_detail=payload.source_detail,
     )
+    # ELI-23: a person from a public ad is a new bus-dev contact.
+    from app.domain.managers.service import stage_for
+
+    manager.stage = stage_for(manager.source)
     session.add(manager)
     await session.commit()
     await session.refresh(manager)
