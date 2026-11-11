@@ -431,8 +431,8 @@ export function ContactsPanel({
       {art14 && (
         <p className="text-[12px] leading-relaxed text-gold-400">
           {t('Kontakt übernommen. Er stammt aus einer öffentlichen Anzeige — eine Information nach Art. 14 DSGVO ist fällig und bei den Kontakten vorgemerkt.')}{' '}
-          <a href="#kontakte" className="underline hover:text-mint-400">
-            {t('In den Kontakten ansehen')}
+          <a href="#leads" className="underline hover:text-mint-400">
+            {t('In den Leads ansehen')}
           </a>
         </p>
       )}

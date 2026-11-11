@@ -1,8 +1,8 @@
-// "Kontakte" (ELI-23): NEW contacts taken from Markt — people a public
-// job ad names — not yet vetted managers. Contact details and the date they
-// were taken over, newest first; filter or group by company. A call can be
-// logged per contact, and once the first contact is done "Zu Managern" moves
-// the person to the Manager screen (same record, nothing copied).
+// "Leads" and "Companies" (ELI-23, ELI-29): NEW contacts taken from Markt —
+// people a public job ad names — not yet vetted managers. Leads lists them
+// newest first; Companies shows the same records grouped per company. One
+// record, two views: a call logged in one shows in the other, and "Zu
+// Managern" moves the person to the Manager screen (nothing copied).
 
 
 import { t } from '@/i18n'
@@ -247,16 +247,31 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
   )
 }
 
-/** "Kontakte": everyone in this workspace, newest first — a person adopted on
- *  Markt lands here. Cut by company (filter) or seen per company (grouped):
- *  companies are how this list is sliced, not a screen of their own. */
-function ContactsTab() {
+export type ContactView = 'leads' | 'companies'
+
+/** Leads per company, companies A→Z, people in list order (newest first).
+ *  Keyed by company id: two companies of one name stay two groups. */
+export function groupByCompany(rows: ContactRowDTO[]) {
+  const groups = new Map<string, { id: string; name: string; people: ContactRowDTO[] }>()
+  for (const r of rows) {
+    const g = groups.get(r.company_id) ?? { id: r.company_id, name: r.company_name, people: [] }
+    g.people.push(r)
+    groups.set(r.company_id, g)
+  }
+  return [...groups.values()].sort(
+    (a, b) => a.name.localeCompare(b.name, locale(), { sensitivity: 'base' }) || a.id.localeCompare(b.id),
+  )
+}
+
+/** Everyone adopted from Markt in this workspace — as a list (Leads) or
+ *  grouped per company (Companies). Same records either way. */
+function ContactsTab({ view }: { view: ContactView }) {
+  const grouped = view === 'companies'
   const [page, setPage] = useState<ContactPageDTO | null>(null)
   const [companyId, setCompanyId] = useState('')
   const [q, setQ] = useState('')
   const [query, setQuery] = useState('')
   const [dueOnly, setDueOnly] = useState(false)
-  const [grouped, setGrouped] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const latest = useRef(0)
   const [bump, setBump] = useState(0)
@@ -274,14 +289,7 @@ function ContactsTab() {
   }, [companyId, query, dueOnly, bump])
 
   const rows = page?.rows ?? []
-  // Keyed by company id: two companies of one name stay two groups.
-  const groups = new Map<string, { name: string; people: ContactRowDTO[] }>()
-  if (grouped)
-    for (const r of rows) {
-      const g = groups.get(r.company_id) ?? { name: r.company_name, people: [] }
-      g.people.push(r)
-      groups.set(r.company_id, g)
-    }
+  const groups = grouped ? groupByCompany(rows) : []
   const filtering = Boolean(companyId || query || dueOnly)
   const called = () => setBump((b) => b + 1)
 
@@ -310,10 +318,6 @@ function ContactsTab() {
           <input type="checkbox" checked={dueOnly} onChange={(e) => setDueOnly(e.target.checked)} className="accent-mint-500" />
           {t('nur fällige Rückrufe')}
         </label>
-        <label className="flex items-center gap-2 text-[13px] text-cockpit-dim">
-          <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="accent-mint-500" />
-          {t('nach Unternehmen gruppieren')}
-        </label>
         <Button type="submit">{t('Suchen')}</Button>
       </form>
       {error && <p className="text-[13px] text-coral-400">{error}</p>}
@@ -331,7 +335,7 @@ function ContactsTab() {
             : t('Noch keine Kontakte — im Markt bei einem Unternehmen „Ansprechpartner“ öffnen und eine Person übernehmen.')}
         </p>
       ) : grouped ? (
-        [...groups.entries()].map(([id, { name, people }]) => (
+        groups.map(({ id, name, people }) => (
           <div key={id} className="mb-3">
             <h3 className="flex items-center gap-2 border-b border-cockpit-line/60 pb-1 text-[14px] font-medium text-cockpit-text">
               <Building2 className="h-4 w-4 text-cockpit-faint" />
@@ -356,15 +360,23 @@ function ContactsTab() {
   )
 }
 
-export function ContactListScreen() {
+export function ContactListScreen({ view }: { view: ContactView }) {
   return (
     <div className="space-y-5">
-      <SectionHeader
-        title={t('Kontakte')}
-        hint={t('Neue Kontakte aus dem Markt — noch keine geprüften Manager. Nach dem Erstkontakt „Zu Managern“.')}
-        icon={<Users className="h-4 w-4" />}
-      />
-      <ContactsTab />
+      {view === 'companies' ? (
+        <SectionHeader
+          title={t('Unternehmen')}
+          hint={t('Dieselben Leads, nach Unternehmen gruppiert. Ein Datensatz: Anrufe und „Zu Managern“ wirken in beiden Ansichten.')}
+          icon={<Building2 className="h-4 w-4" />}
+        />
+      ) : (
+        <SectionHeader
+          title={t('Leads')}
+          hint={t('Neue Kontakte aus dem Markt — noch keine geprüften Manager. Nach dem Erstkontakt „Zu Managern“.')}
+          icon={<Users className="h-4 w-4" />}
+        />
+      )}
+      <ContactsTab view={view} />
     </div>
   )
 }

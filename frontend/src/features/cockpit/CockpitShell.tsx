@@ -32,10 +32,11 @@ import { useTypeface } from './useTypeface'
 export type ScreenKey =
   | 'cockpit'
   | 'markt'
-  | 'kontakte'
+  | 'leads'
+  | 'companies'
   | 'agenturen'
   | 'managers'
-  | 'jobs'
+  | 'mandate'
   | 'kandidaten'
   | 'einstellungen'
 
@@ -45,11 +46,12 @@ export type ScreenKey =
 export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'cockpit', label: t('Cockpit') },
   { key: 'markt', label: t('Markt') },
-  // ELI-22: from "who is hiring" to "who do I call".
-  // ELI-23: new contacts from Markt, not yet vetted managers.
-  { key: 'kontakte', label: t('Kontakte') },
+  // ELI-29: new contacts from Markt, not yet vetted managers — as a list
+  // (Leads) and the same records grouped per company (Companies).
+  { key: 'leads', label: t('Leads') },
+  { key: 'companies', label: t('Unternehmen') },
   { key: 'managers', label: t('Manager') },
-  { key: 'jobs', label: t('Jobs') },
+  { key: 'mandate', label: t('Mandate') },
   { key: 'kandidaten', label: t('Kandidaten') },
   { key: 'einstellungen', label: t('Einstellungen') },
 ]
@@ -64,11 +66,14 @@ export const isScreenKey = (v: string): v is ScreenKey =>
 /** Links and bookmarks to retired screens. One line is cheaper than a dead
  *  hash that silently lands on the cockpit. ELI-23: Workspace, Projekte and
  *  Anrufen were replaced by Kontakte; Tracking left the menu (its backend
- *  and KPI data stay, only the screen is gone). */
+ *  and KPI data stay, only the screen is gone). ELI-29: Kontakte became
+ *  Leads, Jobs became Mandate. */
 const RETIRED: Record<string, ScreenKey> = {
-  workspace: 'kontakte',
-  projekte: 'kontakte',
-  anrufen: 'kontakte',
+  kontakte: 'leads',
+  jobs: 'mandate',
+  workspace: 'leads',
+  projekte: 'leads',
+  anrufen: 'leads',
   tracking: 'cockpit',
 }
 
@@ -155,7 +160,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         query={query}
         onQueryChange={setQuery}
         searchHint={
-          screen === 'jobs' ? t('Mandate filtern: Firma, Titel, Ort …') : undefined
+          screen === 'mandate' ? t('Mandate filtern: Firma, Titel, Ort …') : undefined
         }
         typeface={typeface}
         onTypefaceChange={setTypeface}
@@ -196,7 +201,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
           />
         )}
         {screen === 'managers' && <ManagerScreen />}
-        {screen === 'jobs' && (
+        {screen === 'mandate' && (
           <JobsScreen query={query} onClearQuery={() => setQuery('')} />
         )}
         {screen === 'kandidaten' && (
@@ -206,7 +211,8 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
             onPipelineChanged={state.reload}
           />
         )}
-        {screen === 'kontakte' && <ContactListScreen />}
+        {screen === 'leads' && <ContactListScreen view="leads" />}
+        {screen === 'companies' && <ContactListScreen view="companies" />}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
         </ErrorBoundary>
       </main>
