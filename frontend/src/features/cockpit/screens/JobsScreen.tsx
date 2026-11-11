@@ -295,7 +295,7 @@ export function JobsScreen({
     <div className="space-y-8">
       <header id="section-jobs" className="scroll-mt-24">
         <h1 className="text-[44px] font-semibold leading-tight tracking-tight text-cockpit-text">
-          {t('Jobs')}
+          {t('Mandate')}
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
           {t('Die eigenen Mandate — Rollen, die ein Kunde besetzt haben möchte. Nicht zu verwechseln mit den Marktanzeigen unter „Markt“: nur ein Mandat steuert die harten Filter im Matching.')}

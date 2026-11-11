@@ -246,7 +246,7 @@ function WorldStrip({ onGo }: { onGo?: (screen: ScreenKey) => void }) {
   const WORLDS: { screen: ScreenKey; dir: string; label: string; dot: string }[] = [
     { screen: 'kandidaten', dir: '→', label: t('Kandidatenwelt'), dot: 'bg-coral-400' },
     { screen: 'markt', dir: '←', label: t('Business Development'), dot: 'bg-gold-400' },
-    { screen: 'jobs', dir: '↑', label: t('Mandat & Kandidatensuche'), dot: 'bg-lav-400' },
+    { screen: 'mandate', dir: '↑', label: t('Mandat & Kandidatensuche'), dot: 'bg-lav-400' },
   ]
   return (
     <div className="flex flex-wrap gap-2.5 border-t border-cockpit-line pt-5">

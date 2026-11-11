@@ -31,9 +31,9 @@ src/
 │   ├── CommandBar.tsx          # wordmark, search, status chips, typeface switch, Clerk controls
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
 │   ├── useTypeface.ts          # the Jet · Mono · Heli switch
-│   ├── screens/                # CockpitScreen · MarktScreen · ContactListScreen (Kontakte) · ManagerScreen · JobsScreen
+│   ├── screens/                # CockpitScreen · MarktScreen · ContactListScreen (Leads · Unternehmen) · ManagerScreen · JobsScreen (Mandate)
 │   │   ├── ContactsPanel.tsx   # Markt "Ansprechpartner": people a company's public ads name → adopt
-│   │   ├── MandateEditor.tsx   # "Mandat bearbeiten" — the Suchprofil, from the Jobs list
+│   │   ├── MandateEditor.tsx   # "Mandat bearbeiten" — the Suchprofil, from the Mandate list
 │   │   ├── MandateView.tsx     # the per-job workspace ("Mandat & Kandidatensuche")
 │   │   ├── mandate/            # its nine panels (Stammdaten · Feedback · Aktivität · …)
 │   │   └── kandidaten/         # KandidatenScreen · CandidateDrawer · DossierEditor · CvUploadModal · AttachmentsPanel
@@ -72,17 +72,19 @@ mandate) → Nächste beste Aktionen → 03 Jobscoring → 04 Wettbewerb.
 `kandidatenwelt`: the whole book of business, the pool it draws on, then one
 candidate's world. ←/→ moves between them; the URL hash names the active one.
 
-The client-side funnel runs `markt` → `kontakte` → `managers` (ELI-23).
+The client-side funnel runs `markt` → `leads` / `companies` → `managers` →
+`mandate` (ELI-23, ELI-29).
 Markt searches the shared corpus; on a company card "Ansprechpartner" lists the
 people its public ads name, and adopting one creates the company and a
 `managers` row with `stage = bus_dev`, provenance (the ad URL) and the Art. 14
-flag. **Kontakte** lists only those bus-dev contacts — never imports or
+flag. **Leads** lists only those bus-dev contacts — never imports or
 hand-entered people — with phone, e-mail, LinkedIn/XING (stored profile, else a
-people search) and the adoption date. After the first contact "Zu Managern"
-promotes the same record to the Manager screen. Companies are a filter/grouping
-on Kontakte, not a screen of their own. Workspace, Projekte and Anrufen are
-retired: `resolveScreen` maps their hashes onto `kontakte`, and `tracking`
-onto `cockpit`, so old links still land somewhere.
+people search) and the adoption date. **Unternehmen/Companies** shows the SAME
+records grouped per company (A→Z) — one record, two views, never a copy. After
+the first contact "Zu Managern" promotes the record to the Manager screen.
+**Mandate** (key `mandate`, `JobsScreen`) are the workspace's own jobs.
+Retired hashes still land: `kontakte` → `leads`, `jobs` → `mandate`;
+Workspace, Projekte and Anrufen → `leads`; `tracking` onto `cockpit`, so old links still land somewhere.
 
 ### Parked surfaces
 
