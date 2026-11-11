@@ -19,7 +19,8 @@ class ListArgs(BaseModel):
 @action(
     "contacts.list",
     effect=Effect.READ,
-    description="List the workspace's contacts (people at client and prospect companies), newest first: "
+    description="List the workspace's business-development contacts — new people taken from the market "
+    "(job ads), not yet vetted managers — newest first: "
     "company, role, when added, the last call's outcome and the next agreed call. Filter by company, "
     "search, or only those due a call. No contact data (e-mail, phone, address) is returned.",
     input=ListArgs,

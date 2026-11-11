@@ -147,6 +147,9 @@ class ManagerRead(BaseModel):
     art14_outstanding: bool
     notes: str | None
     status: str
+    #: "bus_dev" | "manager" (ELI-23).
+    stage: str = "manager"
+    promoted_at: dt.datetime | None = None
     created_at: dt.datetime
 
     # --- detail, from the source's own profile ----------------------------

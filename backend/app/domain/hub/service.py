@@ -2301,6 +2301,10 @@ async def adopt_company(
             source=manager.get("source") or ConfidenceSource.SELF_REPORTED.value,
             source_detail=manager.get("source_detail"),
         )
+        # ELI-23: a contact from the ad starts as a bus-dev contact.
+        from app.domain.managers.service import stage_for
+
+        created_manager.stage = stage_for(created_manager.source)
         session.add(created_manager)
 
     await session.commit()

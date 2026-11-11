@@ -25,14 +25,14 @@ async def _seed() -> dict:
         foreign = Company(tenant_id=OTHER, name="Fremd GmbH")
         s.add_all([stw, berg, foreign])
         await s.flush()
-        old = Manager(tenant_id=TENANT, company_id=berg.id, full_name="Petra Vogel", role_title="CTO",
+        old = Manager(tenant_id=TENANT, company_id=berg.id, stage="bus_dev", full_name="Petra Vogel", role_title="CTO",
                       created_at=NOW - dt.timedelta(days=30))
-        ozcan = Manager(tenant_id=TENANT, company_id=stw.id, full_name="Nazlican Özcan", role_title="Personal",
+        ozcan = Manager(tenant_id=TENANT, company_id=stw.id, stage="bus_dev", full_name="Nazlican Özcan", role_title="Personal",
                         phone="+49 731 1234567", source="public_web",
                         source_detail="https://example.invalid/ad", created_at=NOW - dt.timedelta(hours=1))
-        lauchner = Manager(tenant_id=TENANT, company_id=stw.id, full_name="Nicole Lauchner",
+        lauchner = Manager(tenant_id=TENANT, company_id=stw.id, stage="bus_dev", full_name="Nicole Lauchner",
                            created_at=NOW - dt.timedelta(days=2))
-        stranger = Manager(tenant_id=OTHER, company_id=foreign.id, full_name="Fremde Person")
+        stranger = Manager(tenant_id=OTHER, company_id=foreign.id, stage="bus_dev", full_name="Fremde Person")
         s.add_all([old, ozcan, lauchner, stranger])
         await s.flush()
         s.add(ManagerInteraction(tenant_id=TENANT, manager_id=lauchner.id, interaction_type="business_call",

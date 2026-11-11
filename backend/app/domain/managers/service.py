@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.domain.candidates.models import Candidate
 from app.domain.common.enums import (
+    ConfidenceSource,
     CONTACT_INTERACTION_KINDS,
     InteractionType,
     LIVE_JOB_STATUSES,
@@ -54,11 +55,14 @@ async def count_managers(
     *,
     tenant_id: uuid.UUID,
     company_id: uuid.UUID | None = None,
+    stage: str | None = None,
 ) -> int:
     """How many contacts exist, independent of any page or search term."""
     stmt = select(func.count()).select_from(Manager).where(Manager.tenant_id == tenant_id)
     if company_id is not None:
         stmt = stmt.where(Manager.company_id == company_id)
+    if stage is not None:
+        stmt = stmt.where(Manager.stage == stage)
     return int(await session.scalar(stmt) or 0)
 
 
@@ -69,6 +73,7 @@ async def list_managers(
     company_id: uuid.UUID | None = None,
     q: str | None = None,
     limit: int = 100,
+    stage: str | None = None,
 ) -> list[Manager]:
     """This workspace's contacts, optionally narrowed.
 
@@ -80,6 +85,10 @@ async def list_managers(
     stmt = select(Manager).where(Manager.tenant_id == tenant_id)
     if company_id is not None:
         stmt = stmt.where(Manager.company_id == company_id)
+    if stage is not None:
+        # ELI-23: the Manager screen asks for "manager" — vetted contacts only;
+        # the bus-dev contacts from Markt have their own list.
+        stmt = stmt.where(Manager.stage == stage)
     if q and q.strip():
         needle = f"%{q.strip().lower()}%"
         stmt = stmt.join(Company, Company.id == Manager.company_id).where(
@@ -222,6 +231,8 @@ async def create_manager(
         linkedin_url=payload.linkedin_url,
         source=payload.source.value,
         source_detail=payload.source_detail,
+        # ELI-23: a person taken from a public ad is a new bus-dev contact.
+        stage=stage_for(payload.source.value),
         notes=payload.notes,
     )
     session.add(manager)
@@ -256,6 +267,30 @@ async def update_manager(
         setattr(manager, field, value)
     await session.commit()
     await session.refresh(manager)
+    return manager
+
+
+def stage_for(source: str | None) -> str:
+    """Where a new contact starts (ELI-23): from Markt (a public ad) as a
+    bus-dev contact, otherwise as a manager."""
+    return "bus_dev" if source == ConfidenceSource.PUBLIC_WEB.value else "manager"
+
+
+async def promote_manager(
+    session: AsyncSession, *, tenant_id: uuid.UUID, manager_id: uuid.UUID
+) -> Manager | None:
+    """Move a bus-dev contact to Managers once the first contact is done.
+    Idempotent; nothing about the person is copied or lost."""
+    manager = await session.scalar(
+        select(Manager).where(Manager.id == manager_id, Manager.tenant_id == tenant_id)
+    )
+    if manager is None:
+        return None
+    if manager.stage != "manager":
+        manager.stage = "manager"
+        manager.promoted_at = dt.datetime.now(dt.UTC)
+        await session.commit()
+        await session.refresh(manager)
     return manager
 
 

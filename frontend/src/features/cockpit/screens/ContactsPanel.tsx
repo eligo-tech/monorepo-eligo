@@ -364,7 +364,7 @@ export function ContactsPanel({
         <p className="text-[12px] leading-relaxed text-gold-400">
           {t('Kontakt übernommen. Er stammt aus einer öffentlichen Anzeige — eine Information nach Art. 14 DSGVO ist fällig und unter „Manager“ vorgemerkt.')}{' '}
           <a href="#kontakte" className="underline hover:text-mint-400">
-            {t('In der Kontaktliste ansehen')}
+            {t('In den Bus-Dev-Kontakten ansehen')}
           </a>
         </p>
       )}

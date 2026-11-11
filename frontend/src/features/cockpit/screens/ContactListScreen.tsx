@@ -1,14 +1,15 @@
-// "Kontaktliste" — the contacts this workspace adopted (ELI-23): contact
-// details and the date of adoption, newest first. A person adopted on Markt
-// lands here. Filter or group by company — companies are how this list is
-// cut, not a screen of their own. A call can be logged per contact.
+// "Bus-Dev-Kontakte" (ELI-23): NEW contacts taken from Markt — people a public
+// job ad names — not yet vetted managers. Contact details and the date they
+// were taken over, newest first; filter or group by company. A call can be
+// logged per contact, and once the first contact is done "Zu Managern" moves
+// the person to the Manager screen (same record, nothing copied).
 
 
 import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
 import { useEffect, useRef, useState } from 'react'
-import { Building2, ExternalLink, Mail, Phone, PhoneCall, Search, Users } from 'lucide-react'
+import { Building2, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { ContactPageDTO, ContactRowDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
@@ -125,6 +126,20 @@ const day = (iso: string | null) =>
  *  and how the last call went. */
 function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCompany: boolean; onCalled: () => void }) {
   const [calling, setCalling] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const [moveFailed, setMoveFailed] = useState(false)
+  const promote = async () => {
+    setMoving(true)
+    setMoveFailed(false)
+    try {
+      await api.promoteManager(row.manager_id)
+      onCalled() // re-read: the person now lives under Manager
+    } catch {
+      setMoveFailed(true)
+    } finally {
+      setMoving(false)
+    }
+  }
   return (
     <li className={cn('border-b border-cockpit-line/40 py-3 last:border-0', row.due && 'bg-gold-500/[0.04]')}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -174,10 +189,17 @@ function ContactRow({ row, showCompany, onCalled }: { row: ContactRowDTO; showCo
           </span>
         )}
         {!calling && (
-          <Button onClick={() => setCalling(true)} className="ml-auto">
-            <PhoneCall className="h-4 w-4" />
-            {t('Anruf erfassen')}
-          </Button>
+          <span className="ml-auto flex items-center gap-2">
+            {moveFailed && <span className="text-coral-400">{t('Speichern fehlgeschlagen.')}</span>}
+            <Button onClick={promote} disabled={moving}>
+              <UserCheck className="h-4 w-4" />
+              <span title={t('Erstkontakt erledigt — als Manager übernehmen.')}>{t('Zu Managern')}</span>
+            </Button>
+            <Button onClick={() => setCalling(true)}>
+              <PhoneCall className="h-4 w-4" />
+              {t('Anruf erfassen')}
+            </Button>
+          </span>
         )}
       </div>
       {calling && (
@@ -280,7 +302,7 @@ function ContactsTab() {
         <p className="text-[13px] text-cockpit-dim">
           {filtering
             ? t('Keine Kontakte für diese Auswahl.')
-            : t('Noch keine Kontakte — im Markt bei einem Unternehmen „Ansprechpartner“ öffnen und eine Person übernehmen.')}
+            : t('Noch keine Bus-Dev-Kontakte — im Markt bei einem Unternehmen „Ansprechpartner“ öffnen und eine Person übernehmen.')}
         </p>
       ) : grouped ? (
         [...groups.entries()].map(([id, { name, people }]) => (
@@ -312,8 +334,8 @@ export function ContactListScreen() {
   return (
     <div className="space-y-5">
       <SectionHeader
-        title={t('Kontaktliste')}
-        hint={t('Ihre übernommenen Kontakte — mit Kontaktdaten und dem Datum der Übernahme.')}
+        title={t('Bus-Dev-Kontakte')}
+        hint={t('Neue Kontakte aus dem Markt — noch keine geprüften Manager. Nach dem Erstkontakt „Zu Managern“.')}
         icon={<Users className="h-4 w-4" />}
       />
       <ContactsTab />
