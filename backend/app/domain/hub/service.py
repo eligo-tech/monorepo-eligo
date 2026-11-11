@@ -28,6 +28,7 @@ import hashlib
 import html
 import json
 import time
+import re
 import uuid
 
 from sqlalchemy import Select, String, and_, case, cast, func, literal, or_, select, update
@@ -2376,6 +2377,15 @@ CONTACT_POSTINGS_LIMIT = 300
 #: Evidence rows kept per person. The count says how often; a handful of
 #: quotes is enough to judge whether the parser read the ad right.
 CONTACT_EVIDENCE_LIMIT = 5
+#: How many unnamed phone numbers / e-mails the company card lists (ELI-25).
+CONTACT_UNNAMED_LIMIT = 12
+
+
+def _reach_key(kind: str, value: str) -> str:
+    """One number or address however an ad formats it: digits for a phone,
+    lower case for an e-mail."""
+    return f"{kind}:{re.sub(r'[^0-9+]', '', value).lstrip('+') if kind == 'phone' else value.lower()}"
+
 
 
 async def workspace_company(
@@ -2556,7 +2566,12 @@ async def company_contacts(
     Covers every site of the employer, active ads first: a contact named in a
     closed ad is still the person who hired for that team last month.
     """
-    from app.domain.hub.contacts import company_mailboxes, extract_contacts, person_key
+    from app.domain.hub.contacts import (
+        company_mailboxes,
+        extract_contacts,
+        person_key,
+        unnamed_reach,
+    )
     from app.domain.hub.schemas import source_detail_url
     from app.domain.managers.models import Manager
 
@@ -2591,6 +2606,8 @@ async def company_contacts(
 
     people: dict[str, dict] = {}
     mailboxes: dict[str, int] = {}
+    # ELI-25 safety net: phone numbers and e-mails no recognised person claims.
+    unnamed: dict[str, dict] = {}
     with_text = 0
     for posting, description, page_text, page_url in rows:
         # Two public texts per posting: the BA ad ("Anzeige") and, when the
@@ -2615,6 +2632,21 @@ async def company_contacts(
         for origin, text, url in texts:
             for email in company_mailboxes(text):
                 mailboxes[email] = mailboxes.get(email, 0) + 1
+            for reach in unnamed_reach(text):
+                key = _reach_key(reach.kind, reach.value)
+                entry = unnamed.get(key)
+                if entry is None:
+                    unnamed[key] = {
+                        "kind": reach.kind,
+                        "value": reach.value,
+                        "phone_kind": reach.phone_kind,
+                        "mention_count": 1,
+                        "quote": reach.quote,
+                        "url": url,
+                        "posting_title": posting.title,
+                    }
+                else:
+                    entry["mention_count"] += 1
             for mention in extract_contacts(text):
                 mentions.append((origin, url, mention))
         for origin, url, mention in mentions:
@@ -2692,6 +2724,14 @@ async def company_contacts(
         people.values(),
         key=lambda p: (-p["mention_count"], p["last_name"].lower()),
     )
+    # A value one ad leaves unnamed may be a named person's in another ad.
+    claimed = {_reach_key("phone", p["phone"]) for p in contacts if p["phone"]} | {
+        _reach_key("email", p["email"]) for p in contacts if p["email"]
+    }
+    unnamed_list = sorted(
+        (u for k, u in unnamed.items() if k not in claimed),
+        key=lambda u: (-u["mention_count"], u["kind"] != "phone", u["value"]),
+    )
     return {
         "hub_company_id": anchor.id,
         "company_name": anchor.name,
@@ -2701,6 +2741,7 @@ async def company_contacts(
             {"email": email, "mention_count": count}
             for email, count in sorted(mailboxes.items(), key=lambda kv: -kv[1])
         ],
+        "unnamed": unnamed_list[:CONTACT_UNNAMED_LIMIT],
         "postings_scanned": len(rows),
         "postings_with_text": with_text,
     }

@@ -165,3 +165,33 @@ async def test_routes(employer) -> None:
         assert contacts.json()["contacts"][0]["full_name"] == "Sophie Bennicke"
         missing = await client.get(f"/api/v1/hub/companies/{uuid.uuid4()}/contacts")
         assert missing.status_code == 404
+
+
+async def test_contact_data_without_a_recognised_name_is_still_shown(employer) -> None:
+    # ELI-25 safety net: a number in an ad is never lost because the parser
+    # could not name its owner. A named person's number is not repeated.
+    anchor, weizen = employer
+    async with SessionLocal() as s:
+        company = await s.get(HubCompany, weizen)
+        s.add_all(
+            [
+                _posting(
+                    company,
+                    "Kommissionierer (m/w/d)",
+                    "Für Rückfragen erreichen Sie uns unter 07141 643660 oder per WhatsApp unter 01525 7677699.",
+                    days_ago=2,
+                ),
+                _posting(company, "Fahrer (m/w/d)", "WhatsApp: 01525 7677699", days_ago=5),
+            ]
+        )
+        await s.commit()
+        result = await service.company_contacts(s, tenant_id=TENANT, hub_company_id=anchor)
+    unnamed = {u["value"]: u for u in result["unnamed"]}
+    assert set(unnamed) == {"07141 643660", "01525 7677699"}
+    assert unnamed["01525 7677699"]["mention_count"] == 2
+    assert unnamed["01525 7677699"]["kind"] == "phone"
+    assert unnamed["01525 7677699"]["phone_kind"] == "direct"
+    assert unnamed["01525 7677699"]["url"].startswith("https://www.arbeitsagentur.de/")
+    assert "WhatsApp" in unnamed["01525 7677699"]["quote"]
+    # Most-seen first.
+    assert result["unnamed"][0]["value"] == "01525 7677699"

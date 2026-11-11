@@ -487,6 +487,20 @@ class CompanyMailbox(BaseModel):
     mention_count: int
 
 
+class UnnamedReach(BaseModel):
+    """A phone number or e-mail an ad gives without a person the parser could
+    name (ELI-25). Shown so contact data is never lost; the quote and the ad
+    link let the recruiter see whose it is."""
+
+    kind: str  # "phone" | "email"
+    value: str
+    phone_kind: str | None = None
+    mention_count: int
+    quote: str
+    url: str | None
+    posting_title: str
+
+
 class CompanyContacts(BaseModel):
     hub_company_id: uuid.UUID
     company_name: str
@@ -495,6 +509,7 @@ class CompanyContacts(BaseModel):
     company_id: uuid.UUID | None
     contacts: list[ContactCandidate]
     mailboxes: list[CompanyMailbox]
+    unnamed: list[UnnamedReach] = []
     #: Coverage, so "no contacts" can be told apart from "no ad texts yet".
     postings_scanned: int
     postings_with_text: int
