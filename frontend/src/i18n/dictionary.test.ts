@@ -50,7 +50,6 @@ const SAME_IN_BOTH = new Set([
   'max. 20 MB',
   'Minimum {amount}',
   'Name',
-  'Manager',
   'Organisation',
   'Manager via LinkedIn',
   'LinkedIn',

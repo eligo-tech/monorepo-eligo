@@ -48,7 +48,7 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
   // ELI-22: from "who is hiring" to "who do I call".
   // ELI-23: new contacts from Markt, not yet vetted managers.
   { key: 'kontakte', label: t('Kontakte') },
-  { key: 'managers', label: 'Manager' },
+  { key: 'managers', label: t('Manager') },
   { key: 'jobs', label: t('Jobs') },
   { key: 'kandidaten', label: t('Kandidaten') },
   { key: 'einstellungen', label: t('Einstellungen') },
@@ -61,10 +61,10 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
 export const isScreenKey = (v: string): v is ScreenKey =>
   v === 'agenturen' || SCREENS.some((s) => s.key === v)
 
-/** Links and bookmarks from before Projekte replaced the flat Workspace list.
- *  One line is cheaper than a dead hash that silently lands on the cockpit. */
-// ELI-23: Projekte and Anrufen became the Kontaktliste; Tracking left the
-// menu (its data and screen file stay; the KPIs are not deleted).
+/** Links and bookmarks to retired screens. One line is cheaper than a dead
+ *  hash that silently lands on the cockpit. ELI-23: Workspace, Projekte and
+ *  Anrufen were replaced by Kontakte; Tracking left the menu (its backend
+ *  and KPI data stay, only the screen is gone). */
 const RETIRED: Record<string, ScreenKey> = {
   workspace: 'kontakte',
   projekte: 'kontakte',

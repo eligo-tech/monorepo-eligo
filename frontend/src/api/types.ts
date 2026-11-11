@@ -267,31 +267,6 @@ export interface HubCompanyDTO {
   tracked: boolean
 }
 
-/**
- * Outcome of one ingest slice.
- *
- * Returned by `POST /hub/ingest`, which only the scheduled job calls — the UI
- * never triggers ingestion (see ARCHITECTURE.md, RULE 1). Kept here so the
- * contract is typed in one place.
- */
-export interface HubIngestSummaryDTO {
-  source: string
-  /** True when a recent identical fetch was reused and no request was made. */
-  skipped: boolean
-  skipped_reason: string | null
-  /** Age of the reused fetch, so the UI can phrase it in its own language. */
-  reused_age_minutes: number | null
-  observation_id: string
-  fetched: number
-  total_available: number | null
-  companies_created: number
-  companies_matched: number
-  postings_created: number
-  postings_updated: number
-  rejected: { external_id: string | null; company: string | null; reason: string }[]
-  notes: string[]
-}
-
 /** One filter option and how many active postings carry it. */
 export interface FacetValueDTO {
   value: string
@@ -647,61 +622,6 @@ export interface CompanyContactsDTO {
   mailboxes: { email: string; mention_count: number }[]
   postings_scanned: number
   postings_with_text: number
-}
-
-/** A project — the recruiter's own named grouping of target companies. */
-export interface ProjectDTO {
-  id: string
-  name: string
-  note: string | null
-  company_count: number
-  /** Companies in the project that already have a contact in this workspace. */
-  companies_with_contact: number
-  open_roles: number
-  created_at: string
-  updated_at: string
-}
-
-/** One company inside a project, with the corpus facts it points at. */
-/** A person attached to a company in a project — the enrichment step's output. */
-export interface ProjectContactDTO {
-  id: string
-  full_name: string
-  role_title: string | null
-  email: string | null
-  phone: string | null
-  linkedin_url: string | null
-  /** "public_web" (read from an ad or found by us) | "self_reported" | … */
-  source: string
-  art14_outstanding: boolean
-}
-
-export interface ProjectCompanyDTO {
-  hub_company_id: string
-  name: string
-  website_domain: string | null
-  cities: string[]
-  city_count: number
-  sites: number
-  open_roles: number
-  last_posted_at: string | null
-  note: string | null
-  added_at: string
-  company_id: string | null
-  contacts: ProjectContactDTO[]
-  contact_count: number
-}
-
-export interface ProjectDetailDTO extends ProjectDTO {
-  companies: ProjectCompanyDTO[]
-}
-
-/** A watched employer that could be added to a project. */
-export interface ProjectCandidateDTO {
-  hub_company_id: string
-  name: string
-  cities: string[]
-  open_roles: number
 }
 
 /** One checklist step of a candidate's process — the tracker as data. */
@@ -1103,36 +1023,6 @@ export interface JobSpecProposalDTO {
   source_url: string | null
 }
 
-/** One instrument on the Tracking screen (ELI-15). */
-export interface KpiDTO {
-  key: string
-  /** German label; the dictionary is keyed by it. */
-  label: string
-  source: string
-  /** null when nothing measures this KPI — render the reason, not a 0. */
-  ist: number | null
-  /** null when no target is set. Distinct from 0, which is a target of none. */
-  ziel: number | null
-  available: boolean
-  unavailable_because: string
-}
-
-export interface TrackingDTO {
-  period: string
-  period_start: string
-  period_end: string
-  /** null = the whole workspace. */
-  actor_user_id: string | null
-  kpis: KpiDTO[]
-}
-
-/** Somebody with activity in the record, for the per-consultant switch. */
-export interface ConsultantDTO {
-  actor_user_id: string | null
-  name: string
-  events: number
-}
-
 
 // ── Agency finder (Eligo's own leads; allowlisted workspaces only) ──
 
@@ -1191,64 +1081,7 @@ export interface AgencyDetailDTO {
   contacts: CompanyContactsDTO
 }
 
-/** ELI-22 call list — "Anrufen": a person open ads name, not yet called here. */
-export interface CallListRowDTO {
-  hub_company_id: string
-  person_key: string
-  company_name: string
-  full_name: string
-  first_name: string | null
-  last_name: string
-  salutation: 'Frau' | 'Herr' | null
-  role_title: string | null
-  phone: string | null
-  phone_kind: 'direct' | 'switchboard' | null
-  email: string | null
-  open_ads: number
-  posting_title: string
-  quote: string
-  source_url: string | null
-  /** "named_phone" | "named" — the status box. */
-  reach: 'named_phone' | 'named'
-}
-
-export interface CallListPageDTO {
-  rows: CallListRowDTO[]
-  has_more: boolean
-  offset: number
-  /** Where the next page starts — counted in the server's groups, so persons
-   *  it filtered out (erased) neither repeat nor go missing. */
-  next_offset: number
-  limit: number
-}
-
-/** "Wiedervorlage": a contact this workspace has called, with the last outcome. */
-export interface FollowUpDTO {
-  manager_id: string
-  company_id: string
-  company_name: string
-  full_name: string
-  last_name: string
-  role_title: string | null
-  phone: string | null
-  email: string | null
-  outcome: string
-  summary: string | null
-  last_call_at: string | null
-  last_call_by: string | null
-  next_action_at: string | null
-  due: boolean
-}
-
-export interface CallResultDTO {
-  manager_id: string
-  company_id: string
-  interaction_id: string | null
-  created_manager: boolean
-  art14_outstanding: boolean
-}
-
-/** ELI-23 Kontaktliste — "Kontakte": a contact in this workspace. */
+/** ELI-23 "Kontakte": a contact taken from Markt, not yet a vetted manager. */
 export interface ContactRowDTO {
   manager_id: string
   company_id: string
