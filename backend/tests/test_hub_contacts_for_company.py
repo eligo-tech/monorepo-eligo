@@ -195,3 +195,38 @@ async def test_contact_data_without_a_recognised_name_is_still_shown(employer) -
     assert "WhatsApp" in unnamed["01525 7677699"]["quote"]
     # Most-seen first.
     assert result["unnamed"][0]["value"] == "01525 7677699"
+
+
+async def test_a_person_the_model_found_is_shown_and_marked(employer) -> None:
+    # ELI-25 layer 2: the nightly model pass stored a person the rules missed;
+    # the card shows them, says so, and no longer lists their number as unnamed.
+    from app.domain.hub.models import HubAdContact
+
+    anchor, weizen = employer
+    async with SessionLocal() as s:
+        company = await s.get(HubCompany, weizen)
+        posting = _posting(
+            company,
+            "PTA (m/w/d)",
+            "Ihre Bewerbung richten Sie bitte direkt an Hussien Bader: h.bader@apotheke-am-hit.de oder 0711 123456.",
+            days_ago=1,
+        )
+        s.add(posting)
+        await s.flush()
+        s.add(
+            HubAdContact(
+                hub_job_posting_id=posting.id, hub_company_id=company.id, person_key="hussien|bader",
+                full_name="Hussien Bader", first_name="Hussien", last_name="Bader", salutation=None,
+                role_title=None, phone="0711 123456", phone_kind="direct", email="h.bader@apotheke-am-hit.de",
+                quote="Ihre Bewerbung richten Sie bitte direkt an Hussien Bader: h.bader@apotheke-am-hit.de",
+                text_source="ad", source_fetched_at=NOW, found_by="model",
+            )
+        )
+        await s.commit()
+        result = await service.company_contacts(s, tenant_id=TENANT, hub_company_id=anchor)
+    by_last = {c["last_name"]: c for c in result["contacts"]}
+    assert by_last["Bader"]["found_by"] == "model"
+    assert by_last["Bader"]["email"] == "h.bader@apotheke-am-hit.de"
+    assert by_last["Bader"]["evidence"][0]["url"].startswith("https://www.arbeitsagentur.de/")
+    assert by_last["Bennicke"]["found_by"] == "rules"
+    assert "0711 123456" not in {u["value"] for u in result["unnamed"]}

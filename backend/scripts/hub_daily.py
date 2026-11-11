@@ -502,6 +502,40 @@ async def _read_ad_contacts(client: httpx.AsyncClient, *, budget: int) -> dict[s
     return totals
 
 
+_MODEL_BATCH = 50
+
+
+async def _read_ad_contacts_model(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
+    """ELI-25: ask the model about up to `budget` ads the rules named nobody in
+    (`hub/contact_model.py`). Runs after the rules pass, which queues them.
+    Stops when the queue is empty, no model is configured (remaining -1), or a
+    whole batch failed — the model is down; the ads wait for the next night."""
+    totals = {"read": 0, "contacts": 0, "failed": 0, "remaining": 0}
+    while totals["read"] < budget:
+        size = min(_MODEL_BATCH, budget - totals["read"])
+        response = await _post_retrying(client, f"/hub/ad-contacts/model-backfill?limit={size}")
+        result = response.json()
+        totals["read"] += result.get("read", 0)
+        totals["contacts"] += result.get("contacts", 0)
+        totals["failed"] += result.get("failed", 0)
+        totals["remaining"] = result.get("remaining", 0)
+        if totals["remaining"] < 0 or result.get("read", 0) == 0:
+            break
+        if result.get("read", 0) + result.get("failed", 0) < size:
+            break
+    return totals
+
+
+def _print_model(m: dict[str, int]) -> None:
+    if m["remaining"] < 0:
+        print("  Ansprechpartner (Modell): kein Modell konfiguriert — übersprungen")
+        return
+    print(
+        f"  Ansprechpartner (Modell): {m['read']} Anzeigen gelesen, {m['contacts']} Personen bestätigt, "
+        f"{m['failed']} fehlgeschlagen, {m['remaining']} offen"
+    )
+
+
 async def _key_vacancies(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
     """Give up to `budget` older open ads their `vacancy_key`, in batches.
     Spread over nights on purpose: one UPDATE of 650k rows would be a disk-IO
@@ -805,6 +839,13 @@ async def main() -> int:
         "new and re-fetched texts",
     )
     parser.add_argument(
+        "--ad-contacts-model",
+        type=int,
+        default=20_000,
+        help="ads the contact rules named nobody in to ask the model about this run "
+        "(0 = off, ELI-25); runs after --ad-contacts",
+    )
+    parser.add_argument(
         "--ad-contacts-only",
         action="store_true",
         help="run ONLY the ad-contacts pass, e.g. the first fill: "
@@ -825,6 +866,7 @@ async def main() -> int:
         args.agencies, args.profiles, args.descriptions = True, False, False
         args.partner_pages, args.stale_days, args.vacancy_keys, args.job_families = 0, 0, 0, 0
         args.ad_contacts = 0
+        args.ad_contacts_model = 0
 
     base = os.environ.get("ELIGO_API_BASE", "").rstrip("/")
     token = os.environ.get("ELIGO_INGEST_TOKEN", "")
@@ -837,7 +879,9 @@ async def main() -> int:
             base_url=base, timeout=120.0, headers={"Authorization": f"Bearer {token}"}
         ) as client:
             c = await _read_ad_contacts(client, budget=args.ad_contacts)
-        print(f"Ansprechpartner: {c['read']} Anzeigen gelesen, {c['contacts']} Personen, {c['remaining']} offen")
+            print(f"Ansprechpartner: {c['read']} Anzeigen gelesen, {c['contacts']} Personen, {c['remaining']} offen")
+            if args.ad_contacts_model > 0:
+                _print_model(await _read_ad_contacts_model(client, budget=args.ad_contacts_model))
         return 0
 
     configured = os.environ.get("ELIGO_HUB_REGIONS", "").strip()
@@ -1150,6 +1194,12 @@ async def main() -> int:
             except Exception as exc:
                 print(f"  ad-contacts pass FAILED: {exc}", file=sys.stderr)
                 failures.append("ad-contacts")
+        if args.ad_contacts_model > 0:
+            try:
+                _print_model(await _read_ad_contacts_model(client, budget=args.ad_contacts_model))
+            except Exception as exc:
+                print(f"  ad-contacts model pass FAILED: {exc}", file=sys.stderr)
+                failures.append("ad-contacts-model")
 
         # Off by default — see the module docstring on why a delta must not
         # drive deactivation.

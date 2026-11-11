@@ -612,6 +612,8 @@ export interface ContactCandidateDTO {
   evidence: ContactEvidenceDTO[]
   /** Set when this workspace already holds the person as a manager. */
   manager_id: string | null
+  /** ELI-25: "model" — proposed by the AI, checked word for word in the ad. */
+  found_by?: 'rules' | 'model'
 }
 
 export interface CompanyContactsDTO {

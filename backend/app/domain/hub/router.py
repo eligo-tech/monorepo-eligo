@@ -683,6 +683,20 @@ async def ad_contacts_backfill(
     return await ad_contacts.backfill(db, limit=limit)
 
 
+@router.post("/ad-contacts/model-backfill")
+async def ad_contacts_model_backfill(
+    limit: int = Query(default=50, ge=1, le=200),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Ask the model about up to `limit` ads the contact rules named nobody
+    in (ELI-25); store the people the deterministic checks confirm.
+    Machine-only, like every corpus write."""
+    from app.domain.hub import contact_model
+
+    return await contact_model.backfill(db, limit=limit, reader=contact_model.reader_from_settings())
+
+
 @router.post("/vacancy-keys/backfill")
 async def vacancy_keys_backfill(
     limit: int = Query(default=5_000, ge=1, le=10_000),
