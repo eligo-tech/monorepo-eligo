@@ -36,6 +36,8 @@ import type { ManagerDTO, ManagerInteractionDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
 import { EraseSection } from '../erasure/EraseSection'
+import { useAsync } from '@/hooks/useAsync'
+import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
 import { InteractionComposer } from '../ui/InteractionComposer'
 import {
   MANAGER_INTERACTION_KINDS,
@@ -579,6 +581,8 @@ export function ManagerProfile({
             </RailSection>
           )}
 
+          <CompanyJobs companyId={manager.company_id} />
+
           <RailSection title={t('Datensatz')}>
             <Line label={t('Angelegt')}>{dateDe(manager.created_at)}</Line>
             <Line label="Art. 14">
@@ -604,5 +608,22 @@ export function ManagerProfile({
         </aside>
       </div>
     </div>
+  )
+}
+
+
+/** ELI-33: what the manager's company is hiring for now, from Markt — so a
+ *  call starts from the open roles. The full list is on the company page. */
+function CompanyJobs({ companyId }: { companyId: string }) {
+  const page = useAsync(() => api.companyPage(companyId), [companyId])
+  const market = page.data?.market
+  if (!market) return null
+  return (
+    <RailSection title={market.linked ? t('Offene Stellen ({n})', { n: String(market.total) }) : t('Offene Stellen')}>
+      <div className="space-y-2">
+        <CareersLink market={market} />
+        <OpenJobs market={market} limit={5} companyHref={`#companies/${companyId}`} />
+      </div>
+    </RailSection>
   )
 }

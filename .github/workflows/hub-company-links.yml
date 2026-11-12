@@ -1,0 +1,36 @@
+# Workspaces' companies ↔ Markt — a manual run of the exact-match linking
+# (ELI-33). The nightly ingest already runs it (`hub_daily.py`, step "Unternehmen
+# ↔ Markt"); this is for the first link after a deploy or an import.
+#
+# Machine-triggered only (ARCHITECTURE.md RULE 1). It fetches nothing: it reads
+# the corpus and each workspace's companies, and links a company only where the
+# name AND the town match exactly — each link through the verification gate.
+name: Hub · company links (manual)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: hub-ingest
+  cancel-in-progress: false
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Link companies to Markt
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+        run: python -m scripts.hub_daily --company-links-only

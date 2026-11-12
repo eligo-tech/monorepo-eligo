@@ -8,7 +8,7 @@ import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
 import { useMemo, useState } from 'react'
-import { ArrowLeft, Briefcase, Building2, Mail, MapPin, Phone, Plus, Search, UserRound, Users } from 'lucide-react'
+import { ArrowLeft, Briefcase, Building2, Mail, MapPin, Newspaper, Phone, Plus, Search, UserRound, Users } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CompanyOverviewRowDTO, CompanyPersonDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
@@ -20,6 +20,7 @@ import { type CompanyKind, filterCompanies, kindCounts } from '../ui/companyList
 import { JOB_STATUS_TONE, jobStatus, jobStatusLabel } from '../ui/jobStatus'
 import { telHref } from '../ui/switchboard'
 import { SwitchboardLine } from '../ui/SwitchboardLine'
+import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
 
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric' }) : null
@@ -166,6 +167,7 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
                 </span>
               )}
               {data.company.industry && <span>{data.company.industry}</span>}
+              <CareersLink market={data.market} />
             </p>
             {data.switchboard && (
               <div className="mt-2">
@@ -173,6 +175,17 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
               </div>
             )}
           </header>
+
+          <Panel className="p-4">
+            <SectionHeader
+              title={t('Offene Stellen im Markt')}
+              hint={data.market.linked ? String(data.market.total) : undefined}
+              icon={<Newspaper className="h-4 w-4" />}
+            />
+            <div className="mt-2">
+              <OpenJobs market={data.market} />
+            </div>
+          </Panel>
 
           <Panel className="p-4">
             <div className="mb-2 flex items-center justify-between gap-3">

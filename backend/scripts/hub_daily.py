@@ -469,6 +469,14 @@ def _print_employer_sites(e: dict[str, int]) -> None:
     )
 
 
+async def _link_companies(client: httpx.AsyncClient) -> dict[str, int]:
+    """ELI-33: link every workspace's companies to Markt where name AND town
+    match exactly (one receipt per link)."""
+    response = await client.post("/hub/company-links/auto")
+    response.raise_for_status()
+    return response.json()
+
+
 #: Ads keyed per request: one bulk UPDATE, well inside the proxy's timeout.
 _VACANCY_BATCH = 5_000
 
@@ -886,6 +894,17 @@ async def main() -> int:
         "`--ad-contacts-only --ad-contacts 700000`",
     )
     parser.add_argument(
+        "--no-company-links",
+        dest="company_links",
+        action="store_false",
+        help="skip linking workspaces' companies to Markt (ELI-33)",
+    )
+    parser.add_argument(
+        "--company-links-only",
+        action="store_true",
+        help="run ONLY the company ↔ Markt linking (ELI-33)",
+    )
+    parser.add_argument(
         "--employer-sites-only",
         type=int,
         default=0,
@@ -909,12 +928,21 @@ async def main() -> int:
         args.partner_pages, args.stale_days, args.vacancy_keys, args.job_families = 0, 0, 0, 0
         args.ad_contacts = 0
         args.ad_contacts_model = 0
+        args.company_links = False
 
     base = os.environ.get("ELIGO_API_BASE", "").rstrip("/")
     token = os.environ.get("ELIGO_INGEST_TOKEN", "")
     if not base or not token:
         print("ELIGO_API_BASE and ELIGO_INGEST_TOKEN must be set", file=sys.stderr)
         return 2
+
+    if args.company_links_only:
+        async with httpx.AsyncClient(
+            base_url=base, timeout=300.0, headers={"Authorization": f"Bearer {token}"}
+        ) as client:
+            n = await _link_companies(client)
+            print(f"Unternehmen ↔ Markt: +{n['linked']} verknüpft in {n['tenants']} Workspaces")
+        return 0
 
     if args.employer_sites_only > 0:
         async with httpx.AsyncClient(
@@ -1234,6 +1262,16 @@ async def main() -> int:
             except Exception as exc:
                 print(f"  job-family backfill FAILED: {exc}", file=sys.stderr)
                 failures.append("job-families")
+
+        # --- ELI-33: workspaces' companies ↔ Markt, exact name+town only ------
+        # Before the contacts, so a company new in Markt tonight is linked.
+        if args.company_links:
+            try:
+                n = await _link_companies(client)
+                print(f"  Unternehmen ↔ Markt: +{n['linked']} verknüpft in {n['tenants']} Workspaces")
+            except Exception as exc:
+                print(f"  company links FAILED: {exc}", file=sys.stderr)
+                failures.append("company-links")
 
         # --- persons named in open ads (hub/ad_contacts.py) — after the text passes ---
         if args.ad_contacts > 0:
