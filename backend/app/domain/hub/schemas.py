@@ -167,6 +167,9 @@ class HubCorpusStats(BaseModel):
     unverified_identity: int
     sources: int
     last_ingest_at: dt.datetime | None
+    # When the weekly job computed these numbers; None while Markt counts live
+    # (a fresh deploy, before the first refresh).
+    snapshot_at: dt.datetime | None = None
 
 
 class FacetValue(BaseModel):

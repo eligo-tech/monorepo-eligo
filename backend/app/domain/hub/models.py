@@ -736,3 +736,19 @@ class HubAtsBoard(Base, IDMixin, TimestampMixin):
     next_fetch_at: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+
+
+class HubCorpusSnapshot(Base):
+    """Markt's corpus totals and filter counts, as the weekly job computed them.
+
+    Computing them live took 37 s (filters) and 12.5 s (totals) cold on prod,
+    and every restart empties the in-process cache (2026-11-12). The weekly
+    job writes one row per `name` (stats · facets); Markt reads it. Shared
+    corpus, derived: aggregate counts only, no tenant_id, no personal data.
+    """
+
+    __tablename__ = "hub_corpus_snapshots"
+
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSONDict, nullable=False)
+    computed_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
