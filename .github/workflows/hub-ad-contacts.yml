@@ -1,7 +1,7 @@
 # Ad contacts — a manual fill of `hub_ad_contacts` (ELI-22).
 #
-# The nightly ingest already runs the pass (`hub_daily.py --ad-contacts`,
-# 100k ads a night, after the ad-text and partner-page passes). This workflow
+# The weekly ingest already runs the pass (`hub_daily.py --ad-contacts`,
+# 200k ads a week, after the ad-text jobs). This workflow
 # is for the FIRST fill of the ~635k open ads, or a re-read after a parser
 # rules bump, without re-running the whole ingest.
 #
@@ -23,7 +23,7 @@ on:
         default: "100000"
 
 concurrency:
-  # Same group as the nightly ingest: one writer on the corpus at a time.
+  # Same group as the weekly ingest: one writer on the corpus at a time.
   group: hub-ingest
   cancel-in-progress: false
 
