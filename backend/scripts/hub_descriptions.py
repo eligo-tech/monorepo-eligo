@@ -78,8 +78,8 @@ async def main() -> int:
     ) as client:
         # Informational only, and deliberately non-fatal: `progress` is a
         # human-authenticated read, this script carries a machine credential,
-        # and a missing preamble is no reason to refuse to do the work. The
-        # same numbers come back on every batch anyway.
+        # and a missing preamble is no reason to refuse to do the work. Batches
+        # do not repeat the corpus counts: they read every ad text (Disk IO).
         try:
             start = (await client.get("/hub/descriptions/progress")).json()
             print(
@@ -140,8 +140,7 @@ async def main() -> int:
             empty += result["empty"]
             print(
                 f"  +{result['stored']:>3} stored ({result['empty']} without text) · "
-                f"{result['with_description']}/{result['active_postings']} searchable · "
-                f"{result.get('remaining', '?')} not yet tried"
+                f"{stored} stored this run"
             )
 
     print(

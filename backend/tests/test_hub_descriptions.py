@@ -195,7 +195,7 @@ async def test_the_endpoint_keeps_the_batch_count_distinct(postings) -> None:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         body = (
-            await client.post(f"{settings.api_v1_prefix}/hub/descriptions/fetch?limit=5")
+            await client.post(f"{settings.api_v1_prefix}/hub/descriptions/fetch?limit=5&progress=true")
         ).json()
 
     assert "attempted" in body and "corpus_attempted" in body
@@ -367,3 +367,22 @@ async def test_an_empty_scope_is_refused_not_read_as_the_backlog(postings) -> No
                 headers={"Authorization": f"Bearer {settings.ingest_token}"},
             )
             assert r.status_code == 422, body
+
+
+async def test_a_batch_skips_the_corpus_counts_unless_asked() -> None:
+    """Disk IO (2026-11-12): the counts join every ad to its text — ~480 MB
+    read on prod — and ran after EVERY 25-ad batch: 20k calls, ~9 TB. A batch
+    now returns its own numbers only; `progress=true` adds the corpus counts."""
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.config import settings
+    from app.main import app
+
+    url = f"{settings.api_v1_prefix}/hub/descriptions/fetch?limit=5"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        plain = (await client.post(url)).json()
+        asked = (await client.post(url + "&progress=true")).json()
+
+    corpus = {"active_postings", "with_description", "corpus_attempted", "remaining"}
+    assert "attempted" in plain and not corpus & set(plain)
+    assert corpus <= set(asked)

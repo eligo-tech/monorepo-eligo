@@ -490,6 +490,10 @@ async def mark_profiles_crawled(
 async def fetch_descriptions(
     payload: DescriptionFetchRequest | None = None,
     limit: int = Query(default=200, ge=1, le=2000),
+    # Off by default: the counts join every ad to its text (~480 MB read on
+    # prod), and per 25-ad batch they were most of the Disk IO (2026-11-12).
+    # Callers ask once, on their last batch.
+    progress: bool = Query(default=False),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
@@ -506,6 +510,8 @@ async def fetch_descriptions(
         external_ids=payload.external_ids if payload else None,
         segment=payload.segment if payload else None,
     )
+    if not progress:
+        return result
     return {**result, **await service.descriptions_progress(db)}
 
 
@@ -514,6 +520,8 @@ async def fetch_partner_pages(
     # Small by default: each page is a paced request, and the whole batch runs
     # inside one HTTP call a proxy may time out. The nightly script loops.
     limit: int = Query(default=25, ge=1, le=200),
+    # Corpus-wide counts: only when asked, as for /descriptions/fetch.
+    progress: bool = Query(default=False),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
@@ -528,6 +536,8 @@ async def fetch_partner_pages(
         result = await service.fetch_missing_partner_pages(
             db, fetcher=fetcher, limit=limit
         )
+    if not progress:
+        return result
     return {**result, **await service.partner_pages_progress(db)}
 
 

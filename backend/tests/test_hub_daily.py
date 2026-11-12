@@ -19,6 +19,7 @@ from scripts.hub_daily import (
 async def test_description_top_up_uses_proxy_safe_batches() -> None:
     requested: list[int] = []
     requested_ids: list[str] = []
+    asked: list[bool] = []
     corpus_attempted = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -27,19 +28,17 @@ async def test_description_top_up_uses_proxy_safe_batches() -> None:
         body = json.loads(request.content)
         requested.append(batch)
         requested_ids.extend(body["external_ids"])
+        asked.append(request.url.params.get("progress") == "true")
         corpus_attempted += batch
-        return httpx.Response(
-            200,
-            json={
-                "attempted": batch,
-                "stored": batch - 1,
-                "empty": 1,
+        result = {"attempted": batch, "stored": batch - 1, "empty": 1}
+        if asked[-1]:
+            result |= {
                 "active_postings": 10_000,
                 "with_description": corpus_attempted,
                 "corpus_attempted": corpus_attempted,
                 "remaining": 10_000 - corpus_attempted,
-            },
-        )
+            }
+        return httpx.Response(200, json=result)
 
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(handler), base_url="https://example.test"
@@ -53,6 +52,8 @@ async def test_description_top_up_uses_proxy_safe_batches() -> None:
     assert result["attempted"] == 63
     assert result["stored"] == 60
     assert result["empty"] == 3
+    # The corpus counts cost a full read of the ad texts: last batch only.
+    assert asked == [False, False, True]
     assert result["with_description"] == 63
 
 
@@ -134,7 +135,7 @@ async def test_a_page_cut_off_by_the_proxy_is_retried_not_lost() -> None:
     assert totals["available"] == 3
 
 
-def _partner_handler(backlog: int, requested: list[int]):
+def _partner_handler(backlog: int, requested: list[int], asked: list[bool] | None = None):
     remaining = backlog
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -142,34 +143,34 @@ def _partner_handler(backlog: int, requested: list[int]):
         assert request.url.path == "/hub/partner-pages/fetch"
         batch = int(request.url.params["limit"])
         requested.append(batch)
+        if asked is not None:
+            asked.append(request.url.params.get("progress") == "true")
         done = min(batch, remaining)
         remaining -= done
-        return httpx.Response(
-            200,
-            json={
-                "attempted": done,
-                "stored": done // 2,
-                "failed": done - done // 2,
-                "skipped": 0,
+        result = {"attempted": done, "stored": done // 2, "failed": done - done // 2, "skipped": 0}
+        if request.url.params.get("progress") == "true":
+            result |= {
                 "with_source_url": backlog,
                 "source_page_attempted": backlog - remaining,
                 "source_page_read": 0,
-            },
-        )
+            }
+        return httpx.Response(200, json=result)
 
     return handler
 
 
 async def test_partner_pages_respect_the_nightly_budget() -> None:
     requested: list[int] = []
+    asked: list[bool] = []
     async with httpx.AsyncClient(
-        transport=httpx.MockTransport(_partner_handler(10_000, requested)),
+        transport=httpx.MockTransport(_partner_handler(10_000, requested, asked)),
         base_url="https://example.test",
     ) as client:
         result = await _fetch_partner_pages(client, budget=45)
 
     assert requested == [_PARTNER_BATCH_SIZE, _PARTNER_BATCH_SIZE, 5]
     assert result["attempted"] == 45
+    assert asked == [False, False, True]  # corpus counts on the last batch only
     assert result["source_page_attempted"] == 45
 
 
