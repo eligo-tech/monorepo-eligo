@@ -51,6 +51,7 @@ from app.domain.hub.models import (
     EMPLOYER,
     HubCompany,
     HubCompanyLink,
+    HubCorpusSnapshot,
     HubJobPosting,
     HubObservation,
     HubPostingPayload,
@@ -1077,13 +1078,48 @@ async def _cached(name: str, compute):
 
 
 async def corpus_stats(session: AsyncSession) -> dict:
-    """Corpus-wide aggregates (see `_corpus_stats`), cached."""
-    return await _cached("stats", lambda: _corpus_stats(session))
+    """Corpus-wide aggregates (see `_corpus_stats`): the weekly job's stored
+    numbers, live only while none are stored. Cached."""
+    return await _cached("stats", lambda: _stored_or_live(session, "stats", _corpus_stats))
 
 
 async def corpus_facets(session: AsyncSession) -> dict:
-    """Filter options with counts (see `_corpus_facets`), cached."""
-    return await _cached("facets", lambda: _corpus_facets(session))
+    """Filter options with counts (see `_corpus_facets`): stored by the weekly
+    job, live only while none are stored. Cached."""
+    return await _cached("facets", lambda: _stored_or_live(session, "facets", _corpus_facets))
+
+
+async def _stored_or_live(session: AsyncSession, name: str, compute) -> dict:
+    """The stored snapshot, or — on a fresh deploy with none yet — the live
+    numbers. Never writes: presentation reads, the weekly job refreshes."""
+    row = await session.get(HubCorpusSnapshot, name)
+    if row is not None:
+        return dict(row.payload)
+    value = await compute(session)
+    if name == "stats":
+        value["snapshot_at"] = None
+    return value
+
+
+async def refresh_corpus_snapshots(session: AsyncSession) -> dict:
+    """Recompute Markt's totals and filter counts and store them, replacing the
+    previous ones. Machine-only, called at the end of the weekly jobs."""
+    computed_at = dt.datetime.now(dt.UTC)
+    stats = await _corpus_stats(session)
+    facets = await _corpus_facets(session)
+    # JSON: the one datetime goes in as ISO text; the response model parses it.
+    last = stats["last_ingest_at"]
+    stats = {**stats, "last_ingest_at": last.isoformat() if last else None,
+             "snapshot_at": computed_at.isoformat()}
+    for name, payload in (("stats", stats), ("facets", facets)):
+        row = await session.get(HubCorpusSnapshot, name)
+        if row is None:
+            session.add(HubCorpusSnapshot(name=name, payload=payload, computed_at=computed_at))
+        else:
+            row.payload, row.computed_at = payload, computed_at
+    await session.commit()
+    _corpus_cache.clear()
+    return {"computed_at": computed_at.isoformat(), "open_postings": stats["open_postings"]}
 
 
 async def _corpus_stats(session: AsyncSession) -> dict:

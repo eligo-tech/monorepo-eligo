@@ -1059,7 +1059,7 @@ export function MarktScreen() {
           {t('Markt')}
         </h1>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-cockpit-dim">
-          {t('Wer gerade einstellt — durchsuchbar nach Rolle, Firma und Ort. Der Korpus ist geteilt und wird nächtlich aktualisiert; was Sie beobachten, bleibt in diesem Workspace.')}
+          {t('Wer gerade einstellt — durchsuchbar nach Rolle, Firma und Ort. Der Korpus ist geteilt und wird wöchentlich aktualisiert; was Sie beobachten, bleibt in diesem Workspace.')}
         </p>
       </header>
 
@@ -1151,7 +1151,7 @@ export function MarktScreen() {
             options={facets.data?.berufsfelder ?? []}
             selected={berufsfelder}
             onChange={setBerufsfelder}
-            emptyHint={t('Das Berufsfeld liefert die Quelle nicht pro Anzeige — es entsteht nur, wenn der nächtliche Lauf gezielt danach fragt. Werte erscheinen nach dem ersten berufsfeld-Durchlauf.')}
+            emptyHint={t('Das Berufsfeld liefert die Quelle nicht pro Anzeige — es entsteht nur, wenn der wöchentliche Lauf gezielt danach fragt. Werte erscheinen nach dem ersten berufsfeld-Durchlauf.')}
           />
           <Button tone="primary" onClick={run} disabled={results.loading}>
             <Search className="h-4 w-4" />
@@ -1243,7 +1243,7 @@ export function MarktScreen() {
               <div className="space-y-3">
                 <p className="max-w-2xl text-[14px] leading-relaxed text-cockpit-dim">
                   {s && s.companies === 0
-                    ? t('Der Korpus ist noch leer. Er wird von einem nächtlichen Job befüllt — eine Suche löst nie eine Abfrage bei einer öffentlichen Quelle aus.')
+                    ? t('Der Korpus ist noch leer. Er wird von einem wöchentlichen Job befüllt — eine Suche löst nie eine Abfrage bei einer öffentlichen Quelle aus.')
                     : t('Suchen Sie nach einer Rolle, einer Firma oder einem Ort. Die Liste aller Unternehmen wäre keine Antwort auf eine Frage, die jemand stellt.')}
                 </p>
                 <p className="max-w-2xl text-[13px] leading-relaxed text-cockpit-faint">

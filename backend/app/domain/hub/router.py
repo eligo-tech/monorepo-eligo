@@ -84,6 +84,17 @@ async def hub_stats(
     return HubCorpusStats.model_validate(await service.corpus_stats(db))
 
 
+@router.post("/corpus-snapshots/refresh")
+async def refresh_corpus_snapshots(
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Recompute and store Markt's totals and filter counts. Machine-only
+    (RULE 1): the weekly jobs call it last, so Markt reads one row instead of
+    counting the corpus (37 s cold on prod, 2026-11-12)."""
+    return await service.refresh_corpus_snapshots(db)
+
+
 @router.get("/facets", response_model=HubFacets)
 async def hub_facets(
     _tenant_id: uuid.UUID = Depends(get_current_tenant),

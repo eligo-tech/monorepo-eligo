@@ -57,6 +57,7 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     ("POST", "/hub/agencies/sites/check"),
     ("POST", "/hub/employers/sites/check"),
     ("POST", "/hub/company-links/auto"),
+    ("POST", "/hub/corpus-snapshots/refresh"),
     # Not a crawl of a public source — a workspace's own ATS — but it
     # decrypts that workspace's password, so it is machine-only for the same
     # fail-closed reason.
