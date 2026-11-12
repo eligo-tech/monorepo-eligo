@@ -784,6 +784,30 @@ async def refresh_agency_profiles(
     return await agencies.refresh_profiles(db)
 
 
+@router.post("/company-links/auto")
+async def auto_link_companies(
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+) -> dict[str, int]:
+    """ELI-33: link every workspace's companies to their Markt rows where the
+    name AND the town match exactly (receipt per link). Machine-only: the
+    daily hub-company-links workflow and the weekly chain call it. Each workspace in its own session, pinned to it."""
+    from sqlalchemy import select
+
+    from app.core.database import AdminSessionLocal, current_tenant_var
+    from app.domain.companies import market
+    from app.domain.companies.models import Company
+
+    async with AdminSessionLocal() as session:
+        tenants = (await session.scalars(select(Company.tenant_id).distinct())).all()
+    total = {"tenants": 0, "linked": 0}
+    for tenant_id in tenants:
+        current_tenant_var.set(str(tenant_id))
+        async with AdminSessionLocal() as session:
+            total["linked"] += (await market.auto_link(session, tenant_id=tenant_id))["linked"]
+        total["tenants"] += 1
+    return total
+
+
 @router.post("/agencies/sites/check")
 async def check_agency_sites(
     limit: int = Query(default=5, ge=1, le=50),

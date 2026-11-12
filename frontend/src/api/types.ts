@@ -1164,6 +1164,16 @@ export interface CompanyPageDTO {
   leads: CompanyPersonDTO[]
   mandates: { id: string; title: string; status: string; location: string | null }[]
   switchboard: SwitchboardDTO | null
+  /** ELI-33: open jobs in Markt and the careers page. */
+  market: CompanyMarketDTO
+}
+
+/** ELI-33: what a company is hiring for now, from Markt. */
+export interface CompanyMarketDTO {
+  linked: boolean
+  total: number
+  jobs: { title: string; city: string | null; posted_at: string | null; source: string; url: string | null }[]
+  careers: { url: string; kind: 'careers' | 'website' | string } | null
 }
 
 /** ELI-30: as the employer's own Impressum publishes it. */

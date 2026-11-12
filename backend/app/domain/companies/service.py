@@ -178,6 +178,9 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
         )
     ).all()
     boards = await company_switchboards(session, tenant_id, [company_id])
+    from app.domain.companies.market import open_jobs
+
+    in_market = await open_jobs(session, tenant_id=tenant_id, company_id=company_id)
     return {
         "company": {
             "id": company.id,
@@ -191,4 +194,6 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
         "leads": [person(m, at) for m, at in people if m.stage == "bus_dev"],
         "mandates": [{"id": j.id, "title": j.title, "status": j.status, "location": j.location} for j in jobs],
         "switchboard": boards.get(company_id),
+        # ELI-33: what the company is hiring for now, from Markt.
+        "market": in_market,
     }

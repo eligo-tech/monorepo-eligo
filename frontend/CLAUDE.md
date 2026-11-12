@@ -84,7 +84,8 @@ promotes the record to the Manager screen. **Unternehmen** (`CompanyScreen`,
 ELI-33) lists EVERY company of the workspace — Alle / Kunden (≥1 manager) /
 Leads (≥1 bus-dev contact); not `is_client`, which imports set on every row —
 and one page per company (`#companies/<id>`): managers, leads, mandates, the
-Impressum switchboard, "Manager hinzufügen". Company names on the manager page
+Impressum switchboard, the open jobs in Markt and the careers page
+(`companies/market.py`; also in the manager page's sidebar), "Manager hinzufügen". Company names on the manager page
 and in Leads link there; `#managers/<id>` opens a manager.
 **Mandate** (key `mandate`, `JobsScreen`) are the workspace's own jobs.
 Retired hashes still land: `kontakte` → `leads`, `jobs` → `mandate`;

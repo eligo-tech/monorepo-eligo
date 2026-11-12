@@ -71,6 +71,30 @@ class CompanyCore(BaseModel):
     source: str | None
 
 
+class MarketJob(BaseModel):
+    title: str
+    city: str | None
+    posted_at: dt.datetime | None
+    source: str
+    url: str | None
+
+
+class CareersPage(BaseModel):
+    url: str
+    #: "careers" (its own job board/page) or "website" (only its site).
+    kind: str
+
+
+class CompanyMarket(BaseModel):
+    """ELI-33: the company's open jobs in Markt — every site of the employer
+    it is linked to — and its careers page."""
+
+    linked: bool
+    total: int
+    jobs: list[MarketJob]
+    careers: CareersPage | None = None
+
+
 class CompanyPage(BaseModel):
     company: CompanyCore
     managers: list[CompanyPerson]
@@ -78,3 +102,4 @@ class CompanyPage(BaseModel):
     mandates: list[CompanyMandate]
     #: ELI-30: the switchboard from the company's own Impressum, if verified.
     switchboard: Switchboard | None = None
+    market: CompanyMarket
