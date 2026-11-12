@@ -297,7 +297,13 @@ export function ManagerProfile({
               {companyName && companyName !== '—' && (
                 <>
                   <span className="text-cockpit-faint">{t('bei')}</span>
-                  <span className="text-mint-400">{companyName}</span>
+                  <a
+                    href={`#companies/${manager.company_id}`}
+                    className="text-mint-400 underline-offset-4 hover:underline"
+                    title={t('Zur Firmenseite')}
+                  >
+                    {companyName}
+                  </a>
                 </>
               )}
               {place && <span className="text-cockpit-faint">· {place}</span>}
@@ -562,10 +568,14 @@ export function ManagerProfile({
 
           {companyName && companyName !== '—' && (
             <RailSection title={t('Firma')}>
-              <p className="flex items-center gap-1.5 text-[17px] font-semibold text-cockpit-text">
+              <a
+                href={`#companies/${manager.company_id}`}
+                className="flex items-center gap-1.5 text-[17px] font-semibold text-cockpit-text hover:text-mint-400"
+                title={t('Zur Firmenseite')}
+              >
                 <Building2 className="h-4 w-4 shrink-0 text-cockpit-faint" />
                 {companyName}
-              </p>
+              </a>
             </RailSection>
           )}
 

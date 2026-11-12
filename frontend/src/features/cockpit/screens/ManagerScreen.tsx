@@ -161,10 +161,17 @@ function ManagerRow({
   )
 }
 
-export function ManagerScreen() {
+export function ManagerScreen({
+  managerId = null,
+  onSelect,
+}: {
+  /** ELI-33: `#managers/<id>` — opened from a company page or a link. */
+  managerId?: string | null
+  onSelect?: (id: string | null) => void
+} = {}) {
   const [query, setQuery] = useState('')
   const [overrides, setOverrides] = useState<Record<string, ManagerDTO>>({})
-  const [selected, setSelected] = useState<ManagerDTO | null>(null)
+  const [picked, setPicked] = useState<ManagerDTO | null>(null)
 
   // The whole pool, once. It used to be a debounced database query per
   // keystroke, capped at 200 of 647 — so a term matching 300 people showed
@@ -185,6 +192,13 @@ export function ManagerScreen() {
     () => (managers.data?.items ?? []).map((m) => overrides[m.id] ?? m),
     [managers.data, overrides],
   )
+  // The open profile: the one named in the URL, else the one clicked.
+  const linked = useAsync<ManagerDTO | null>(
+    () => (managerId && !all.some((m) => m.id === managerId) ? api.manager(managerId) : Promise.resolve(null)),
+    [managerId, managers.data],
+  )
+  const selected = managerId ? (all.find((m) => m.id === managerId) ?? linked.data) : picked
+  const setSelected = (m: ManagerDTO | null) => (onSelect ? onSelect(m?.id ?? null) : setPicked(m))
   const poolTotal = managers.data?.total ?? all.length
   const truncated = poolTotal > all.length
 

@@ -1129,6 +1129,43 @@ export interface CompanyFacetDTO {
   switchboard?: SwitchboardDTO | null
 }
 
+/** ELI-33: one row of Unternehmen — every company of the workspace. */
+export interface CompanyOverviewRowDTO {
+  id: string
+  name: string
+  location: string | null
+  managers: number
+  leads: number
+  mandates: number
+  last_contact_at: string | null
+}
+
+export interface CompanyPersonDTO {
+  id: string
+  full_name: string
+  role_title: string | null
+  email: string | null
+  phone: string | null
+  stage: string
+  last_contact_at: string | null
+}
+
+/** ELI-33: one company — its managers, leads, mandates, Impressum switchboard. */
+export interface CompanyPageDTO {
+  company: {
+    id: string
+    name: string
+    location: string | null
+    domain: string | null
+    industry: string | null
+    source: string | null
+  }
+  managers: CompanyPersonDTO[]
+  leads: CompanyPersonDTO[]
+  mandates: { id: string; title: string; status: string; location: string | null }[]
+  switchboard: SwitchboardDTO | null
+}
+
 /** ELI-30: as the employer's own Impressum publishes it. */
 export interface SwitchboardDTO {
   phone: string | null

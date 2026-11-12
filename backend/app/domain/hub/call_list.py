@@ -317,7 +317,7 @@ async def contacts(
             .order_by(func.count(Manager.id).desc(), Company.name)
         )
     ).all()
-    boards = await _switchboards(session, tenant_id, [cid for cid, _, _ in facet])
+    boards = await company_switchboards(session, tenant_id, [cid for cid, _, _ in facet])
     return {
         "rows": rows,
         "total": int(total or 0),
@@ -328,7 +328,7 @@ async def contacts(
     }
 
 
-async def _switchboards(session: AsyncSession, tenant_id: uuid.UUID, company_ids: list[uuid.UUID]) -> dict:
+async def company_switchboards(session: AsyncSession, tenant_id: uuid.UUID, company_ids: list[uuid.UUID]) -> dict:
     """ELI-30: each of this workspace's companies' Impressum switchboard,
     through its own `hub_company_link` rows (any linked site)."""
     from app.domain.hub.employer_sites import switchboards

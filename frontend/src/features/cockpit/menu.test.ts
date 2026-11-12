@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SCREENS, resolveScreen } from './CockpitShell'
-import { groupByCompany } from './screens/ContactListScreen'
+import { SCREENS, resolveDetail, resolveScreen } from './CockpitShell'
 
 // ELI-29: the ground structure — Markt · Leads · Companies · Manager · Mandate
 // · Kandidaten — and old links that still land.
@@ -23,22 +22,14 @@ describe('menu', () => {
   })
 })
 
-// Companies is the same lead records, grouped — one record, two views.
-describe('groupByCompany', () => {
-  const row = (manager_id: string, company_id: string, company_name: string) =>
-    ({ manager_id, company_id, company_name }) as never
-
-  it('groups by company id, companies sorted by name, people in list order', () => {
-    const g = groupByCompany([
-      row('m1', 'c2', 'Zeta GmbH'),
-      row('m2', 'c1', 'alpha AG'),
-      row('m3', 'c2', 'Zeta GmbH'),
-      row('m4', 'c3', 'Zeta GmbH'), // same name, other company: its own group
-    ])
-    expect(g.map((x) => [x.id, x.people.map((p) => p.manager_id)])).toEqual([
-      ['c1', ['m2']],
-      ['c2', ['m1', 'm3']],
-      ['c3', ['m4']],
-    ])
+// ELI-33: a company page and a manager are links — the manager page's company
+// name opens `#companies/<id>`, a manager on it opens `#managers/<id>`.
+describe('links to a company or a manager', () => {
+  it('land on the screen with the record in focus', () => {
+    expect(resolveScreen('companies/abc-123')).toBe('companies')
+    expect(resolveDetail('companies/abc-123')).toBe('abc-123')
+    expect(resolveScreen('managers/m-9')).toBe('managers')
+    expect(resolveDetail('managers/m-9')).toBe('m-9')
+    expect(resolveDetail('companies')).toBeNull()
   })
 })

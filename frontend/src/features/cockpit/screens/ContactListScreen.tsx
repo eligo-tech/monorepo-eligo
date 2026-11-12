@@ -1,15 +1,14 @@
-// "Leads" and "Companies" (ELI-23, ELI-29): NEW contacts taken from Markt —
-// people a public job ad names — not yet vetted managers. Leads lists them
-// newest first; Companies shows the same records grouped per company. One
-// record, two views: a call logged in one shows in the other, and "Zu
-// Managern" moves the person to the Manager screen (nothing copied).
+// "Leads" (ELI-23, ELI-29): NEW contacts taken from Markt — people a public
+// job ad names — not yet vetted managers, newest first. "Zu Managern" moves
+// the person to the Manager screen (same record, nothing copied). Per company
+// they are on the company page in Unternehmen (`CompanyScreen`, ELI-33).
 
 
 import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
 import { useEffect, useRef, useState } from 'react'
-import { Building2, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
+import { ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { ContactPageDTO, ContactRowDTO, SwitchboardDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
@@ -24,7 +23,7 @@ import {
 } from '../ui/callOutcomes'
 import { networkLinks } from '../ui/contactReach'
 import { leadPhone } from '../ui/switchboard'
-import { ImpressumBadge, SwitchboardLine } from '../ui/SwitchboardLine'
+import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
 
 const when = (iso: string | null) =>
@@ -195,7 +194,14 @@ function ContactRow({
           </>
         )}
         <span className="ml-auto font-mono text-[12px] text-cockpit-faint">
-          {showCompany && <>{row.company_name} · </>}
+          {showCompany && (
+            <>
+              <a href={`#companies/${row.company_id}`} className="hover:text-mint-400" title={t('Zur Firmenseite')}>
+                {row.company_name}
+              </a>{' '}
+              ·{' '}
+            </>
+          )}
           {t('übernommen am {date}', { date: day(row.added_at) })}
         </span>
       </div>
@@ -264,26 +270,8 @@ function ContactRow({
   )
 }
 
-export type ContactView = 'leads' | 'companies'
-
-/** Leads per company, companies A→Z, people in list order (newest first).
- *  Keyed by company id: two companies of one name stay two groups. */
-export function groupByCompany(rows: ContactRowDTO[]) {
-  const groups = new Map<string, { id: string; name: string; people: ContactRowDTO[] }>()
-  for (const r of rows) {
-    const g = groups.get(r.company_id) ?? { id: r.company_id, name: r.company_name, people: [] }
-    g.people.push(r)
-    groups.set(r.company_id, g)
-  }
-  return [...groups.values()].sort(
-    (a, b) => a.name.localeCompare(b.name, locale(), { sensitivity: 'base' }) || a.id.localeCompare(b.id),
-  )
-}
-
-/** Everyone adopted from Markt in this workspace — as a list (Leads) or
- *  grouped per company (Companies). Same records either way. */
-function ContactsTab({ view }: { view: ContactView }) {
-  const grouped = view === 'companies'
+/** Everyone adopted from Markt in this workspace, newest first. */
+function ContactsTab() {
   const [page, setPage] = useState<ContactPageDTO | null>(null)
   const [companyId, setCompanyId] = useState('')
   const [q, setQ] = useState('')
@@ -306,7 +294,6 @@ function ContactsTab({ view }: { view: ContactView }) {
   }, [companyId, query, dueOnly, bump])
 
   const rows = page?.rows ?? []
-  const groups = grouped ? groupByCompany(rows) : []
   const boards = new Map((page?.companies ?? []).map((c) => [c.company_id, c.switchboard ?? null]))
   const filtering = Boolean(companyId || query || dueOnly)
   const called = () => setBump((b) => b + 1)
@@ -352,26 +339,6 @@ function ContactsTab({ view }: { view: ContactView }) {
             ? t('Keine Kontakte für diese Auswahl.')
             : t('Noch keine Kontakte — im Markt bei einem Unternehmen „Ansprechpartner“ öffnen und eine Person übernehmen.')}
         </p>
-      ) : grouped ? (
-        groups.map(({ id, name, people }) => (
-          <div key={id} className="mb-3">
-            <h3 className="flex items-center gap-2 border-b border-cockpit-line/60 pb-1 text-[14px] font-medium text-cockpit-text">
-              <Building2 className="h-4 w-4 text-cockpit-faint" />
-              {name}
-              <span className="font-mono text-[12px] text-cockpit-faint">{people.length}</span>
-            </h3>
-            {boards.get(id) && (
-              <div className="pt-1.5">
-                <SwitchboardLine board={boards.get(id)!} />
-              </div>
-            )}
-            <ul>
-              {people.map((r) => (
-                <ContactRow key={r.manager_id} row={r} showCompany={false} onCalled={called} switchboard={boards.get(r.company_id)} />
-              ))}
-            </ul>
-          </div>
-        ))
       ) : (
         <ul>
           {rows.map((r) => (
@@ -383,23 +350,15 @@ function ContactsTab({ view }: { view: ContactView }) {
   )
 }
 
-export function ContactListScreen({ view }: { view: ContactView }) {
+export function ContactListScreen() {
   return (
     <div className="space-y-5">
-      {view === 'companies' ? (
-        <SectionHeader
-          title={t('Unternehmen')}
-          hint={t('Dieselben Leads, nach Unternehmen gruppiert. Ein Datensatz: Anrufe und „Zu Managern“ wirken in beiden Ansichten.')}
-          icon={<Building2 className="h-4 w-4" />}
-        />
-      ) : (
-        <SectionHeader
-          title={t('Leads')}
-          hint={t('Neue Kontakte aus dem Markt — noch keine geprüften Manager. Nach dem Erstkontakt „Zu Managern“.')}
-          icon={<Users className="h-4 w-4" />}
-        />
-      )}
-      <ContactsTab view={view} />
+      <SectionHeader
+        title={t('Leads')}
+        hint={t('Neue Kontakte aus dem Markt — noch keine geprüften Manager. Nach dem Erstkontakt „Zu Managern“.')}
+        icon={<Users className="h-4 w-4" />}
+      />
+      <ContactsTab />
     </div>
   )
 }
