@@ -2799,6 +2799,12 @@ async def company_contacts(
         (u for k, u in unnamed.items() if k not in claimed),
         key=lambda u: (-u["mention_count"], u["kind"] != "phone", u["value"]),
     )
+    # ELI-30, last fallback: the employer's own Impressum — the anchor site's
+    # check first, else any sibling's.
+    from app.domain.hub.employer_sites import switchboards
+
+    boards = await switchboards(session, ids) if kind == EMPLOYER else {}
+    switchboard = boards.get(anchor.id) or next(iter(boards.values()), None)
     return {
         "hub_company_id": anchor.id,
         "company_name": anchor.name,
@@ -2809,6 +2815,7 @@ async def company_contacts(
             for email, count in sorted(mailboxes.items(), key=lambda kv: -kv[1])
         ],
         "unnamed": unnamed_list[:CONTACT_UNNAMED_LIMIT],
+        "switchboard": switchboard,
         "postings_scanned": len(rows),
         "postings_with_text": with_text,
     }

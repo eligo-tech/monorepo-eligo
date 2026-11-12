@@ -117,3 +117,33 @@ async def test_every_way_to_reach_a_contact_is_returned() -> None:
         (row,) = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
     assert row["linkedin_url"] == "https://www.linkedin.com/in/nicole-lauchner"
     assert row["xing_url"] == "https://www.xing.com/profile/Nicole_Lauchner"
+
+
+async def test_a_company_carries_its_impressum_switchboard() -> None:
+    # ELI-30: the employer's own Impressum, as the Unternehmen view and a lead
+    # without a direct number show it. Reached through THIS workspace's link.
+    from app.domain.hub.employer_sites import group_key
+    from app.domain.hub.models import EMPLOYER, HubCompany, HubCompanyLink, HubSiteCheck
+
+    ids = await _seed()
+    async with SessionLocal() as s:
+        hub = HubCompany(
+            name="STW GmbH", normalized_name="stw", dedupe_key=f"k-{uuid.uuid4()}", resolution_basis="name_place",
+            city="Ulm", source="bundesagentur", kind=EMPLOYER, first_seen_at=NOW, last_seen_at=NOW,
+        )
+        s.add(hub)
+        await s.flush()
+        s.add(HubCompanyLink(tenant_id=TENANT, hub_company_id=hub.id, company_id=ids["stw"]))
+        s.add(HubSiteCheck(
+            domain="stw.de", group_key=group_key(hub.id), hub_company_id=hub.id, status="verified",
+            impressum_url="https://stw.de/impressum", facts={"phone": "0731 100-0", "vat_id": "DE123456789"},
+            checked_at=NOW,
+        ))
+        await s.commit()
+        page = await call_list.contacts(s, tenant_id=TENANT, now=NOW)
+        other = await call_list.contacts(s, tenant_id=OTHER, now=NOW)
+    by_name = {c["name"]: c for c in page["companies"]}
+    assert by_name["STW GmbH"]["switchboard"]["phone"] == "0731 100-0"
+    assert by_name["STW GmbH"]["switchboard"]["impressum_url"] == "https://stw.de/impressum"
+    assert by_name["Bergfreunde GmbH"]["switchboard"] is None
+    assert all(c["switchboard"] is None for c in other["companies"])

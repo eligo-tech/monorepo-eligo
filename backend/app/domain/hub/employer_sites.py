@@ -247,6 +247,35 @@ async def check_employer_sites(session: AsyncSession, *, fetcher, limit: int = 2
     return counts
 
 
+async def switchboards(session: AsyncSession, hub_company_ids) -> dict[uuid.UUID, dict]:
+    """Verified Impressum facts per employer, for the company card and the
+    Leads/Unternehmen views. Only "verified": a rejected Impressum is someone
+    else's and is never shown."""
+    ids = list(hub_company_ids)
+    if not ids:
+        return {}
+    rows = await session.scalars(
+        select(HubSiteCheck)
+        .where(HubSiteCheck.hub_company_id.in_(ids), HubSiteCheck.status == SITE_VERIFIED)
+        .order_by(HubSiteCheck.checked_at.desc())
+    )
+    out: dict[uuid.UUID, dict] = {}
+    for check in rows:
+        facts = check.facts or {}
+        if check.hub_company_id in out or not any(facts.get(k) for k in ("phone", "vat_id", "register")):
+            continue
+        out[check.hub_company_id] = {
+            "phone": facts.get("phone"),
+            "vat_id": facts.get("vat_id"),
+            "register": facts.get("register"),
+            "register_court": facts.get("register_court"),
+            "impressum_url": check.impressum_url,
+            "domain": check.domain,
+            "checked_at": check.checked_at,
+        }
+    return out
+
+
 async def _observe(session: AsyncSession, page: _Page, status: str, now: dt.datetime) -> uuid.UUID:
     observation = HubObservation(
         source="impressum",

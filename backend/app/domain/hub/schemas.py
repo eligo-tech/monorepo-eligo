@@ -506,6 +506,19 @@ class UnnamedReach(BaseModel):
     posting_title: str
 
 
+class Switchboard(BaseModel):
+    """ELI-30: the employer's switchboard as its own Impressum publishes it —
+    shown only when the Impressum names the employer as operator."""
+
+    phone: str | None = None
+    vat_id: str | None = None
+    register: str | None = None
+    register_court: str | None = None
+    impressum_url: str | None = None
+    domain: str
+    checked_at: dt.datetime
+
+
 class CompanyContacts(BaseModel):
     hub_company_id: uuid.UUID
     company_name: str
@@ -515,6 +528,7 @@ class CompanyContacts(BaseModel):
     contacts: list[ContactCandidate]
     mailboxes: list[CompanyMailbox]
     unnamed: list[UnnamedReach] = []
+    switchboard: Switchboard | None = None
     #: Coverage, so "no contacts" can be told apart from "no ad texts yet".
     postings_scanned: int
     postings_with_text: int

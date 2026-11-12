@@ -317,12 +317,37 @@ async def contacts(
             .order_by(func.count(Manager.id).desc(), Company.name)
         )
     ).all()
+    boards = await _switchboards(session, tenant_id, [cid for cid, _, _ in facet])
     return {
         "rows": rows,
         "total": int(total or 0),
         "truncated": int(total or 0) > len(rows),
-        "companies": [{"company_id": cid, "name": name, "contacts": n} for cid, name, n in facet],
+        "companies": [
+            {"company_id": cid, "name": name, "contacts": n, "switchboard": boards.get(cid)} for cid, name, n in facet
+        ],
     }
+
+
+async def _switchboards(session: AsyncSession, tenant_id: uuid.UUID, company_ids: list[uuid.UUID]) -> dict:
+    """ELI-30: each of this workspace's companies' Impressum switchboard,
+    through its own `hub_company_link` rows (any linked site)."""
+    from app.domain.hub.employer_sites import switchboards
+
+    if not company_ids:
+        return {}
+    links = (
+        await session.execute(
+            select(HubCompanyLink.company_id, HubCompanyLink.hub_company_id).where(
+                HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id.in_(company_ids)
+            )
+        )
+    ).all()
+    boards = await switchboards(session, {hub_id for _, hub_id in links})
+    out: dict = {}
+    for company_id, hub_id in links:
+        if company_id not in out and hub_id in boards:
+            out[company_id] = boards[hub_id]
+    return out
 
 
 async def follow_ups(session: AsyncSession, *, tenant_id: uuid.UUID, now: dt.datetime | None = None) -> list[dict]:

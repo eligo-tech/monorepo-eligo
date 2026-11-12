@@ -250,3 +250,53 @@ async def test_the_recruiters_mobile_is_on_the_person_not_unnamed(employer) -> N
     jurgens = next(c for c in result["contacts"] if c["last_name"] == "Jürgens")
     assert (jurgens["phone"], jurgens["mobile"]) == ("+49 5491 666 2834", "+49 151 51446810")
     assert "+49 151 51446810" not in {u["value"] for u in result["unnamed"]}
+
+
+# --- ELI-30: the switchboard from the employer's own Impressum ---------------
+
+
+async def _site_check(company_id: uuid.UUID, status: str, facts: dict) -> None:
+    from app.domain.hub.employer_sites import group_key
+    from app.domain.hub.models import HubSiteCheck
+
+    async with SessionLocal() as s:
+        s.add(HubSiteCheck(
+            domain="sto.de", group_key=group_key(company_id), hub_company_id=company_id, status=status,
+            impressum_url="https://sto.de/impressum", facts=facts, checked_at=NOW,
+        ))
+        await s.commit()
+
+
+async def test_a_verified_impressum_switchboard_is_on_the_card(employer) -> None:
+    _, weizen = employer  # checked on a sibling site, shown on the anchor's card
+    await _site_check(weizen, "verified", {
+        "phone": "+49 7744 57-0", "vat_id": "DE142215600", "register": "HRA 270002", "register_court": "Freiburg",
+    })
+    async with SessionLocal() as s:
+        card = await service.company_contacts(s, tenant_id=TENANT, hub_company_id=employer[0])
+    assert card["switchboard"] == {
+        "phone": "+49 7744 57-0", "vat_id": "DE142215600", "register": "HRA 270002",
+        "register_court": "Freiburg", "impressum_url": "https://sto.de/impressum", "domain": "sto.de",
+        "checked_at": card["switchboard"]["checked_at"],
+    }
+
+
+async def test_someone_elses_impressum_is_never_on_the_card(employer) -> None:
+    anchor, _ = employer
+    await _site_check(anchor, "not_named", {})
+    async with SessionLocal() as s:
+        card = await service.company_contacts(s, tenant_id=TENANT, hub_company_id=anchor)
+    assert card["switchboard"] is None
+
+
+async def test_the_route_carries_the_switchboard(employer) -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from app.main import app
+
+    anchor, _ = employer
+    await _site_check(anchor, "verified", {"phone": "+49 7744 57-0"})
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        body = (await client.get(f"/api/v1/hub/companies/{anchor}/contacts")).json()
+    assert body["switchboard"]["phone"] == "+49 7744 57-0"
+    assert body["switchboard"]["impressum_url"] == "https://sto.de/impressum"
