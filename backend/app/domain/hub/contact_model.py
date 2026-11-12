@@ -351,10 +351,11 @@ async def _ask(
 
 
 async def backfill(
-    session: AsyncSession, *, limit: int, reader: ContactReader | None
+    session: AsyncSession, *, limit: int, reader: ContactReader | None, count: bool = True
 ) -> dict[str, int]:
     """Ask the model about up to `limit` queued ads; store what passes the
-    checks. `remaining` is -1 when no model is configured."""
+    checks. `remaining` is -1 when no model is configured, else (with
+    `count`) the ads still queued — a count batch callers ask for once."""
     if reader is None:
         return {"read": 0, "contacts": 0, "failed": 0, "remaining": -1}
     ids = list(
@@ -448,7 +449,12 @@ async def backfill(
             )
         stored = len(values)
     await session.commit()
-    remaining = await session.scalar(
-        select(func.count(HubJobPosting.id)).where(HubJobPosting.contacts_model_due.is_(True))
-    )
-    return {"read": len(ids) - failed, "contacts": stored, "failed": failed, "remaining": int(remaining or 0)}
+    result = {"read": len(ids) - failed, "contacts": stored, "failed": failed}
+    if count:
+        result["remaining"] = int(
+            await session.scalar(
+                select(func.count(HubJobPosting.id)).where(HubJobPosting.contacts_model_due.is_(True))
+            )
+            or 0
+        )
+    return result

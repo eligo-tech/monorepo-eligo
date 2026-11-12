@@ -123,9 +123,10 @@ def _read(rows: list, rules: suppression.Suppressions) -> tuple[list[dict], list
     return values, stamps
 
 
-async def backfill(session: AsyncSession, *, limit: int) -> dict[str, int]:
+async def backfill(session: AsyncSession, *, limit: int, count: bool = True) -> dict[str, int]:
     """Read up to `limit` queued ads; how many were read, how many persons
-    were stored, how many ads remain queued."""
+    were stored, and (with `count`) how many ads remain queued. The count
+    scans the open ads, so batch callers ask for it once (Disk IO)."""
     due = text(CONTACTS_DUE)
     # The queue predicate alone on the postings table: the planner proves it
     # against the partial index, and nothing in it can be ambiguous.
@@ -176,8 +177,10 @@ async def backfill(session: AsyncSession, *, limit: int) -> dict[str, int]:
         )
         stored = len(values)
     await session.commit()
-    remaining = await session.scalar(select(func.count(HubJobPosting.id)).where(due))
-    return {"read": len(ids), "contacts": stored, "remaining": int(remaining or 0)}
+    result = {"read": len(ids), "contacts": stored}
+    if count:
+        result["remaining"] = int(await session.scalar(select(func.count(HubJobPosting.id)).where(due)) or 0)
+    return result
 
 
 async def forget(session: AsyncSession, posting_ids: Any) -> None:

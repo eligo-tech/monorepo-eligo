@@ -539,7 +539,10 @@ async def _read_ad_contacts(client: httpx.AsyncClient, *, budget: int) -> dict[s
     totals = {"read": 0, "contacts": 0, "remaining": 0}
     while totals["read"] < budget:
         size = min(_VACANCY_BATCH, budget - totals["read"])
-        response = await _post_retrying(client, f"/hub/ad-contacts/backfill?limit={size}")
+        # The queue count scans the open ads: once, on the batch that ends the
+        # budget. A short batch ends the run too, and means the queue is empty.
+        progress = "&progress=true" if size == budget - totals["read"] else ""
+        response = await _post_retrying(client, f"/hub/ad-contacts/backfill?limit={size}{progress}")
         result = response.json()
         totals["read"] += result.get("read", 0)
         totals["contacts"] += result.get("contacts", 0)
@@ -560,7 +563,9 @@ async def _read_ad_contacts_model(client: httpx.AsyncClient, *, budget: int) -> 
     totals = {"read": 0, "contacts": 0, "failed": 0, "remaining": 0}
     while totals["read"] < budget:
         size = min(_MODEL_BATCH, budget - totals["read"])
-        response = await _post_retrying(client, f"/hub/ad-contacts/model-backfill?limit={size}")
+        # As above: the count once, on the last batch; -1 (no model) always comes.
+        progress = "&progress=true" if size == budget - totals["read"] else ""
+        response = await _post_retrying(client, f"/hub/ad-contacts/model-backfill?limit={size}{progress}")
         result = response.json()
         totals["read"] += result.get("read", 0)
         totals["contacts"] += result.get("contacts", 0)
