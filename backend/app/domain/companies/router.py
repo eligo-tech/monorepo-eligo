@@ -9,10 +9,11 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_tenant
+from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.companies import service
-from app.domain.companies.schemas import CompanyCreate, CompanyOverviewRow, CompanyPage, CompanyRead
+from app.domain.companies import market
+from app.domain.companies.schemas import CompanyCreate, CompanyOverviewRow, CompanyPage, CompanyRead, MarketSites
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -50,6 +51,69 @@ async def company_page(
     if page is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found")
     return CompanyPage(**page)
+
+
+async def _page_or_404(db: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID) -> CompanyPage:
+    page = await service.company_page(db, tenant_id=tenant_id, company_id=company_id)
+    if page is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found")
+    return CompanyPage(**page)
+
+
+@router.post("/{company_id}/market-links", response_model=CompanyPage)
+async def confirm_market_link(
+    company_id: uuid.UUID,
+    payload: MarketSites,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> CompanyPage:
+    """ELI-33 step 2b: "Das ist unser Unternehmen" — link these Markt sites
+    (same name) to this company. A receipt names the person."""
+    try:
+        await market.confirm(
+            db,
+            tenant_id=actor.tenant_id,
+            company_id=company_id,
+            hub_company_ids=payload.hub_company_ids,
+            actor=actor.name,
+            dismiss_ids=payload.dismiss_ids,
+        )
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found") from exc
+    except market.NotACandidate as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    except market.SiteTaken as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return await _page_or_404(db, actor.tenant_id, company_id)
+
+
+@router.delete("/{company_id}/market-links", response_model=CompanyPage)
+async def undo_market_link(
+    company_id: uuid.UUID,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> CompanyPage:
+    """ELI-33: undo a wrong link; the sites are not linked again by the job."""
+    try:
+        await market.unlink(db, tenant_id=actor.tenant_id, company_id=company_id, actor=actor.name)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found") from exc
+    return await _page_or_404(db, actor.tenant_id, company_id)
+
+
+@router.post("/{company_id}/market-dismissals", response_model=CompanyPage)
+async def dismiss_market_sites(
+    company_id: uuid.UUID,
+    payload: MarketSites,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> CompanyPage:
+    """ELI-33 step 2b: "Keiner davon" — not suggested again."""
+    try:
+        await market.dismiss(db, tenant_id=actor.tenant_id, company_id=company_id, hub_company_ids=payload.hub_company_ids)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found") from exc
+    return await _page_or_404(db, actor.tenant_id, company_id)
 
 
 @router.get("/{company_id}", response_model=CompanyRead)

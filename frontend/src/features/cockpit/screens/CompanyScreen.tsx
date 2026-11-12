@@ -10,7 +10,7 @@ import { locale } from '@/i18n/format'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, Briefcase, Building2, Mail, MapPin, Newspaper, Phone, Plus, Search, UserRound, Users } from 'lucide-react'
 import { api } from '@/api/client'
-import type { CompanyOverviewRowDTO, CompanyPersonDTO } from '@/api/types'
+import type { CompanyOverviewRowDTO, CompanyPersonDTO, MarketSuggestionDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
@@ -64,6 +64,7 @@ function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
               { key: 'all', label: t('Alle ({n})', { n: String(counts.all) }) },
               { key: 'clients', label: t('Kunden ({n})', { n: String(counts.clients) }) },
               { key: 'leads', label: t('Leads ({n})', { n: String(counts.leads) }) },
+              { key: 'review', label: t('Zu prüfen ({n})', { n: String(counts.review) }) },
             ]}
           />
           <div className="relative min-w-[200px] flex-1">
@@ -98,6 +99,11 @@ function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
                   {c.managers > 0 && <span>{t('{n} Manager', { n: String(c.managers) })}</span>}
                   {c.leads > 0 && <Chip tone="gold">{t('{n} Leads', { n: String(c.leads) })}</Chip>}
                   {c.mandates > 0 && <span>{t('{n} Mandate', { n: String(c.mandates) })}</span>}
+                  {(c.to_review ?? 0) > 0 && (
+                    <Chip tone="lav" title={t('Im Markt gibt es Unternehmen gleichen Namens — bitte bestätigen oder verwerfen.')}>
+                      {t('prüfen')}
+                    </Chip>
+                  )}
                   {c.last_contact_at && (
                     <span className="text-cockpit-faint">{t('zuletzt {date}', { date: day(c.last_contact_at) ?? '' })}</span>
                   )}
@@ -182,8 +188,17 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
               hint={data.market.linked ? String(data.market.total) : undefined}
               icon={<Newspaper className="h-4 w-4" />}
             />
-            <div className="mt-2">
-              <OpenJobs market={data.market} />
+            <div className="mt-2 space-y-3">
+              {!data.market.linked && (data.suggestions?.length ?? 0) > 0 ? (
+                <MarketSuggestions
+                  companyId={data.company.id}
+                  suggestions={data.suggestions ?? []}
+                  onDone={() => setBump((b) => b + 1)}
+                />
+              ) : (
+                <OpenJobs market={data.market} />
+              )}
+              {data.market.linked && <UndoLink companyId={data.company.id} onDone={() => setBump((b) => b + 1)} />}
             </div>
           </Panel>
 
@@ -317,5 +332,135 @@ function AddManager({
         {error && <span className="text-[13px] text-coral-400">{error}</span>}
       </div>
     </form>
+  )
+}
+
+
+/** ELI-33 step 2b: the same name in Markt, in another or unknown town. A
+ *  person picks the right site(s) — or none — so the company's open jobs show
+ *  and a lead taken from Markt lands here instead of on a duplicate. */
+function MarketSuggestions({
+  companyId,
+  suggestions,
+  onDone,
+}: {
+  companyId: string
+  suggestions: MarketSuggestionDTO[]
+  onDone: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+      onDone()
+    } catch {
+      setError(t('Nicht gespeichert — bitte erneut versuchen.'))
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[13px] text-cockpit-dim">
+        {t('Im Markt gibt es Unternehmen gleichen Namens an anderen Orten. Ist eines davon dieses Unternehmen?')}
+      </p>
+      <ul>
+        {suggestions.map((s) => (
+          <li
+            key={s.hub_company_id}
+            className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-cockpit-line/60 py-2 last:border-0"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="text-[14px] text-cockpit-text">{s.name}</span>
+              <span className="ml-2 text-[13px] text-cockpit-faint">
+                {[s.postal_code, s.city].filter(Boolean).join(' ') || t('Ort unbekannt')}
+              </span>
+              {s.sample_titles.length > 0 && (
+                <span className="block truncate text-[12px] text-cockpit-faint">{s.sample_titles.join(' · ')}</span>
+              )}
+            </span>
+            <span className="font-mono text-[12px] text-cockpit-dim">
+              {t('{n} offene Stellen', { n: String(s.open_ads) })}
+            </span>
+            <Button
+              tone="primary"
+              disabled={busy}
+              // The sites shown and not picked are a same-name firm elsewhere.
+              onClick={() =>
+                run(() =>
+                  api.confirmMarketLink(
+                    companyId,
+                    [s.hub_company_id],
+                    suggestions.map((o) => o.hub_company_id).filter((id) => id !== s.hub_company_id),
+                  ),
+                )
+              }
+            >
+              {t('Das ist unser Unternehmen')}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-3">
+        {suggestions.length > 1 && (
+          <Button
+            disabled={busy}
+            title={t('Ein Unternehmen mit mehreren Standorten: alle gehören dazu.')}
+            onClick={() => run(() => api.confirmMarketLink(companyId, suggestions.map((s) => s.hub_company_id)))}
+          >
+            {t('Alle davon')}
+          </Button>
+        )}
+        <Button
+          disabled={busy}
+          onClick={() => run(() => api.dismissMarketSites(companyId, suggestions.map((s) => s.hub_company_id)))}
+        >
+          {t('Keiner davon')}
+        </Button>
+        {error && <span className="text-[13px] text-coral-400">{error}</span>}
+      </div>
+    </div>
+  )
+}
+
+/** ELI-33: undo a wrong link — two steps, no browser dialog. */
+function UndoLink({ companyId, onDone }: { companyId: string; onDone: () => void }) {
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  if (!asking)
+    return (
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        className="font-mono text-[11px] text-cockpit-faint hover:text-coral-400"
+      >
+        {t('Falsches Unternehmen? Verknüpfung lösen')}
+      </button>
+    )
+  return (
+    <span className="flex items-center gap-2 text-[12px] text-cockpit-dim">
+      {t('Verknüpfung mit dem Markt lösen? Sie wird nicht automatisch wiederhergestellt.')}
+      <Button
+        tone="danger"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          try {
+            await api.undoMarketLink(companyId)
+            onDone()
+          } finally {
+            setBusy(false)
+            setAsking(false)
+          }
+        }}
+      >
+        {t('Lösen')}
+      </Button>
+      <Button onClick={() => setAsking(false)}>{t('Abbrechen')}</Button>
+    </span>
   )
 }

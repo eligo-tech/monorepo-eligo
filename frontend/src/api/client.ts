@@ -352,6 +352,23 @@ export const api = {
   /** ELI-33: one company — managers, leads, mandates, Impressum switchboard. */
   companyPage: (id: string) => request<CompanyPageDTO>(`/companies/${id}/page`),
 
+  /** ELI-33 2b: "Das ist unser Unternehmen" — link these Markt sites. */
+  confirmMarketLink: (id: string, hubCompanyIds: string[], dismissIds: string[] = []) =>
+    request<CompanyPageDTO>(`/companies/${id}/market-links`, {
+      method: 'POST',
+      body: JSON.stringify({ hub_company_ids: hubCompanyIds, dismiss_ids: dismissIds }),
+    }),
+
+  /** ELI-33 2b: "Keiner davon" — never suggested again. */
+  dismissMarketSites: (id: string, hubCompanyIds: string[]) =>
+    request<CompanyPageDTO>(`/companies/${id}/market-dismissals`, {
+      method: 'POST',
+      body: JSON.stringify({ hub_company_ids: hubCompanyIds }),
+    }),
+
+  /** ELI-33: undo a wrong link (the daily job does not put it back). */
+  undoMarketLink: (id: string) => request<CompanyPageDTO>(`/companies/${id}/market-links`, { method: 'DELETE' }),
+
   managerInteractions: (id: string) =>
     request<ManagerInteractionDTO[]>(`/managers/${id}/interactions`),
 

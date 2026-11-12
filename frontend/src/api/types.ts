@@ -1138,6 +1138,8 @@ export interface CompanyOverviewRowDTO {
   leads: number
   mandates: number
   last_contact_at: string | null
+  /** ELI-33 2b: Markt sites of the same name waiting for a yes or no. */
+  to_review?: number
 }
 
 export interface CompanyPersonDTO {
@@ -1166,6 +1168,17 @@ export interface CompanyPageDTO {
   switchboard: SwitchboardDTO | null
   /** ELI-33: open jobs in Markt and the careers page. */
   market: CompanyMarketDTO
+  /** ELI-33 2b: same name in Markt, another or unknown town — to confirm. */
+  suggestions?: MarketSuggestionDTO[]
+}
+
+export interface MarketSuggestionDTO {
+  hub_company_id: string
+  name: string
+  city: string | null
+  postal_code: string | null
+  open_ads: number
+  sample_titles: string[]
 }
 
 /** ELI-33: what a company is hiring for now, from Markt. */

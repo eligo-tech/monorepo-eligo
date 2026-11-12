@@ -43,6 +43,8 @@ class CompanyOverviewRow(BaseModel):
     leads: int
     mandates: int
     last_contact_at: dt.datetime | None
+    #: ELI-33: Markt sites of the same name waiting for a person's yes/no.
+    to_review: int = 0
 
 
 class CompanyPerson(BaseModel):
@@ -95,6 +97,24 @@ class CompanyMarket(BaseModel):
     careers: CareersPage | None = None
 
 
+class MarketSuggestion(BaseModel):
+    """ELI-33 step 2b: a Markt site with this company's name in another or
+    unknown town — for a person to confirm or dismiss."""
+
+    hub_company_id: uuid.UUID
+    name: str
+    city: str | None
+    postal_code: str | None
+    open_ads: int
+    sample_titles: list[str]
+
+
+class MarketSites(BaseModel):
+    hub_company_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
+    #: Confirming: the other sites shown and not picked — ruled out.
+    dismiss_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
+
+
 class CompanyPage(BaseModel):
     company: CompanyCore
     managers: list[CompanyPerson]
@@ -103,3 +123,4 @@ class CompanyPage(BaseModel):
     #: ELI-30: the switchboard from the company's own Impressum, if verified.
     switchboard: Switchboard | None = None
     market: CompanyMarket
+    suggestions: list[MarketSuggestion] = []
