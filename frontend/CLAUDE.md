@@ -85,7 +85,10 @@ ELI-33) lists EVERY company of the workspace — Alle / Kunden (≥1 manager) /
 Leads (≥1 bus-dev contact); not `is_client`, which imports set on every row —
 and one page per company (`#companies/<id>`): managers, leads, mandates, the
 Impressum switchboard, the open jobs in Markt and the careers page
-(`companies/market.py`; also in the manager page's sidebar), "Manager hinzufügen". Company names on the manager page
+(`companies/market.py`; also in the manager page's sidebar), "Manager hinzufügen".
+An unlinked company with same-name Markt sites elsewhere shows them for a
+person: "Das ist unser Unternehmen" (the other sites shown are ruled out),
+"Alle davon" (a chain), "Keiner davon"; a link can be undone. Filter "Zu prüfen". Company names on the manager page
 and in Leads link there; `#managers/<id>` opens a manager.
 **Mandate** (key `mandate`, `JobsScreen`) are the workspace's own jobs.
 Retired hashes still land: `kontakte` → `leads`, `jobs` → `mandate`;

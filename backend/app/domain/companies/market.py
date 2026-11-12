@@ -25,7 +25,7 @@ import re
 import uuid
 from urllib.parse import urlparse
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -97,15 +97,7 @@ async def exact_matches(session: AsyncSession, tenant_id: uuid.UUID) -> list[tup
         )
     ).all():
         hubs[hub.normalized_name].append(hub)
-    taken = set(
-        (
-            await session.scalars(
-                select(HubCompanyLink.hub_company_id).where(
-                    HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id.is_not(None)
-                )
-            )
-        ).all()
-    )
+    taken = await _unavailable(session, tenant_id)
     places = await _places(session, tenant_id, [c.id for c in companies])
     out = []
     for company in companies:
@@ -122,6 +114,25 @@ async def exact_matches(session: AsyncSession, tenant_id: uuid.UUID) -> list[tup
         if same:
             out.append((company, same))
     return out
+
+
+IGNORED = "ignored"
+
+
+async def _unavailable(session: AsyncSession, tenant_id: uuid.UUID) -> set[uuid.UUID]:
+    """Sites this workspace already holds for a company, or said are not
+    theirs ("Keiner davon", or a link undone) — never linked or suggested
+    again, not even by the daily job."""
+    return set(
+        (
+            await session.scalars(
+                select(HubCompanyLink.hub_company_id).where(
+                    HubCompanyLink.tenant_id == tenant_id,
+                    (HubCompanyLink.company_id.is_not(None)) | (HubCompanyLink.relationship == IGNORED),
+                )
+            )
+        ).all()
+    )
 
 
 async def link(
@@ -237,6 +248,232 @@ async def link_all_workspaces() -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
+# Step 2b: the unclear matches — a person confirms, dismisses, or undoes
+# ---------------------------------------------------------------------------
+
+#: Candidate sites shown per company (a chain can have hundreds).
+SUGGESTION_SITES = 8
+
+
+class NotACandidate(ValueError):
+    """The site is not this company's name, or not an employer row."""
+
+
+class SiteTaken(ValueError):
+    """Another company of this workspace already holds the site."""
+
+
+async def _candidates(
+    session: AsyncSession, tenant_id: uuid.UUID, companies: list[Company]
+) -> dict[uuid.UUID, list[HubCompany]]:
+    """Per unlinked company: the employer sites of the same normalized name
+    this workspace has neither linked nor dismissed."""
+    if not companies:
+        return {}
+    keys = {c.id: normalize_company_name(c.name) for c in companies}
+    names = {k for k in keys.values() if k}
+    if not names:
+        return {}
+    blocked = await _unavailable(session, tenant_id)
+    by_name: dict[str, list[HubCompany]] = collections.defaultdict(list)
+    for hub in (
+        await session.scalars(
+            select(HubCompany).where(HubCompany.normalized_name.in_(names), HubCompany.kind == EMPLOYER)
+        )
+    ).all():
+        if hub.id not in blocked:
+            by_name[hub.normalized_name].append(hub)
+    return {c.id: by_name.get(keys[c.id], []) for c in companies}
+
+
+async def _linked_company_ids(session: AsyncSession, tenant_id: uuid.UUID) -> set[uuid.UUID]:
+    return set(
+        (
+            await session.scalars(
+                select(HubCompanyLink.company_id).where(
+                    HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id.is_not(None)
+                )
+            )
+        ).all()
+    )
+
+
+async def to_review(session: AsyncSession, tenant_id: uuid.UUID) -> dict[uuid.UUID, int]:
+    """For Unternehmen: how many candidate sites each unlinked company has."""
+    linked = await _linked_company_ids(session, tenant_id)
+    companies = (
+        await session.scalars(select(Company).where(Company.tenant_id == tenant_id))
+    ).all()
+    open_ = [c for c in companies if c.id not in linked]
+    return {cid: len(sites) for cid, sites in (await _candidates(session, tenant_id, open_)).items()}
+
+
+async def suggestions(session: AsyncSession, *, tenant_id: uuid.UUID, company: Company) -> list[dict]:
+    """The candidate sites of one unlinked company, most open ads first, each
+    with its town and two sample job titles — enough to recognise the firm."""
+    if company.id in await _linked_company_ids(session, tenant_id):
+        return []
+    sites = (await _candidates(session, tenant_id, [company])).get(company.id, [])
+    if not sites:
+        return []
+    ids = [h.id for h in sites]
+    counts = dict(
+        (
+            await session.execute(
+                select(HubJobPosting.hub_company_id, func.count(HubJobPosting.id))
+                .where(HubJobPosting.hub_company_id.in_(ids), HubJobPosting.is_active.is_(True))
+                .group_by(HubJobPosting.hub_company_id)
+            )
+        ).all()
+    )
+    ranked = sorted(sites, key=lambda h: (-counts.get(h.id, 0), h.city or "", str(h.id)))[:SUGGESTION_SITES]
+    out = []
+    for hub in ranked:
+        titles = (
+            await session.scalars(
+                select(HubJobPosting.title)
+                .where(HubJobPosting.hub_company_id == hub.id, HubJobPosting.is_active.is_(True))
+                .order_by(HubJobPosting.posted_at.desc().nulls_last())
+                .limit(2)
+            )
+        ).all()
+        out.append(
+            {
+                "hub_company_id": hub.id,
+                "name": hub.name,
+                "city": hub.city,
+                "postal_code": hub.postal_code,
+                "open_ads": int(counts.get(hub.id, 0)),
+                "sample_titles": list(titles),
+            }
+        )
+    return out
+
+
+async def _company(session: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID) -> Company:
+    company = await session.scalar(select(Company).where(Company.id == company_id, Company.tenant_id == tenant_id))
+    if company is None:
+        raise LookupError("company not found")
+    return company
+
+
+async def confirm(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    company_id: uuid.UUID,
+    hub_company_ids: list[uuid.UUID],
+    actor: str | None,
+    dismiss_ids: list[uuid.UUID] | None = None,
+) -> None:
+    """A person says: these sites are our company. Only sites of the same
+    name, not held by another company here; one receipt naming the person.
+
+    `dismiss_ids`: the other sites the person was shown and did not pick —
+    a same-name firm elsewhere, ruled out so its jobs do not show here."""
+    company = await _company(session, tenant_id, company_id)
+    wanted = set(hub_company_ids)
+    sites = (
+        await session.scalars(select(HubCompany).where(HubCompany.id.in_(wanted), HubCompany.kind == EMPLOYER))
+    ).all()
+    if not wanted or len(sites) != len(wanted) or any(
+        h.normalized_name != normalize_company_name(company.name) for h in sites
+    ):
+        raise NotACandidate("not a site of this company's name")
+    held = (
+        await session.scalars(
+            select(HubCompanyLink.company_id).where(
+                HubCompanyLink.tenant_id == tenant_id,
+                HubCompanyLink.hub_company_id.in_(wanted),
+                HubCompanyLink.company_id.is_not(None),
+                HubCompanyLink.company_id != company.id,
+            )
+        )
+    ).all()
+    if held:
+        raise SiteTaken("another company here holds this site")
+    await link(
+        session,
+        tenant_id=tenant_id,
+        company=company,
+        sites=list(sites),
+        basis=f"confirmed by {actor or 'a recruiter'}",
+        agent="recruiter_market_link",
+        actor=actor,
+    )
+    others = [i for i in (dismiss_ids or []) if i not in wanted]
+    if others:
+        await dismiss(session, tenant_id=tenant_id, company_id=company_id, hub_company_ids=others)
+
+
+async def dismiss(
+    session: AsyncSession, *, tenant_id: uuid.UUID, company_id: uuid.UUID, hub_company_ids: list[uuid.UUID]
+) -> None:
+    """"Keiner davon": these sites are not ours — never suggested or
+    auto-linked here again. Interest, not a record change: no receipt (as
+    tracking, `hub.service.track_company`)."""
+    await _company(session, tenant_id, company_id)
+    for hub_id in set(hub_company_ids):
+        row = await session.scalar(
+            select(HubCompanyLink).where(HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.hub_company_id == hub_id)
+        )
+        if row is None:
+            if await session.get(HubCompany, hub_id) is None:
+                continue
+            row = HubCompanyLink(tenant_id=tenant_id, hub_company_id=hub_id)
+            session.add(row)
+        if row.company_id is None:
+            row.relationship = IGNORED
+    await session.commit()
+
+
+async def unlink(session: AsyncSession, *, tenant_id: uuid.UUID, company_id: uuid.UUID, actor: str | None) -> None:
+    """Undo a wrong link: the sites are released and marked not ours, so the
+    daily job does not put the link back. A record change: one receipt."""
+    company = await _company(session, tenant_id, company_id)
+    rows = (
+        await session.scalars(
+            select(HubCompanyLink).where(HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id == company.id)
+        )
+    ).all()
+    if not rows:
+        return
+    ids = [r.hub_company_id for r in rows]
+    for row in rows:
+        row.company_id = None
+        row.relationship = IGNORED
+    await session.flush()
+
+    async def _prove_it_landed(_session: AsyncSession, _change) -> None:
+        still = await _session.scalar(
+            select(HubCompanyLink.id).where(HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id == company.id)
+        )
+        if still is not None:
+            raise RuntimeError("market unlink did not land")
+
+    result = await verification.verify_and_commit(
+        session,
+        change=ProposedChange(
+            tenant_id=tenant_id,
+            entity_type="company",
+            entity_id=company.id,
+            field="hub_company_id",
+            proposed_value="",
+            source=ConfidenceSource.SELF_REPORTED,
+            source_detail=f"unlinked by {actor or 'a recruiter'}: " + ",".join(str(i) for i in ids)[:400],
+            confidence=1.0,
+        ),
+        agent="recruiter_market_unlink",
+        apply_hook=_prove_it_landed,
+        actor=actor,
+    )
+    if not result.committed:
+        await session.rollback()
+        raise RuntimeError(f"market unlink not committed: {result.reason}")
+    await session.commit()
+
+
+# ---------------------------------------------------------------------------
 # Open jobs and the careers page, for the company page and the manager page
 # ---------------------------------------------------------------------------
 
@@ -289,6 +526,18 @@ async def open_jobs(session: AsyncSession, *, tenant_id: uuid.UUID, company_id: 
     ).all()
     if not names:
         return {"linked": False, "total": 0, "jobs": [], "careers": None}
+    # Every site of the name — a chain's branches — except those this
+    # workspace ruled out or another of its companies holds.
+    mine = set(
+        (
+            await session.scalars(
+                select(HubCompanyLink.hub_company_id).where(
+                    HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id == company_id
+                )
+            )
+        ).all()
+    )
+    excluded = (await _unavailable(session, tenant_id)) - mine
     base = (
         select(HubJobPosting, HubCompany.city, HubPostingPayload.raw)
         .join(HubCompany, HubCompany.id == HubJobPosting.hub_company_id)
@@ -296,6 +545,7 @@ async def open_jobs(session: AsyncSession, *, tenant_id: uuid.UUID, company_id: 
         .where(
             HubCompany.normalized_name.in_(names),
             HubCompany.kind == EMPLOYER,
+            HubCompany.id.not_in(excluded) if excluded else True,
             HubJobPosting.is_active.is_(True),
         )
     )

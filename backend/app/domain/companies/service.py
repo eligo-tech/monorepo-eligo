@@ -116,6 +116,9 @@ async def overview(
         needle = q.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         stmt = stmt.where(func.lower(Company.name).like(f"%{needle}%", escape="\\"))
     rows = await session.execute(stmt.order_by(func.lower(Company.name), Company.id).limit(limit))
+    from app.domain.companies.market import to_review
+
+    review = await to_review(session, tenant_id)
     return [
         {
             "id": r.id,
@@ -125,6 +128,8 @@ async def overview(
             "leads": int(r.leads or 0),
             "mandates": int(r.mandates or 0),
             "last_contact_at": _aware(r.last_contact_at),
+            # ELI-33 step 2b: Markt sites of the same name to confirm or dismiss.
+            "to_review": review.get(r.id, 0),
         }
         for r in rows
     ]
@@ -178,9 +183,10 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
         )
     ).all()
     boards = await company_switchboards(session, tenant_id, [company_id])
-    from app.domain.companies.market import open_jobs
+    from app.domain.companies.market import open_jobs, suggestions
 
     in_market = await open_jobs(session, tenant_id=tenant_id, company_id=company_id)
+    candidates = [] if in_market["linked"] else await suggestions(session, tenant_id=tenant_id, company=company)
     return {
         "company": {
             "id": company.id,
@@ -196,4 +202,6 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
         "switchboard": boards.get(company_id),
         # ELI-33: what the company is hiring for now, from Markt.
         "market": in_market,
+        # ELI-33 step 2b: same name in Markt, another or unknown town.
+        "suggestions": candidates,
     }
