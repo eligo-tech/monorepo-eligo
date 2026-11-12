@@ -322,7 +322,9 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
         Uuid(), ForeignKey("hub_companies.id"), nullable=False, index=True
     )
     observation_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(), ForeignKey("hub_observations.id"), nullable=True, index=True
+        # Not indexed: nothing deletes observations, and an unread index costs
+        # a write on every insert (0068).
+        Uuid(), ForeignKey("hub_observations.id"), nullable=True
     )
 
     title: Mapped[str] = mapped_column(String(300), nullable=False)
@@ -346,7 +348,8 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
 
     location_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
     postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    city: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    # Not indexed: the filter is lower(city), which a plain index cannot serve (0068).
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
     country: Mapped[str | None] = mapped_column(String(80), nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
