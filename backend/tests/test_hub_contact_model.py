@@ -243,22 +243,31 @@ async def test_the_nightly_job_asks_the_model_in_batches_and_stops_when_it_shoul
 
     left = {"n": 120, "down": False, "off": False}
     asked: list[int] = []
+    counted: list[bool] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         n = int(request.url.params["limit"])
         asked.append(n)
+        counted.append(request.url.params.get("progress") == "true")
         if left["off"]:
             return httpx.Response(200, json={"read": 0, "contacts": 0, "failed": 0, "remaining": -1})
+        count = {"remaining": left["n"]} if counted[-1] else {}
         if left["down"]:
-            return httpx.Response(200, json={"read": 0, "contacts": 0, "failed": n, "remaining": left["n"]})
+            return httpx.Response(200, json={"read": 0, "contacts": 0, "failed": n, **count})
         read = min(n, left["n"])
         left["n"] -= read
-        return httpx.Response(200, json={"read": read, "contacts": read // 2, "failed": 0, "remaining": left["n"]})
+        count = {"remaining": left["n"]} if counted[-1] else {}
+        return httpx.Response(200, json={"read": read, "contacts": read // 2, "failed": 0, **count})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://api") as client:
         # The queue drains, then the job stops.
         assert await _read_ad_contacts_model(client, budget=10_000) == {"read": 120, "contacts": 60, "failed": 0, "remaining": 0}
         assert asked == [50, 50, 50]
+        assert counted == [False, False, False]  # Disk IO: no queue count per batch
+        # The budget ends the run: the queue is counted once, on its last batch.
+        asked.clear(); counted.clear(); left.update(n=500)
+        assert (await _read_ad_contacts_model(client, budget=100))["remaining"] == 400
+        assert counted == [False, True]
         # The model is down: one failed batch, and the ads wait for the next night.
         asked.clear(); left.update(n=500, down=True)
         assert (await _read_ad_contacts_model(client, budget=10_000))["failed"] == 50

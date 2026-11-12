@@ -682,6 +682,8 @@ async def job_families_backfill(
 @router.post("/ad-contacts/backfill")
 async def ad_contacts_backfill(
     limit: int = Query(default=5_000, ge=1, le=10_000),
+    # The queue count scans the open ads: only when asked (Disk IO, 2026-11-12).
+    progress: bool = Query(default=False),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
@@ -690,12 +692,13 @@ async def ad_contacts_backfill(
     nightly job repeats until the queue is empty."""
     from app.domain.hub import ad_contacts
 
-    return await ad_contacts.backfill(db, limit=limit)
+    return await ad_contacts.backfill(db, limit=limit, count=progress)
 
 
 @router.post("/ad-contacts/model-backfill")
 async def ad_contacts_model_backfill(
     limit: int = Query(default=50, ge=1, le=200),
+    progress: bool = Query(default=False),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
@@ -704,7 +707,9 @@ async def ad_contacts_model_backfill(
     Machine-only, like every corpus write."""
     from app.domain.hub import contact_model
 
-    return await contact_model.backfill(db, limit=limit, reader=contact_model.reader_from_settings())
+    return await contact_model.backfill(
+        db, limit=limit, reader=contact_model.reader_from_settings(), count=progress
+    )
 
 
 @router.post("/vacancy-keys/backfill")

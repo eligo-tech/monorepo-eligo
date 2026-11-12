@@ -210,8 +210,14 @@ async def test_the_route_runs_the_pass_for_the_ingest_token(monkeypatch) -> None
             f"{settings.api_v1_prefix}/hub/ad-contacts/backfill?limit=10",
             headers={"Authorization": f"Bearer {'t' * 40}"},
         )
+        asked = await c.post(
+            f"{settings.api_v1_prefix}/hub/ad-contacts/backfill?limit=10&progress=true",
+            headers={"Authorization": f"Bearer {'t' * 40}"},
+        )
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"read": 1, "contacts": 1, "remaining": 0}
+    # Disk IO (2026-11-12): the queue count scans the open ads; only on request.
+    assert resp.json() == {"read": 1, "contacts": 1}
+    assert asked.json() == {"read": 0, "contacts": 0, "remaining": 0}
 
 
 async def test_the_nightly_job_reads_in_batches_and_stops_when_the_queue_is_empty() -> None:
@@ -220,22 +226,31 @@ async def test_the_nightly_job_reads_in_batches_and_stops_when_the_queue_is_empt
     from scripts.hub_daily import _read_ad_contacts
 
     asked: list[int] = []
+    counted: list[bool] = []
     left = {"n": 12_000}
 
     def handler(request: httpx.Request) -> httpx.Response:
         n = int(request.url.params["limit"])
         asked.append(n)
+        counted.append(request.url.params.get("progress") == "true")
         read = min(n, left["n"])
         left["n"] -= read
-        return httpx.Response(200, json={"read": read, "contacts": read // 10, "remaining": left["n"]})
+        body = {"read": read, "contacts": read // 10}
+        if counted[-1]:
+            body["remaining"] = left["n"]
+        return httpx.Response(200, json=body)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://api") as client:
         assert await _read_ad_contacts(client, budget=50_000) == {"read": 12_000, "contacts": 1_200, "remaining": 0}
         assert asked == [5_000, 5_000, 5_000]
-        asked.clear()
+        assert counted == [False, False, False]  # a short batch means the queue is empty
+        asked.clear(); counted.clear()
         left["n"] = 100_000
-        assert (await _read_ad_contacts(client, budget=7_000))["read"] == 7_000
+        result = await _read_ad_contacts(client, budget=7_000)
+        assert result["read"] == 7_000
         assert asked == [5_000, 2_000]
+        assert counted == [False, True]  # the queue count once, on the last batch
+        assert result["remaining"] == 93_000
 
 
 # --- review of #231 -----------------------------------------------------------
