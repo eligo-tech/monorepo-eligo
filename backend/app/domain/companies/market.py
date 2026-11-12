@@ -210,6 +210,32 @@ async def auto_link(session: AsyncSession, *, tenant_id: uuid.UUID) -> dict[str,
     return {"linked": linked}
 
 
+async def link_all_workspaces() -> dict[str, int]:
+    """`auto_link` for every workspace, each in its own session pinned to it.
+
+    The workspaces come from `tenants`, which every role may read (the
+    pre-auth org lookup). NOT from `companies`: the operator request is pinned
+    to the ingest token's workspace, so under RLS that list held one
+    workspace — the first production run linked 1 company instead of ~84 per
+    workspace. The caller's pin is restored afterwards."""
+    from app.core.database import SessionLocal, current_tenant_var
+    from app.domain.tenants.models import Tenant
+
+    async with SessionLocal() as session:
+        tenants = (await session.scalars(select(Tenant.id))).all()
+    total = {"tenants": 0, "linked": 0}
+    for tenant_id in tenants:
+        token = current_tenant_var.set(str(tenant_id))
+        try:
+            async with SessionLocal() as session:
+                total["linked"] += (await auto_link(session, tenant_id=tenant_id))["linked"]
+        finally:
+            current_tenant_var.reset(token)
+        total["tenants"] += 1
+    logger.info("company links: %s", total)
+    return total
+
+
 # ---------------------------------------------------------------------------
 # Open jobs and the careers page, for the company page and the manager page
 # ---------------------------------------------------------------------------

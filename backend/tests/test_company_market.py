@@ -184,6 +184,11 @@ async def test_the_operator_route_links_every_workspace(monkeypatch) -> None:
     from app.core.config import settings
     from app.main import app
 
+    from app.domain.tenants.models import Tenant
+
+    # Every workspace is a `tenants` row (its Clerk organisation); the job
+    # lists workspaces from there (see test_company_links_postgres.py).
+    await _add(*(Tenant(id=t, clerk_org_id=f"org_{t.hex}") for t in (TENANT, OTHER)))
     await _add(_hub("uniVersa Versicherungen", "Nürnberg"))
     mine = await _company(TENANT, "uniVersa Versicherungen", manager_city="Nürnberg")
     theirs = await _company(OTHER, "uniVersa Versicherungen", manager_city="Nürnberg")
