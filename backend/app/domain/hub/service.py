@@ -433,7 +433,15 @@ async def merge_fetch(
             continue
 
         # Seen before: a touch when nothing changed, a rewrite when it did.
+        # A touch moves `last_seen_at` only. `observation_id` is indexed, and
+        # changing an indexed column rewrites every index on this table (~18),
+        # which on each crawl's re-seen ads drained the Disk IO budget
+        # (2026-11-12). It keeps naming the fetch that produced the row's
+        # current content: it moves on a change or a return, not on a sighting.
+        reobserved = row.closed_at is not None or not row.is_active or row.content_hash != content_hash
         row.last_seen_at = now
+        if reobserved:
+            row.observation_id = observation.id
         if row.closed_at is not None:
             # The source published a reference it had taken down (liveness.py).
             # Closure deleted its payload: restore the raw copy now, and ask
@@ -450,7 +458,6 @@ async def merge_fetch(
         row.unlisted_at = None
         row.check_due_at = None
         row.is_active = True
-        row.observation_id = observation.id
         # Backfill only. A posting first seen by a regional sweep has no field;
         # the next berufsfeld shard that returns it supplies one. Never clear a
         # known field because this particular slice did not ask for it.
