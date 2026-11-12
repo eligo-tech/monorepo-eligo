@@ -338,11 +338,13 @@ async def _fetch_descriptions(
     while pending:
         batch_ids = pending[:_DESCRIPTION_BATCH_SIZE]
         pending = pending[_DESCRIPTION_BATCH_SIZE:]
+        # The corpus counts read every ad text: ask once, on the last batch.
+        progress = "" if pending else "&progress=true"
         result: dict[str, int] | None = None
         for attempt in range(_DESCRIPTION_BATCH_ATTEMPTS):
             try:
                 response = await client.post(
-                    f"/hub/descriptions/fetch?limit={len(batch_ids)}",
+                    f"/hub/descriptions/fetch?limit={len(batch_ids)}{progress}",
                     json={"external_ids": batch_ids},
                 )
                 response.raise_for_status()
@@ -386,10 +388,13 @@ async def _fetch_partner_pages(client: httpx.AsyncClient, *, budget: int) -> dic
     latest: dict[str, int] = {}
     while totals["attempted"] < budget:
         size = min(_PARTNER_BATCH_SIZE, budget - totals["attempted"])
+        # Corpus counts once, on the batch that reaches the budget. A run that
+        # ends early on an empty backlog reports none (the log prints "?").
+        progress = "&progress=true" if size == budget - totals["attempted"] else ""
         result: dict[str, int] | None = None
         for attempt in range(_DESCRIPTION_BATCH_ATTEMPTS):
             try:
-                response = await client.post(f"/hub/partner-pages/fetch?limit={size}")
+                response = await client.post(f"/hub/partner-pages/fetch?limit={size}{progress}")
                 response.raise_for_status()
                 result = response.json()
                 break
@@ -1165,7 +1170,7 @@ async def main() -> int:
                 print(
                     f"  Anzeigentexte: {d['attempted']} geprüft, +{d['stored']} geholt "
                     f"({d['empty']} ohne Text) · "
-                    f"{d['with_description']}/{d['active_postings']} durchsuchbar"
+                    f"{d.get('with_description', '?')}/{d.get('active_postings', '?')} durchsuchbar"
                 )
             except Exception as exc:
                 print(f"  description fetch FAILED: {exc}", file=sys.stderr)
@@ -1211,7 +1216,7 @@ async def main() -> int:
                 print(
                     f"  Partnerseiten: {q['attempted']} geprüft, +{q['stored']} gelesen "
                     f"({q['failed']} Fehler, {q['skipped']} übersprungen) · "
-                    f"{q['source_page_read']}/{q['with_source_url']} gelesen"
+                    f"{q.get('source_page_read', '?')}/{q.get('with_source_url', '?')} gelesen"
                 )
             except Exception as exc:
                 print(f"  partner-page fetch FAILED: {exc}", file=sys.stderr)

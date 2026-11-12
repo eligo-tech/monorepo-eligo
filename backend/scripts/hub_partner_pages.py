@@ -53,7 +53,7 @@ async def main() -> int:
     print(
         f"Partnerseiten: {q['attempted']} geprüft, +{q['stored']} gelesen "
         f"({q['failed']} Fehler, {q['skipped']} übersprungen) · "
-        f"{q['source_page_read']}/{q['with_source_url']} gelesen"
+        f"{q.get('source_page_read', '?')}/{q.get('with_source_url', '?')} gelesen"
     )
     return 0
 
