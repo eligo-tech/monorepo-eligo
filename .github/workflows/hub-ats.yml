@@ -2,9 +2,9 @@
 # (backend/app/domain/hub/ats.py). A scheduled job only (ARCHITECTURE.md
 # RULE 1), over HTTP with the machine token — no database credentials in CI.
 #
-# Daytime, so it never competes with the nightly ingest chain for the
+# Daytime, so it never competes with the weekly ingest chain for the
 # database. One parallel job per board system, each with its own time budget,
-# so a slow system never costs another its daily refresh. Each board is one
+# so a slow system never costs another its weekly refresh. Each board is one
 # feed request (~1/s); Personio adds one job page per new office, Ashby and
 # Lever one board page per new DACH board (its name). On the 1st of the month each job
 # first rediscovers boards from public URL indexes (Common Crawl, the Wayback
@@ -13,7 +13,10 @@ name: Hub · employer boards (Personio, Ashby, Greenhouse, Lever)
 
 on:
   schedule:
-    - cron: "37 12 * * *"
+    # Wednesdays: weekly since 2026-11-12 (Disk IO on the Small instance), and
+    # mid-week so it never overlaps the Saturday ingest chain, which can run
+    # past 24 h. Discovery runs on the first Wednesday of the month.
+    - cron: "37 12 * * 3"
   workflow_dispatch:
     inputs:
       ats:
@@ -73,7 +76,7 @@ jobs:
           ATS: ${{ matrix.ats }}
         run: |
           extra=()
-          if [ "$DISCOVER_INPUT" = "true" ] || [ "$(date -u +%d)" = "01" ]; then extra=(--discover); fi
+          if [ "$DISCOVER_INPUT" = "true" ] || [ "$(date -u +%-d)" -le 7 ]; then extra=(--discover); fi
           if [ -n "$HOST_INPUT" ]; then
             case "$HOST_INPUT" in *[!a-z0-9.-]*) echo "discover_host must be a host name"; exit 2;; esac
             # A host belongs to one system: with "all", the other systems'

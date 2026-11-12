@@ -7,29 +7,30 @@
 #
 # Machine-triggered only (ARCHITECTURE.md RULE 1): it calls the deployed API
 # with the scoped ingest token; no user and no UI can start a fetch.
-# Its own daily slot so the nightly ingest does not grow by hours while the
-# first pass (~240k employers) drains over about seven weeks.
+# Its own weekly slot (Wednesdays, clear of the Saturday ingest chain) with a
+# double budget: the first pass (~240k employers) now drains over months,
+# not weeks — the price of keeping the Small instance's Disk IO in budget.
 name: Hub · employer Impressum
 
 on:
   schedule:
-    - cron: "23 15 * * *"
+    - cron: "23 15 * * 3"
   workflow_dispatch:
     inputs:
       budget:
         description: "Employers to check this run (batches of 20)"
         required: false
-        default: "5000"
+        default: "10000"
 
 concurrency:
-  # Same group as the nightly ingest: one writer on the corpus at a time.
+  # Same group as the weekly ingest: one writer on the corpus at a time.
   group: hub-ingest
   cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 170
+    timeout-minutes: 340
     steps:
       - uses: actions/checkout@v5
 
@@ -46,4 +47,4 @@ jobs:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
           BUDGET: ${{ github.event.inputs.budget }}
-        run: python -m scripts.hub_daily --employer-sites-only "${BUDGET:-5000}"
+        run: python -m scripts.hub_daily --employer-sites-only "${BUDGET:-10000}"

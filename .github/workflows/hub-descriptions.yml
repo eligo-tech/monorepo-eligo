@@ -2,8 +2,8 @@
 #
 # The listing endpoint returns no description, so full text costs ONE request
 # per posting and there is no bulk call. That makes this a deliberate action
-# with a budget, not something to run nightly: the nightly job already tops up
-# a few hundred, and this is for the first fill or after adding a saved search
+# with a budget, not a schedule of its own: the weekly ingest chain runs it
+# twice for the new ads, and this is for the first fill or after adding a saved search
 # that opens a new slice of the market.
 #
 # Runs through the deployed API with the machine credential, so no database
