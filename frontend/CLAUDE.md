@@ -31,7 +31,7 @@ src/
 │   ├── CommandBar.tsx          # wordmark, search, status chips, typeface switch, Clerk controls
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
 │   ├── useTypeface.ts          # the Jet · Mono · Heli switch
-│   ├── screens/                # CockpitScreen · MarktScreen · ContactListScreen (Leads · Unternehmen) · ManagerScreen · JobsScreen (Mandate)
+│   ├── screens/                # CockpitScreen · MarktScreen · ContactListScreen (Leads) · CompanyScreen (Unternehmen) · ManagerScreen · JobsScreen (Mandate)
 │   │   ├── ContactsPanel.tsx   # Markt "Ansprechpartner": people a company's public ads name → adopt
 │   │   ├── MandateEditor.tsx   # "Mandat bearbeiten" — the Suchprofil, from the Mandate list
 │   │   ├── MandateView.tsx     # the per-job workspace ("Mandat & Kandidatensuche")
@@ -79,9 +79,13 @@ people its public ads name, and adopting one creates the company and a
 `managers` row with `stage = bus_dev`, provenance (the ad URL) and the Art. 14
 flag. **Leads** lists only those bus-dev contacts — never imports or
 hand-entered people — with phone, e-mail, LinkedIn/XING (stored profile, else a
-people search) and the adoption date. **Unternehmen/Companies** shows the SAME
-records grouped per company (A→Z) — one record, two views, never a copy. After
-the first contact "Zu Managern" promotes the record to the Manager screen.
+people search) and the adoption date. After the first contact "Zu Managern"
+promotes the record to the Manager screen. **Unternehmen** (`CompanyScreen`,
+ELI-33) lists EVERY company of the workspace — Alle / Kunden (≥1 manager) /
+Leads (≥1 bus-dev contact); not `is_client`, which imports set on every row —
+and one page per company (`#companies/<id>`): managers, leads, mandates, the
+Impressum switchboard, "Manager hinzufügen". Company names on the manager page
+and in Leads link there; `#managers/<id>` opens a manager.
 **Mandate** (key `mandate`, `JobsScreen`) are the workspace's own jobs.
 Retired hashes still land: `kontakte` → `leads`, `jobs` → `mandate`;
 Workspace, Projekte and Anrufen → `leads`; `tracking` onto `cockpit`, so old links still land somewhere.

@@ -18,6 +18,7 @@ import { CockpitScreen } from './screens/CockpitScreen'
 import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
 import { EinstellungenScreen } from './screens/EinstellungenScreen'
 import { ContactListScreen } from './screens/ContactListScreen'
+import { CompanyScreen } from './screens/CompanyScreen'
 import { JobsScreen } from './screens/JobsScreen'
 import { ManagerScreen } from './screens/ManagerScreen'
 import { MarktScreen } from './screens/MarktScreen'
@@ -200,7 +201,15 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
             }}
           />
         )}
-        {screen === 'managers' && <ManagerScreen />}
+        {screen === 'managers' && (
+          <ManagerScreen
+            managerId={detail}
+            onSelect={(id) => {
+              setDetail(id)
+              window.location.hash = id ? `managers/${id}` : 'managers'
+            }}
+          />
+        )}
         {screen === 'mandate' && (
           <JobsScreen query={query} onClearQuery={() => setQuery('')} />
         )}
@@ -211,8 +220,17 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
             onPipelineChanged={state.reload}
           />
         )}
-        {screen === 'leads' && <ContactListScreen view="leads" />}
-        {screen === 'companies' && <ContactListScreen view="companies" />}
+        {screen === 'leads' && <ContactListScreen />}
+        {screen === 'companies' && (
+          <CompanyScreen
+            companyId={detail}
+            onSelect={(id) => {
+              setDetail(id)
+              window.location.hash = id ? `companies/${id}` : 'companies'
+              window.scrollTo({ top: 0 })
+            }}
+          />
+        )}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
         </ErrorBoundary>
       </main>

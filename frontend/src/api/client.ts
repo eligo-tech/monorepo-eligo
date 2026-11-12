@@ -10,6 +10,8 @@ import type {
   CandidateDTO,
   CandidateUpdatePayload,
   CompanyDTO,
+  CompanyOverviewRowDTO,
+  CompanyPageDTO,
   CVExtractionResultDTO,
   HubCompanyLinkDTO,
   HubCorpusStatsDTO,
@@ -343,6 +345,12 @@ export const api = {
   managersOwingArt14: () => request<ManagerDTO[]>('/managers/art14-outstanding'),
 
   manager: (id: string) => request<ManagerDTO>(`/managers/${id}`),
+
+  /** ELI-33: Unternehmen — every company here with counts, A–Z. */
+  companiesOverview: () => request<CompanyOverviewRowDTO[]>('/companies/overview'),
+
+  /** ELI-33: one company — managers, leads, mandates, Impressum switchboard. */
+  companyPage: (id: string) => request<CompanyPageDTO>(`/companies/${id}/page`),
 
   managerInteractions: (id: string) =>
     request<ManagerInteractionDTO[]>(`/managers/${id}/interactions`),
