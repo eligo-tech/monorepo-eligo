@@ -3,7 +3,7 @@
 "Bei Managern oder Leads soll immer direkt die Karriereseite hinterlegt sein,
 damit wir wissen welche Stellen gerade offen sind, wenn wir anrufen." The open
 jobs are already in the shared corpus (BA, EURES, Personio, Ashby …, refreshed
-nightly); a company only has to be linked to its corpus rows. Measured
+weekly and daily); a company only has to be linked to its corpus rows. Measured
 2026-11-12: of ~330 companies per workspace only 1–6 were linked.
 
 Linking is the corpus→record crossing (CLAUDE.md §2.6), so each one goes

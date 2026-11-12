@@ -151,7 +151,7 @@ export const EN: Record<string, string> = {
   'Offene Stellen ({n})': 'Open jobs ({n})',
   'Offene Stellen': 'Open jobs',
   'Karriereseite': 'Careers page',
-  'Noch nicht mit dem Markt verknüpft. Unternehmen mit gleichem Namen und Ort werden nachts automatisch verknüpft.': 'Not linked to the market yet. Companies with the same name and town are linked automatically every night.',
+  'Noch nicht mit dem Markt verknüpft. Unternehmen mit gleichem Namen und Ort werden täglich automatisch verknüpft.': 'Not linked to the market yet. Companies with the same name and town are linked automatically every day.',
   'Im Markt gerade keine offene Stelle.': 'No open job in the market right now.',
   '+ {n} weitere': '+ {n} more',
   'Bei {company} von Hand erfasst': 'Entered by hand at {company}',

@@ -790,7 +790,7 @@ async def auto_link_companies(
 ) -> dict[str, int]:
     """ELI-33: link every workspace's companies to their Markt rows where the
     name AND the town match exactly (receipt per link). Machine-only: the
-    nightly job calls it. Each workspace in its own session, pinned to it."""
+    daily hub-company-links workflow and the weekly chain call it. Each workspace in its own session, pinned to it."""
     from sqlalchemy import select
 
     from app.core.database import AdminSessionLocal, current_tenant_var

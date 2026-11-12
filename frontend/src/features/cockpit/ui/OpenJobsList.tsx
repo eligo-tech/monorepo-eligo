@@ -38,7 +38,7 @@ export function OpenJobs({
   if (!market.linked)
     return (
       <p className="text-[13px] text-cockpit-dim">
-        {t('Noch nicht mit dem Markt verknüpft. Unternehmen mit gleichem Namen und Ort werden nachts automatisch verknüpft.')}
+        {t('Noch nicht mit dem Markt verknüpft. Unternehmen mit gleichem Namen und Ort werden täglich automatisch verknüpft.')}
       </p>
     )
   if (market.total === 0)

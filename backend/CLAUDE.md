@@ -288,9 +288,9 @@ These are enforced in code. Do not route around them.
   backfilled onto `hub_companies` only where empty. Employers no ad names a
   person for come first; sole traders are never checked. Measured 2026-11-11:
   164/1,000 employers verified, 140 with a phone.
-- **Workspaces' companies ↔ Markt** (`companies/market.py`, ELI-33): nightly
-  (`hub_daily.py`, `POST /hub/company-links/auto`, manual
-  `hub-company-links.yml`) a company is linked to its corpus rows ONLY where
+- **Workspaces' companies ↔ Markt** (`companies/market.py`, ELI-33): daily
+  (`hub-company-links.yml`, 05:53 UTC, and in the weekly chain's
+  `hub_daily.py` → `POST /hub/company-links/auto`) a company is linked to its corpus rows ONLY where
   the normalized name AND the town (its location, else its managers' town or
   postcode) match — one receipt per link through `verify_and_commit`, which
   does not commit: the caller does. Linked, the company page and the manager
