@@ -211,7 +211,10 @@ async def test_a_sole_trader_is_never_checked() -> None:
 async def test_only_this_workspaces_companies_are_checked() -> None:
     mine, theirs = uuid.uuid4(), uuid.uuid4()
     their_company = await _company(theirs, "Tempton Group GmbH", domain="tempton.de")
-    await _run(mine, _Fetcher(_tempton()))
+    fetcher = _Fetcher(_tempton())
+    outcome = await _run(mine, fetcher)
+    # Not even fetched: another workspace's client list never drives a request.
+    assert fetcher.requested == [] and outcome["checked"] == 0
     assert (await _get(their_company)).impressum is None
 
 
