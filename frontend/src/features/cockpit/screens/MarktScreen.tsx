@@ -404,7 +404,7 @@ function RoleRow({
         {onToggle &&
           (taken ? (
             <Chip tone="gold" className="px-1.5 py-0">
-              <span title={t('Als Lead in Jobs übernommen')}>{t('Lead')}</span>
+              <span title={t('Als Lead in Mandate übernommen')}>{t('Lead')}</span>
             </Chip>
           ) : (
             <input
@@ -672,7 +672,7 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
       setSelected(new Set())
       if (landed.length > 0) setAdopted(true)
       const parts: string[] = []
-      if (result.created) parts.push(t('{n} als Lead in Jobs übernommen', { n: String(result.created) }))
+      if (result.created) parts.push(t('{n} als Lead in Mandate übernommen', { n: String(result.created) }))
       if (result.existing) parts.push(t('{n} waren schon da', { n: String(result.existing) }))
       if (result.skipped) parts.push(t('{n} übersprungen (Agentur oder nicht mehr vorhanden)', { n: String(result.skipped) }))
       setLeadNote(parts.join(' · '))
