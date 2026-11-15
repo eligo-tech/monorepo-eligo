@@ -354,7 +354,7 @@ async def contacts(
     def aware(value: dt.datetime | None) -> dt.datetime | None:
         return value.replace(tzinfo=dt.UTC) if value is not None and value.tzinfo is None else value
 
-    jobs = await lead_jobs(session, tenant_id, [manager for manager, _, _ in found])
+    jobs = await lead_jobs(session, tenant_id, [row[0] for row in found])
     rows = []
     for manager, company, call, open_next_at in found:
         nxt = aware(open_next_at)
