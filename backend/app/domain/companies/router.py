@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.domain.companies import service
 from app.domain.companies import market
 from app.domain.companies.schemas import CompanyCreate, CompanyOverviewRow, CompanyPage, CompanyRead, MarketSites
+from app.domain.hub.schemas import Switchboard
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -51,6 +52,24 @@ async def company_page(
     if page is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found")
     return CompanyPage(**page)
+
+
+@router.get("/{company_id}/register", response_model=Switchboard | None)
+async def company_register(
+    company_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> Switchboard | None:
+    """ELI-39: website, VAT id and register as the company's Impressum
+    publishes them (Markt's reading, else the company's own), with the page
+    and fetch time — or null while none is verified. Reads only: the daily
+    job fills it, never this request."""
+    if await service.get_company(db, tenant_id=tenant_id, company_id=company_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found")
+    from app.domain.hub.call_list import company_switchboards
+
+    board = (await company_switchboards(db, tenant_id, [company_id])).get(company_id)
+    return Switchboard(**board) if board else None
 
 
 async def _page_or_404(db: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID) -> CompanyPage:

@@ -57,6 +57,8 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     ("POST", "/hub/agencies/sites/check"),
     ("POST", "/hub/employers/sites/check"),
     ("POST", "/hub/company-links/auto"),
+    # ELI-39: fetches workspace companies' homepages + Impressum — outbound.
+    ("POST", "/hub/companies/impressum/check"),
     ("POST", "/hub/corpus-snapshots/refresh"),
     # Not a crawl of a public source — a workspace's own ATS — but it
     # decrypts that workspace's password, so it is machine-only for the same

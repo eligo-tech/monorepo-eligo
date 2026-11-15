@@ -835,6 +835,23 @@ async def auto_link_companies(
     return await market.link_all_workspaces()
 
 
+@router.post("/companies/impressum/check")
+async def check_company_impressum(
+    limit: int = Query(default=20, ge=1, le=50),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+) -> dict[str, int]:
+    """ELI-39: workspace companies Markt cannot answer for — their website
+    (own domain, else contacts' company mail), its Impressum, VAT id and
+    register, through the verification gate. Machine-only (RULE 1): the daily
+    hub-company-links workflow calls it in batches; each workspace in its own
+    session, pinned to it."""
+    from app.domain.companies import impressum
+    from app.domain.hub import sites
+
+    async with sites.SiteFetcher() as fetcher:
+        return await impressum.check_all_workspaces(fetcher=fetcher, limit=limit)
+
+
 @router.post("/agencies/sites/check")
 async def check_agency_sites(
     limit: int = Query(default=5, ge=1, le=50),
