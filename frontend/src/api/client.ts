@@ -372,6 +372,10 @@ export const api = {
   managerInteractions: (id: string) =>
     request<ManagerInteractionDTO[]>(`/managers/${id}/interactions`),
 
+  /** ELI-40: the Termine tab — this manager's meetings, booked or held. */
+  managerAppointments: (id: string) =>
+    request<ManagerInteractionDTO[]>(`/managers/${id}/appointments`),
+
   /** File one touch on this manager by hand — the call that just happened,
    *  rather than the one an import will bring tomorrow. */
   logManagerInteraction: (

@@ -12,10 +12,12 @@ from sqlalchemy.orm import selectinload
 
 from app.domain.candidates.models import Candidate
 from app.domain.common.enums import (
+    APPOINTMENT_INTERACTION_KINDS,
     ConfidenceSource,
     CONTACT_INTERACTION_KINDS,
     InteractionType,
     LIVE_JOB_STATUSES,
+    interaction_spellings,
     normalise_interaction_type,
 )
 from app.domain.companies.models import Company
@@ -352,6 +354,10 @@ def _advance_last_contact(manager: Manager, occurred_at: dt.datetime) -> None:
     if current is not None and current.tzinfo is None:
         # SQLite hands back a naive datetime even for a tz-aware column.
         current = current.replace(tzinfo=dt.UTC)
+    # A meeting booked for next week is not contact made next week (ELI-40):
+    # "Letzter Kontakt" never shows a date that has not happened yet.
+    if occurred_at > dt.datetime.now(dt.UTC):
+        return
     if current is None or occurred_at > current:
         manager.last_contact_at = occurred_at
 
@@ -421,6 +427,37 @@ async def list_interactions(
         .where(
             ManagerInteraction.tenant_id == tenant_id,
             ManagerInteraction.manager_id == manager_id,
+        )
+        .order_by(ManagerInteraction.occurred_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def list_appointments(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    manager_id: uuid.UUID,
+    limit: int = 200,
+) -> list[ManagerInteraction] | None:
+    """The manager's Termine (ELI-40): the interactions of an appointment kind.
+
+    None when the manager is not in this workspace, so the router can say 404
+    rather than an empty calendar that suggests the person exists.
+    """
+    exists = await session.scalar(
+        select(Manager.id).where(Manager.id == manager_id, Manager.tenant_id == tenant_id)
+    )
+    if exists is None:
+        return None
+    spellings = interaction_spellings(APPOINTMENT_INTERACTION_KINDS)
+    result = await session.execute(
+        select(ManagerInteraction)
+        .where(
+            ManagerInteraction.tenant_id == tenant_id,
+            ManagerInteraction.manager_id == manager_id,
+            func.lower(func.trim(ManagerInteraction.interaction_type)).in_(spellings),
         )
         .order_by(ManagerInteraction.occurred_at.desc())
         .limit(limit)
