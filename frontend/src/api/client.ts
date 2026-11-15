@@ -51,6 +51,7 @@ import type {
   ProcessJobDTO,
   ProcessStepDTO,
   ReportingOverviewDTO,
+  SwitchboardDTO,
 } from './types'
 
 // Dev: '/api/v1' (Vite proxies to :8000). Prod: set VITE_API_BASE_URL to the
@@ -359,6 +360,10 @@ export const api = {
 
   /** ELI-33: one company — managers, leads, mandates, Impressum switchboard. */
   companyPage: (id: string) => request<CompanyPageDTO>(`/companies/${id}/page`),
+
+  /** ELI-39: website, VAT id and register from the company's Impressum, with
+   *  the page and fetch date — null while none is verified. Read only. */
+  companyRegister: (id: string) => request<SwitchboardDTO | null>(`/companies/${id}/register`),
 
   /** ELI-33 2b: "Das ist unser Unternehmen" — link these Markt sites. */
   confirmMarketLink: (id: string, hubCompanyIds: string[], dismissIds: string[] = []) =>
