@@ -276,3 +276,36 @@ async def test_the_nightly_job_asks_the_model_in_batches_and_stops_when_it_shoul
         asked.clear(); left.update(down=False, off=True)
         assert (await _read_ad_contacts_model(client, budget=10_000))["remaining"] == -1
         assert asked == [50]
+
+
+async def test_the_model_queue_is_read_through_its_partial_index() -> None:
+    """Disk IO (2026-11-15): the queue was picked with `contacts_model_due IS
+    true`, which Postgres cannot match to the index `WHERE contacts_model_due`
+    — so each 50-ad batch walked the whole ads table: 800 batches, 68.5 GB
+    read in one weekly run (EXPLAIN on prod: pkey scan + filter vs. an
+    index-only scan on ix_hub_posting_contacts_model_due). The bare column is
+    what the index predicate says, and what the planner can prove."""
+    from sqlalchemy import event
+
+    from app.core.database import engine
+
+    await _ad(AD)
+    async with SessionLocal() as s:
+        await ad_contacts.backfill(s, limit=1000)
+    seen: list[str] = []
+
+    def record(conn, cursor, statement, params, context, many):
+        if "contacts_model_due" in statement and statement.lstrip().upper().startswith("SELECT"):
+            seen.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
+    try:
+        async with SessionLocal() as s:
+            await contact_model.backfill(s, limit=50, reader=FakeReader([]), count=True)
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", record)
+
+    assert seen, "the queue and its count must still filter on contacts_model_due"
+    for statement in seen:
+        where = statement.split("WHERE", 1)[1]
+        assert "contacts_model_due IS" not in where, statement
