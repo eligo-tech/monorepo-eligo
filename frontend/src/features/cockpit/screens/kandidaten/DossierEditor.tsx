@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Trash2, Save, Ban, AlertCircle, RefreshCw } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import { withReaddConfirm } from '../../erasure/readd'
+import { WORK_PERMITS, workPermitForEdit } from './workPermit'
 import type { CandidateDTO, CandidateUpdatePayload, EducationDTO, WorkRoleDTO } from '@/api/types'
 import {
   AddButton,
@@ -63,14 +64,6 @@ interface Draft {
   education: EducationDTO[]
 }
 
-const WORK_PERMITS: { value: string; label: string }[] = [
-  { value: 'unknown', label: t('Unbekannt') },
-  { value: 'citizen', label: t('Staatsbürger') },
-  { value: 'permanent', label: t('Unbefristet') },
-  { value: 'work_visa', label: t('Arbeitsvisum') },
-  { value: 'requires_sponsorship', label: t('Sponsoring nötig') },
-  { value: 'none', label: t('Keine') },
-]
 
 const EMPLOYMENT_FORMS = [
   { value: '', label: '—' },
@@ -131,7 +124,7 @@ function seed(dto: CandidateDTO): Draft {
     other_processes: s(dto.other_processes),
     other_process_companies: [...(dto.other_process_companies ?? [])],
     other_notes: s(dto.other_notes),
-    work_permit: dto.work_permit || 'unknown',
+    work_permit: workPermitForEdit(dto.work_permit),
     source: s(dto.source),
     motivation: s(dto.motivation),
     skills: [...(dto.skills ?? [])],

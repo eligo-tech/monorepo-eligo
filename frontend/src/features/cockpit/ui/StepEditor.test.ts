@@ -11,7 +11,13 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { isPlaced, placementJustHappened, type StepFacts } from './StepEditor'
+import {
+  initialStepInputs,
+  isPlaced,
+  placementJustHappened,
+  presentedStep,
+  type StepFacts,
+} from './StepEditor'
 
 const step = (key: string, facts: Partial<StepFacts> = {}): StepFacts => ({
   key,
@@ -146,5 +152,69 @@ describe('placementJustHappened', () => {
     expect(
       placementJustHappened(rejected, step('vertrag', { doneAt: '2026-10-20T00:00:00Z' })),
     ).toBe(false)
+  })
+})
+
+// ── ELI-28: the dialog opens on "now" ───────────────────────────────────────
+//
+// "Vorauswahl ist immer das aktuelle Datum mit der aktuellen Uhrzeit." Only an
+// EMPTY step is filled, and only the date the step is about: a milestone is
+// done now, an appointment is booked now. Filling both would mark an
+// interview as having happened the moment somebody opened it to book it.
+
+describe('initialStepInputs', () => {
+  // 14:05 UTC on 15 Nov 2026 is 15:05 on a Berlin wall clock (CET, +1).
+  const now = new Date('2026-11-15T14:05:00Z')
+
+  it('prefills a milestone with the current date and time', () => {
+    expect(initialStepInputs({ key: 'vorgestellt' }, now)).toEqual({
+      scheduled: '',
+      done: '2026-11-15T15:05',
+    })
+  })
+
+  it('prefills an appointment as booked now, not as done', () => {
+    expect(initialStepInputs({ key: 'interview' }, now)).toEqual({
+      scheduled: '2026-11-15T15:05',
+      done: '',
+    })
+    expect(initialStepInputs({ key: 'interviewtermin_3' }, now).scheduled).toBe('2026-11-15T15:05')
+  })
+
+  it('never overwrites what is already recorded', () => {
+    expect(
+      initialStepInputs({ key: 'vorgestellt', doneAt: '2026-09-01T08:30:00Z' }, now),
+    ).toEqual({ scheduled: '', done: '2026-09-01T10:30' })
+    expect(
+      initialStepInputs({ key: 'interview', scheduledAt: '2026-12-01T09:00:00Z' }, now),
+    ).toEqual({ scheduled: '2026-12-01T10:00', done: '' })
+  })
+
+  it('prefills the next step of a running process, not one further down', () => {
+    // Opening "Vertrag" two steps early to jot a note must not mark the
+    // candidate placed; the step due next is the one being recorded.
+    expect(initialStepInputs({ key: 'feedback-1', state: 'current' }, now).done).toBe(
+      '2026-11-15T15:05',
+    )
+    expect(initialStepInputs({ key: 'vertrag', state: 'pending' }, now)).toEqual({
+      scheduled: '',
+      done: '',
+    })
+  })
+
+  it('leaves a step that already carries a verdict alone', () => {
+    expect(initialStepInputs({ key: 'feedback-1', outcome: 'pass' }, now)).toEqual({
+      scheduled: '',
+      done: '',
+    })
+  })
+})
+
+describe('presentedStep', () => {
+  it('is the Vorgestellt step, with nothing recorded yet', () => {
+    const s = presentedStep()
+    expect(s.key).toBe('vorgestellt')
+    expect(s.doneAt ?? null).toBeNull()
+    expect(initialStepInputs(s, new Date('2026-07-01T06:00:00Z')).done).toBe('2026-07-01T08:00')
   })
 })

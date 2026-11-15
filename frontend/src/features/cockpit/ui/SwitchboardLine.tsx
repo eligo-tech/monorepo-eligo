@@ -1,7 +1,10 @@
 // ELI-30: "Zentrale laut Impressum" — phone, VAT id, register, and the page
 // they come from. Used on the Markt company card and the Unternehmen view.
+// ELI-39: a company's own reading has no phone — then no switchboard badge,
+// and the link names the page and the day it was read (provenance).
 
 import { t } from '@/i18n'
+import { date } from '@/i18n/format'
 import { ExternalLink, Phone } from 'lucide-react'
 import type { SwitchboardDTO } from '@/api/types'
 import { registerLine, telHref } from './switchboard'
@@ -27,7 +30,7 @@ export function SwitchboardLine({ board, compact = false }: { board: Switchboard
           {board.phone}
         </a>
       )}
-      <ImpressumBadge />
+      {board.phone && <ImpressumBadge />}
       {!compact && board.vat_id && (
         <span>
           {t('USt-IdNr.')} {board.vat_id}
@@ -40,9 +43,10 @@ export function SwitchboardLine({ board, compact = false }: { board: Switchboard
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1 text-cockpit-faint hover:text-mint-400"
+          title={`${t('Laut Impressum, abgerufen am')} ${date(board.checked_at)}`}
         >
           <ExternalLink className="h-3 w-3" />
-          {board.domain}
+          {board.domain} · {date(board.checked_at)}
         </a>
       )}
     </div>

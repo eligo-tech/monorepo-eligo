@@ -1,5 +1,5 @@
-"""The Contact List's "Kontakte" tab (ELI-23): every contact in the workspace,
-newest first, with the company, when they were added, where they came from,
+"""The Contact List's "Kontakte" tab (ELI-23): every contact in the workspace —
+open call-backs first (ELI-38), then newest first — with the company, when they were added, where they came from,
 and how the last call went — filterable and countable by company.
 """
 
@@ -42,17 +42,18 @@ async def _seed() -> dict:
         return {"stw": stw.id, "berg": berg.id, "ozcan": ozcan.id}
 
 
-async def test_newest_first_with_company_source_and_last_call() -> None:
+async def test_due_call_back_first_then_newest_with_company_source_and_last_call() -> None:
     await _seed()
     async with SessionLocal() as s:
         page = await call_list.contacts(s, tenant_id=TENANT, now=NOW)
     rows = page["rows"]
-    assert [r["full_name"] for r in rows] == ["Nazlican Özcan", "Nicole Lauchner", "Petra Vogel"]
-    ozcan = rows[0]
+    # ELI-38: Lauchner's call-back is due, so she leads; the rest newest first.
+    assert [r["full_name"] for r in rows] == ["Nicole Lauchner", "Nazlican Özcan", "Petra Vogel"]
+    ozcan = rows[1]
     assert (ozcan["company_name"], ozcan["phone"], ozcan["source"]) == ("STW GmbH", "+49 731 1234567", "public_web")
     assert ozcan["source_detail"] == "https://example.invalid/ad" and ozcan["added_at"] is not None
     assert ozcan["art14_outstanding"] is True and ozcan["last_outcome"] is None
-    lauchner = rows[1]
+    lauchner = rows[0]
     assert (lauchner["last_outcome"], lauchner["due"], lauchner["last_call_by"]) == ("call_back", True, "Dima")
     # The company facet: who we know where, most contacts first.
     assert [(c["name"], c["contacts"]) for c in page["companies"]] == [("STW GmbH", 2), ("Bergfreunde GmbH", 1)]
@@ -64,7 +65,7 @@ async def test_filter_by_company_and_search() -> None:
     async with SessionLocal() as s:
         by_company = await call_list.contacts(s, tenant_id=TENANT, company_id=ids["stw"], now=NOW)
         searched = await call_list.contacts(s, tenant_id=TENANT, q="berg", now=NOW)
-    assert [r["full_name"] for r in by_company["rows"]] == ["Nazlican Özcan", "Nicole Lauchner"]
+    assert [r["full_name"] for r in by_company["rows"]] == ["Nicole Lauchner", "Nazlican Özcan"]
     assert [r["full_name"] for r in searched["rows"]] == ["Petra Vogel"]
     # The facet always lists every company, so the filter can be changed.
     assert len(by_company["companies"]) == 2
@@ -92,7 +93,7 @@ async def test_the_route() -> None:
     finally:
         app.dependency_overrides.clear()
     assert resp.status_code == 200, resp.text
-    assert [r["full_name"] for r in resp.json()["rows"]] == ["Nazlican Özcan", "Nicole Lauchner"]
+    assert [r["full_name"] for r in resp.json()["rows"]] == ["Nicole Lauchner", "Nazlican Özcan"]
 
 
 async def test_a_search_for_wildcard_characters_matches_them_literally() -> None:
@@ -147,3 +148,94 @@ async def test_a_company_carries_its_impressum_switchboard() -> None:
     assert by_name["STW GmbH"]["switchboard"]["impressum_url"] == "https://stw.de/impressum"
     assert by_name["Bergfreunde GmbH"]["switchboard"] is None
     assert all(c["switchboard"] is None for c in other["companies"])
+
+
+# ELI-38 "Status on top — keep the status until it is done". A lead's open
+# status is its agreed next call: it stays until a later call reaches the
+# person (or sets a new date), and leads with one are listed first.
+
+
+async def _lead_with_calls(name: str, calls: list[dict], created_at: dt.datetime | None = None) -> uuid.UUID:
+    async with SessionLocal() as s:
+        c = Company(tenant_id=TENANT, name=f"{name} GmbH")
+        s.add(c)
+        await s.flush()
+        m = Manager(tenant_id=TENANT, company_id=c.id, stage="bus_dev", full_name=name,
+                    created_at=created_at or NOW - dt.timedelta(days=5))
+        s.add(m)
+        await s.flush()
+        for i, call in enumerate(calls):
+            s.add(ManagerInteraction(
+                tenant_id=TENANT, manager_id=m.id, interaction_type="business_call",
+                created_at=NOW - dt.timedelta(days=10 - i), **call,
+            ))
+        await s.commit()
+        return m.id
+
+
+async def test_an_unanswered_call_keeps_the_agreed_call_back() -> None:
+    """Rückruf vereinbart for yesterday, then nobody picks up: the call-back
+    is not done — the date stays, and the lead is still due."""
+    await _lead_with_calls("Ina Dorsch", [
+        {"occurred_at": NOW - dt.timedelta(days=3), "outcome": "call_back", "next_action_at": NOW - dt.timedelta(days=1)},
+        {"occurred_at": NOW - dt.timedelta(hours=3), "outcome": "not_reached"},
+        {"occurred_at": NOW - dt.timedelta(hours=2), "outcome": "voicemail"},
+    ])
+    async with SessionLocal() as s:
+        (row,) = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
+        due = (await call_list.contacts(s, tenant_id=TENANT, due_only=True, now=NOW))["rows"]
+    assert row["last_outcome"] == "voicemail"
+    assert row["next_action_at"] == NOW - dt.timedelta(days=1)
+    assert row["due"] is True
+    assert [r["full_name"] for r in due] == ["Ina Dorsch"]
+
+
+async def test_a_note_without_an_outcome_does_not_close_the_call_back() -> None:
+    await _lead_with_calls("Lara Schmidt", [
+        {"occurred_at": NOW - dt.timedelta(days=3), "outcome": "call_back", "next_action_at": NOW - dt.timedelta(days=1)},
+        {"occurred_at": NOW - dt.timedelta(hours=2), "outcome": None, "summary": "Mail geschickt"},
+    ])
+    async with SessionLocal() as s:
+        (row,) = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
+    assert (row["last_outcome"], row["due"]) == ("call_back", True)
+
+
+async def test_reaching_the_person_closes_the_call_back() -> None:
+    await _lead_with_calls("Virtudes Fuchs", [
+        {"occurred_at": NOW - dt.timedelta(days=3), "outcome": "call_back", "next_action_at": NOW - dt.timedelta(days=1)},
+        {"occurred_at": NOW - dt.timedelta(hours=2), "outcome": "meeting_booked"},
+    ])
+    async with SessionLocal() as s:
+        (row,) = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
+        due = (await call_list.contacts(s, tenant_id=TENANT, due_only=True, now=NOW))["rows"]
+    assert (row["last_outcome"], row["next_action_at"], row["due"]) == ("meeting_booked", None, False)
+    assert due == []
+
+
+async def test_a_new_date_replaces_the_old_one() -> None:
+    later = NOW + dt.timedelta(days=2)
+    await _lead_with_calls("Tuba Tanik", [
+        {"occurred_at": NOW - dt.timedelta(days=3), "outcome": "call_back", "next_action_at": NOW - dt.timedelta(days=1)},
+        {"occurred_at": NOW - dt.timedelta(hours=2), "outcome": "not_reached", "next_action_at": later},
+    ])
+    async with SessionLocal() as s:
+        (row,) = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
+    assert (row["next_action_at"], row["due"]) == (later, False)
+
+
+async def test_leads_with_an_open_call_back_come_first_due_ones_on_top() -> None:
+    await _lead_with_calls("Newest Lead", [], created_at=NOW - dt.timedelta(hours=1))
+    await _lead_with_calls("Upcoming", [
+        {"occurred_at": NOW - dt.timedelta(days=1), "outcome": "call_back", "next_action_at": NOW + dt.timedelta(days=1)},
+    ])
+    await _lead_with_calls("Overdue", [
+        {"occurred_at": NOW - dt.timedelta(days=2), "outcome": "call_back", "next_action_at": NOW - dt.timedelta(hours=5)},
+        {"occurred_at": NOW - dt.timedelta(hours=1), "outcome": "not_reached"},
+    ])
+    await _lead_with_calls("Done", [
+        {"occurred_at": NOW - dt.timedelta(days=2), "outcome": "call_back", "next_action_at": NOW - dt.timedelta(days=1)},
+        {"occurred_at": NOW - dt.timedelta(hours=1), "outcome": "not_interested"},
+    ], created_at=NOW - dt.timedelta(days=9))
+    async with SessionLocal() as s:
+        rows = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
+    assert [r["full_name"] for r in rows] == ["Overdue", "Upcoming", "Newest Lead", "Done"]

@@ -39,10 +39,12 @@ import {
   CloseButton,
   FieldLabel,
   Modal,
+  SelectInput,
   TagInput,
   TextInput,
 } from '../../ui/forms'
 import { Label } from '../../ui/primitives'
+import { NEW_CANDIDATE_WORK_PERMIT, WORK_PERMITS } from './workPermit'
 
 
 
@@ -62,6 +64,7 @@ export function NewCandidate({
   const [skills, setSkills] = useState<string[]>([])
   const [salary, setSalary] = useState('')
   const [source, setSource] = useState('')
+  const [workPermit, setWorkPermit] = useState(NEW_CANDIDATE_WORK_PERMIT)
   /** Common origins, offered as one tap each.
    *
    *  The VALUE stays German in both languages and the LABEL is translated —
@@ -101,6 +104,7 @@ export function NewCandidate({
         location: location.trim() || undefined,
         skills,
         salary_expectation: toAmount(salary),
+        work_permit: workPermit,
         source: source.trim() || undefined,
       }))
       onCreated(created.id)
@@ -160,6 +164,12 @@ export function NewCandidate({
             value={salary}
             onChange={setSalary}
             placeholder="85.000"
+          />
+          <SelectInput
+            label={t('Arbeitserlaubnis')}
+            value={workPermit}
+            onChange={setWorkPermit}
+            options={WORK_PERMITS}
           />
         </div>
 

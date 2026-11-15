@@ -52,6 +52,7 @@ import type {
   ProcessJobDTO,
   ProcessStepDTO,
   ReportingOverviewDTO,
+  SwitchboardDTO,
 } from './types'
 
 // Dev: '/api/v1' (Vite proxies to :8000). Prod: set VITE_API_BASE_URL to the
@@ -176,6 +177,8 @@ export const api = {
     location?: string
     skills?: string[]
     salary_expectation?: number | null
+    /** `WorkPermitStatus` value; omitted, the backend stores `unknown`. */
+    work_permit?: string
     source?: string
     /** Erased here on request and come back of their own accord (409 otherwise). */
     override_suppression?: boolean
@@ -253,6 +256,10 @@ export const api = {
     minRelevance?: number
     /** false asks for the literal query — "trotzdem nach „muenchen" suchen". */
     correct?: boolean
+    /** ELI-27: leave out firms whose name marks staffing or placement. */
+    excludeAgencies?: boolean
+    /** ELI-27: employer size by open ads in the corpus — s · m · l · xl. */
+    sizes?: string[]
   }) => {
     const qs = new URLSearchParams()
     if (params.q) qs.set('q', params.q)
@@ -268,6 +275,8 @@ export const api = {
     if (params.minRelevance && params.minRelevance > 1)
       qs.set('min_relevance', String(params.minRelevance))
     if (params.correct === false) qs.set('correct', 'false')
+    if (params.excludeAgencies) qs.set('exclude_agencies', 'true')
+    params.sizes?.forEach((s) => qs.append('size', s))
     return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
 
@@ -353,6 +362,10 @@ export const api = {
   /** ELI-33: one company — managers, leads, mandates, Impressum switchboard. */
   companyPage: (id: string) => request<CompanyPageDTO>(`/companies/${id}/page`),
 
+  /** ELI-39: website, VAT id and register from the company's Impressum, with
+   *  the page and fetch date — null while none is verified. Read only. */
+  companyRegister: (id: string) => request<SwitchboardDTO | null>(`/companies/${id}/register`),
+
   /** ELI-33 2b: "Das ist unser Unternehmen" — link these Markt sites. */
   confirmMarketLink: (id: string, hubCompanyIds: string[], dismissIds: string[] = []) =>
     request<CompanyPageDTO>(`/companies/${id}/market-links`, {
@@ -372,6 +385,10 @@ export const api = {
 
   managerInteractions: (id: string) =>
     request<ManagerInteractionDTO[]>(`/managers/${id}/interactions`),
+
+  /** ELI-40: the Termine tab — this manager's meetings, booked or held. */
+  managerAppointments: (id: string) =>
+    request<ManagerInteractionDTO[]>(`/managers/${id}/appointments`),
 
   /** File one touch on this manager by hand — the call that just happened,
    *  rather than the one an import will bring tomorrow. */
@@ -393,7 +410,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  /** Kontakte (ELI-23): contacts taken from Markt (stage bus_dev), newest first. */
+  /** Kontakte (ELI-23): contacts taken from Markt (stage bus_dev) — open call-backs first (ELI-38), then newest. */
   callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean }) => {
     const qs = new URLSearchParams()
     if (params.companyId) qs.set('company_id', params.companyId)
@@ -660,10 +677,14 @@ export const api = {
     file: File,
     persist = false,
     overrideSuppression = false,
+    /** Arbeitserlaubnis chosen in the upload dialog — stored on persist only. */
+    workPermit?: string,
   ): Promise<CVExtractionResultDTO> {
     const body = new FormData()
     body.append('file', file)
-    const q = `persist=${persist}${overrideSuppression ? '&override_suppression=true' : ''}`
+    const q =
+      `persist=${persist}${overrideSuppression ? '&override_suppression=true' : ''}` +
+      (persist && workPermit ? `&work_permit=${encodeURIComponent(workPermit)}` : '')
     const res = await fetch(`${BASE}/documents/extract-cv?${q}`, {
       method: 'POST',
       body, // let the browser set the multipart boundary

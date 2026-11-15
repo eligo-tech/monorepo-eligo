@@ -279,6 +279,14 @@ These are enforced in code. Do not route around them.
   the backfill re-labels every open ad. The Markt "Tech" filter reads it.
   Measured 2026-11-09: 33,573 of 702,630 open ads; 120 hand-labelled real
   titles (`tests/fixtures/families/`) guard precision and recall.
+- **Markt's agency and size filters** (ELI-27). `hub_companies.staffing_name`
+  is set at ingest by `resolution.looks_like_staffing_firm` — the EURES name
+  rule (brands + staffing words), without its ad-text arm — and backfilled by
+  migration 0070; "Personalberatungen ausblenden" (`exclude_agencies`) is a
+  column check on it, never a name scan per request. Size (`size=s|m|l|xl`)
+  is the employer's open ads in the corpus over ALL its sites (1–4 · 5–19 ·
+  20–99 · 100+), because the corpus holds no headcount — the UI says "offene
+  Stellen", never "Mitarbeiter".
 - **Employers' Impressum** (`hub/employer_sites.py`, `POST /hub/employers/sites/check`,
   daily at 15:23 UTC — `.github/workflows/hub-employer-sites.yml`, ELI-30). The
   last contact fallback: website from the ads (text + BA `externeURL`) →
@@ -295,6 +303,18 @@ These are enforced in code. Do not route around them.
   postcode) match — one receipt per link through `verify_and_commit`, which
   does not commit: the caller does. Linked, the company page and the manager
   page show the employer's open jobs and its careers page.
+- **Workspace companies' own Impressum** (`companies/impressum.py`, ELI-39):
+  daily after the linking (`hub-company-links.yml` → `POST /hub/companies/impressum/check`,
+  machine-only). For a company no verified Markt row answers for: website =
+  its own `domain`, else its contacts' company mail domains (no freemail) →
+  the employer check's `fetch_impressum` + `parse_impressum` → `names_firm`.
+  Kept on `companies.impressum` (tenant row, never `hub_*`) only through
+  `verify_and_commit`: named as operator, every value on the fetched page, a
+  DE VAT id passing its check digit (`valid_de_vat`). The parser reads a value
+  only when unambiguous: two different valid VAT ids, or two different
+  registers of one kind, read as nothing. `company_switchboards` serves Markt's
+  reading first, else this one; `GET /companies/{id}/register` feeds the
+  Mandate's Stammdaten.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.

@@ -17,6 +17,7 @@ import { useState } from 'react'
 
 import { api } from '@/api/client'
 import { useRemembered } from '@/hooks/useRemembered'
+import { isAdmin, useMe } from '../useMe'
 import { BookGraph, MandateGraphLegend } from '../ui/MandateGraph'
 import { PanelHead } from '../screens/mandate/parts'
 import { StepEditor } from '../ui/StepEditor'
@@ -93,6 +94,7 @@ export function ProcessSection({
   const [editing, setEditing] = useState<{ card: ProcessCard; step: ProcessStep } | null>(
     null,
   )
+  const admin = isAdmin(useMe())
   const total = mandates.reduce((n, m) => n + m.cards.length, 0)
   const [graphShut, setGraphShut] = useRemembered(
     'eligo.panel.bookGraph.collapsed',
@@ -183,7 +185,9 @@ export function ProcessSection({
                         : undefined
                     }
                     onRemoveStep={
-                      card.editable
+                      // ELI-27: removing a step deletes data — admins only (the
+                      // server refuses anyone else; this only hides the button).
+                      card.editable && admin
                         ? async (step) => {
                             await api.removeProcessStep(card.id, step.key)
                             onChanged?.()

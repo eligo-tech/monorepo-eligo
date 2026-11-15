@@ -362,7 +362,10 @@ async def backfill(
         (
             await session.execute(
                 select(HubJobPosting.id)
-                .where(HubJobPosting.contacts_model_due.is_(True))
+                # The bare column, as the partial index says (`WHERE
+                # contacts_model_due`): `IS true` cannot be matched to it, and
+                # each batch then walked the whole table (68.5 GB a run).
+                .where(HubJobPosting.contacts_model_due)
                 .order_by(HubJobPosting.id)
                 .limit(limit)
                 .with_for_update(skip_locked=True)
@@ -453,7 +456,7 @@ async def backfill(
     if count:
         result["remaining"] = int(
             await session.scalar(
-                select(func.count(HubJobPosting.id)).where(HubJobPosting.contacts_model_due.is_(True))
+                select(func.count(HubJobPosting.id)).where(HubJobPosting.contacts_model_due)
             )
             or 0
         )
