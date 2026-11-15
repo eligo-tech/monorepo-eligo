@@ -1,9 +1,12 @@
 // "Stammdaten · Firma · Manager · Job · Konditionen"
 //
 // The master data a recruiter needs in front of them before they call anyone.
-// Firma, Manager and Job come from the record; the register details
-// (HRB/USt-ID), the Konditionen and the seniority/employment type have no
-// column yet and are drawn as the design draws them, marked.
+// Firma, Manager and Job come from the record. The register details
+// (HRB/USt-ID) come from the company's Impressum (ELI-39), read by the daily
+// job — Markt's reading, else the company's own — and link to the page and
+// the day it was read; until one is verified they show "—". The Konditionen
+// and the seniority/employment type have no column yet and are drawn as the
+// design draws them, marked.
 //
 // Briefing-Vollständigkeit is NOT a demo number: it counts how much of the
 // Suchprofil this mandate actually carries. That makes it the one figure on
@@ -13,7 +16,11 @@ import { t } from '@/i18n'
 
 import { ExternalLink, Globe, Linkedin } from 'lucide-react'
 
+import { api } from '@/api/client'
 import type { CompanyDTO, ManagerDTO } from '@/api/types'
+import { useAsync } from '@/hooks/useAsync'
+import { date } from '@/i18n/format'
+import { registerFacts } from '../../ui/switchboard'
 import { Panel } from '../../ui/primitives'
 import { Button } from '../../ui/forms'
 import { DemoText, PanelHead, StammRow } from './parts'
@@ -55,6 +62,12 @@ export function StammdatenPanel({
   onChanged?: () => void
 }) {
   const complete = briefingCompleteness(mandate, manager)
+  // Reads only — the daily job fills it; nothing here fetches a website.
+  const board = useAsync(
+    () => (company ? api.companyRegister(company.id) : Promise.resolve(null)),
+    [company?.id],
+  ).data
+  const register = registerFacts(board)
   const band =
     mandate.salaryMin !== null && mandate.salaryMax !== null
       ? `${Math.round(mandate.salaryMin / 1000)}–${Math.round(mandate.salaryMax / 1000)}k`
@@ -68,9 +81,21 @@ export function StammdatenPanel({
         label={t('Firma')}
         sub={
           <>
-            <DemoText source={t('Handelsregister — noch keine Quelle angebunden')}>
-              {t('HRB — · USt-ID —')}
-            </DemoText>
+            {register && board ? (
+              <a
+                href={board.impressum_url ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-mint-400"
+                title={`${t('Laut Impressum, abgerufen am')} ${date(board.checked_at)}`}
+              >
+                {register.register ?? t('HRB —')} · {t('USt-ID')} {register.vat ?? '—'}
+              </a>
+            ) : (
+              <span title={t('Noch nicht aus dem Impressum bestätigt — der tägliche Abgleich liest es.')}>
+                {t('HRB — · USt-ID —')}
+              </span>
+            )}
             {company?.location && ` · ${t('Standort')}: ${company.location}`}
             {company?.industry && ` · ${t('Branche')}: ${company.industry}`}
           </>
@@ -156,7 +181,7 @@ export function StammdatenPanel({
       </StammRow>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button disabled title={t('Firmendaten-Anreicherung ist noch nicht angebunden')}>
+        <Button disabled title={t('Website, HRB und USt-ID kommen täglich automatisch aus dem Impressum — kein Abruf per Klick')}>
           <Globe className="h-4 w-4" /> {t('Firma aus Internet')}
         </Button>
         <Button disabled title={t('LinkedIn-Anreicherung ist noch nicht angebunden')}>

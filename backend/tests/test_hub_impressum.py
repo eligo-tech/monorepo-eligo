@@ -47,8 +47,10 @@ def _page(name: str) -> str:
         ("tempton_de", "DE252406571", ("HRB", "28871"), "Essen"),
         ("focussearch_de", None, ("HRB", "78563"), "Köln"),
         ("aurea_gmbh_de", None, ("HRB", "57731"), "Düsseldorf"),
-        ("sole_trader_aerzte", "DE987654321", (None, None), None),
-        ("sole_trader_personal", "DE123456789", (None, None), None),
+        # The sole traders' VAT ids are placeholders (see the docstring) and
+        # fail the official check digit (ELI-39), so nothing is read.
+        ("sole_trader_aerzte", None, (None, None), None),
+        ("sole_trader_personal", None, (None, None), None),
     ],
 )
 def test_company_facts(fixture: str, vat, register, court) -> None:
@@ -242,3 +244,55 @@ def test_a_swiss_uid_is_read() -> None:
 def test_an_italian_tax_number_is_not_a_vat_id() -> None:
     # euroclima.com: "MwSt.Nr.: IT 00 628 930 216" — not a DACH id, not read.
     assert parse_impressum("Euroclima AG\nMwSt.Nr.: IT 00 628 930 216\nHandelsregister Bozen").vat_id is None
+
+
+# --- ELI-39: a value is kept only when it is unambiguous and checks out ------
+
+
+@pytest.mark.parametrize(
+    "vat, ok",
+    [
+        # Every real VAT id in the fixtures, as published.
+        ("DE314696624", True), ("DE223960681", True), ("DE286798712", True),
+        ("DE167339196", True), ("DE275526440", True), ("DE236865937", True),
+        ("DE252406571", True), ("DE122787794", True),
+        # Placeholders and typos: the 9th digit is the check digit.
+        ("DE123456789", False), ("DE987654321", False), ("DE111111111", False),
+        ("DE252406572", False),
+        ("DE052406571", False),  # never starts with 0
+        ("DE25240657", False), ("ATU31821909", False),
+    ],
+)
+def test_the_german_vat_check_digit(vat: str, ok: bool) -> None:
+    # ISO 7064 MOD 11,10 — the Bundeszentralamt für Steuern's algorithm.
+    from app.domain.hub.adapters.impressum import valid_de_vat
+
+    assert valid_de_vat(vat) is ok
+
+
+def test_a_vat_id_failing_its_check_digit_is_not_read() -> None:
+    facts = parse_impressum("Tempton GmbH\nHRB 28871 Amtsgericht Essen\nUSt-IdNr.: DE252406572")
+    assert facts.is_impressum and facts.vat_id is None
+    assert facts.register_number == "28871"  # the register still stands
+
+
+def test_two_different_vat_ids_are_ambiguous_and_neither_is_read() -> None:
+    # A parent's and a subsidiary's id on one page: which one is this firm's?
+    facts = parse_impressum("Muster GmbH\nUSt-IdNr.: DE252406571\nSchwester GmbH\nUSt-IdNr.: DE314696624")
+    assert facts.vat_id is None
+
+
+def test_the_same_vat_id_twice_is_not_ambiguous() -> None:
+    facts = parse_impressum("Muster GmbH\nUSt-IdNr.: DE 252 406 571\nUmsatzsteuer-ID DE252406571")
+    assert facts.vat_id == "DE252406571"
+
+
+def test_two_registers_of_the_same_kind_are_ambiguous() -> None:
+    facts = parse_impressum("Muster GmbH\nAmtsgericht Essen HRB 28871\nTochter GmbH\nAmtsgericht Bonn HRB 23195")
+    assert facts.register_number is None and facts.register_court is None
+
+
+def test_a_gmbh_co_kg_keeps_its_own_register_before_its_partners() -> None:
+    # The KG (HRA) and its general partner GmbH (HRB): the first is the firm's.
+    facts = parse_impressum("Muster GmbH & Co. KG\nAmtsgericht Essen HRA 1234\nKomplementärin: Muster Verwaltungs GmbH, Amtsgericht Essen HRB 5678")
+    assert (facts.register_type, facts.register_number, facts.register_court) == ("HRA", "1234", "Essen")

@@ -35,3 +35,10 @@ class Company(Base, IDMixin, TenantMixin, TimestampMixin):
 
     # Business-development signals gathered from public data.
     bd_signals: Mapped[dict] = mapped_column(JSONDict, default=dict, nullable=False)
+
+    #: ELI-39: the company's own Impressum, read by the daily job
+    #: (`companies/impressum.py`) — status and when it was checked; when
+    #: "verified" also the website, VAT id, register and the page's URL, fetch
+    #: time and content hash. Written only through the verification gate.
+    #: Null: never checked.
+    impressum: Mapped[dict | None] = mapped_column(JSONDict, nullable=True)

@@ -329,6 +329,25 @@ async def contacts(
 
 
 async def company_switchboards(session: AsyncSession, tenant_id: uuid.UUID, company_ids: list[uuid.UUID]) -> dict:
+    """Each of this workspace's companies' Impressum facts: Markt's (ELI-30,
+    with the switchboard phone) where a linked site has them, else the
+    company's own reading (ELI-39, `companies/impressum.py`, no phone)."""
+    from app.domain.companies.impressum import board
+
+    out = await corpus_switchboards(session, tenant_id, company_ids)
+    rest = [cid for cid in company_ids if cid not in out]
+    if rest:
+        from app.domain.companies.models import Company
+
+        for company in await session.scalars(
+            select(Company).where(Company.tenant_id == tenant_id, Company.id.in_(rest), Company.impressum.is_not(None))
+        ):
+            if (facts := board(company)) is not None:
+                out[company.id] = facts
+    return out
+
+
+async def corpus_switchboards(session: AsyncSession, tenant_id: uuid.UUID, company_ids: list[uuid.UUID]) -> dict:
     """ELI-30: each of this workspace's companies' Impressum switchboard,
     through its own `hub_company_link` rows (any linked site)."""
     from app.domain.hub.employer_sites import switchboards

@@ -167,7 +167,9 @@ async def _ads(session: AsyncSession, company_id: uuid.UUID) -> list[tuple[str, 
     return out
 
 
-async def _fetch(fetcher, domain: str) -> _Page:
+async def fetch_impressum(fetcher, domain: str) -> _Page:
+    """A domain's homepage, then its Impressum (the linked page, else /impressum).
+    Shared with the workspace companies' check (`companies/impressum.py`)."""
     home = await fetcher.get(f"https://{domain}/")
     page, impressum_url = home, None
     if home.status == 200:
@@ -186,7 +188,7 @@ async def _check(fetcher, name: str, ads, pages: dict[str, asyncio.Task]) -> lis
     for candidate in candidates[:MAX_TRIES]:
         domain = candidate["domain"]
         if domain not in pages:
-            pages[domain] = asyncio.ensure_future(_fetch(fetcher, domain))
+            pages[domain] = asyncio.ensure_future(fetch_impressum(fetcher, domain))
         page = await pages[domain]
         facts = parse_impressum(page.text)
         status = verdict(page.status, facts.is_impressum, names_firm(page.text, [name]))
