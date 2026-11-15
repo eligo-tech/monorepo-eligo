@@ -58,7 +58,13 @@ _SYSTEM = (
     "carried over from a different role.\n"
     "5. EDUCATION (`education`): degree, institution, location and dates as "
     "written.\n"
-    "6. CONFIDENCE: each flat field's confidence in [0,1] reflects how directly "
+    "6. ADDRESS & CURRENT JOB: `postal_code` is the postcode of the candidate's "
+    "OWN address (e.g. '10115'), `city` its town, `country` the country only if "
+    "the text names it (as written; never guess it). `current_title` and "
+    "`current_company` are the title and employer of the most recent position "
+    "whose end is open ('heute', 'present', 'seit 2021', no end date) — omit "
+    "both if every position has ended. Copy them verbatim.\n"
+    "7. CONFIDENCE: each flat field's confidence in [0,1] reflects how directly "
     "the text states it; lower it when you are unsure. No commentary."
 )
 

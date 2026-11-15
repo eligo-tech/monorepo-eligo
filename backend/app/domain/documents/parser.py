@@ -131,6 +131,99 @@ def _guess_title(lines: list[str]) -> ExtractedField | None:
     return None
 
 
+# ── Address (ELI-28) ─────────────────────────────────────────────────────────
+#
+# A German postcode is five digits directly followed by a town: "10115 Berlin",
+# "D-80331 München", "Am Hang 3, 80331 München". Read only in the header, where
+# a CV puts the candidate's own address — further down five digits next to a
+# word are an employer's office. Not preceded by a digit, "+" or "/" so a phone
+# number ("+49 30 12345 6789") never yields one.
+_HEADER_LINES = 15
+_PLZ_RE = re.compile(
+    r"(?:^|(?<=[\s,]))(?:D-|DE-)?(\d{5})\s+"
+    r"([A-ZÄÖÜ][a-zäöüß]+(?:[ -][A-ZÄÖÜ][a-zäöüß]+)?(?:\s\([^)]{1,40}\))?)"
+)
+#: Countries a DACH CV names in its address line. The value is kept as WRITTEN
+#: — "Germany" stays "Germany"; translating it would not be in the text.
+_COUNTRY_RE = re.compile(
+    r"(?<!\w)(Deutschland|Germany|Österreich|Austria|Schweiz|Switzerland)(?!\w)"
+)
+
+
+def _guess_address(lines: list[str]) -> list[ExtractedField]:
+    out: list[ExtractedField] = []
+    for line in lines[:_HEADER_LINES]:
+        if m := _PLZ_RE.search(line):
+            if _COUNTRY_RE.fullmatch(m.group(2)):
+                continue
+            out.append(ExtractedField(field="postal_code", value=m.group(1), confidence=0.8))
+            out.append(ExtractedField(field="city", value=m.group(2), confidence=0.75))
+            break
+    for line in lines[:_HEADER_LINES]:
+        if m := _COUNTRY_RE.search(line):
+            out.append(ExtractedField(field="country", value=m.group(1), confidence=0.8))
+            break
+    return out
+
+
+# ── Current position (ELI-28) ────────────────────────────────────────────────
+#
+# The current job is the one whose period has no end: "03/2021 – heute",
+# "seit 01/2020", "2019 – present". A closed period ("2015 – 2019") never is.
+_DATE = r"(?:\d{1,2}[./])?\d{4}"
+_OPEN_PERIOD_RE = re.compile(
+    rf"(?:{_DATE}\s*[-–—]\s*(?:heute|present|now|aktuell|current|today|dato|bis heute)"
+    rf"|seit\s+{_DATE}|since\s+{_DATE})",
+    re.IGNORECASE,
+)
+_ANY_PERIOD_RE = re.compile(rf"{_DATE}\s*[-–—]\s*(?:{_DATE}|\w+)|seit\s+{_DATE}", re.IGNORECASE)
+_COMPANY_HINT = re.compile(
+    r"(?<!\w)(GmbH|AG|SE|KG|KGaA|OHG|UG|e\.\s?V\.|Inc\.?|Ltd\.?|LLC|plc|S\.A\.|B\.V\.|Group|Gruppe)(?!\w)"
+)
+_SEPARATORS = re.compile(r"\s*[|·•]\s*|\s+[-–—]\s+|\s+(?:bei|at)\s+")
+
+
+def _company_part(segment: str) -> str:
+    """'Beispiel Software GmbH, Berlin' → 'Beispiel Software GmbH' — the town
+    after the comma is the office, not the name."""
+    head, _, _ = segment.partition(",")
+    return head.strip() if _COMPANY_HINT.search(head) else segment.strip()
+
+
+def _split_role(parts: list[str]) -> tuple[str | None, str | None]:
+    parts = [p.strip() for p in parts if p and p.strip()]
+    company = next((p for p in parts if _COMPANY_HINT.search(p)), None)
+    title = next((p for p in parts if p is not company and _TITLE_HINT.search(p)), None)
+    if title is None:
+        title = next((p for p in parts if p is not company), None)
+    return title, (_company_part(company) if company else None)
+
+
+def _guess_current_role(lines: list[str]) -> list[ExtractedField]:
+    for i, line in enumerate(lines):
+        m = _OPEN_PERIOD_RE.search(line)
+        if not m:
+            continue
+        rest = (line[: m.start()] + " | " + line[m.end():]).strip(" |,()")
+        if rest:
+            title, company = _split_role(_SEPARATORS.split(rest))
+        else:
+            # Stacked layout: the period on its own line, then title, then employer.
+            following: list[str] = []
+            for nxt in lines[i + 1 : i + 3]:
+                if _ANY_PERIOD_RE.search(nxt):
+                    break
+                following.append(nxt)
+            title, company = _split_role(following)
+        out: list[ExtractedField] = []
+        if title and len(title) <= 80:
+            out.append(ExtractedField(field="current_title", value=title, confidence=0.65))
+        if company and len(company) <= 120:
+            out.append(ExtractedField(field="current_company", value=company, confidence=0.65))
+        return out
+    return []
+
+
 def extract_cv_fields(text: str) -> list[ExtractedField]:
     """Heuristically extract candidate fields from raw CV text.
 
@@ -151,8 +244,15 @@ def extract_cv_fields(text: str) -> list[ExtractedField]:
     if name := _guess_name(lines):
         fields.append(name)
 
-    if title := _guess_title(lines):
-        fields.append(title)
+    fields += _guess_address(lines)
+
+    # The open-ended position names the current job; the positional title
+    # guess is only the fallback when no period is open.
+    current = _guess_current_role(lines)
+    fields += current
+    if not any(f.field == "current_title" for f in current):
+        if title := _guess_title(lines):
+            fields.append(title)
 
     found_skills = sorted(
         {
