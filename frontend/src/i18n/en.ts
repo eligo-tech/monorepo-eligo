@@ -1271,6 +1271,13 @@ export const EN: Record<string, string> = {
   'Über Kandidat': 'About the candidate',
   'Überblick': 'Overview',
   'Übernahme fehlgeschlagen.': 'Adoption failed.',
+  // ELI-26: why taking ads as leads failed.
+  'Übernahme abgelehnt: {reason}': 'Refused: {reason}',
+  'Übernahme fehlgeschlagen (Serverfehler {status}).': 'Adoption failed (server error {status}).',
+  'Keine Antwort vom Server. Bitte erneut versuchen — schon übernommene Anzeigen werden nicht doppelt angelegt.':
+    'No answer from the server. Please try again — ads already taken are not added twice.',
+  'Keine Berechtigung in diesem Workspace.': 'Not permitted in this workspace.',
+  'Zu viele Anfragen — bitte kurz warten und erneut versuchen.': 'Too many requests — please wait a moment and try again.',
   'Übernehmen': 'Adopt',
   'Übernimmt…': 'Adopting…',
   'Übernommen': 'Taken over',
