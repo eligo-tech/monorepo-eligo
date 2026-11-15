@@ -8,7 +8,7 @@ import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
 import { useEffect, useRef, useState } from 'react'
-import { ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
+import { Briefcase, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { ContactPageDTO, ContactRowDTO, SwitchboardDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
@@ -22,6 +22,7 @@ import {
   needsDate,
 } from '../ui/callOutcomes'
 import { networkLinks } from '../ui/contactReach'
+import { leadJobLine, mandateHref } from '../ui/leadJobs'
 import { leadPhone } from '../ui/switchboard'
 import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
@@ -251,6 +252,32 @@ function ContactRow({
           </span>
         )}
       </div>
+      {row.jobs && row.jobs.length > 0 && (
+        // ELI-37: which job the lead is about — the ads naming them, and the
+        // workspace's own job taken from one or owned by them.
+        <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[12px] text-cockpit-dim">
+          {row.jobs.map((job) => {
+            const own = mandateHref(job)
+            return (
+              <li key={job.posting_id ?? job.job_id ?? job.title} className="flex items-center gap-1.5">
+                <Briefcase className="h-3.5 w-3.5 text-cockpit-faint" />
+                {job.url ? (
+                  <a href={job.url} target="_blank" rel="noreferrer noopener" className="hover:text-mint-400" title={t('Anzeige öffnen')}>
+                    {leadJobLine(job)}
+                  </a>
+                ) : (
+                  <span>{leadJobLine(job)}</span>
+                )}
+                {own && (
+                  <a href={own} title={t('Unter Mandate öffnen')}>
+                    <Chip tone="mint">{t('Mandat')}</Chip>
+                  </a>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
       {calling && (
         <CallForm
           onCancel={() => setCalling(false)}

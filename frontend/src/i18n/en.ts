@@ -130,6 +130,7 @@ export const EN: Record<string, string> = {
   'Zentrale': 'Switchboard',
   'Zu Managern': 'To Managers',
   'aus Anzeige': 'from ad',
+  'Unter Mandate öffnen': 'Open under Mandates',
   'keine Nummer': 'no number',
   'Alle Unternehmen dieses Workspaces — Kunden mit Managern und Unternehmen mit neuen Leads aus dem Markt.': 'Every company in this workspace — clients with managers, and companies with new leads from the market.',
   'Alle ({n})': 'All ({n})',

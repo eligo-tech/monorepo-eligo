@@ -67,6 +67,18 @@ class FollowUpRow(BaseModel):
     due: bool
 
 
+class LeadJob(BaseModel):
+    """ELI-37: a concrete job the lead is connected to — an ad naming them
+    (`posting_id`, `url`), this workspace's job taken from it or owned by
+    them (`job_id`), or both."""
+
+    title: str
+    location: str | None
+    url: str | None
+    posting_id: uuid.UUID | None
+    job_id: uuid.UUID | None
+
+
 class ContactRow(BaseModel):
     manager_id: uuid.UUID
     company_id: uuid.UUID
@@ -86,6 +98,7 @@ class ContactRow(BaseModel):
     last_call_by: str | None
     next_action_at: dt.datetime | None
     due: bool
+    jobs: list[LeadJob] = Field(default_factory=list)
 
 
 class CompanyFacet(BaseModel):

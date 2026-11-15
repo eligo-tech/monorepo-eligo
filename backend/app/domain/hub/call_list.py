@@ -284,6 +284,7 @@ async def contacts(
     def aware(value: dt.datetime | None) -> dt.datetime | None:
         return value.replace(tzinfo=dt.UTC) if value is not None and value.tzinfo is None else value
 
+    jobs = await lead_jobs(session, tenant_id, [manager for manager, _, _ in found])
     rows = []
     for manager, company, call in found:
         nxt = aware(call.next_action_at) if call else None
@@ -306,6 +307,7 @@ async def contacts(
             "last_call_by": call.actor_name if call else None,
             "next_action_at": nxt,
             "due": nxt is not None and nxt <= now,
+            "jobs": jobs.get(manager.id, []),
         })
 
     facet = (
@@ -326,6 +328,123 @@ async def contacts(
             {"company_id": cid, "name": name, "contacts": n, "switchboard": boards.get(cid)} for cid, name, n in facet
         ],
     }
+
+
+#: Jobs shown per lead at most — the newest ads first.
+LEAD_JOBS_LIMIT = 5
+
+
+async def lead_jobs(session: AsyncSession, tenant_id: uuid.UUID, managers: list) -> dict[uuid.UUID, list[dict]]:
+    """ELI-37: the concrete jobs each lead is connected to.
+
+    Two links, both already in the data:
+      * the ads that name the person — `hub_ad_contacts` at any site of the
+        employer this workspace linked the lead's company to, by the same
+        surname key the company card uses to say who is already held;
+      * this workspace's jobs — one taken in from such an ad
+        (`external_source='hub'`, ELI-22), or one the person owns
+        (`jobs.manager_id`).
+
+    Three queries for the whole page, whatever its size: the Leads list is
+    read often and the database is Disk-IO bound. The ads are public corpus
+    rows (RULE 2); the jobs and links are read for THIS workspace only.
+    """
+    from sqlalchemy.orm import aliased
+
+    from app.domain.hub.schemas import source_detail_url
+    from app.domain.jobs.models import Job
+
+    if not managers:
+        return {}
+    keys = {m.id: _surname_key(m.last_name, m.full_name) for m in managers}
+    company_ids = {m.company_id for m in managers}
+
+    anchor, site = aliased(HubCompany), aliased(HubCompany)
+    sites: dict[uuid.UUID, set[uuid.UUID]] = {}
+    for company_id, site_id in (
+        await session.execute(
+            select(HubCompanyLink.company_id, site.id)
+            .join(anchor, anchor.id == HubCompanyLink.hub_company_id)
+            .join(site, (site.normalized_name == anchor.normalized_name) & (site.kind == anchor.kind))
+            .where(HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id.in_(company_ids))
+        )
+    ).all():
+        sites.setdefault(company_id, set()).add(site_id)
+
+    ads: dict[tuple[uuid.UUID, str], list] = {}
+    order: dict[uuid.UUID, int] = {}
+    all_sites = set().union(*sites.values()) if sites else set()
+    wanted = {k for k in keys.values() if k}
+    if all_sites and wanted:
+        for ad in (
+            await session.execute(
+                select(
+                    HubAdContact.hub_company_id, HubAdContact.person_key, HubJobPosting.id, HubJobPosting.title,
+                    HubJobPosting.city, HubJobPosting.location_text, HubJobPosting.source,
+                    HubJobPosting.external_id, HubJobPosting.source_url,
+                )
+                .join(HubJobPosting, HubJobPosting.id == HubAdContact.hub_job_posting_id)
+                .where(HubAdContact.hub_company_id.in_(all_sites), HubAdContact.person_key.in_(wanted))
+                .order_by(HubJobPosting.is_active.desc(), HubJobPosting.posted_at.desc().nulls_last(), HubJobPosting.title)
+            )
+        ).all():
+            ads.setdefault((ad.hub_company_id, ad.person_key), []).append(ad)
+            order.setdefault(ad.id, len(order))
+
+    named: dict[uuid.UUID, list] = {}
+    for m in managers:
+        key = keys[m.id]
+        if not key:
+            continue
+        found = [ad for s in sites.get(m.company_id, ()) for ad in ads.get((s, key), ())]
+        # Merge the sites back into the query's order: open and newest first.
+        named[m.id] = sorted(found, key=lambda ad: order[ad.id])
+
+    posting_ids = {str(ad.id) for found in named.values() for ad in found}
+    taken: dict[str, uuid.UUID] = {}
+    owned: dict[uuid.UUID, list] = {}
+    condition = Job.manager_id.in_(list(keys))
+    if posting_ids:
+        condition = or_(condition, (Job.external_source == "hub") & Job.external_id.in_(posting_ids))
+    for job in (
+        await session.execute(
+            select(Job.id, Job.title, Job.location, Job.manager_id, Job.external_source, Job.external_id)
+            .where(Job.tenant_id == tenant_id, condition)
+            .order_by(Job.created_at.desc())
+        )
+    ).all():
+        if job.external_source == "hub" and job.external_id in posting_ids:
+            taken[job.external_id] = job.id
+        if job.manager_id is not None:
+            owned.setdefault(job.manager_id, []).append(job)
+
+    out: dict[uuid.UUID, list[dict]] = {}
+    for m in managers:
+        entries: list[dict] = []
+        seen_ads: dict[tuple[str, str | None], dict] = {}
+        for ad in named.get(m.id, []):
+            location = ad.city or ad.location_text
+            # One role relayed by several boards is one job on the lead —
+            # carrying the workspace's job whichever copy was taken in.
+            same = seen_ads.get((ad.title, location))
+            if same is not None:
+                same["job_id"] = same["job_id"] or taken.get(str(ad.id))
+                continue
+            seen_ads[(ad.title, location)] = {
+                "title": ad.title,
+                "location": location,
+                "url": source_detail_url(ad.source, ad.external_id) or ad.source_url,
+                "posting_id": ad.id,
+                "job_id": taken.get(str(ad.id)),
+            }
+            entries.append(seen_ads[(ad.title, location)])
+        listed = {e["job_id"] for e in entries}
+        for job in owned.get(m.id, []):
+            if job.id not in listed:
+                entries.append({"title": job.title, "location": job.location, "url": None, "posting_id": None, "job_id": job.id})
+        if entries:
+            out[m.id] = entries[:LEAD_JOBS_LIMIT]
+    return out
 
 
 async def company_switchboards(session: AsyncSession, tenant_id: uuid.UUID, company_ids: list[uuid.UUID]) -> dict:
