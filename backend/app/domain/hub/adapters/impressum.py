@@ -19,6 +19,14 @@ before anything is kept.
 
 Deterministic on purpose: an Impressum is a structured legal notice, and a
 pattern either finds "HRB 23195" or it does not.
+
+ELI-39: a value is read only when it is unambiguous and checks out. A German
+VAT id must pass its official check digit (`valid_de_vat`); two different
+valid ids on one page, or two different registers of the same kind (two
+HRBs), name more than one firm and read as nothing — which includes a KGaA
+whose general partner is also in HRB (fails closed). A "& Co. KG" page with
+one HRA keeps that HRA, whichever order it prints it and its general
+partner's HRB in: a KG is registered in HRA, its partner GmbH in HRB.
 """
 
 from __future__ import annotations
@@ -105,6 +113,56 @@ class ImpressumFacts:
     people: list[ImpressumPerson] = dataclasses.field(default_factory=list)
 
 
+def valid_de_vat(vat: str | None) -> bool:
+    """The German USt-IdNr check digit: "DE" + 9 digits, the ninth computed
+    from the first eight by ISO 7064 MOD 11,10 (the Bundeszentralamt für
+    Steuern's published algorithm). Every real id in the fixtures passes;
+    placeholders and one-digit typos do not."""
+    if not vat or not vat.startswith("DE"):
+        return False
+    digits = vat[2:]
+    if len(digits) != 9 or not digits.isdigit() or digits[0] == "0":
+        return False
+    product = 10
+    for d in digits[:8]:
+        total = (int(d) + product) % 10 or 10
+        product = (2 * total) % 11
+    check = 11 - product
+    return (0 if check == 10 else check) == int(digits[8])
+
+
+def register_entries(text: str | None) -> set[tuple[str, str]]:
+    """Every (HRA|HRB, number) the text publishes — a postcondition's check
+    that a stored register is on the fetched page."""
+    return {(m.group(1), m.group(2)) for m in _REGISTER.finditer(text or "")}
+
+
+def _german_vat(body: str) -> str | None:
+    """The one valid German VAT id on the page; none, or two different, → None."""
+    found = {"DE" + "".join(m.groups()) for m in _VAT.finditer(body)}
+    valid = {v for v in found if valid_de_vat(v)}
+    return valid.pop() if len(valid) == 1 else None
+
+
+#: "Muster GmbH & Co. KG" — not "& Co. KGaA", which registers in HRB.
+_CO_KG = re.compile(r"&\s*Co\.?\s*KG\b(?!aA)")
+
+
+def _register(body: str):
+    """The first register entry — unless the page names a second, different
+    one of the same kind (HRB 1 … HRB 2): then whose is which is a guess."""
+    matches = list(_REGISTER.finditer(body))
+    if not matches:
+        return None
+    hra = {m.group(2) for m in matches if m.group(1) == "HRA"}
+    if len(hra) == 1 and len(matches) > 1 and _CO_KG.search(body):
+        return next(m for m in matches if m.group(1) == "HRA")
+    first = matches[0]
+    if any(m.group(1) == first.group(1) and m.group(2) != first.group(2) for m in matches[1:]):
+        return None
+    return first
+
+
 def _lines(text: str) -> list[str]:
     return [line.strip() for line in (text or "").split("\n") if line.strip()]
 
@@ -145,15 +203,16 @@ def parse_impressum(text: str | None) -> ImpressumFacts:
     lines = _lines(text or "")
     body = "\n".join(lines)
     markers = sum(1 for line in lines if _LEGAL_MARKER.search(line))
-    vat = _VAT.search(body)
-    vat_id = "DE" + "".join(vat.groups()) if vat else None
-    if vat_id is None and (at := _VAT_AT.search(body)):
+    german = _VAT.search(body) is not None
+    vat_id = _german_vat(body)
+    # A German id was printed but none checks out: not an Austrian/Swiss page.
+    if vat_id is None and not german and (at := _VAT_AT.search(body)):
         vat_id = "ATU" + at.group(1)
-    if vat_id is None and (ch := _VAT_CH.search(body)):
+    if vat_id is None and not german and (ch := _VAT_CH.search(body)):
         vat_id = "CHE" + "".join(ch.groups())
-    register = _REGISTER.search(body)
-    firmenbuch = None if register else _FIRMENBUCH.search(body)
-    if not (vat_id or register or firmenbuch or markers >= 2):
+    register = _register(body)
+    firmenbuch = None if (register or _REGISTER.search(body)) else _FIRMENBUCH.search(body)
+    if not (vat_id or register or firmenbuch or german or markers >= 2):
         return ImpressumFacts(is_impressum=False)
 
     # The court beside THIS register — a GmbH & Co. KG also names its general

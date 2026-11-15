@@ -24,6 +24,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   Building2,
+  CalendarDays,
   ExternalLink,
   Mail,
   MapPin,
@@ -44,6 +45,7 @@ import {
   interactionLabel,
   isContact,
 } from '../ui/interactionKinds'
+import { appointmentIcs, isAppointmentKind, splitAppointments } from '../ui/appointments'
 
 const dateDe = (iso: string | null | undefined) =>
   iso
@@ -201,6 +203,7 @@ export function ManagerProfile({
 }) {
   const [manager, setManager] = useState(initial)
   const [history, setHistory] = useState<ManagerInteractionDTO[] | null>(null)
+  const [appointments, setAppointments] = useState<ManagerInteractionDTO[] | null>(null)
   const [tab, setTab] = useState<TabKey>('notes')
   const [composing, setComposing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -209,6 +212,7 @@ export function ManagerProfile({
     let alive = true
     setManager(initial)
     setHistory(null)
+    setAppointments(null)
     setTab('notes')
     setComposing(false)
     api.manager(initial.id).then((m) => alive && setManager(m)).catch(() => {})
@@ -216,6 +220,10 @@ export function ManagerProfile({
       .managerInteractions(initial.id)
       .then((rows) => alive && setHistory(rows))
       .catch(() => alive && setHistory([]))
+    api
+      .managerAppointments(initial.id)
+      .then((rows) => alive && setAppointments(rows))
+      .catch(() => alive && setAppointments([]))
     return () => {
       alive = false
     }
@@ -246,10 +254,10 @@ export function ManagerProfile({
       [
         { key: 'notes' as const, label: t('Notizen'), count: noteCount },
         { key: 'jobs' as const, label: t('Mandate'), count: manager.job_count ?? 0 },
-        { key: 'meetings' as const, label: t('Termine'), count: 0 },
+        { key: 'meetings' as const, label: t('Termine'), count: appointments?.length ?? 0 },
         { key: 'deals' as const, label: 'Deals', count: 0 },
       ],
-    [noteCount, manager.job_count],
+    [noteCount, manager.job_count, appointments],
   )
 
   const socials = [
@@ -408,7 +416,8 @@ export function ManagerProfile({
         <button
           type="button"
           onClick={() => {
-            setTab('notes')
+            // From Termine the composer opens there, on a meeting (ELI-40).
+            if (tab !== 'meetings') setTab('notes')
             setComposing((open) => !open)
           }}
           aria-expanded={composing}
@@ -426,35 +435,44 @@ export function ManagerProfile({
 
       <div className="flex flex-col lg:flex-row">
         <div className="min-w-0 flex-1 border-r border-cockpit-line">
+          {(tab === 'notes' || tab === 'meetings') && composing && (
+            <InteractionComposer
+              key={tab}
+              kinds={MANAGER_INTERACTION_KINDS}
+              defaultKind={tab === 'meetings' ? 'meeting' : undefined}
+              onCancel={() => setComposing(false)}
+              onSave={async (entry) => {
+                const row = await api.logManagerInteraction(manager.id, entry)
+                // Prepend rather than refetch: the list is sorted by when
+                // the event happened, and a note filed for last Tuesday
+                // would otherwise appear to vanish.
+                setHistory((rows) =>
+                  [row, ...(rows ?? [])].sort((a, b) =>
+                    b.occurred_at.localeCompare(a.occurred_at),
+                  ),
+                )
+                // ELI-40: a meeting is also a Termin.
+                if (isAppointmentKind(row.interaction_type)) {
+                  setAppointments((rows) => [row, ...(rows ?? [])])
+                }
+                setManager((m) => ({
+                  ...m,
+                  note_count: (m.note_count ?? 0) + 1,
+                  // A meeting booked for later is not contact yet — the
+                  // server applies the same rule.
+                  last_contact_at:
+                    isContact(entry.interaction_type) &&
+                    new Date(entry.occurred_at).getTime() <= Date.now() &&
+                    (!m.last_contact_at || entry.occurred_at > m.last_contact_at)
+                      ? entry.occurred_at
+                      : m.last_contact_at,
+                }))
+                setComposing(false)
+              }}
+            />
+          )}
           {tab === 'notes' && (
             <>
-              {composing && (
-                <InteractionComposer
-                  kinds={MANAGER_INTERACTION_KINDS}
-                  onCancel={() => setComposing(false)}
-                  onSave={async (entry) => {
-                    const row = await api.logManagerInteraction(manager.id, entry)
-                    // Prepend rather than refetch: the list is sorted by when
-                    // the event happened, and a note filed for last Tuesday
-                    // would otherwise appear to vanish.
-                    setHistory((rows) =>
-                      [row, ...(rows ?? [])].sort((a, b) =>
-                        b.occurred_at.localeCompare(a.occurred_at),
-                      ),
-                    )
-                    setManager((m) => ({
-                      ...m,
-                      note_count: (m.note_count ?? 0) + 1,
-                      last_contact_at:
-                        isContact(entry.interaction_type) &&
-                        (!m.last_contact_at || entry.occurred_at > m.last_contact_at)
-                          ? entry.occurred_at
-                          : m.last_contact_at,
-                    }))
-                    setComposing(false)
-                  }}
-                />
-              )}
               {history === null && (
                 <p className="px-6 py-6 font-mono text-[13px] text-cockpit-faint">
                   {t('lädt…')}
@@ -480,10 +498,18 @@ export function ManagerProfile({
             </>
           )}
 
-          {/* Termine and Deals are named because the record has those
-              dimensions and empty because nothing fills them yet. Saying so
-              beats a tab that silently shows nothing. */}
-          {tab !== 'notes' && (
+          {tab === 'meetings' && (
+            <Appointments
+              rows={appointments}
+              composing={composing}
+              calendarTitle={`${interactionLabel('meeting')} — ${manager.full_name}`}
+            />
+          )}
+
+          {/* Deals is named because the record has that dimension and empty
+              because nothing fills it yet. Saying so beats a tab that
+              silently shows nothing. */}
+          {(tab === 'jobs' || tab === 'deals') && (
             <p className="px-6 py-6 text-[14px] leading-relaxed text-cockpit-dim">
               {tab === 'jobs'
                 ? t('Mandate dieser Person erscheinen hier, sobald sie einem Job zugeordnet sind.')
@@ -611,6 +637,79 @@ export function ManagerProfile({
   )
 }
 
+
+/** ELI-40: the Termine tab. Booked meetings first, soonest on top, each with a
+ *  calendar file; then the meetings that were held. */
+function Appointments({
+  rows,
+  composing,
+  calendarTitle,
+}: {
+  rows: ManagerInteractionDTO[] | null
+  composing: boolean
+  calendarTitle: string
+}) {
+  if (rows === null) {
+    return <p className="px-6 py-6 font-mono text-[13px] text-cockpit-faint">{t('lädt…')}</p>
+  }
+  if (rows.length === 0) {
+    return composing ? null : (
+      <p className="px-6 py-6 text-[14px] text-cockpit-dim">
+        {t('Noch keine Termine. Ein Ereignis der Art „Meeting Notes“ erscheint hier — mit Datum und Uhrzeit.')}
+      </p>
+    )
+  }
+  const { upcoming, past } = splitAppointments(rows)
+  const download = (entry: ManagerInteractionDTO) => {
+    const blob = new Blob([appointmentIcs(entry, calendarTitle)], { type: 'text/calendar' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `termin-${entry.occurred_at.slice(0, 10)}.ics`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  return (
+    <>
+      {[
+        { title: t('Geplant'), list: upcoming },
+        { title: t('Stattgefunden'), list: past },
+      ].map(({ title, list }) =>
+        list.length === 0 ? null : (
+          <section key={title}>
+            <p className="px-6 pb-1 pt-4 font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">
+              {title} · {list.length}
+            </p>
+            <ul>
+              {list.map((entry) => (
+                <li key={entry.id} className="flex gap-5 border-b border-cockpit-line/60 px-6 py-4">
+                  <div className="w-[5.5rem] shrink-0">
+                    <p className="font-mono text-[13px] text-cockpit-text">{dateDe(entry.occurred_at)}</p>
+                    <p className="font-mono text-[11px] text-cockpit-faint">{timeDe(entry.occurred_at)}</p>
+                  </div>
+                  <p className="min-w-0 flex-1 whitespace-pre-wrap text-[14px] leading-relaxed text-cockpit-dim line-clamp-4">
+                    {entry.summary}
+                  </p>
+                  {list === upcoming && (
+                    <button
+                      type="button"
+                      onClick={() => download(entry)}
+                      title={t('Als .ics in den eigenen Kalender übernehmen')}
+                      className="flex shrink-0 items-center gap-1.5 self-start font-mono text-[12px] text-mint-400 transition-colors hover:text-mint-300"
+                    >
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      {t('In Kalender')}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ),
+      )}
+    </>
+  )
+}
 
 /** ELI-33: what the manager's company is hiring for now, from Markt — so a
  *  call starts from the open roles. The full list is on the company page. */

@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import Actor, get_current_actor, get_current_tenant
+from app.core.auth import Actor, get_current_actor, get_current_tenant, require_admin_to_delete
 from app.core.database import get_db
 from app.core.ratelimit import paid_ai_quota
 from app.domain.pipeline import auswertung
@@ -176,7 +176,7 @@ async def add_step(
 async def remove_step(
     application_id: uuid.UUID,
     step_key: str,
-    actor: Actor = Depends(get_current_actor),
+    actor: Actor = Depends(require_admin_to_delete),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Take a step out of this one process.

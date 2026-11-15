@@ -216,6 +216,20 @@ _ORG_MARKERS = (
 )
 
 
+def looks_like_staffing_firm(name: str | None) -> bool:
+    """Does the firm's NAME mark staffing, placement or a Personalberatung?
+
+    The rule EURES already sorts ads with (`adapters.eures.staffing_signal`:
+    known brands, then staffing words in the name), without its ad-text arm —
+    a company row has a name, not one ad. Deliberately narrow: "consult" or
+    "talent" in an employer's name is not evidence, and a missed agency only
+    stays visible, while a wrong hit would hide an employer.
+    """
+    from app.domain.hub.adapters.eures import staffing_signal
+
+    return bool(name) and staffing_signal(name, None) is not None
+
+
 def looks_like_natural_person(name: str | None) -> bool:
     """Screening heuristic: does this company name look like a PERSON's name?
 

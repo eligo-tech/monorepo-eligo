@@ -440,6 +440,22 @@ async def require_admin(actor: Actor = Depends(get_current_actor)) -> Actor:
     return actor
 
 
+async def require_admin_to_delete(actor: Actor = Depends(get_current_actor)) -> Actor:
+    """ELI-27: "Generell Daten löschen darf nur ein Admin."
+
+    Every DELETE route and every erasure carries this (or `require_admin`);
+    `tests/test_delete_admin_only.py` walks the route table and attacks each
+    one as a recruiter, so a new delete endpoint cannot skip it quietly.
+    """
+    if not actor.is_admin:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Nur Administratoren dürfen Daten löschen."
+            + ("" if actor.role_known else " (Das Token enthält keine Rolle.)"),
+        )
+    return actor
+
+
 async def get_ingest_tenant(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: AsyncSession = Depends(get_db),

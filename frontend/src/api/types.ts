@@ -1150,6 +1150,17 @@ export interface ContactRowDTO {
   last_call_by: string | null
   next_action_at: string | null
   due: boolean
+  /** ELI-37: the jobs connected to the person, newest ad first (at most 5). */
+  jobs?: LeadJobDTO[]
+}
+
+/** ELI-37: an ad naming the lead (`url`) and/or this workspace's job (`job_id`). */
+export interface LeadJobDTO {
+  title: string
+  location: string | null
+  url: string | null
+  posting_id: string | null
+  job_id: string | null
 }
 
 export interface CompanyFacetDTO {

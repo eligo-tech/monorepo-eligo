@@ -127,6 +127,15 @@ async def search_hub_employers(
         le=4,
         description="1 = any mention, 3 = the title names it, 4 = the title names every term",
     ),
+    exclude_agencies: bool = Query(
+        default=False,
+        description="leave out firms whose name marks staffing/placement (hub_companies.staffing_name)",
+    ),
+    size: list[Literal["s", "m", "l", "xl"]] | None = Query(
+        default=None,
+        description="employer size by OPEN ADS in the corpus (no headcount exists): "
+        "s 1–4 · m 5–19 · l 20–99 · xl 100+; repeatable",
+    ),
     limit: int = Query(default=40, ge=1, le=200),
     cursor: str | None = Query(
         default=None, description="opaque; from a previous page's next_cursor"
@@ -157,6 +166,8 @@ async def search_hub_employers(
             limit=limit,
             cursor=cursor,
             min_relevance=min_relevance,
+            exclude_agencies=exclude_agencies,
+            sizes=size,
         )
         # Counted once, on the first page only: it does not change as the
         # reader pages, and it is a second aggregate over the same set.
@@ -169,6 +180,8 @@ async def search_hub_employers(
                 berufsfelder=berufsfeld,
                 families=family,
                 min_relevance=min_relevance,
+                exclude_agencies=exclude_agencies,
+                sizes=size,
             )
             if cursor is None
             else 0
@@ -820,6 +833,23 @@ async def auto_link_companies(
     from app.domain.companies import market
 
     return await market.link_all_workspaces()
+
+
+@router.post("/companies/impressum/check")
+async def check_company_impressum(
+    limit: int = Query(default=20, ge=1, le=50),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+) -> dict[str, int]:
+    """ELI-39: workspace companies Markt cannot answer for — their website
+    (own domain, else contacts' company mail), its Impressum, VAT id and
+    register, through the verification gate. Machine-only (RULE 1): the daily
+    hub-company-links workflow calls it in batches; each workspace in its own
+    session, pinned to it."""
+    from app.domain.companies import impressum
+    from app.domain.hub import sites
+
+    async with sites.SiteFetcher() as fetcher:
+        return await impressum.check_all_workspaces(fetcher=fetcher, limit=limit)
 
 
 @router.post("/agencies/sites/check")

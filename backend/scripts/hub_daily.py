@@ -474,6 +474,32 @@ def _print_employer_sites(e: dict[str, int]) -> None:
     )
 
 
+#: Workspace companies per request. The server stops waiting after 90 s
+#: across all workspaces, so a batch stays inside the 120 s read timeout.
+_COMPANY_IMPRESSUM_BATCH = 20
+
+
+async def _check_company_impressum(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
+    """ELI-39: up to `budget` workspace companies' website, VAT id and
+    register from their Impressum, in batches. Stops when the server has
+    nothing left to check."""
+    totals = {"checked": 0, "verified": 0, "not_named": 0, "no_impressum": 0,
+              "blocked": 0, "error": 0, "no_domain": 0, "rejected": 0}
+    empty = 0
+    while totals["checked"] < budget:
+        size = min(_COMPANY_IMPRESSUM_BATCH, budget - totals["checked"])
+        response = await client.post(f"/hub/companies/impressum/check?limit={size}")
+        response.raise_for_status()
+        result = response.json()
+        for key in totals:
+            totals[key] += result.get(key, 0)
+        # Slow sites can finish nothing in one batch; two in a row: done.
+        empty = empty + 1 if result.get("checked", 0) == 0 else 0
+        if empty >= 2:
+            break
+    return totals
+
+
 async def _link_companies(client: httpx.AsyncClient) -> dict[str, int]:
     """ELI-33: link every workspace's companies to Markt where name AND town
     match exactly (one receipt per link)."""
@@ -915,6 +941,14 @@ async def main() -> int:
         help="run ONLY the company ↔ Markt linking (ELI-33)",
     )
     parser.add_argument(
+        "--company-impressum-only",
+        type=int,
+        default=0,
+        metavar="N",
+        help="run ONLY the workspace companies' Impressum check (ELI-39) for "
+        "up to N companies — the daily hub-company-links workflow",
+    )
+    parser.add_argument(
         "--employer-sites-only",
         type=int,
         default=0,
@@ -952,6 +986,19 @@ async def main() -> int:
         ) as client:
             n = await _link_companies(client)
             print(f"Unternehmen ↔ Markt: +{n['linked']} verknüpft in {n['tenants']} Workspaces")
+        return 0
+
+    if args.company_impressum_only > 0:
+        async with httpx.AsyncClient(
+            base_url=base, timeout=120.0, headers={"Authorization": f"Bearer {token}"}
+        ) as client:
+            c = await _check_company_impressum(client, budget=args.company_impressum_only)
+            print(
+                f"Unternehmen-Impressum: {c['checked']} geprüft, {c['verified']} bestätigt, "
+                f"{c['no_domain']} ohne Website, {c['not_named']} fremdes Impressum, "
+                f"{c['no_impressum']} ohne Impressum, {c['blocked']} gesperrt, {c['error']} Fehler, "
+                f"{c['rejected']} nicht bestätigt"
+            )
         return 0
 
     if args.employer_sites_only > 0:

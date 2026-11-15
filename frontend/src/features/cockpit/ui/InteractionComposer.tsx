@@ -11,6 +11,11 @@
 // list, and it turned out to be TWO lists: five kinds on a manager, three on
 // a candidate. A composer that knew its own vocabulary could only ever serve
 // one of them. Both live in `interactionKinds.ts`.
+//
+// ELI-40: choosing an appointment kind ("Meeting Notes") makes the note a
+// Termin — the date gets a time next to it, and the saved row shows up in the
+// manager's Termine tab. Same row, same endpoint: the calendar is a view of
+// the notes, not a second copy of them. Every other kind saves as before.
 
 import { useState } from 'react'
 import { CalendarPlus } from 'lucide-react'
@@ -18,9 +23,20 @@ import { CalendarPlus } from 'lucide-react'
 import { t } from '@/i18n'
 import { Button } from './forms'
 import { interactionLabel } from './interactionKinds'
+import { isAppointmentKind, nextFullHour, occurredAt } from './appointments'
 
 /** Today, as the date input wants it. */
 const today = () => new Date().toISOString().slice(0, 10)
+
+/** What the composer hands to `onSave`. The time counts only for a Termin;
+ *  any other kind keeps the date-only, midday-pinned behaviour. */
+export function composeEntry(kind: string, text: string, date: string, time: string) {
+  return {
+    interaction_type: kind,
+    summary: text.trim(),
+    occurred_at: occurredAt(date, isAppointmentKind(kind) ? time : null),
+  }
+}
 
 export function InteractionComposer({
   kinds,
@@ -45,6 +61,8 @@ export function InteractionComposer({
   const [kind, setKind] = useState<string>(defaultKind ?? kinds[0])
   const [text, setText] = useState('')
   const [when, setWhen] = useState(today())
+  const [at, setAt] = useState(nextFullHour())
+  const appointment = isAppointmentKind(kind)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -54,13 +72,7 @@ export function InteractionComposer({
     setBusy(true)
     setError(null)
     try {
-      await onSave({
-        interaction_type: kind,
-        summary,
-        // Midday, so a date typed without a time does not drift across a day
-        // boundary when it is read back in another timezone.
-        occurred_at: new Date(`${when}T12:00:00`).toISOString(),
-      })
+      await onSave(composeEntry(kind, summary, when, at))
       setText('')
     } catch {
       setError(t('Nicht gespeichert — bitte erneut versuchen.'))
@@ -103,6 +115,22 @@ export function InteractionComposer({
             className="rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
           />
         </label>
+        {appointment && (
+          <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
+            {t('um')}
+            <input
+              type="time"
+              value={at}
+              onChange={(e) => setAt(e.target.value)}
+              className="rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
+            />
+          </label>
+        )}
+        {appointment && (
+          <span className="font-mono text-[11px] text-mint-400">
+            {t('→ wird unter Termine eingetragen')}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Button tone="ghost" onClick={onCancel} disabled={busy}>
             {t('Abbrechen')}

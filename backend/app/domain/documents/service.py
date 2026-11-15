@@ -33,7 +33,7 @@ from sqlalchemy import desc, select
 from app.domain.candidates import service as candidates_service
 from app.domain.candidates.employment import normalize_employment_form
 from app.domain.candidates.schemas import CandidateCreate
-from app.domain.common.enums import DocumentKind
+from app.domain.common.enums import DocumentKind, WorkPermitStatus
 from app.domain.documents import gate, parser
 from app.domain.documents.models import CandidateDocument
 from app.domain.documents.extraction import get_cv_extractor
@@ -93,6 +93,67 @@ def _to_int(value: str | None) -> int | None:
     return int(digits) if digits else None
 
 
+#: ELI-28: "Land (Voreinstellung Deutschland)". A default, not a reading — it
+#: carries no enrichment record, so it never counts as verified evidence.
+DEFAULT_COUNTRY = "Deutschland"
+#: A German postcode has five digits. A four-digit one is Austria or
+#: Switzerland, and a German default there would be a wrong fact.
+_GERMAN_PLZ = re.compile(r"^\d{5}$")
+
+
+def _default_country(acc: dict[str, str]) -> str | None:
+    if acc.get("country"):
+        return acc["country"]
+    plz = (acc.get("postal_code") or "").strip()
+    if plz and not _GERMAN_PLZ.match(plz):
+        return None
+    return DEFAULT_COUNTRY
+
+
+#: Fields that are copied from the document, so they must appear in it.
+_GROUNDED_FIELDS = ("postal_code", "city", "country", "current_title", "current_company")
+#: An end date that means "still there".
+_OPEN_END = re.compile(
+    r"^\s*$|\b(?:heute|present|now|aktuell|current|today|dato|ongoing|laufend)\b", re.IGNORECASE
+)
+_DERIVED_CONFIDENCE = 0.75
+
+
+def _ground_address_and_role(
+    text: str, fields: list[ExtractedField], sections: CVSections
+) -> tuple[list[ExtractedField], list[str]]:
+    """ELI-28: PLZ, Land, Job-Titel and Aktuelles Unternehmen.
+
+    1. A value the document does not contain is not dropped but sent to review
+       (confidence capped below the threshold): it is a proposal nobody can
+       check against the source.
+    2. When the flat fields lack the current role, it is read off the grounded
+       work history: the newest entry whose end is open ("heute", "Present",
+       none) — the same position a recruiter would call the current job.
+    """
+    notes: list[str] = []
+    out: list[ExtractedField] = []
+    for f in fields:
+        # Default min_len: a two-letter "DE" is a substring of nearly any text
+        # and would pass without proving anything.
+        if f.field in _GROUNDED_FIELDS and not gate.is_grounded(f.value, text):
+            capped = min(f.confidence, HUMAN_REVIEW_THRESHOLD - 0.01)
+            out.append(f.model_copy(update={"confidence": capped}))
+            notes.append(f"{f.field}: not found in the document — sent to review")
+        else:
+            out.append(f)
+    have = {f.field for f in out}
+    current = next(
+        (r for r in sections.work_history if _OPEN_END.search(r.end_date or "")), None
+    )
+    if current is not None and sections.work_history and current is sections.work_history[0]:
+        for name, value in (("current_title", current.title), ("current_company", current.company)):
+            if name not in have and value and gate.is_grounded(value, text):
+                out.append(ExtractedField(field=name, value=value, confidence=_DERIVED_CONFIDENCE))
+                notes.append(f"{name}: read from the open position in the work history")
+    return out, notes
+
+
 def _build_candidate(
     tenant_id: uuid.UUID,
     fields: list[ExtractedField],
@@ -125,7 +186,7 @@ def _build_candidate(
         street=g("street"),
         postal_code=g("postal_code"),
         city=g("city"),
-        country=g("country"),
+        country=_default_country(acc),
         linkedin_url=g("linkedin_url"),
         xing_url=g("xing_url"),
         # One label from a CV is one industry — splitting on the comma would
@@ -192,6 +253,7 @@ async def extract_cv(
     tenant_id: uuid.UUID,
     persist: bool,
     override_suppression: bool = False,
+    work_permit: WorkPermitStatus | None = None,
 ) -> CVExtractionResult:
     # Off the event loop: PDF parsing and the (synchronous) LLM call take
     # seconds, and on the loop they stall every other request on this worker.
@@ -219,6 +281,8 @@ async def extract_cv(
     # ── Anti-hallucination: drop any role/education not grounded in the CV text,
     #    then assert (laufwise postcondition) that nothing ungrounded slipped by.
     sections, dropped_roles, dropped_edu = _ground_sections(text, raw_sections)
+    extracted, address_notes = _ground_address_and_role(text, extracted, sections)
+    notes += address_notes
     sec_post = gate.evaluate(
         gate.SECTIONS_POSTCONDITIONS,
         {"roles": {"ungrounded": dropped_roles}, "education": {"ungrounded": dropped_edu}},
@@ -267,6 +331,10 @@ async def extract_cv(
 
         data = _build_candidate(tenant_id, extracted, sections)
         data.override_suppression = override_suppression
+        # The recruiter's choice in the upload dialog (ELI-28) — never read
+        # from the CV. Without one the record keeps `unknown`.
+        if work_permit is not None:
+            data.work_permit = work_permit
         created = await candidates_service.create_candidate(session, data=data)
         candidate_id = created.id
         agent_result = await agent.run(

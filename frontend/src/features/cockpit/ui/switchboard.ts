@@ -13,3 +13,12 @@ export const registerLine = (board: Pick<SwitchboardDTO, 'register' | 'register_
 /** A lead's own number first; without one, the company's switchboard. */
 export const leadPhone = (own: string | null, board: SwitchboardDTO | null | undefined) =>
   own ? { phone: own, fromImpressum: false } : board?.phone ? { phone: board.phone, fromImpressum: true } : { phone: null, fromImpressum: false }
+
+/** ELI-39: register ("HRB 28871 · Essen") and VAT id for the Mandate's
+ *  Stammdaten — null when the Impressum gave neither (or none is verified). */
+export const registerFacts = (board: SwitchboardDTO | null | undefined) => {
+  if (!board) return null
+  const register = registerLine(board)
+  const vat = board.vat_id ?? null
+  return register || vat ? { register, vat } : null
+}

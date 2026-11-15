@@ -60,6 +60,7 @@ from app.domain.hub.resolution import (
     extract_legal_form,
     identity_key,
     looks_like_natural_person,
+    looks_like_staffing_firm,
     normalize_company_name,
     normalize_domain,
 )
@@ -324,6 +325,7 @@ async def merge_fetch(
                 longitude=sourced.longitude,
                 industry=sourced.industry,
                 suspected_natural_person=looks_like_natural_person(sourced.name),
+                staffing_name=looks_like_staffing_firm(sourced.name),
                 source=result.source,
                 kind=record_segment,
                 first_seen_at=now,
@@ -1588,6 +1590,8 @@ async def _search_candidates(
     regions: list[str] | None,
     berufsfelder: list[str] | None,
     families: list[str] | None = None,
+    exclude_agencies: bool = False,
+    sizes: list[str] | None = None,
 ):
     """Which employers the query matches, and the pieces built along the way.
 
@@ -1674,7 +1678,48 @@ async def _search_candidates(
             )
         )
 
+    if exclude_agencies:
+        # A stored verdict (`HubCompany.staffing_name`), not a name scan.
+        candidates = candidates.where(HubCompany.staffing_name.is_(False))
+
+    if sizes:
+        candidates = candidates.where(_employer_sized(candidates, sizes))
+
     return candidates, terms, name_hits, description_hits, posting_filters
+
+
+#: ELI-27 "Unternehmensgröße". The corpus has no headcount, so size is the
+#: employer's open ads in the corpus, all its sites together — labelled "offene
+#: Stellen" in the UI, never "Mitarbeiter". Inclusive bounds; None = open-ended.
+SIZE_BUCKETS: dict[str, tuple[int, int | None]] = {
+    "s": (1, 4),
+    "m": (5, 19),
+    "l": (20, 99),
+    "xl": (100, None),
+}
+
+
+def _employer_sized(candidates: Select, sizes: list[str]):
+    """Employers (by `normalized_name`) whose open ads fall in a bucket.
+
+    Summed over ALL the employer's sites, not just the matched ones: a city
+    filter must not shrink a chain to its one branch there. Bounded to the
+    names already in the candidate set, so the sum never walks the corpus.
+    `open_postings_count` is maintained at ingest and by liveness.
+    """
+    total = func.sum(HubCompany.open_postings_count)
+    ranges = [
+        total >= lo if hi is None else total.between(lo, hi)
+        for lo, hi in (SIZE_BUCKETS[s] for s in sizes)
+    ]
+    names = select(HubCompany.normalized_name).where(HubCompany.id.in_(candidates))
+    sized = (
+        select(HubCompany.normalized_name)
+        .where(_employer_company(), HubCompany.normalized_name.in_(names))
+        .group_by(HubCompany.normalized_name)
+        .having(or_(*ranges))
+    )
+    return HubCompany.normalized_name.in_(sized)
 
 
 #: How many ad-text hits a term may have before its description arm is dropped.
@@ -1866,6 +1911,8 @@ async def search_employers(
     roles_per_employer: int = 6,
     cursor: str | None = None,
     min_relevance: int = 1,
+    exclude_agencies: bool = False,
+    sizes: list[str] | None = None,
 ) -> list[dict]:
     """Search the corpus and return EMPLOYERS, not company rows.
 
@@ -1897,7 +1944,8 @@ async def search_employers(
         description_hits,
         posting_filters,
     ) = await _search_candidates(
-        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder, families=families
+        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder, families=families,
+        exclude_agencies=exclude_agencies, sizes=sizes,
     )
 
     # ONE predicate for what counts as a matching role, used for both the
@@ -2095,6 +2143,8 @@ async def count_employers(
     berufsfelder: list[str] | None = None,
     families: list[str] | None = None,
     min_relevance: int = 1,
+    exclude_agencies: bool = False,
+    sizes: list[str] | None = None,
 ) -> int:
     """How many employers the query matches in total.
 
@@ -2110,7 +2160,8 @@ async def count_employers(
         description_hits,
         posting_filters,
     ) = await _search_candidates(
-        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder, families=families
+        session, q=q, city=city, regions=regions, berufsfelder=berufsfelder, families=families,
+        exclude_agencies=exclude_agencies, sizes=sizes,
     )
     if min_relevance <= 1:
         # Nothing is excluded, so the cheap shape is also the correct one.

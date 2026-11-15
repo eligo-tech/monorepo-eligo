@@ -19,17 +19,24 @@ import type { CandidateDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { searchScore } from '@/lib/search'
+import { StepEditor, presentedStep } from '../../ui/StepEditor'
 
 export function AssignCandidate({
   jobId,
+  role,
   assignedCandidateIds,
   onAssigned,
 }: {
   jobId: string
+  /** The mandate's title, shown in the presentation dialog's header. */
+  role?: string
   assignedCandidateIds: string[]
   onAssigned?: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [presenting, setPresenting] = useState<{ id: string; candidateName: string } | null>(
+    null,
+  )
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [done, setDone] = useState<string[]>([])
@@ -67,16 +74,31 @@ export function AssignCandidate({
   async function assign(candidate: CandidateDTO) {
     setBusy(candidate.id)
     try {
-      await api.assignToJob(candidate.id, jobId)
+      const run = await api.assignToJob(candidate.id, jobId)
       setDone((prev) => [...prev, candidate.id])
       onAssigned?.()
+      // ELI-28: assigned = presented. The process dialog opens on
+      // "Vorgestellt" with now as the date; cancelling leaves the
+      // assignment without a presentation date.
+      setPresenting({ id: run.id, candidateName: candidate.full_name })
     } finally {
       setBusy(null)
     }
   }
 
+  const dialog = presenting && (
+    <StepEditor
+      card={{ ...presenting, jobId, role: role ?? '', steps: [] }}
+      step={presentedStep()}
+      onClose={() => setPresenting(null)}
+      onSaved={() => onAssigned?.()}
+    />
+  )
+
   if (!open) {
     return (
+      <>
+      {dialog}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -84,11 +106,13 @@ export function AssignCandidate({
       >
         <UserPlus className="h-3.5 w-3.5" /> {t('Kandidat zuordnen')}
       </button>
+      </>
     )
   }
 
   return (
     <div className="relative">
+      {dialog}
       <div className="absolute right-0 top-0 z-50 w-[26rem] rounded-xl border border-cockpit-line bg-cockpit-surface p-3 shadow-panel">
         <div className="mb-2 flex items-center gap-2">
           <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">

@@ -4,15 +4,28 @@
 # by tomorrow, not next Saturday. Light: it reads names and writes a handful
 # of link rows — no Disk IO concern (see #251).
 #
-# Machine-triggered only (ARCHITECTURE.md RULE 1). It fetches nothing: it reads
-# the corpus and each workspace's companies, and links a company only where the
-# name AND the town match exactly — each link through the verification gate.
+# Machine-triggered only (ARCHITECTURE.md RULE 1). The linking fetches nothing:
+# it reads the corpus and each workspace's companies, and links a company only
+# where the name AND the town match exactly — each link through the
+# verification gate.
+#
+# Then ELI-39: companies Markt still cannot answer for get their website (own
+# domain, else their contacts' company mail), its Impressum read politely
+# (robots.txt, identified, paced) and VAT id + register kept only when the
+# Impressum names the company — through the verification gate
+# (`backend/app/domain/companies/impressum.py`). Linking runs first, so a
+# company Markt answers for is never fetched.
 name: Hub · company links
 
 on:
   schedule:
     - cron: "53 5 * * *"
   workflow_dispatch:
+    inputs:
+      impressum_budget:
+        description: "Workspace companies whose Impressum to read this run (batches of 20)"
+        required: false
+        default: "600"
 
 concurrency:
   group: hub-ingest
@@ -21,7 +34,7 @@ concurrency:
 jobs:
   link:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
 
@@ -38,3 +51,11 @@ jobs:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
         run: python -m scripts.hub_daily --company-links-only
+
+      - name: Read companies' Impressum (ELI-39)
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+          BUDGET: ${{ github.event.inputs.impressum_budget }}
+        run: python -m scripts.hub_daily --company-impressum-only "${BUDGET:-600}"

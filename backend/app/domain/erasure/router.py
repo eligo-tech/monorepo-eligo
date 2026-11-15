@@ -13,23 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import Actor, get_current_actor
+from app.core.auth import Actor, require_admin_to_delete
 from app.core.database import get_db
 from app.domain.erasure import service
 from app.domain.erasure.models import ErasureRequest, TenantSuppression
 from app.domain.erasure.schemas import EraseRequest, ErasureRequestRead
 
 router = APIRouter(prefix="/erasure", tags=["erasure"])
-
-
-async def _admin(actor: Actor = Depends(get_current_actor)) -> Actor:
-    if not actor.is_admin:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Nur Administratoren dürfen Personen löschen."
-            + ("" if actor.role_known else " (Das Token enthält keine Rolle.)"),
-        )
-    return actor
 
 
 def _refuse(exc: Exception) -> HTTPException:
@@ -57,7 +47,7 @@ async def _run(erase, db: AsyncSession, actor: Actor, body: EraseRequest, **ids)
              status_code=status.HTTP_201_CREATED)
 async def erase_candidate(
     candidate_id: uuid.UUID, body: EraseRequest,
-    actor: Actor = Depends(_admin), db: AsyncSession = Depends(get_db),
+    actor: Actor = Depends(require_admin_to_delete), db: AsyncSession = Depends(get_db),
 ) -> ErasureRequestRead:
     return await _run(service.erase_candidate, db, actor, body, candidate_id=candidate_id)
 
@@ -66,14 +56,14 @@ async def erase_candidate(
              status_code=status.HTTP_201_CREATED)
 async def erase_manager(
     manager_id: uuid.UUID, body: EraseRequest,
-    actor: Actor = Depends(_admin), db: AsyncSession = Depends(get_db),
+    actor: Actor = Depends(require_admin_to_delete), db: AsyncSession = Depends(get_db),
 ) -> ErasureRequestRead:
     return await _run(service.erase_manager, db, actor, body, manager_id=manager_id)
 
 
 @router.get("/requests", response_model=list[ErasureRequestRead])
 async def list_requests(
-    actor: Actor = Depends(_admin), db: AsyncSession = Depends(get_db),
+    actor: Actor = Depends(require_admin_to_delete), db: AsyncSession = Depends(get_db),
 ) -> list[ErasureRequestRead]:
     requests = (
         await db.execute(
