@@ -83,8 +83,6 @@ COUNTS = (SITE_VERIFIED, SITE_NOT_NAMED, SITE_NO_IMPRESSUM, SITE_BLOCKED, SITE_E
 ERROR_RETRY_AFTER = dt.timedelta(days=7)
 #: No usable domain yet: a contact added later may bring one.
 NO_DOMAIN_RETRY_AFTER = dt.timedelta(days=30)
-#: The facts a verified reading may keep (`sites.company_facts` minus phone/mail).
-FACTS = ("vat_id", "register", "register_court")
 
 
 def site_domain(value: str | None) -> str | None:
