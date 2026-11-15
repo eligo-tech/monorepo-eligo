@@ -28,6 +28,7 @@ import type {
   AssessmentWriteDTO,
   JobCreatePayload,
   AuswertungParsedDTO,
+  EvaluationPromptDTO,
   BriefingDTO,
   CriteriaSuggestionDTO,
   JobDTO,
@@ -572,6 +573,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text }),
     }),
+
+  /** The Bewertungs-Prompt for one candidate on one mandate (ELI-41):
+   *  assembled by code, for the recruiter to paste into Claude. */
+  evaluationPrompt: (applicationId: string) =>
+    request<EvaluationPromptDTO>(
+      `/pipeline/applications/${applicationId}/bewertung-prompt`,
+    ),
 
   /** Put a candidate on a mandate. Idempotent per pair — assigning twice
    *  returns the existing process rather than making a second one. */

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.pipeline import auswertung
+from app.domain.pipeline import bewertung
 from app.domain.pipeline import service
 from app.domain.pipeline import steps as steps_mod
 from app.domain.pipeline.schemas import (
@@ -17,6 +18,7 @@ from app.domain.pipeline.schemas import (
     AssessmentWrite,
     AuswertungParse,
     AuswertungParsed,
+    EvaluationPromptRead,
     ProfileRead,
     ProcessJobRead,
     ProcessStepCreate,
@@ -265,6 +267,32 @@ async def parse_auswertung_document(
     return AuswertungParsed(
         assessment=AssessmentWrite(**assessment),
         profile=ProfileRead(**parsed["candidate"]),
+    )
+
+
+@router.get(
+    "/applications/{application_id}/bewertung-prompt",
+    response_model=EvaluationPromptRead,
+)
+async def evaluation_prompt(
+    application_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> EvaluationPromptRead:
+    """The Bewertungs-Prompt for this candidate on this mandate (ELI-41).
+
+    Reads only; stores nothing and calls no model. The recruiter copies it
+    into Claude, and pastes the answer back through "Nach dem Gespräch
+    erfassen" — where it is parsed into the form and saved by a person.
+    """
+    material = await service.evaluation_material(
+        db, tenant_id=tenant_id, application_id=application_id
+    )
+    if material is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "application not found")
+    prompt = bewertung.build_prompt(material)
+    return EvaluationPromptRead(
+        prompt=prompt, sources=bewertung.sources(material), chars=len(prompt)
     )
 
 

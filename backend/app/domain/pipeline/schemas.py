@@ -282,3 +282,17 @@ class AuswertungParsed(BaseModel):
 
     assessment: AssessmentWrite
     profile: ProfileRead
+
+
+class EvaluationPromptRead(BaseModel):
+    """The Bewertungs-Prompt (ELI-41), ready for the clipboard.
+
+    Assembled by code from the record — no model was asked. `sources` says
+    what went in, so the recruiter can see before pasting that the transcript
+    is (or is not) part of it.
+    """
+
+    prompt: str
+    #: "Lebenslauf — cv.pdf", "Briefing (2)", … in the prompt's order.
+    sources: list[str]
+    chars: int

@@ -752,6 +752,15 @@ export interface AuswertungParsedDTO {
   profile: ProfileDTO
 }
 
+/** The Bewertungs-Prompt (ELI-41): assembled by code from the record, for
+ *  the recruiter to paste into Claude. No model was asked. */
+export interface EvaluationPromptDTO {
+  prompt: string
+  /** What went in, in the prompt's order: "Lebenslauf — cv.pdf", … */
+  sources: string[]
+  chars: number
+}
+
 export interface ProcessJobDTO {
   job_id: string
   job_title: string

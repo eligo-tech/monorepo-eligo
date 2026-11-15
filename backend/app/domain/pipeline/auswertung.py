@@ -33,9 +33,20 @@ from typing import Any
 
 #: "Gesamtbewertung: 8 / 10" — the score, on the document's own scale.
 SCORE = re.compile(r"Gesamtbewertung:\s*(\d{1,2})\s*/\s*10")
-#: "Grundlage: CV (Kurzversion) + Gesprächstranskript (18.09.2026)"
-BASIS = re.compile(r"^Grundlage:\s*(.+)$", re.MULTILINE)
+#: "Grundlage: CV (Kurzversion) + Gesprächstranskript (18.09.2026)" — the
+#: recruiter's template — or "Basis: Suchprofil vom …, Gesprächstranskript
+#: vom …" — the Bewertungs-Prompt's schema (ELI-41, `bewertung.py`).
+BASIS = re.compile(r"^(?:Grundlage|Basis):\s*(.+)$", re.MULTILINE)
 GERMAN_DATE = re.compile(r"(\d{1,2})\.(\d{1,2})\.(\d{4})")
+#: The day of the conversation is the day the candidate was assessed.
+_TRANSCRIPT_DATE = re.compile(
+    r"Gesprächstranskript\D{0,12}?(\d{1,2})\.(\d{1,2})\.(\d{4})"
+)
+#: A Suchprofil's / an ad's date says when the MANDATE was written, not when
+#: the candidate was assessed — never read as `assessed_at`.
+_NOT_ASSESSMENT_DATE = re.compile(
+    r"(?:Suchprofil|Stellenanzeige)\s+vom\s+\d{1,2}\.\d{1,2}\.\d{4}"
+)
 
 #: Section headings, as the template writes them. Matched at the start of a
 #: line so a mention inside a paragraph cannot split the document.
@@ -44,7 +55,25 @@ _SECTIONS = (
     ("B", re.compile(r"^B\.\s", re.MULTILINE)),
     ("C", re.compile(r"^C\.\s", re.MULTILINE)),
     ("D", re.compile(r"^D\.\s", re.MULTILINE)),
+    # The schema's closing list. A section of its own so it ends D: without
+    # it the open questions were read as technologies.
+    ("Z", re.compile(r"^Vor der Vorstellung zu klären:?", re.MULTILINE)),
 )
+
+#: "**Kurzfazit:**", "## A. …" — Claude answers in Markdown, the template
+#: did not. Emphasis and heading marks carry nothing the fields need.
+_HEADING_MARK = re.compile(r"^[ \t]*#{1,6}[ \t]*", re.MULTILINE)
+_EMPHASIS = re.compile(r"\*\*|__")
+#: "Lücken / Risiken" (the ELI-42 schema) is "Lücken/Risiken" (the template).
+_RISKS_LABEL = re.compile(r"Lücken\s*/\s*Risiken")
+_NUMBERED = re.compile(r"^\d{1,2}[.)]\s+")
+
+
+def _plain(text: str) -> str:
+    """The document without Markdown, labels in one spelling."""
+    text = _HEADING_MARK.sub("", text)
+    text = _EMPHASIS.sub("", text)
+    return _RISKS_LABEL.sub("Lücken/Risiken", text)
 
 #: Single labelled lines of section B → the candidate column each belongs in.
 #: Everything here describes the PERSON, not their fit for one position.
@@ -113,12 +142,25 @@ def _lines_between(block: str, start_label: str, stop_labels: tuple[str, ...]) -
 
 
 def _labelled(block: str, label: str) -> str | None:
-    """The text after `Label:` — the paragraph it introduces, one line."""
-    for raw in block.splitlines():
-        line = raw.strip()
-        if line.startswith(f"{label}:"):
-            value = line.split(":", 1)[1].strip()
-            return value or None
+    """The text after `Label:` — the paragraph it introduces, one line.
+
+    When the label stands alone ("Kurzfazit:" and the text below it), the
+    next line is the value — unless that line is itself a label or a bullet,
+    which would mean the field was left empty.
+    """
+    lines = [raw.strip() for raw in block.splitlines()]
+    for index, line in enumerate(lines):
+        if not line.startswith(f"{label}:"):
+            continue
+        value = line.split(":", 1)[1].strip()
+        if value:
+            return value
+        following = next((n for n in lines[index + 1 :] if n), "")
+        if following and not following.endswith(":") and not following.startswith(
+            ("-", "•", "*")
+        ) and not re.match(r"^[\wÄÖÜäöü &/-]{2,60}:", following):
+            return following
+        return None
     return None
 
 
@@ -184,8 +226,23 @@ def _body(block: str) -> str:
     return "\n".join(line.strip() for line in lines[1:] if line.strip())
 
 
+def _open_points(block: str) -> list[str]:
+    """"Vor der Vorstellung zu klären" → risks, each marked as a question.
+
+    The assessment has no column for open questions, and they are exactly
+    what the risk column is for: what must be said before the client says it.
+    """
+    out: list[str] = []
+    for raw in block.splitlines()[1:]:
+        line = _NUMBERED.sub("", raw.strip().lstrip("-•* ")).strip()
+        if line:
+            out.append(f"Zu klären: {line}")
+    return out
+
+
 def parse_auswertung(text: str) -> dict[str, Any]:
     """The document as data. Pure: takes the text, returns what to store."""
+    text = _plain(text)
     sections = _split_sections(text)
     a, b = sections.get("A", ""), sections.get("B", "")
 
@@ -194,7 +251,9 @@ def parse_auswertung(text: str) -> dict[str, Any]:
     basis = basis_match.group(1).strip() if basis_match else None
     assessed_at = None
     if basis:
-        date = GERMAN_DATE.search(basis)
+        date = _TRANSCRIPT_DATE.search(basis) or GERMAN_DATE.search(
+            _NOT_ASSESSMENT_DATE.sub("", basis)
+        )
         if date:
             day, month, year = (int(g) for g in date.groups())
             assessed_at = dt.datetime(year, month, day, tzinfo=dt.UTC)
@@ -239,7 +298,8 @@ def parse_auswertung(text: str) -> dict[str, Any]:
             "strengths": _lines_between(a, "Stärken", ("Lücken/Risiken",)),
             "risks": _lines_between(
                 a, "Lücken/Risiken", ("Fachliche & professionelle Passung",)
-            ),
+            )
+            + _open_points(sections.get("Z", "")),
             "client_summary": _body(sections.get("C", "")) or None,
             "technologies": technologies,
             "basis": basis,

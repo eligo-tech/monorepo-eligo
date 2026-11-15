@@ -33,6 +33,7 @@ import { StammdatenPanel } from './mandate/StammdatenPanel'
 import { AssignCandidate } from './mandate/AssignCandidate'
 import { PanelHead } from './mandate/parts'
 import { BriefingPanel } from './mandate/BriefingPanel'
+import { BewertungPrompt } from './mandate/BewertungPrompt'
 import { SuchprofilPanel } from './mandate/SuchprofilPanel'
 import type { Mandate, ProcessCard, ProcessStep } from '../data/types'
 
@@ -263,6 +264,9 @@ export function MandateView({
                       </button>
                     )}
                   </div>
+                )}
+                {card.editable && assessing !== card.id && (
+                  <BewertungPrompt applicationId={card.id} />
                 )}
               </ProcessCardPanel>
             ))
