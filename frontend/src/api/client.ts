@@ -175,6 +175,8 @@ export const api = {
     location?: string
     skills?: string[]
     salary_expectation?: number | null
+    /** `WorkPermitStatus` value; omitted, the backend stores `unknown`. */
+    work_permit?: string
     source?: string
     /** Erased here on request and come back of their own accord (409 otherwise). */
     override_suppression?: boolean
@@ -652,10 +654,14 @@ export const api = {
     file: File,
     persist = false,
     overrideSuppression = false,
+    /** Arbeitserlaubnis chosen in the upload dialog — stored on persist only. */
+    workPermit?: string,
   ): Promise<CVExtractionResultDTO> {
     const body = new FormData()
     body.append('file', file)
-    const q = `persist=${persist}${overrideSuppression ? '&override_suppression=true' : ''}`
+    const q =
+      `persist=${persist}${overrideSuppression ? '&override_suppression=true' : ''}` +
+      (persist && workPermit ? `&work_permit=${encodeURIComponent(workPermit)}` : '')
     const res = await fetch(`${BASE}/documents/extract-cv?${q}`, {
       method: 'POST',
       body, // let the browser set the multipart boundary
