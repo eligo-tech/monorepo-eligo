@@ -331,19 +331,27 @@ async def contacts(
 async def company_switchboards(session: AsyncSession, tenant_id: uuid.UUID, company_ids: list[uuid.UUID]) -> dict:
     """Each of this workspace's companies' Impressum facts: Markt's (ELI-30,
     with the switchboard phone) where a linked site has them, else the
-    company's own reading (ELI-39, `companies/impressum.py`, no phone)."""
+    company's own reading (ELI-39, `companies/impressum.py`, no phone).
+
+    Markt's reading without VAT id and register gives way to the company's
+    own (review of #267); its phone is kept only when both read the same
+    domain, so a value is never shown under another site's provenance."""
     from app.domain.companies.impressum import board
 
     out = await corpus_switchboards(session, tenant_id, company_ids)
-    rest = [cid for cid in company_ids if cid not in out]
+    rest = [cid for cid in company_ids if not (out.get(cid) or {}).get("vat_id") and not (out.get(cid) or {}).get("register")]
     if rest:
         from app.domain.companies.models import Company
 
         for company in await session.scalars(
             select(Company).where(Company.tenant_id == tenant_id, Company.id.in_(rest), Company.impressum.is_not(None))
         ):
-            if (facts := board(company)) is not None:
-                out[company.id] = facts
+            if (own := board(company)) is None:
+                continue
+            markt = out.get(company.id)
+            if markt and markt.get("phone") and markt.get("domain") == own["domain"]:
+                own = {**own, "phone": markt["phone"]}
+            out[company.id] = own
     return out
 
 

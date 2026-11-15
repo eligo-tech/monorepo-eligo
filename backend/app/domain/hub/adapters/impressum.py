@@ -23,9 +23,10 @@ pattern either finds "HRB 23195" or it does not.
 ELI-39: a value is read only when it is unambiguous and checks out. A German
 VAT id must pass its official check digit (`valid_de_vat`); two different
 valid ids on one page, or two different registers of the same kind (two
-HRBs), name more than one firm and read as nothing. A GmbH & Co. KG's HRA
-followed by its general partner's HRB is not ambiguous: the first is the
-firm's own, as before.
+HRBs), name more than one firm and read as nothing — which includes a KGaA
+whose general partner is also in HRB (fails closed). A "& Co. KG" page with
+one HRA keeps that HRA, whichever order it prints it and its general
+partner's HRB in: a KG is registered in HRA, its partner GmbH in HRB.
 """
 
 from __future__ import annotations
@@ -143,12 +144,19 @@ def _german_vat(body: str) -> str | None:
     return valid.pop() if len(valid) == 1 else None
 
 
+#: "Muster GmbH & Co. KG" — not "& Co. KGaA", which registers in HRB.
+_CO_KG = re.compile(r"&\s*Co\.?\s*KG\b(?!aA)")
+
+
 def _register(body: str):
     """The first register entry — unless the page names a second, different
     one of the same kind (HRB 1 … HRB 2): then whose is which is a guess."""
     matches = list(_REGISTER.finditer(body))
     if not matches:
         return None
+    hra = {m.group(2) for m in matches if m.group(1) == "HRA"}
+    if len(hra) == 1 and len(matches) > 1 and _CO_KG.search(body):
+        return next(m for m in matches if m.group(1) == "HRA")
     first = matches[0]
     if any(m.group(1) == first.group(1) and m.group(2) != first.group(2) for m in matches[1:]):
         return None

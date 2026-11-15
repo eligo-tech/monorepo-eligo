@@ -76,13 +76,17 @@ from app.domain.verification.schemas import ProposedChange
 logger = get_logger(__name__)
 
 AGENT = "company_impressum"
-#: A verified reading whose values did not all re-check: kept out, not retried.
+#: A verified reading whose values did not all re-check: nothing kept.
 REJECTED = "rejected"
 COUNTS = (SITE_VERIFIED, SITE_NOT_NAMED, SITE_NO_IMPRESSUM, SITE_BLOCKED, SITE_ERROR, SITE_NO_DOMAIN, REJECTED)
 #: "Not now" from a site: asked again after a week (as the corpus job).
 ERROR_RETRY_AFTER = dt.timedelta(days=7)
 #: No usable domain yet: a contact added later may bring one.
 NO_DOMAIN_RETRY_AFTER = dt.timedelta(days=30)
+#: Every other outcome but "verified" (not named, no Impressum, blocked,
+#: rejected) is asked again after a quarter — or at once when the website
+#: candidates changed (a recruiter entered the domain, a contact arrived).
+SETTLED_RETRY_AFTER = dt.timedelta(days=90)
 
 
 def site_domain(value: str | None) -> str | None:
@@ -113,16 +117,18 @@ def website_candidates(domain: str | None, emails: list[str]) -> list[str]:
 def on_page(facts: dict, text: str | None) -> tuple[bool, str]:
     """Postcondition: every value appears on the fetched page as published."""
     text = text or ""
-    squashed = re.sub(r"\s+", "", text)
+    # Compared as printed, minus separators: "CHE-123.456.789", "DE 252 406 571".
+    alnum = re.sub(r"[^0-9A-Za-z]", "", text)
+    spaced = " ".join(text.split())
     missing = []
-    if (vat := facts.get("vat_id")) and vat not in squashed:
+    if (vat := facts.get("vat_id")) and re.sub(r"[^0-9A-Za-z]", "", vat) not in alnum:
         missing.append("vat_id")
     if register := facts.get("register"):
         kind, _, number = register.partition(" ")
-        found = (kind, number) in register_entries(text) if kind in ("HRA", "HRB") else number in squashed
+        found = (kind, number) in register_entries(text) if kind in ("HRA", "HRB") else number in alnum
         if not found:
             missing.append("register")
-    if (court := facts.get("register_court")) and court not in text:
+    if (court := facts.get("register_court")) and " ".join(court.split()) not in spaced:
         missing.append("register_court")
     if missing:
         return False, f"not on the fetched page: {', '.join(missing)}"
@@ -133,26 +139,34 @@ def _vat_checks(facts: dict) -> tuple[bool, str]:
     vat = facts.get("vat_id")
     if vat and vat.startswith("DE") and not valid_de_vat(vat):
         return False, "VAT id fails its check digit"
-    return True, "VAT id check digit valid" if vat and vat.startswith("DE") else "no German VAT id"
+    if vat and vat.startswith("DE"):
+        return True, "German VAT id check digit valid"
+    return True, "no German VAT id (no check digit tested)"
 
 
-def _standing(facts: dict | None, now: dt.datetime) -> bool:
+def _standing(facts: dict | None, candidates: list[str], now: dt.datetime) -> bool:
     if not facts:
         return False
     try:
         checked = dt.datetime.fromisoformat(facts.get("checked_at") or "")
     except ValueError:
         return False
-    if facts.get("status") == SITE_ERROR:
+    status = facts.get("status")
+    if status == SITE_VERIFIED:
+        return True
+    if facts.get("candidates") is not None and facts["candidates"] != candidates:
+        return False  # a new website to try
+    if status == SITE_ERROR:
         return checked > now - ERROR_RETRY_AFTER
-    if facts.get("status") == SITE_NO_DOMAIN:
+    if status == SITE_NO_DOMAIN:
         return checked > now - NO_DOMAIN_RETRY_AFTER
-    return True
+    return checked > now - SETTLED_RETRY_AFTER
 
 
 async def _due(session: AsyncSession, tenant_id: uuid.UUID, now: dt.datetime, limit: int) -> list[tuple]:
-    """(company id, name, website candidates) for companies no verified Markt
-    row and no standing check answers for; clients first."""
+    """(company id, name, website candidates) for companies no Markt reading
+    with a VAT id or register and no standing check answers for; clients
+    first."""
     from app.domain.hub.call_list import corpus_switchboards
     from app.domain.managers.models import Manager
 
@@ -161,21 +175,25 @@ async def _due(session: AsyncSession, tenant_id: uuid.UUID, now: dt.datetime, li
             select(Company).where(Company.tenant_id == tenant_id).order_by(Company.is_client.desc(), Company.name)
         )
     ).all()
-    open_ = [c for c in companies if not _standing(c.impressum, now) and not looks_like_natural_person(c.name)]
-    if not open_:
-        return []
-    answered = await corpus_switchboards(session, tenant_id, [c.id for c in open_])
-    open_ = [c for c in open_ if c.id not in answered][:limit]
     emails: dict[uuid.UUID, list[str]] = collections.defaultdict(list)
     for company_id, email in await session.execute(
         select(Manager.company_id, Manager.email).where(
-            Manager.tenant_id == tenant_id,
-            Manager.company_id.in_([c.id for c in open_]),
-            Manager.email.is_not(None),
+            Manager.tenant_id == tenant_id, Manager.company_id.is_not(None), Manager.email.is_not(None)
         )
     ):
         emails[company_id].append(email)
-    return [(c.id, c.name, website_candidates(c.domain, emails[c.id])) for c in open_]
+    candidates = {c.id: website_candidates(c.domain, emails[c.id]) for c in companies}
+    open_ = [
+        c for c in companies
+        if not _standing(c.impressum, candidates[c.id], now) and not looks_like_natural_person(c.name)
+    ]
+    if not open_:
+        return []
+    # A Markt reading with only a phone does not answer for VAT id and register.
+    boards = await corpus_switchboards(session, tenant_id, [c.id for c in open_])
+    answered = {cid for cid, b in boards.items() if b.get("vat_id") or b.get("register")}
+    open_ = [c for c in open_ if c.id not in answered][:limit]
+    return [(c.id, c.name, candidates[c.id]) for c in open_]
 
 
 async def _read(fetcher, name: str, candidates: list[str], pages: dict[str, asyncio.Task]) -> dict:
@@ -221,18 +239,24 @@ async def check_companies(
     tasks = [asyncio.ensure_future(one(name, candidates)) for _, name, candidates in work]
     if tasks:
         await asyncio.wait(tasks, timeout=seconds)
+    # Decide which reads finished BEFORE cancelling anything: cancelling one
+    # company's read cancels a page fetch another company awaits too, and that
+    # one would then be "done" as cancelled (review of #267).
+    finished = [task.done() and not task.cancelled() for task in tasks]
+    for task, ok in zip(tasks, finished, strict=True):
+        if not ok:
+            task.cancel()
 
     counts = {"checked": 0, **{status: 0 for status in COUNTS}}
-    for (company_id, *_), task in zip(work, tasks, strict=True):
-        if not task.done():
-            task.cancel()
-            continue
+    for (company_id, _, candidates), task, ok in zip(work, tasks, finished, strict=True):
+        if not ok:
+            continue  # picked again next batch; nothing recorded
         if task.exception() is not None:
             logger.warning("company impressum check failed: %s", type(task.exception()).__name__)
             result = {"status": SITE_ERROR, "domain": None}
         else:
             result = task.result()
-        status = await _record(session, tenant_id, company_id, result, now)
+        status = await _record(session, tenant_id, company_id, result, candidates, now)
         counts["checked"] += 1
         counts[status] += 1
     leftover = [t for t in [*tasks, *pages.values()] if not t.done()]
@@ -243,23 +267,29 @@ async def check_companies(
     return counts
 
 
-async def _record(session: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID, result: dict, now: dt.datetime) -> str:
+async def _record(
+    session: AsyncSession, tenant_id: uuid.UUID, company_id: uuid.UUID, result: dict, candidates: list[str], now: dt.datetime
+) -> str:
     company = await session.scalar(select(Company).where(Company.tenant_id == tenant_id, Company.id == company_id))
     if company is None:
         return result["status"]  # deleted meanwhile; nothing to record
     status = result["status"]
-    if status == SITE_VERIFIED and await _commit_verified(session, tenant_id, company, result, now):
+    if status == SITE_VERIFIED and await _commit_verified(session, tenant_id, company, result, candidates, now):
         return SITE_VERIFIED
     if status == SITE_VERIFIED:
         status = REJECTED
     # Scheduling only — what was tried and when, never a value: the record
     # asserts nothing about the company, so it owes no receipt.
-    company.impressum = {"status": status, "domain": result.get("domain"), "checked_at": now.isoformat()}
+    company.impressum = {
+        "status": status, "domain": result.get("domain"), "candidates": candidates, "checked_at": now.isoformat(),
+    }
     await session.flush()
     return status
 
 
-async def _commit_verified(session: AsyncSession, tenant_id: uuid.UUID, company: Company, result: dict, now: dt.datetime) -> bool:
+async def _commit_verified(
+    session: AsyncSession, tenant_id: uuid.UUID, company: Company, result: dict, candidates: list[str], now: dt.datetime
+) -> bool:
     page, parsed, domain = result["page"], result["facts"], result["domain"]
     register = f"{parsed.register_type} {parsed.register_number}" if parsed.register_number else None
     values = {
@@ -276,6 +306,7 @@ async def _commit_verified(session: AsyncSession, tenant_id: uuid.UUID, company:
         "fetched_at": now.isoformat(),
         "checked_at": now.isoformat(),
         "content_sha256": hashlib.sha256(page.text.encode()).hexdigest(),
+        "candidates": candidates,
     }
     change = ProposedChange(
         tenant_id=tenant_id,
@@ -291,8 +322,6 @@ async def _commit_verified(session: AsyncSession, tenant_id: uuid.UUID, company:
 
     async def _apply(_session: AsyncSession, _change) -> None:
         company.impressum = record
-        if not company.domain:
-            company.domain = domain
         await _session.flush()
         landed = await _session.scalar(
             select(Company.impressum).where(Company.tenant_id == tenant_id, Company.id == company.id)
@@ -300,22 +329,53 @@ async def _commit_verified(session: AsyncSession, tenant_id: uuid.UUID, company:
         if (landed or {}).get("fetched_at") != record["fetched_at"]:
             raise RuntimeError("company impressum did not land")
 
+    def _named(_c) -> tuple[bool, str]:
+        if result["named"] and names_firm(text, [company.name]):
+            return True, "Impressum names the company as operator"
+        return False, "Impressum does not name the company"
+
     outcome = await verification.verify_and_commit(
         session,
         change=change,
         agent=AGENT,
-        postconditions=[
-            lambda _c: (
-                (True, "Impressum names the company as operator")
-                if result["named"] and names_firm(text, [company.name])
-                else (False, "Impressum does not name the company")
-            ),
-            lambda _c: on_page(values, text),
-            lambda _c: _vat_checks(values),
-        ],
+        postconditions=[_named, lambda _c: on_page(values, text), lambda _c: _vat_checks(values)],
         apply_hook=_apply,
     )
+    if outcome.committed and not company.domain:
+        await _commit_domain(session, tenant_id, company, domain, url, now, _named)
     return outcome.committed
+
+
+async def _commit_domain(session, tenant_id: uuid.UUID, company: Company, domain: str, url: str, now, named) -> None:
+    """The website found and verified becomes the company's `domain` — only
+    where the record has none, and as its own receipted change, so the ledger
+    names the field it wrote (review of #267)."""
+
+    async def _apply(_session: AsyncSession, _change) -> None:
+        company.domain = domain
+        await _session.flush()
+        landed = await _session.scalar(
+            select(Company.domain).where(Company.tenant_id == tenant_id, Company.id == company.id)
+        )
+        if landed != domain:
+            raise RuntimeError("company domain did not land")
+
+    await verification.verify_and_commit(
+        session,
+        change=ProposedChange(
+            tenant_id=tenant_id,
+            entity_type="company",
+            entity_id=company.id,
+            field="domain",
+            proposed_value=domain,
+            source=ConfidenceSource.PUBLIC_WEB,
+            source_detail=f"{url[:900]} @ {now.isoformat()}",
+            confidence=1.0,
+        ),
+        agent=AGENT,
+        postconditions=[named],
+        apply_hook=_apply,
+    )
 
 
 def board(company: Company) -> dict | None:

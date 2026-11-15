@@ -14,6 +14,7 @@ recording fetcher). Fixtures are real Impressum pages (`fixtures/impressum/`).
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import pathlib
 import uuid
@@ -257,3 +258,98 @@ async def test_the_register_route() -> None:
     assert body["vat_id"] == "DE252406571" and body["register"] == "HRB 28871"
     assert body["impressum_url"] == "https://tempton.de/impressum" and body["checked_at"].startswith("2026-11-15")
 
+
+
+class _Slow(_Fetcher):
+    """`slow.de` never answers within the batch."""
+
+    async def get(self, url: str) -> sites.SitePage:
+        if "slow.de" in url:
+            await asyncio.sleep(5)
+        return await super().get(url)
+
+
+async def test_two_companies_on_one_slow_domain_do_not_lose_the_batch() -> None:
+    # Review of #267: cancelling one company's read cancelled the shared page
+    # fetch, and the other company's read raised CancelledError mid-loop —
+    # the whole batch, incl. the verified Tempton, was never committed.
+    tenant = uuid.uuid4()
+    await _company(tenant, "Aaa Slow GmbH", domain="slow.de")
+    fast = await _company(tenant, "Tempton Group GmbH", domain="tempton.de")
+    await _company(tenant, "Zzz Slow Zwei GmbH", domain="slow.de")
+    async with SessionLocal() as s:
+        out = await impressum.check_companies(
+            s, tenant_id=tenant, fetcher=_Slow(_tempton()), limit=20, now=NOW, seconds=0.5
+        )
+    assert out["checked"] == 1 and out["verified"] == 1
+    assert (await _get(fast)).impressum["status"] == "verified"
+
+
+def test_values_are_found_on_the_page_as_printed() -> None:
+    # Review of #267: "CHE-123.456.789" on the page, "CHE123456789" stored;
+    # a court broken across lines.
+    page = "Muster Personal AG\nUID: CHE-123.456.789 MWST\nVertreten durch: Max Mustermann"
+    assert impressum.on_page({"vat_id": "CHE123456789"}, page)[0]
+    assert impressum.on_page({"register_court": "Frankfurt am Main"}, "Amtsgericht Frankfurt\n   am Main HRB 1")[0]
+
+
+async def test_a_new_website_candidate_reopens_a_settled_check() -> None:
+    # Review of #267: "no Impressum" on a contact's group domain must not stay
+    # final once the recruiter enters the company's own domain.
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH", emails=("m.mustermann@other-group.de",))
+    await _run(tenant, _Fetcher({}))
+    assert (await _get(cid)).impressum["status"] == "no_impressum"
+    async with SessionLocal() as s:
+        (await s.get(Company, cid)).domain = "tempton.de"
+        await s.commit()
+    assert (await _run(tenant, _Fetcher(_tempton())))["verified"] == 1
+
+
+async def test_a_settled_check_is_retried_after_a_quarter() -> None:
+    tenant = uuid.uuid4()
+    await _company(tenant, "Tempton Group GmbH", domain="tempton.de")
+    await _run(tenant, _Fetcher({}))
+    assert (await _run(tenant, _Fetcher(_tempton()), NOW + dt.timedelta(days=30)))["checked"] == 0
+    assert (await _run(tenant, _Fetcher(_tempton()), NOW + dt.timedelta(days=91)))["verified"] == 1
+
+
+async def _linked_markt_board(tenant: uuid.UUID, cid: uuid.UUID, facts: dict) -> None:
+    async with SessionLocal() as s:
+        hub = HubCompany(
+            name="Tempton Group GmbH", normalized_name=normalize_company_name("Tempton Group GmbH"),
+            dedupe_key=f"k-{uuid.uuid4()}", resolution_basis="name_place", source="bundesagentur",
+            kind=EMPLOYER, first_seen_at=NOW, last_seen_at=NOW,
+        )
+        s.add(hub)
+        await s.flush()
+        s.add(HubSiteCheck(domain="tempton.de", group_key=f"employer:{hub.id}", hub_company_id=hub.id,
+                           status="verified", facts=facts, checked_at=NOW))
+        s.add(HubCompanyLink(tenant_id=tenant, hub_company_id=hub.id, company_id=cid))
+        await s.commit()
+
+
+async def test_a_phone_only_markt_reading_does_not_hide_the_register() -> None:
+    # Review of #267: Markt's switchboard has only a phone — the company's
+    # own reading still runs, and the page shows both, field by field.
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH", domain="tempton.de")
+    await _linked_markt_board(tenant, cid, {"phone": "+49 201 89479-0"})
+    assert (await _run(tenant, _Fetcher(_tempton())))["verified"] == 1
+    async with SessionLocal() as s:
+        board = (await company_switchboards(s, tenant, [cid]))[cid]
+    assert board["phone"] == "+49 201 89479-0"
+    assert board["vat_id"] == "DE252406571" and board["register"] == "HRB 28871"
+
+
+async def test_writing_the_found_website_is_its_own_receipted_change() -> None:
+    # Review of #267: the domain write must be named in the ledger, not ride
+    # along inside the "impressum" change.
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH", emails=("m.mustermann@tempton.de",))
+    await _run(tenant, _Fetcher(_tempton()))
+    async with SessionLocal() as s:
+        records = (await s.scalars(select(EnrichmentRecord).where(EnrichmentRecord.entity_id == cid))).all()
+        writes = (await s.scalars(select(Receipt).where(Receipt.tenant_id == tenant, Receipt.action == "write"))).all()
+    assert sorted(r.field for r in records) == ["domain", "impressum"] and all(r.committed for r in records)
+    assert sorted(w.payload["field"] for w in writes) == ["domain", "impressum"]

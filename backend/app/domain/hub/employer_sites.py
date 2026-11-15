@@ -218,8 +218,11 @@ async def check_employer_sites(session: AsyncSession, *, fetcher, limit: int = 2
 
     counts = {"checked": 0, **{status: 0 for status in COUNTS}}
     observations: dict[str, uuid.UUID] = {}
-    for (company_id, *_), task in zip(work, tasks, strict=True):
-        if not task.done():
+    # Which finished is decided before cancelling: a cancelled read cancels a
+    # page fetch another employer awaits too (review of #267).
+    finished = [task.done() and not task.cancelled() for task in tasks]
+    for (company_id, *_), task, ok in zip(work, tasks, finished, strict=True):
+        if not ok:
             task.cancel()  # picked again next batch; nothing recorded
             continue
         if task.exception() is not None:

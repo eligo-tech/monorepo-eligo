@@ -296,3 +296,23 @@ def test_a_gmbh_co_kg_keeps_its_own_register_before_its_partners() -> None:
     # The KG (HRA) and its general partner GmbH (HRB): the first is the firm's.
     facts = parse_impressum("Muster GmbH & Co. KG\nAmtsgericht Essen HRA 1234\nKomplementärin: Muster Verwaltungs GmbH, Amtsgericht Essen HRB 5678")
     assert (facts.register_type, facts.register_number, facts.register_court) == ("HRA", "1234", "Essen")
+
+
+def test_a_gmbh_co_kg_naming_its_general_partner_first_keeps_its_own_hra() -> None:
+    # Review of #267: the Komplementär's HRB printed before the KG's own HRA.
+    facts = parse_impressum(
+        "Muster Personal GmbH & Co. KG\nMusterweg 1, 45127 Essen\n"
+        "Persönlich haftende Gesellschafterin: Muster Verwaltungs GmbH, Amtsgericht Essen HRB 12345\n"
+        "Registergericht: Amtsgericht Essen HRA 6789\nUSt-IdNr. DE 252 406 571"
+    )
+    assert (facts.register_type, facts.register_number) == ("HRA", "6789")
+
+
+def test_a_kgaa_and_its_partner_both_in_hrb_read_as_no_register() -> None:
+    # Fail closed, documented: both are HRB entries; whose is whose is a guess.
+    facts = parse_impressum(
+        "Henkel AG & Co. KGaA\nAmtsgericht Düsseldorf HRB 4724\n"
+        "Persönlich haftende Gesellschafterin: Henkel Management AG, Amtsgericht Düsseldorf HRB 48207\n"
+        "USt-IdNr. DE 119 429 301"
+    )
+    assert facts.register_number is None
