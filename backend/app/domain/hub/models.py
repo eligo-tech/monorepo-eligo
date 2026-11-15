@@ -52,6 +52,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     Uuid,
     text,
 )
@@ -197,6 +198,14 @@ class HubCompany(Base, IDMixin, TimestampMixin):
     # Art. 14/17) is the next step.
     suspected_natural_person: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, index=True
+    )
+    # ELI-27: the NAME says staffing or placement ("… Personalberatung GmbH",
+    # Hays) — decided at ingest by `resolution.looks_like_staffing_firm`, so
+    # Markt's "Personalberatungen ausblenden" is a column check rather than a
+    # text scan per request. pav ads never reach this segment at all; this is
+    # what still does. Not indexed: it narrows a candidate set already chosen.
+    staffing_name: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
     )
 
     # --- corpus bookkeeping ----------------------------------------------

@@ -39,10 +39,10 @@ describe('taking ads as leads', () => {
   })
 
   it('reports what the first, unanswered attempt took as taken — not as "already there"', () => {
-    expect(leadSummary(ok({ created: 0, existing: 1 }), true)).toBe('1 als Lead in Jobs übernommen')
+    expect(leadSummary(ok({ created: 0, existing: 1 }), true)).toBe('1 als Lead in Mandate übernommen')
     expect(leadSummary(ok({ created: 0, existing: 1 }), false)).toBe('1 waren schon da')
     expect(leadSummary(ok({ created: 2, existing: 0, skipped: 1 }), false)).toBe(
-      '2 als Lead in Jobs übernommen · 1 übersprungen (Agentur oder nicht mehr vorhanden)',
+      '2 als Lead in Mandate übernommen · 1 übersprungen (Agentur oder nicht mehr vorhanden)',
     )
   })
 })

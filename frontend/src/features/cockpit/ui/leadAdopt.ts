@@ -28,7 +28,7 @@ export function leadSummary(result: AdoptPostingsResultDTO, retried: boolean): s
   const taken = result.created + (retried ? result.existing : 0)
   const before = retried ? 0 : result.existing
   const parts: string[] = []
-  if (taken) parts.push(t('{n} als Lead in Jobs übernommen', { n: String(taken) }))
+  if (taken) parts.push(t('{n} als Lead in Mandate übernommen', { n: String(taken) }))
   if (before) parts.push(t('{n} waren schon da', { n: String(before) }))
   if (result.skipped)
     parts.push(t('{n} übersprungen (Agentur oder nicht mehr vorhanden)', { n: String(result.skipped) }))

@@ -12,7 +12,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_tenant
+from app.core.auth import Actor, get_current_tenant, require_admin_to_delete
 from app.core.database import get_db
 from app.domain.hub import service as hub_service
 from app.domain.hub.schemas import HubEmployerHit, HubJobPostingRead
@@ -64,11 +64,11 @@ async def update_saved_search(
 @router.delete("/{search_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_saved_search(
     search_id: uuid.UUID,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(require_admin_to_delete),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     if not await service.delete_search(
-        db, tenant_id=tenant_id, search_id=search_id
+        db, tenant_id=actor.tenant_id, search_id=search_id
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "saved search not found")
 
