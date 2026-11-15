@@ -27,12 +27,16 @@ import argparse
 import asyncio
 import os
 import sys
+import time
 
 import httpx
 
 # A redeploy or a proxy blip mid-run is expected over hours, not exceptional.
 _MAX_BATCH_ATTEMPTS = 4
 _MAX_CONSECUTIVE_FAILURES = 3
+
+# Swapped in tests; wall time only decides when to stop.
+_clock = time.monotonic
 
 
 async def main() -> int:
@@ -64,7 +68,17 @@ async def main() -> int:
         help="only this kind of advertiser. The agency backfill stored no ad "
         "text, and the agency finder's website discovery reads it.",
     )
+    parser.add_argument(
+        "--minutes",
+        type=float,
+        default=None,
+        help="stop starting new batches after this long, and exit cleanly. Set "
+        "it below the job's timeout: --target counts texts STORED, and most "
+        "ads have none, so a target alone can outlast the job (2026-11-14).",
+    )
     args = parser.parse_args()
+    if args.minutes is not None and args.minutes <= 0:
+        parser.error("--minutes must be positive")
 
     base = os.environ.get("ELIGO_API_BASE", "").rstrip("/")
     token = os.environ.get("ELIGO_INGEST_TOKEN", "")
@@ -90,7 +104,11 @@ async def main() -> int:
             pass
 
         consecutive_failures = 0
+        deadline = _clock() + args.minutes * 60 if args.minutes else None
         while args.all or stored < args.target:
+            if deadline is not None and _clock() >= deadline:
+                print(f"  time budget of {args.minutes:g} min used — stopping; the next run continues")
+                break
             result = None
             for attempt in range(_MAX_BATCH_ATTEMPTS):
                 try:

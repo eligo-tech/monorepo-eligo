@@ -25,6 +25,7 @@ import { ProcessCardPanel } from '../ui/ProcessCardPanel'
 import { StepEditor } from '../ui/StepEditor'
 import { Panel, SectionHeader } from '../ui/primitives'
 import { useRemembered } from '@/hooks/useRemembered'
+import { isAdmin, useMe } from '../useMe'
 import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { ActivityPanel } from './mandate/ActivityPanel'
 import { FeedbackPanel } from './mandate/FeedbackPanel'
@@ -87,6 +88,7 @@ export function MandateView({
   /** Re-read the cockpit after a step was written. */
   onChanged?: () => void
 }) {
+  const admin = isAdmin(useMe())
   // Which process is having its Kandidatenauswertung written right now.
   const [assessing, setAssessing] = useState<string | null>(null)
   const [graphShut, setGraphShut] = useRemembered(
@@ -210,7 +212,9 @@ export function MandateView({
                     : undefined
                 }
                 onRemoveStep={
-                  card.editable
+                  // ELI-27: removing a step deletes data — admins only (the
+                  // server refuses anyone else; this only hides the button).
+                  card.editable && admin
                     ? async (step) => {
                         await api.removeProcessStep(card.id, step.key)
                         onChanged?.()

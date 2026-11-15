@@ -20,7 +20,7 @@ class ListArgs(BaseModel):
     "contacts.list",
     effect=Effect.READ,
     description="List the workspace's business-development contacts — new people taken from the market "
-    "(job ads), not yet vetted managers — newest first: "
+    "(job ads), not yet vetted managers — open call-backs first (the earliest due on top), then newest first: "
     "company, role, when added, the last call's outcome and the next agreed call. Filter by company, "
     "search, or only those due a call. No contact data (e-mail, phone, address) is returned.",
     input=ListArgs,

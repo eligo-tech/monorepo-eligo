@@ -127,6 +127,15 @@ async def search_hub_employers(
         le=4,
         description="1 = any mention, 3 = the title names it, 4 = the title names every term",
     ),
+    exclude_agencies: bool = Query(
+        default=False,
+        description="leave out firms whose name marks staffing/placement (hub_companies.staffing_name)",
+    ),
+    size: list[Literal["s", "m", "l", "xl"]] | None = Query(
+        default=None,
+        description="employer size by OPEN ADS in the corpus (no headcount exists): "
+        "s 1–4 · m 5–19 · l 20–99 · xl 100+; repeatable",
+    ),
     limit: int = Query(default=40, ge=1, le=200),
     cursor: str | None = Query(
         default=None, description="opaque; from a previous page's next_cursor"
@@ -157,6 +166,8 @@ async def search_hub_employers(
             limit=limit,
             cursor=cursor,
             min_relevance=min_relevance,
+            exclude_agencies=exclude_agencies,
+            sizes=size,
         )
         # Counted once, on the first page only: it does not change as the
         # reader pages, and it is a second aggregate over the same set.
@@ -169,6 +180,8 @@ async def search_hub_employers(
                 berufsfelder=berufsfeld,
                 families=family,
                 min_relevance=min_relevance,
+                exclude_agencies=exclude_agencies,
+                sizes=size,
             )
             if cursor is None
             else 0
