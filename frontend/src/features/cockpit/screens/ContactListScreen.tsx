@@ -1,6 +1,7 @@
 // "Leads" (ELI-23, ELI-29): NEW contacts taken from Markt — people a public
-// job ad names — not yet vetted managers, newest first. "Zu Managern" moves
-// the person to the Manager screen (same record, nothing copied). Per company
+// job ad names — not yet vetted managers; open call-backs first (ELI-38), then
+// newest first. "Zu Managern" moves the person to the Manager screen (same
+// record, nothing copied). Per company
 // they are on the company page in Unternehmen (`CompanyScreen`, ELI-33).
 
 
@@ -8,7 +9,7 @@ import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
 import { useEffect, useRef, useState } from 'react'
-import { ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
+import { Briefcase, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { ContactPageDTO, ContactRowDTO, SwitchboardDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
@@ -22,6 +23,7 @@ import {
   needsDate,
 } from '../ui/callOutcomes'
 import { networkLinks } from '../ui/contactReach'
+import { leadJobLine, mandateHref } from '../ui/leadJobs'
 import { leadPhone } from '../ui/switchboard'
 import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
@@ -127,7 +129,7 @@ const day = (iso: string | null) =>
 
 /** One contact in this workspace — how to reach them, where they came from,
  *  and how the last call went. */
-function ContactRow({
+export function ContactRow({
   row,
   showCompany,
   onCalled,
@@ -176,6 +178,13 @@ function ContactRow({
         <span className="text-[15px] font-medium text-cockpit-text">{row.full_name}</span>
         {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
         {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
+        {/* ELI-38: the open next call is the lead's status — on the name
+            line, and kept by the backend until a call reaches the person. */}
+        {row.next_action_at && (
+          <Chip tone={row.due ? 'gold' : undefined}>
+            {row.due ? t('Fällig seit') : t('Nächster Anruf')}: {when(row.next_action_at)}
+          </Chip>
+        )}
         {row.art14_outstanding && (
           <>
             <Chip tone="gold">
@@ -230,11 +239,6 @@ function ContactRow({
             {row.last_call_by ? ` · ${row.last_call_by}` : ''}
           </span>
         )}
-        {row.next_action_at && (
-          <span className={row.due ? 'text-gold-400' : undefined}>
-            {row.due ? t('Fällig seit') : t('Nächster Anruf')}: {when(row.next_action_at)}
-          </span>
-        )}
         {!calling && (
           <span className="ml-auto flex items-center gap-2">
             {moveFailed && <span className="text-coral-400">{t('Speichern fehlgeschlagen.')}</span>}
@@ -251,6 +255,32 @@ function ContactRow({
           </span>
         )}
       </div>
+      {row.jobs && row.jobs.length > 0 && (
+        // ELI-37: which job the lead is about — the ads naming them, and the
+        // workspace's own job taken from one or owned by them.
+        <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[12px] text-cockpit-dim">
+          {row.jobs.map((job) => {
+            const own = mandateHref(job)
+            return (
+              <li key={job.posting_id ?? job.job_id ?? job.title} className="flex items-center gap-1.5">
+                <Briefcase className="h-3.5 w-3.5 text-cockpit-faint" />
+                {job.url ? (
+                  <a href={job.url} target="_blank" rel="noreferrer noopener" className="hover:text-mint-400" title={t('Anzeige öffnen')}>
+                    {leadJobLine(job)}
+                  </a>
+                ) : (
+                  <span>{leadJobLine(job)}</span>
+                )}
+                {own && (
+                  <a href={own} title={t('Unter Mandate öffnen')}>
+                    <Chip tone="mint">{t('Mandat')}</Chip>
+                  </a>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
       {calling && (
         <CallForm
           onCancel={() => setCalling(false)}
@@ -270,7 +300,7 @@ function ContactRow({
   )
 }
 
-/** Everyone adopted from Markt in this workspace, newest first. */
+/** Everyone adopted from Markt in this workspace — open call-backs first, then newest. */
 function ContactsTab() {
   const [page, setPage] = useState<ContactPageDTO | null>(null)
   const [companyId, setCompanyId] = useState('')

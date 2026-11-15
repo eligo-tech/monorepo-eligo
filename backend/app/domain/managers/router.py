@@ -151,6 +151,22 @@ async def list_interactions(
     return [ManagerInteractionRead.model_validate(r) for r in rows]
 
 
+@router.get("/{manager_id}/appointments", response_model=list[ManagerInteractionRead])
+async def list_appointments(
+    manager_id: uuid.UUID,
+    limit: int = Query(default=200, ge=1, le=1000),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[ManagerInteractionRead]:
+    """The Termine tab (ELI-40): this manager's meetings, booked or held."""
+    rows = await service.list_appointments(
+        db, tenant_id=tenant_id, manager_id=manager_id, limit=limit
+    )
+    if rows is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
+    return [ManagerInteractionRead.model_validate(r) for r in rows]
+
+
 @router.post(
     "/{manager_id}/interactions",
     response_model=ManagerInteractionRead,

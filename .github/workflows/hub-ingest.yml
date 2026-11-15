@@ -91,9 +91,12 @@ jobs:
             --since "${{ github.event.inputs.since || '14' }}" "${extra[@]}"
 
   # Ad text for every open ad that has none — newest first, saved searches
-  # leading (service.fetch_missing_descriptions). Measured 2.4 ads/s
-  # (hub-descriptions.yml), so ~45k fits one job; two cover a normal week. A
-  # timeout loses nothing: the pass only considers ads with no text yet.
+  # leading (service.fetch_missing_descriptions). By TIME, not by count: on
+  # 2026-11-14 `--target 45000` (texts stored) was never reached — most ads
+  # have no text — and both jobs hit the timeout after ~95k ads (2.3 ads/s),
+  # which marked the run cancelled. 330 min stops each job cleanly before its
+  # 350-minute timeout; the pass only considers ads with no text yet, so the
+  # second job continues where the first stopped.
   ad-text-1:
     needs: ingest
     if: ${{ !cancelled() && github.event.inputs.agencies_only != 'true' }}
@@ -114,7 +117,7 @@ jobs:
         env:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
-        run: python -m scripts.hub_descriptions --target 45000 --batch 25
+        run: python -m scripts.hub_descriptions --all --minutes 330 --batch 25
 
   ad-text-2:
     needs: ad-text-1
@@ -136,7 +139,7 @@ jobs:
         env:
           ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
           ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
-        run: python -m scripts.hub_descriptions --target 45000 --batch 25
+        run: python -m scripts.hub_descriptions --all --minutes 330 --batch 25
 
   # Named contact persons in the week's new and re-fetched ad texts
   # (hub/ad_contacts.py), then the model pass (ELI-25). Nightly this was 100k

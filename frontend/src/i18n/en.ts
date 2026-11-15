@@ -130,6 +130,7 @@ export const EN: Record<string, string> = {
   'Zentrale': 'Switchboard',
   'Zu Managern': 'To Managers',
   'aus Anzeige': 'from ad',
+  'Unter Mandate öffnen': 'Open under Mandates',
   'keine Nummer': 'no number',
   'Alle Unternehmen dieses Workspaces — Kunden mit Managern und Unternehmen mit neuen Leads aus dem Markt.': 'Every company in this workspace — clients with managers, and companies with new leads from the market.',
   'Alle ({n})': 'All ({n})',
@@ -1285,4 +1286,12 @@ export const EN: Record<string, string> = {
   '•••••••• gespeichert': '•••••••• saved',
   '… bei welchen Firmen': '… at which companies',
   '‹ wischen · tippen ›': '‹ swipe · tap ›',
+  // ELI-40: Termine
+  'um': 'at',
+  '→ wird unter Termine eingetragen': '→ added to Appointments',
+  'Geplant': 'Scheduled',
+  'Stattgefunden': 'Held',
+  'In Kalender': 'Add to calendar',
+  'Als .ics in den eigenen Kalender übernehmen': 'Download as .ics for your own calendar',
+  'Noch keine Termine. Ein Ereignis der Art „Meeting Notes“ erscheint hier — mit Datum und Uhrzeit.': 'No appointments yet. An event of type “Meeting Notes” appears here — with date and time.',
 }
