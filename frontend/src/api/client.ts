@@ -396,7 +396,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  /** Kontakte (ELI-23): contacts taken from Markt (stage bus_dev), newest first. */
+  /** Kontakte (ELI-23): contacts taken from Markt (stage bus_dev) — open call-backs first (ELI-38), then newest. */
   callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean }) => {
     const qs = new URLSearchParams()
     if (params.companyId) qs.set('company_id', params.companyId)

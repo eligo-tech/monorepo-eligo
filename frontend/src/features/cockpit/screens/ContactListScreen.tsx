@@ -1,6 +1,7 @@
 // "Leads" (ELI-23, ELI-29): NEW contacts taken from Markt — people a public
-// job ad names — not yet vetted managers, newest first. "Zu Managern" moves
-// the person to the Manager screen (same record, nothing copied). Per company
+// job ad names — not yet vetted managers; open call-backs first (ELI-38), then
+// newest first. "Zu Managern" moves the person to the Manager screen (same
+// record, nothing copied). Per company
 // they are on the company page in Unternehmen (`CompanyScreen`, ELI-33).
 
 
@@ -128,7 +129,7 @@ const day = (iso: string | null) =>
 
 /** One contact in this workspace — how to reach them, where they came from,
  *  and how the last call went. */
-function ContactRow({
+export function ContactRow({
   row,
   showCompany,
   onCalled,
@@ -177,6 +178,13 @@ function ContactRow({
         <span className="text-[15px] font-medium text-cockpit-text">{row.full_name}</span>
         {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
         {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
+        {/* ELI-38: the open next call is the lead's status — on the name
+            line, and kept by the backend until a call reaches the person. */}
+        {row.next_action_at && (
+          <Chip tone={row.due ? 'gold' : undefined}>
+            {row.due ? t('Fällig seit') : t('Nächster Anruf')}: {when(row.next_action_at)}
+          </Chip>
+        )}
         {row.art14_outstanding && (
           <>
             <Chip tone="gold">
@@ -229,11 +237,6 @@ function ContactRow({
           <span>
             {t('Zuletzt')}: {when(row.last_call_at)}
             {row.last_call_by ? ` · ${row.last_call_by}` : ''}
-          </span>
-        )}
-        {row.next_action_at && (
-          <span className={row.due ? 'text-gold-400' : undefined}>
-            {row.due ? t('Fällig seit') : t('Nächster Anruf')}: {when(row.next_action_at)}
           </span>
         )}
         {!calling && (
@@ -297,7 +300,7 @@ function ContactRow({
   )
 }
 
-/** Everyone adopted from Markt in this workspace, newest first. */
+/** Everyone adopted from Markt in this workspace — open call-backs first, then newest. */
 function ContactsTab() {
   const [page, setPage] = useState<ContactPageDTO | null>(null)
   const [companyId, setCompanyId] = useState('')
