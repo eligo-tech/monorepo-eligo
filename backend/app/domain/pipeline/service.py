@@ -1009,10 +1009,9 @@ _SALARY_LABEL = {
 }
 
 
-def _hard_checks(candidate, job) -> list[str]:  # noqa: ANN001
+def _hard_checks(candidate, job, failures: list[str]) -> list[str]:  # noqa: ANN001
     """The hard criteria as the matcher decides them — code, not the model."""
     from app.domain.matching.salary import salary_fit
-    from app.domain.matching.service import apply_hard_filters
 
     fit = salary_fit(
         minimum=candidate.salary_minimum,
@@ -1024,7 +1023,6 @@ def _hard_checks(candidate, job) -> list[str]:  # noqa: ANN001
     lines = [
         f"Gehalt: {_SALARY_LABEL[fit.status]}" + (f" — {fit.detail}" if fit.detail else "")
     ]
-    failures = apply_hard_filters(candidate, job)
     if failures:
         lines.extend(f"Harter Filter nicht erfüllt: {f}" for f in failures)
     else:
@@ -1058,6 +1056,7 @@ async def evaluation_material(
     from app.domain.jobs.models import Job
     from app.domain.managers import service as managers
     from app.domain.managers.models import Manager
+    from app.domain.matching.service import apply_hard_filters
     from app.domain.pipeline import bewertung
 
     app = await get_application(session, tenant_id=tenant_id, application_id=application_id)
@@ -1129,6 +1128,7 @@ async def evaluation_material(
     )
     order = list(bewertung.DOCUMENT_LABELS)
     docs.sort(key=lambda d: order.index(d.kind) if d.kind in order else len(order))
+    failures = apply_hard_filters(candidate, job)
 
     return bewertung.EvaluationMaterial(
         job_title=job.title,
@@ -1154,5 +1154,6 @@ async def evaluation_material(
             )
             for d in docs
         ],
-        checks=_hard_checks(candidate, job),
+        checks=_hard_checks(candidate, job, failures),
+        hard_failures=failures,
     )

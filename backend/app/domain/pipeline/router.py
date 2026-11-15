@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -9,16 +10,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
+from app.core.ratelimit import paid_ai_quota
 from app.domain.pipeline import auswertung
 from app.domain.pipeline import bewertung
 from app.domain.pipeline import service
 from app.domain.pipeline import steps as steps_mod
+from app.domain.pipeline.evaluation import factory as evaluation_factory
+from app.domain.pipeline.evaluation import propose as evaluation_propose
 from app.domain.pipeline.schemas import (
     AssessmentRead,
     AssessmentWrite,
     AuswertungParse,
     AuswertungParsed,
     EvaluationPromptRead,
+    EvaluationProviderRead,
+    EvaluationRead,
     ProfileRead,
     ProcessJobRead,
     ProcessStepCreate,
@@ -294,6 +300,104 @@ async def evaluation_prompt(
     return EvaluationPromptRead(
         prompt=prompt, sources=bewertung.sources(material), chars=len(prompt)
     )
+
+
+def _evaluation(row) -> EvaluationRead:  # noqa: ANN001 — AgentProposal
+    from app.domain.proposals import service as proposals
+
+    args = row.args or {}
+    generated = args.get("generated_at")
+    return EvaluationRead(
+        id=row.id,
+        status=proposals.effective_status(row),
+        model=args.get("model"),
+        provider=args.get("provider"),
+        generated_at=dt.datetime.fromisoformat(generated) if generated else None,
+        text=args.get("text"),
+        assessment=AssessmentWrite(**args["assessment"]) if args.get("assessment") else None,
+        flags=list(args.get("flags") or []),
+        client_text_withheld=bool(args.get("client_text_withheld")),
+        created_at=service.as_utc(row.created_at),
+        expires_at=proposals.expires_at(row),
+    )
+
+
+@router.get("/evaluation/provider", response_model=EvaluationProviderRead)
+async def evaluation_provider(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+) -> EvaluationProviderRead:
+    """Whether a model is configured for "Bewertung erstellen" (ELI-42).
+    Without one the cockpit offers only the copy-prompt (ELI-41)."""
+    evaluator = evaluation_factory.get_evaluator()
+    return EvaluationProviderRead(
+        available=evaluator is not None,
+        model=evaluator.model if evaluator is not None else None,
+    )
+
+
+@router.post(
+    "/applications/{application_id}/evaluation",
+    response_model=EvaluationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_evaluation(
+    application_id: uuid.UUID,
+    actor: Actor = Depends(paid_ai_quota),
+    db: AsyncSession = Depends(get_db),
+) -> EvaluationRead:
+    """Ask the configured model for a Kandidatenauswertung (ELI-42).
+
+    The answer is checked by code and stored as a PROPOSAL — nothing is
+    written to the assessment until a recruiter confirms it via
+    `POST /proposals/{id}/confirm`. Errors never echo the model's or the
+    SDK's text: either may quote the candidate's documents.
+    """
+    from app.domain.proposals import service as proposals
+
+    try:
+        row = await evaluation_propose.propose_evaluation(
+            db,
+            tenant_id=actor.tenant_id,
+            application_id=application_id,
+            evaluator=evaluation_factory.get_evaluator(),
+            user_id=actor.user_id,
+            name=actor.name,
+        )
+    except evaluation_propose.NoEvaluator as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"code": "no_llm", "message": "no model configured — copy the prompt instead"},
+        ) from exc
+    except evaluation_propose.EvaluatorFailed as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            {"code": "llm_failed", "message": "the model did not answer — nothing was stored"},
+        ) from exc
+    except proposals.TooManyPending as exc:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            {"code": "too_many_pending", "message": str(exc)},
+        ) from exc
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "application not found")
+    return _evaluation(row)
+
+
+@router.get(
+    "/applications/{application_id}/evaluation", response_model=EvaluationRead
+)
+async def read_evaluation(
+    application_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> EvaluationRead:
+    """The open AI evaluation of this process, if any (404 otherwise)."""
+    row = await evaluation_propose.pending_for(
+        db, tenant_id=tenant_id, application_id=application_id
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no open evaluation")
+    return _evaluation(row)
 
 
 @router.get(

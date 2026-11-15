@@ -92,6 +92,9 @@ class EvaluationMaterial:
     documents: list[SourceDocument] = field(default_factory=list)
     #: The hard criteria, as code decided them.
     checks: list[str] = field(default_factory=list)
+    #: The hard filters this candidate FAILS (`matching.apply_hard_filters`).
+    #: ELI-42 repeats each as a flag next to the AI evaluation.
+    hard_failures: list[str] = field(default_factory=list)
 
 
 def _de(day: dt.date | None) -> str:

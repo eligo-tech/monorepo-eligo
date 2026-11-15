@@ -296,3 +296,32 @@ class EvaluationPromptRead(BaseModel):
     #: "Lebenslauf — cv.pdf", "Briefing (2)", … in the prompt's order.
     sources: list[str]
     chars: int
+
+
+class EvaluationProviderRead(BaseModel):
+    """Whether "Bewertung erstellen" can run here, and with which model."""
+
+    available: bool
+    model: str | None = None
+
+
+class EvaluationRead(BaseModel):
+    """An AI evaluation waiting for a recruiter (ELI-42) — a proposal.
+
+    `assessment` is what "Übernehmen" stores: the CHECKED fields, not the raw
+    answer. `flags` says what the checks withheld or could not confirm.
+    """
+
+    id: uuid.UUID
+    #: pending · confirmed · declined · stale · expired
+    status: str
+    model: str | None
+    provider: str | None
+    generated_at: dt.datetime | None
+    #: The model's full answer, for reading. Erased once decided.
+    text: str | None
+    assessment: AssessmentWrite | None
+    flags: list[str] = Field(default_factory=list)
+    client_text_withheld: bool = False
+    created_at: dt.datetime
+    expires_at: dt.datetime

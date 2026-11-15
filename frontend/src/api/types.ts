@@ -761,6 +761,28 @@ export interface EvaluationPromptDTO {
   chars: number
 }
 
+/** Whether "Bewertung erstellen" can run, and with which model (ELI-42). */
+export interface EvaluationProviderDTO {
+  available: boolean
+  model: string | null
+}
+
+/** An AI evaluation waiting for a recruiter — a proposal (ELI-42).
+ *  `assessment` is what "Übernehmen" stores: the CHECKED fields. */
+export interface EvaluationDTO {
+  id: string
+  status: string
+  model: string | null
+  provider: string | null
+  generated_at: string | null
+  text: string | null
+  assessment: AssessmentWriteDTO | null
+  flags: string[]
+  client_text_withheld: boolean
+  created_at: string
+  expires_at: string
+}
+
 export interface ProcessJobDTO {
   job_id: string
   job_title: string

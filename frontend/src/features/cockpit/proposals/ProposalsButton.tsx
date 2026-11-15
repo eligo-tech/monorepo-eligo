@@ -25,6 +25,8 @@ const FIELD_LABEL: Record<string, () => string> = {
   done_at: () => t('Erledigt am'),
   outcome: () => t('Ergebnis'),
   text: () => t('Notiz'),
+  fit_score: () => t('KI-Bewertung'),
+  verdict: () => t('Kurzfazit'),
 }
 
 const OUTCOME_LABEL: Record<string, () => string> = {
@@ -99,7 +101,7 @@ function ProposalCard({ p, onDone }: { p: ProposalDTO; onDone: () => void }) {
           <div key={line.field} className="grid grid-cols-[7rem_1fr] gap-2">
             <dt className="text-cockpit-dim">{FIELD_LABEL[line.field]?.() ?? line.field}</dt>
             <dd className="whitespace-pre-line text-cockpit-text">
-              {line.field !== 'text' && (
+              {!['text', 'fit_score', 'verdict'].includes(line.field) && (
                 <>
                   <span className="text-cockpit-faint line-through">{shown(line.field, line.before)}</span>
                   {' → '}

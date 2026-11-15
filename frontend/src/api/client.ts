@@ -28,7 +28,9 @@ import type {
   AssessmentWriteDTO,
   JobCreatePayload,
   AuswertungParsedDTO,
+  EvaluationDTO,
   EvaluationPromptDTO,
+  EvaluationProviderDTO,
   BriefingDTO,
   CriteriaSuggestionDTO,
   JobDTO,
@@ -580,6 +582,21 @@ export const api = {
     request<EvaluationPromptDTO>(
       `/pipeline/applications/${applicationId}/bewertung-prompt`,
     ),
+
+  /** Is a model configured for the in-app evaluation (ELI-42)? */
+  evaluationProvider: () =>
+    request<EvaluationProviderDTO>('/pipeline/evaluation/provider'),
+
+  /** The open AI evaluation of one process; rejects (404) when none. */
+  evaluation: (applicationId: string) =>
+    request<EvaluationDTO>(`/pipeline/applications/${applicationId}/evaluation`),
+
+  /** Ask the model. The result is a PROPOSAL — confirm or decline it via
+   *  `confirmProposal` / `declineProposal`; nothing is stored before. */
+  evaluate: (applicationId: string) =>
+    request<EvaluationDTO>(`/pipeline/applications/${applicationId}/evaluation`, {
+      method: 'POST',
+    }),
 
   /** Put a candidate on a mandate. Idempotent per pair — assigning twice
    *  returns the existing process rather than making a second one. */
