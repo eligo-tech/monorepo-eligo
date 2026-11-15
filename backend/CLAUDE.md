@@ -279,6 +279,14 @@ These are enforced in code. Do not route around them.
   the backfill re-labels every open ad. The Markt "Tech" filter reads it.
   Measured 2026-11-09: 33,573 of 702,630 open ads; 120 hand-labelled real
   titles (`tests/fixtures/families/`) guard precision and recall.
+- **Markt's agency and size filters** (ELI-27). `hub_companies.staffing_name`
+  is set at ingest by `resolution.looks_like_staffing_firm` — the EURES name
+  rule (brands + staffing words), without its ad-text arm — and backfilled by
+  migration 0070; "Personalberatungen ausblenden" (`exclude_agencies`) is a
+  column check on it, never a name scan per request. Size (`size=s|m|l|xl`)
+  is the employer's open ads in the corpus over ALL its sites (1–4 · 5–19 ·
+  20–99 · 100+), because the corpus holds no headcount — the UI says "offene
+  Stellen", never "Mitarbeiter".
 - **Employers' Impressum** (`hub/employer_sites.py`, `POST /hub/employers/sites/check`,
   daily at 15:23 UTC — `.github/workflows/hub-employer-sites.yml`, ELI-30). The
   last contact fallback: website from the ads (text + BA `externeURL`) →

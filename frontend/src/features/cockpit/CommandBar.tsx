@@ -126,7 +126,15 @@ export function CommandBar({
                   until a refresh. See auth/orgSwitchRedirect.test.ts. */}
               <OrganizationSwitcher
                 hidePersonal
-                appearance={{ elements: { rootBox: 'flex items-center' } }}
+                appearance={{
+                  elements: {
+                    rootBox: 'flex items-center',
+                    // ELI-27 "Unser Logo soll etwas größer dargestellt
+                    // werden": Clerk's default (1.25rem) read as a dot next
+                    // to the workspace name.
+                    organizationPreviewAvatarBox: { width: '2rem', height: '2rem' },
+                  },
+                }}
               />
               <UserButton afterSignOutUrl="/" />
             </>
