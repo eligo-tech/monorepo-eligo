@@ -252,6 +252,10 @@ export const api = {
     minRelevance?: number
     /** false asks for the literal query — "trotzdem nach „muenchen" suchen". */
     correct?: boolean
+    /** ELI-27: leave out firms whose name marks staffing or placement. */
+    excludeAgencies?: boolean
+    /** ELI-27: employer size by open ads in the corpus — s · m · l · xl. */
+    sizes?: string[]
   }) => {
     const qs = new URLSearchParams()
     if (params.q) qs.set('q', params.q)
@@ -267,6 +271,8 @@ export const api = {
     if (params.minRelevance && params.minRelevance > 1)
       qs.set('min_relevance', String(params.minRelevance))
     if (params.correct === false) qs.set('correct', 'false')
+    if (params.excludeAgencies) qs.set('exclude_agencies', 'true')
+    params.sizes?.forEach((s) => qs.append('size', s))
     return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
 

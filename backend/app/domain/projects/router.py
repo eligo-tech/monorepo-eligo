@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_tenant
+from app.core.auth import Actor, get_current_tenant, require_admin_to_delete
 from app.core.database import get_db
 from app.domain.projects import service
 from app.domain.managers.schemas import ManagerRead
@@ -111,12 +111,12 @@ async def update_project(
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project_id: uuid.UUID,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(require_admin_to_delete),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Drop the grouping only. The corpus companies and this workspace's
     contacts are untouched."""
-    if not await service.delete_project(db, tenant_id=tenant_id, project_id=project_id):
+    if not await service.delete_project(db, tenant_id=actor.tenant_id, project_id=project_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "project not found")
 
 
@@ -194,12 +194,12 @@ async def add_contact(
 async def remove_company(
     project_id: uuid.UUID,
     hub_company_id: uuid.UUID,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(require_admin_to_delete),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     removed = await service.remove_company(
         db,
-        tenant_id=tenant_id,
+        tenant_id=actor.tenant_id,
         project_id=project_id,
         hub_company_id=hub_company_id,
     )
