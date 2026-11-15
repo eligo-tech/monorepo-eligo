@@ -141,7 +141,7 @@ async def contacts(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ContactPage:
-    """"Kontakte": every contact in this workspace, newest first (ELI-23)."""
+    """"Kontakte": every contact in this workspace — open call-backs first (ELI-38), then newest first (ELI-23)."""
     return ContactPage(**await call_list.contacts(
         db, tenant_id=tenant_id, company_id=company_id, q=q, due_only=due_only, limit=limit))
 

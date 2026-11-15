@@ -25,7 +25,8 @@ import datetime as dt
 import uuid
 from typing import Any
 
-from sqlalchemy import case, distinct, func, or_, select, tuple_
+from sqlalchemy import and_, case, distinct, exists, func, or_, select, tuple_
+from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.hub.contacts import _fold, person_key
@@ -33,6 +34,9 @@ from app.domain.hub.models import EMPLOYER, HubAdContact, HubCompany, HubCompany
 
 #: Outcomes after which a person is not called again from the list.
 _OFF_THE_LIST = ("wrong_person",)
+#: Outcomes of a call that did not reach the person: an agreed call-back
+#: survives them (ELI-38 — "keep the status until it is done").
+_NOT_REACHED = ("not_reached", "voicemail")
 #: Follow-ups shown at most — the most recently called first.
 _FOLLOW_UP_LIMIT = 500
 
@@ -227,6 +231,60 @@ def _latest_calls(tenant_id: uuid.UUID):
     )
 
 
+def _open_follow_ups(tenant_id: uuid.UUID):
+    """Subquery: each manager's OPEN next call (ELI-38) — `manager_id`,
+    `next_action_at`.
+
+    The date of the latest call that set one, kept until a later call
+    reaches the person (any outcome but not reached / voicemail). A later
+    unanswered call does not close it, and a later dated call replaces it
+    (it is then the latest dated call). Interactions without an outcome —
+    notes, mails — never touch it.
+    """
+    from app.domain.managers.models import ManagerInteraction
+
+    dated = (
+        select(
+            ManagerInteraction.manager_id,
+            ManagerInteraction.next_action_at,
+            ManagerInteraction.occurred_at,
+            ManagerInteraction.created_at,
+            func.row_number()
+            .over(
+                partition_by=ManagerInteraction.manager_id,
+                order_by=(
+                    ManagerInteraction.occurred_at.desc(),
+                    ManagerInteraction.created_at.desc(),
+                    ManagerInteraction.id.desc(),
+                ),
+            )
+            .label("rank"),
+        )
+        .where(
+            ManagerInteraction.tenant_id == tenant_id,
+            ManagerInteraction.outcome.is_not(None),
+            ManagerInteraction.next_action_at.is_not(None),
+        )
+        .subquery()
+    )
+    later = aliased(ManagerInteraction)
+    reached_since = exists().where(
+        later.tenant_id == tenant_id,
+        later.manager_id == dated.c.manager_id,
+        later.outcome.is_not(None),
+        later.outcome.not_in(_NOT_REACHED),
+        or_(
+            later.occurred_at > dated.c.occurred_at,
+            and_(later.occurred_at == dated.c.occurred_at, later.created_at > dated.c.created_at),
+        ),
+    )
+    return (
+        select(dated.c.manager_id, dated.c.next_action_at)
+        .where(dated.c.rank == 1, ~reached_since)
+        .subquery()
+    )
+
+
 async def contacts(
     session: AsyncSession,
     *,
@@ -239,8 +297,11 @@ async def contacts(
     now: dt.datetime | None = None,
 ) -> dict:
     """The Contact List's "Kontakte" tab (ELI-23): every contact in this
-    workspace, newest first — company, when added, where from (an adopted ad
-    contact carries the ad as `source_detail`), and the last call.
+    workspace — company, when added, where from (an adopted ad contact
+    carries the ad as `source_detail`), the last call, and the open next
+    call (`_open_follow_ups`). ELI-38: leads with an open next call come
+    first, the earliest date on top (so the overdue ones lead); the rest
+    newest first.
 
     `companies` is the facet the screen filters and groups by — every company
     this workspace holds contacts at, most contacts first. Companies are not a
@@ -252,11 +313,13 @@ async def contacts(
 
     now = now or dt.datetime.now(dt.UTC)
     latest = _latest_calls(tenant_id)
+    follow_up = _open_follow_ups(tenant_id)
     base = (
-        select(Manager, Company.name, ManagerInteraction)
+        select(Manager, Company.name, ManagerInteraction, follow_up.c.next_action_at.label("open_next_at"))
         .join(Company, Company.id == Manager.company_id)
         .outerjoin(latest, (latest.c.manager_id == Manager.id) & (latest.c.rank == 1))
         .outerjoin(ManagerInteraction, ManagerInteraction.id == latest.c.interaction_id)
+        .outerjoin(follow_up, follow_up.c.manager_id == Manager.id)
         # ELI-23: the Bus-Dev-Kontakte — new contacts from Markt, not yet
         # moved to Managers.
         .where(Manager.tenant_id == tenant_id, Company.tenant_id == tenant_id, Manager.stage == "bus_dev")
@@ -273,20 +336,27 @@ async def contacts(
             func.lower(func.coalesce(Manager.role_title, "")).like(like, escape="\\"),
         ))
     if due_only:
-        base = base.where(ManagerInteraction.next_action_at.is_not(None), ManagerInteraction.next_action_at <= now)
+        base = base.where(follow_up.c.next_action_at.is_not(None), follow_up.c.next_action_at <= now)
 
     total = await session.scalar(select(func.count()).select_from(base.subquery()))
     # NULLS LAST: Postgres would put a row without a date first ("newest").
     found = (
-        await session.execute(base.order_by(Manager.created_at.desc().nulls_last(), Manager.full_name).limit(limit))
+        await session.execute(
+            base.order_by(
+                follow_up.c.next_action_at.is_(None),
+                follow_up.c.next_action_at.asc(),
+                Manager.created_at.desc().nulls_last(),
+                Manager.full_name,
+            ).limit(limit)
+        )
     ).all()
 
     def aware(value: dt.datetime | None) -> dt.datetime | None:
         return value.replace(tzinfo=dt.UTC) if value is not None and value.tzinfo is None else value
 
     rows = []
-    for manager, company, call in found:
-        nxt = aware(call.next_action_at) if call else None
+    for manager, company, call, open_next_at in found:
+        nxt = aware(open_next_at)
         rows.append({
             "manager_id": manager.id,
             "company_id": manager.company_id,
