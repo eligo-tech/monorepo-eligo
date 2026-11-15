@@ -265,6 +265,21 @@ CONTACT_INTERACTION_KINDS = frozenset(
 )
 
 
+#: Kinds that are a Termin — they belong in a manager's calendar (ELI-40).
+#: A future date is a scheduled meeting, a past one a meeting that happened;
+#: both are the same `manager_interactions` row the composer writes, so the
+#: Termine tab is a view of the notes, never a second copy of them.
+APPOINTMENT_INTERACTION_KINDS = frozenset({InteractionType.MEETING.value})
+
+
+def interaction_spellings(kinds: frozenset[str]) -> frozenset[str]:
+    """Every stored spelling (lower-cased, trimmed) that normalises onto one of
+    `kinds` — so a query can find "Meeting Notes" rows from the aiFind import
+    as well as `meeting` without normalising the whole table in Python."""
+    legacy = {key for key, kind in _LEGACY_INTERACTION_TYPES.items() if kind.value in kinds}
+    return frozenset(kinds) | legacy
+
+
 #: Provenances that constitute EVIDENCE for a field: somebody or something
 #: checked the value against a source that can be named. A bulk import is not
 #: in this set — it asserts what another system held, which is a claim, not a
