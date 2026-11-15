@@ -190,6 +190,18 @@ describe('initialStepInputs', () => {
     ).toEqual({ scheduled: '2026-12-01T10:00', done: '' })
   })
 
+  it('prefills the next step of a running process, not one further down', () => {
+    // Opening "Vertrag" two steps early to jot a note must not mark the
+    // candidate placed; the step due next is the one being recorded.
+    expect(initialStepInputs({ key: 'feedback-1', state: 'current' }, now).done).toBe(
+      '2026-11-15T15:05',
+    )
+    expect(initialStepInputs({ key: 'vertrag', state: 'pending' }, now)).toEqual({
+      scheduled: '',
+      done: '',
+    })
+  })
+
   it('leaves a step that already carries a verdict alone', () => {
     expect(initialStepInputs({ key: 'feedback-1', outcome: 'pass' }, now)).toEqual({
       scheduled: '',

@@ -134,7 +134,9 @@ def _ground_address_and_role(
     notes: list[str] = []
     out: list[ExtractedField] = []
     for f in fields:
-        if f.field in _GROUNDED_FIELDS and not gate.is_grounded(f.value, text, min_len=2):
+        # Default min_len: a two-letter "DE" is a substring of nearly any text
+        # and would pass without proving anything.
+        if f.field in _GROUNDED_FIELDS and not gate.is_grounded(f.value, text):
             capped = min(f.confidence, HUMAN_REVIEW_THRESHOLD - 0.01)
             out.append(f.model_copy(update={"confidence": capped}))
             notes.append(f"{f.field}: not found in the document — sent to review")

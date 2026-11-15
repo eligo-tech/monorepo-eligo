@@ -19,7 +19,7 @@ import { cn } from '@/lib/cn'
 import { Panel } from './primitives'
 import { Button, FIELD } from './forms'
 import type { JobDTO } from '@/api/types'
-import type { ProcessCard, ProcessStep } from '../data/types'
+import type { ProcessCard, ProcessStep, StepState } from '../data/types'
 
 const TZ = 'Europe/Berlin'
 /** How far the Berlin wall clock is from UTC at that instant (DST included). */
@@ -97,13 +97,17 @@ const isAppointment = (key: string): boolean =>
   APPOINTMENT_STEPS.has(key) || key.startsWith('interviewtermin_')
 
 export function initialStepInputs(
-  step: Pick<StepFacts, 'key' | 'scheduledAt' | 'doneAt' | 'outcome'>,
+  step: StepFacts & { state?: StepState },
   now: Date = new Date(),
 ): { scheduled: string; done: string } {
   const scheduled = toBerlinInput(step.scheduledAt)
   const done = toBerlinInput(step.doneAt)
   const untouched = !scheduled && !done && (step.outcome ?? 'open') === 'open'
-  if (!untouched) return { scheduled, done }
+  // Only the step due next. One further down ("Vertrag" while the interview
+  // is pending) opened to jot a note must not be recorded as done — that
+  // would place the candidate.
+  const due = step.state === undefined || step.state === 'current'
+  if (!untouched || !due) return { scheduled, done }
   const at = toBerlinInput(now.toISOString())
   return isAppointment(step.key) ? { scheduled: at, done: '' } : { scheduled: '', done: at }
 }
