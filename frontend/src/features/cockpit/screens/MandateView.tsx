@@ -157,6 +157,7 @@ export function MandateView({
           {mandate.jobId && (
             <AssignCandidate
               jobId={mandate.jobId}
+              role={mandate.title}
               assignedCandidateIds={mandate.cards
                 .map((c) => c.candidateId)
                 .filter((id): id is string => Boolean(id))}

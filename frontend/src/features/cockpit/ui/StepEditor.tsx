@@ -19,7 +19,7 @@ import { cn } from '@/lib/cn'
 import { Panel } from './primitives'
 import { Button, FIELD } from './forms'
 import type { JobDTO } from '@/api/types'
-import type { ProcessCard, ProcessStep } from '../data/types'
+import type { ProcessCard, ProcessStep, StepState } from '../data/types'
 
 const TZ = 'Europe/Berlin'
 /** How far the Berlin wall clock is from UTC at that instant (DST included). */
@@ -80,6 +80,46 @@ function fromBerlinInput(value: string): string | null {
   // as the very string that was typed, it is not that moment.
   return toBerlinInput(iso) === value.trim().slice(0, 16) ? iso : null
 }
+
+// ── The dialog opens on "now" (ELI-28) ──────────────────────────────────────
+//
+// "Vorauswahl ist immer das aktuelle Datum mit der aktuellen Uhrzeit." A step
+// nothing has been recorded on opens with the current Berlin date AND time in
+// the one field the step is about: an appointment is booked now, anything
+// else is done now. Never both — prefilling "erledigt" on an interview would
+// say it happened the moment somebody opened it to book it — and never over
+// a value already on the record.
+
+/** Steps whose date is an appointment. Mirrors `kind="appointment"` in
+ *  backend/app/domain/pipeline/steps.py, plus the extra interview rounds. */
+const APPOINTMENT_STEPS = new Set(['interview', 'finaltermin'])
+const isAppointment = (key: string): boolean =>
+  APPOINTMENT_STEPS.has(key) || key.startsWith('interviewtermin_')
+
+export function initialStepInputs(
+  step: StepFacts & { state?: StepState },
+  now: Date = new Date(),
+): { scheduled: string; done: string } {
+  const scheduled = toBerlinInput(step.scheduledAt)
+  const done = toBerlinInput(step.doneAt)
+  const untouched = !scheduled && !done && (step.outcome ?? 'open') === 'open'
+  // Only the step due next. One further down ("Vertrag" while the interview
+  // is pending) opened to jot a note must not be recorded as done — that
+  // would place the candidate.
+  const due = step.state === undefined || step.state === 'current'
+  if (!untouched || !due) return { scheduled, done }
+  const at = toBerlinInput(now.toISOString())
+  return isAppointment(step.key) ? { scheduled: at, done: '' } : { scheduled: '', done: at }
+}
+
+/** The step a fresh assignment opens on: "Vorgestellt", nothing recorded. */
+export function presentedStep(): ProcessStep {
+  return { key: 'vorgestellt', label: t('Vorgestellt'), state: 'current', doneAt: null }
+}
+
+/** What the editor reads off a card — all a fresh assignment can supply, so
+ *  the dialog opens straight after "Zu Mandat zuordnen" without a board. */
+export type StepCard = Pick<ProcessCard, 'id' | 'jobId' | 'candidateName' | 'role' | 'steps'>
 
 // ── Placement: the question at the moment a role is filled (ELI-8) ──────────
 //
@@ -170,18 +210,21 @@ export function StepEditor({
   onClose,
   onSaved,
 }: {
-  card: ProcessCard
+  card: StepCard
   step: ProcessStep
   onClose: () => void
   onSaved: () => void
 }) {
-  const [scheduled, setScheduled] = useState(toBerlinInput(step.scheduledAt))
-  const [doneOn, setDoneOn] = useState(toBerlinInput(step.doneAt).slice(0, 10))
+  // Read once, at open: the clock must not move under the recruiter's typing.
+  const [initial] = useState(() => initialStepInputs(step))
+  const [scheduled, setScheduled] = useState(initial.scheduled)
+  const [doneOn, setDoneOn] = useState(initial.done)
   const [outcome, setOutcome] = useState(step.outcome ?? 'open')
   const [note, setNote] = useState(step.note ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const terminRef = useRef<HTMLInputElement>(null)
+  const doneRef = useRef<HTMLInputElement>(null)
   // 'form' is the step editor; the other two are the ELI-8 question and its
   // answer, shown in the same dialog because that is where the recruiter
   // already is.
@@ -206,7 +249,11 @@ export function StepEditor({
       setError(t('Termin nicht lesbar — bitte Datum und Uhrzeit angeben.'))
       return
     }
-    const doneIso = doneOn ? fromBerlinInput(`${doneOn}T00:00`) : null
+    if (doneRef.current?.validity.badInput) {
+      setError(t('Datum „erledigt am“ nicht lesbar.'))
+      return
+    }
+    const doneIso = doneOn ? fromBerlinInput(doneOn) : null
     if (doneOn && !doneIso) {
       setError(t('Datum „erledigt am“ nicht lesbar.'))
       return
@@ -362,7 +409,8 @@ export function StepEditor({
               {t('Erledigt am')}
             </span>
             <input
-              type="date"
+              ref={doneRef}
+              type="datetime-local"
               value={doneOn}
               onChange={(e) => setDoneOn(e.target.value)}
               className={cn(FIELD, 'w-full')}
@@ -442,7 +490,7 @@ function PlacementQuestion({
   onCopy,
   onClose,
 }: {
-  card: ProcessCard
+  card: StepCard
   phase: 'ask' | 'copied'
   fresh: JobDTO | null
   busy: boolean

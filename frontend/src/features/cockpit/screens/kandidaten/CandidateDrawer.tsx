@@ -181,6 +181,7 @@ export function CandidateDrawer({
         <div className="relative flex items-center gap-2">
           <AssignToMandate
             candidateId={candidate.id}
+            candidateName={candidate.name}
             assignedJobIds={(runs ?? []).map((r) => r.id)}
             onAssigned={() => {
               setRunsKey((k) => k + 1)

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.ratelimit import paid_ai_quota
 from app.core.auth import get_current_tenant
 from app.core.database import get_db
-from app.domain.common.enums import DocumentKind
+from app.domain.common.enums import DocumentKind, WorkPermitStatus
 from app.domain.documents import service
 from app.domain.documents.gate import PreconditionFailed
 from app.domain.documents.schemas import CVExtractionResult, DocumentRead
@@ -40,6 +40,11 @@ async def extract_cv(
     override_suppression: bool = Query(
         default=False,
         description="The person was erased here on request and has come back of their own accord.",
+    ),
+    work_permit: WorkPermitStatus | None = Query(
+        default=None,
+        description="Arbeitserlaubnis as chosen in the upload dialog (persist only). "
+        "Never read from the CV; omitted, the candidate keeps 'unknown'.",
     ),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
@@ -67,6 +72,7 @@ async def extract_cv(
             tenant_id=tenant_id,
             persist=persist,
             override_suppression=override_suppression,
+            work_permit=work_permit,
         )
     except PreconditionFailed as exc:
         # A blocking pre/postcondition did not hold — reject rather than write.

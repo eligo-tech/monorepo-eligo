@@ -13,7 +13,8 @@ import { rateLimitMessage } from '@/api/rateLimit'
 import { ReaddDeclined, askReadd, withReaddConfirm } from '../../erasure/readd'
 import type { CVExtractionResultDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
-import { Button, CloseButton, Modal } from '../../ui/forms'
+import { Button, CloseButton, Modal, SelectInput } from '../../ui/forms'
+import { NEW_CANDIDATE_WORK_PERMIT, WORK_PERMITS } from './workPermit'
 
 interface Props {
   onClose: () => void
@@ -41,6 +42,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [workPermit, setWorkPermit] = useState(NEW_CANDIDATE_WORK_PERMIT)
 
   async function handleFile(f: File) {
     setFile(f)
@@ -69,7 +71,7 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
         override = await askReadd(result.suppressed_on)
         if (!override) throw new ReaddDeclined()
       }
-      await withReaddConfirm((o) => api.extractCv(file, true, override || o))
+      await withReaddConfirm((o) => api.extractCv(file, true, override || o, workPermit))
       onCreated()
       onClose()
     } catch (e) {
@@ -228,6 +230,19 @@ export function CvUploadModal({ onClose, onCreated }: Props) {
                 </div>
               </details>
             )}
+          </div>
+        )}
+
+        {/* ELI-28: a CV says nothing about the right to work, so it is the
+            recruiter's call, preselected as Staatsbürger. */}
+        {result && (
+          <div className="mt-5 max-w-xs">
+            <SelectInput
+              label={t('Arbeitserlaubnis')}
+              value={workPermit}
+              onChange={setWorkPermit}
+              options={WORK_PERMITS}
+            />
           </div>
         )}
       </div>

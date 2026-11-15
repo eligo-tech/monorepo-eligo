@@ -23,19 +23,26 @@ import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { searchScore } from '@/lib/search'
 import { isLive, jobStatusLabel } from '../../ui/jobStatus'
+import { StepEditor, presentedStep, type StepCard } from '../../ui/StepEditor'
 
 export function AssignToMandate({
   candidateId,
+  candidateName,
   assignedJobIds,
   onAssigned,
 }: {
   candidateId: string
+  /** Shown in the presentation dialog's header. */
+  candidateName?: string
   /** Mandates this candidate already runs on — offered as "bereits zugeordnet"
    *  rather than hidden, so the list answers "where is she already?" too. */
   assignedJobIds: string[]
   onAssigned?: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [presenting, setPresenting] = useState<Omit<StepCard, 'candidateName' | 'steps'> | null>(
+    null,
+  )
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [done, setDone] = useState<string[]>([])
@@ -84,16 +91,33 @@ export function AssignToMandate({
   async function assign(job: JobDTO) {
     setBusy(job.id)
     try {
-      await api.assignToJob(candidateId, job.id)
+      const run = await api.assignToJob(candidateId, job.id)
       setDone((prev) => [...prev, job.id])
       onAssigned?.()
+      // ELI-28: assigned = presented. The process dialog opens on
+      // "Vorgestellt" with now as the date; cancelling leaves the
+      // assignment without a presentation date.
+      // The list stays open behind the dialog: several mandates at once is
+      // the normal case, each with its own presentation.
+      setPresenting({ id: run.id, jobId: job.id, role: job.title })
     } finally {
       setBusy(null)
     }
   }
 
+  const dialog = presenting && (
+    <StepEditor
+      card={{ ...presenting, candidateName: candidateName ?? '', steps: [] }}
+      step={presentedStep()}
+      onClose={() => setPresenting(null)}
+      onSaved={() => onAssigned?.()}
+    />
+  )
+
   if (!open) {
     return (
+      <>
+      {dialog}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -101,10 +125,13 @@ export function AssignToMandate({
       >
         <Plus className="h-4 w-4" /> {t('Zu Mandat zuordnen')}
       </button>
+      </>
     )
   }
 
   return (
+    <>
+    {dialog}
     <div className="absolute right-6 top-20 z-50 w-[26rem] rounded-xl border border-cockpit-line bg-cockpit-surface p-3 shadow-panel">
       <div className="mb-2 flex items-center gap-2">
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
@@ -179,5 +206,6 @@ export function AssignToMandate({
         })}
       </div>
     </div>
+    </>
   )
 }
