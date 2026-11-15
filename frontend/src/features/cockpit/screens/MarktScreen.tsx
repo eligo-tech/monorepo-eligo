@@ -57,6 +57,7 @@ import { ContactsPanel } from './ContactsPanel'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { Button, FIELD } from '../ui/forms'
+import { adoptLeads, leadError, leadSummary } from '../ui/leadAdopt'
 
 /**
  * Which rung of the identity ladder established this employer.
@@ -661,18 +662,15 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
     setLeadBusy(true)
     setLeadNote(null)
     try {
-      const result = await api.adoptHubPostings([...selected])
+      const ids = [...selected]
+      const { result, retried } = await adoptLeads(() => api.adoptHubPostings(ids))
       const landed = result.results.filter((r) => r.job_id).map((r) => r.posting_id)
       setTaken((prev) => new Set([...prev, ...landed]))
       setSelected(new Set())
       if (landed.length > 0) setAdopted(true)
-      const parts: string[] = []
-      if (result.created) parts.push(t('{n} als Lead in Jobs übernommen', { n: String(result.created) }))
-      if (result.existing) parts.push(t('{n} waren schon da', { n: String(result.existing) }))
-      if (result.skipped) parts.push(t('{n} übersprungen (Agentur oder nicht mehr vorhanden)', { n: String(result.skipped) }))
-      setLeadNote(parts.join(' · '))
-    } catch {
-      setLeadNote(t('Übernahme fehlgeschlagen.'))
+      setLeadNote(leadSummary(result, retried))
+    } catch (e) {
+      setLeadNote(leadError(e))
     } finally {
       setLeadBusy(false)
     }
