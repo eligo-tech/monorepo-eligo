@@ -901,6 +901,13 @@ export function MarktScreen() {
   // Tech roles only (backend `hub/families.py`: software, data, IT, product,
   // design — fixed rules on title and Berufsfeld, no model).
   const [techOnly, setTechOnly] = useState(false)
+  // ELI-27. On by default: Markt already hides private recruiters' ads (their
+  // own segment); this also hides firms whose NAME says Personalberatung,
+  // Personaldienstleister or Zeitarbeit (backend `hub_companies.staffing_name`).
+  const [hideAgencies, setHideAgencies] = useState(true)
+  // ELI-27 "Unternehmensgröße": there is no headcount in the corpus, so size is
+  // the employer's open ads there — labelled as such, never as employees.
+  const [size, setSize] = useState('')
   const [activeSaved, setActiveSaved] = useState<string | null>(null)
   const [savedKey, setSavedKey] = useState(0)
 
@@ -919,6 +926,8 @@ export function MarktScreen() {
             minRelevance: titlesOnly ? 3 : 1,
             families: techOnly ? ['tech'] : undefined,
             correct: !query.exact,
+            excludeAgencies: hideAgencies,
+            sizes: size ? [size] : undefined,
           })
         : Promise.resolve({ items: [], total: 0, next_cursor: null, corrections: [] }),
     [
@@ -929,6 +938,8 @@ export function MarktScreen() {
       query?.exact,
       titlesOnly,
       techOnly,
+      hideAgencies,
+      size,
     ],
   )
   // What the corpus was actually asked, once a thin answer was retried with
@@ -970,13 +981,15 @@ export function MarktScreen() {
         cursor,
         minRelevance: titlesOnly ? 3 : 1,
         families: techOnly ? ['tech'] : undefined,
+        excludeAgencies: hideAgencies,
+        sizes: size ? [size] : undefined,
       })
       setMore((prev) => [...prev, ...page.items])
       setCursor(page.next_cursor)
     } finally {
       setLoadingMore(false)
     }
-  }, [query, searchedQ, cursor, titlesOnly, techOnly])
+  }, [query, searchedQ, cursor, titlesOnly, techOnly, hideAgencies, size])
 
   const run = useCallback(() => {
     setActiveSaved(null)
@@ -1218,6 +1231,36 @@ export function MarktScreen() {
               </span>
             )}
           </button>
+          <button
+            type="button"
+            onClick={() => setHideAgencies((on) => !on)}
+            aria-pressed={hideAgencies}
+            title={t('Blendet Firmen aus, deren Name eine Personalberatung, einen Personaldienstleister oder Zeitarbeit nennt')}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[13px] transition-colors',
+              hideAgencies
+                ? 'border-mint-400/40 bg-mint-400/10 text-cockpit-text'
+                : 'border-cockpit-line text-cockpit-dim hover:text-cockpit-text',
+            )}
+          >
+            <Check
+              className={cn('h-3.5 w-3.5', hideAgencies ? 'text-mint-400' : 'text-cockpit-faint')}
+            />
+            {t('Personalberatungen ausblenden')}
+          </button>
+          <select
+            aria-label={t('Unternehmensgröße')}
+            title={t('Größe nach offenen Stellen des Unternehmens im Markt, alle Standorte zusammen — eine Mitarbeiterzahl liegt nicht vor')}
+            value={size}
+            onChange={(e) => setSize(e.target.value)}
+            className="rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 text-[13px] text-cockpit-dim hover:text-cockpit-text"
+          >
+            <option value="">{t('Alle Größen')}</option>
+            <option value="s">{t('1–4 offene Stellen')}</option>
+            <option value="m">{t('5–19 offene Stellen')}</option>
+            <option value="l">{t('20–99 offene Stellen')}</option>
+            <option value="xl">{t('100+ offene Stellen')}</option>
+          </select>
           {/* Not offered while Tech is on: a saved search cannot keep it yet,
               and "Java" saved from "Java + Tech" would quietly widen. */}
           {hasCriteria && !alreadySaved && !techOnly && (
