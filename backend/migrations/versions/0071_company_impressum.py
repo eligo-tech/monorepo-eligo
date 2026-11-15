@@ -9,8 +9,8 @@ content hash. Company facts only; never a person.
 Tenant record: `companies` already carries its fail-closed RLS policy, so a
 new column needs none. Nullable without a default: metadata-only, no rewrite.
 
-Revision ID: 0070
-Revises: 0069
+Revision ID: 0071
+Revises: 0070
 """
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0070"
-down_revision: str | None = "0069"
+revision: str = "0071"
+down_revision: str | None = "0070"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
