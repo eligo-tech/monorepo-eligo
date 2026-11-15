@@ -39,6 +39,23 @@ describe('what a proposal changes', () => {
     expect(changeLines(p)).toEqual([{ field: 'text', before: null, after: 'Start im März' }])
   })
 
+  it('an AI evaluation (ELI-42) shows its score and Kurzfazit, not step fields', () => {
+    const p: ProposalDTO = {
+      ...base,
+      kind: 'assessment',
+      before: { assessment: null },
+      after: {
+        application_id: 'a1',
+        model: 'gpt-4o-mini',
+        assessment: { fit_score: 7, verdict: 'Solide.\n\nBegründung …' },
+      },
+    }
+    expect(changeLines(p)).toEqual([
+      { field: 'fit_score', before: null, after: '7 / 10' },
+      { field: 'verdict', before: null, after: 'Solide.' },
+    ])
+  })
+
   it('only a pending proposal can be decided', () => {
     expect(isOpen(base)).toBe(true)
     for (const status of ['confirmed', 'declined', 'stale', 'expired'])

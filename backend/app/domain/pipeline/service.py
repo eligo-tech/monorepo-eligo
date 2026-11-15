@@ -872,3 +872,288 @@ async def processes(
         reverse=True,
     )
     return out
+
+
+# ── Bewertungs-Prompt (ELI-41) ──────────────────────────────────────────────
+
+#: How each kind of note is called in the prompt.
+_INTERACTION_LABELS = {
+    "candidate_qualification": "Qualifikationsgespräch",
+    "candidate_call": "Gespräch",
+    "message": "Nachricht",
+    "note": "Notiz",
+    "call": "Anruf",
+    "email": "E-Mail",
+    "meeting": "Termin",
+    "client_call": "Kundengespräch",
+    "business_call": "Gespräch",
+    "briefing": "Briefing",
+    "feedback": "Feedback",
+}
+
+#: Kinds that carry nothing to evaluate: "nicht erreicht".
+_EMPTY_KINDS = {"na"}
+
+
+def _day(value: dt.datetime | None) -> dt.date | None:
+    aware = as_utc(value)
+    return aware.date() if aware else None
+
+
+def _money_de(amount: int) -> str:
+    return f"{amount:,}".replace(",", ".")
+
+
+def _band_text(job) -> str | None:  # noqa: ANN001 — the Job model
+    currency = job.salary_currency or "EUR"
+    if job.salary_min is not None and job.salary_max is not None:
+        return f"{_money_de(job.salary_min)}–{_money_de(job.salary_max)} {currency}"
+    if job.salary_max is not None:
+        return f"bis {_money_de(job.salary_max)} {currency}"
+    if job.salary_min is not None:
+        return f"ab {_money_de(job.salary_min)} {currency}"
+    return None
+
+
+def _document_text(doc) -> str | None:  # noqa: ANN001 — CandidateDocument
+    """A stored file as text, or None when nothing can be read (a scan)."""
+    from app.domain.documents import parser
+
+    if doc.content_type == "text/plain":
+        return doc.content.decode("utf-8", errors="replace")
+    if doc.content_type in ("application/pdf", "application/octet-stream"):
+        return parser.pdf_to_text(doc.content) or None
+    return None
+
+
+def _work_line(entry: object) -> str:
+    """One CV station as a line: "Senior Dev · Muster AG · 2019 – heute"."""
+    if not isinstance(entry, dict):
+        return str(entry).strip()
+    span = " – ".join(
+        str(entry[k]).strip() for k in ("start_date", "end_date") if entry.get(k)
+    )
+    head = " · ".join(
+        str(entry[k]).strip()
+        for k in ("title", "company", "location")
+        if str(entry.get(k) or "").strip()
+    )
+    line = " · ".join(part for part in (head, span) if part)
+    highlights = [str(h).strip() for h in entry.get("highlights") or [] if str(h).strip()]
+    if highlights:
+        line += " — " + "; ".join(highlights)
+    return line
+
+
+def _profile_lines(candidate) -> list[tuple[str, str]]:  # noqa: ANN001 — Candidate
+    """The candidate's columns the evaluation reads, as labelled lines.
+
+    Deliberately NOT here: e-mail, phone, street, postcode, date of birth,
+    LinkedIn/XING. The evaluation needs none of them, and the prompt leaves
+    Eligo on the recruiter's clipboard for a third-party model — data
+    minimisation (GDPR Art. 5(1)(c)) decides what travels. The documents
+    themselves still carry whatever the candidate wrote on them.
+    """
+    out: list[tuple[str, str]] = []
+
+    def add(label: str, value: object) -> None:
+        if value is None:
+            return
+        if isinstance(value, list):
+            items = [str(v).strip() for v in value if str(v or "").strip()]
+            if items:
+                out.append((label, ", ".join(items)))
+            return
+        text_value = str(getattr(value, "value", value)).strip()
+        if text_value:
+            out.append((label, text_value))
+
+    add("Aktuelle Position", candidate.current_title)
+    add("Aktueller Arbeitgeber", candidate.current_company)
+    add("Wohnort", candidate.location or candidate.city)
+    add("Berufserfahrung (Jahre)", candidate.total_years_experience)
+    add("Skills", list(candidate.skills or []))
+    add("Sprachen", [_as_line(e) for e in candidate.languages or []])
+    add("Ausbildung", [_as_line(e) for e in candidate.education or []])
+    add("Branchen", list(candidate.industries or []))
+    add("Anstellungsart", candidate.employment_form or candidate.employment_type)
+    add("Umzugsbereitschaft", candidate.willing_to_relocate)
+    add("Kündigungsfrist", candidate.notice_period)
+    add("Verfügbarkeit", candidate.availability)
+    for label, amount in (
+        ("Gehalt aktuell", candidate.current_salary),
+        ("Gehalt Minimum", candidate.salary_minimum),
+        ("Gehalt Wunsch", candidate.salary_expectation),
+    ):
+        if amount is not None:
+            add(label, f"{_money_de(amount)} {candidate.salary_currency or 'EUR'}")
+    add("Wechselmotivation", candidate.motivation)
+    add("Zusammenfassung des Profils", candidate.profile_summary)
+    add("Schwerpunkte", list(candidate.focus_areas or []))
+    add("Technisches Know-how", candidate.technical_profile)
+    add("Verfügbarkeit für Interviews", candidate.interview_availability)
+    add("Andere Prozesse", candidate.other_processes)
+    add("Weitere relevante Punkte", candidate.other_notes)
+    add("Arbeitserlaubnis", candidate.work_permit)
+    for entry in candidate.work_history or []:
+        if line := _work_line(entry):
+            out.append(("Station", line))
+    return out
+
+
+_SALARY_LABEL = {
+    "fits": "im Band",
+    "negotiable": "verhandelbar (Wunsch über dem Band, Minimum passt)",
+    "above_band": "über dem Band (Minimum über dem Maximum)",
+    "unknown": "nicht prüfbar (Band oder Gehaltsangabe fehlt)",
+}
+
+
+def _hard_checks(candidate, job, failures: list[str]) -> list[str]:  # noqa: ANN001
+    """The hard criteria as the matcher decides them — code, not the model."""
+    from app.domain.matching.salary import salary_fit
+
+    fit = salary_fit(
+        minimum=candidate.salary_minimum,
+        wish=candidate.salary_expectation,
+        job_min=job.salary_min,
+        job_max=job.salary_max,
+        currency=job.salary_currency,
+    )
+    lines = [
+        f"Gehalt: {_SALARY_LABEL[fit.status]}" + (f" — {fit.detail}" if fit.detail else "")
+    ]
+    if failures:
+        lines.extend(f"Harter Filter nicht erfüllt: {f}" for f in failures)
+    else:
+        lines.append(
+            "Harte Filter (Arbeitserlaubnis, Ort, Gehaltsminimum, Muss-Skills "
+            "laut erfassten Skills): erfüllt"
+        )
+    return lines
+
+
+async def evaluation_material(
+    session: AsyncSession, *, tenant_id: uuid.UUID, application_id: uuid.UUID
+):  # noqa: ANN201 — bewertung.EvaluationMaterial, imported lazily
+    """Everything the Bewertungs-Prompt may say about ONE process; None if
+    the process is not this tenant's.
+
+    What is selected, and what is not:
+
+    * briefings — rows on this job with NO candidate: what the client said
+      about the mandate;
+    * feedback — rows on this job about THIS candidate only. Another
+      candidate's feedback is about another person;
+    * candidate notes — rows on this candidate with no job or THIS job. A
+      note from another mandate may name another client, and section C of the
+      answer is written for this one;
+    * documents — every file on the candidate, read to text where possible.
+    """
+    from app.domain.candidates.models import Candidate
+    from app.domain.companies.models import Company
+    from app.domain.documents import service as documents
+    from app.domain.jobs.models import Job
+    from app.domain.managers import service as managers
+    from app.domain.managers.models import Manager
+    from app.domain.matching.service import apply_hard_filters
+    from app.domain.pipeline import bewertung
+
+    app = await get_application(session, tenant_id=tenant_id, application_id=application_id)
+    if app is None:
+        return None
+    candidate = await session.scalar(
+        select(Candidate).where(
+            Candidate.tenant_id == tenant_id, Candidate.id == app.candidate_id
+        )
+    )
+    job = await session.scalar(
+        select(Job).where(Job.tenant_id == tenant_id, Job.id == app.job_id)
+    )
+    if candidate is None or job is None:
+        return None
+    company = None
+    if job.client_company_id:
+        company = await session.scalar(
+            select(Company).where(
+                Company.tenant_id == tenant_id, Company.id == job.client_company_id
+            )
+        )
+    names: dict[uuid.UUID, str] = {}
+    contact = None
+    if company is not None:
+        for m in (
+            await session.execute(
+                select(Manager).where(
+                    Manager.tenant_id == tenant_id, Manager.company_id == company.id
+                )
+            )
+        ).scalars():
+            names[m.id] = m.full_name
+            if m.id == job.manager_id:
+                contact = m.full_name + (f" · {m.role_title}" if m.role_title else "")
+
+    def note(row) -> bewertung.Note | None:  # noqa: ANN001 — ManagerInteraction
+        if row.interaction_type in _EMPTY_KINDS or not (row.summary or "").strip():
+            return None
+        return bewertung.Note(
+            date=_day(row.occurred_at),
+            text=row.summary,
+            label=_INTERACTION_LABELS.get(row.interaction_type),
+            who=names.get(row.manager_id) if row.manager_id else None,
+        )
+
+    on_job = await managers.list_for_job(session, tenant_id=tenant_id, job_id=job.id)
+    briefings = [
+        n
+        for r in on_job
+        if r.candidate_id is None and r.interaction_type != "feedback" and (n := note(r))
+    ]
+    feedback = [
+        n
+        for r in on_job
+        if r.candidate_id == candidate.id and r.interaction_type == "feedback" and (n := note(r))
+    ]
+    about_person = await managers.list_candidate_interactions(
+        session, tenant_id=tenant_id, candidate_id=candidate.id
+    )
+    candidate_notes = [
+        n
+        for r in about_person
+        if r.interaction_type != "feedback" and r.job_id in (None, job.id) and (n := note(r))
+    ]
+
+    docs = await documents.list_documents(
+        session, tenant_id=tenant_id, candidate_id=candidate.id
+    )
+    order = list(bewertung.DOCUMENT_LABELS)
+    docs.sort(key=lambda d: order.index(d.kind) if d.kind in order else len(order))
+    failures = apply_hard_filters(candidate, job)
+
+    return bewertung.EvaluationMaterial(
+        job_title=job.title,
+        client=company.name if company else "Kunde nicht hinterlegt",
+        location=job.location,
+        vacancy_id=job.external_id or f"#A-{str(job.id)[:4]}",
+        candidate_name=candidate.full_name,
+        contact=contact,
+        must_have=list(job.must_have_skills or []),
+        certifications=list(job.required_certifications or []),
+        salary_band=_band_text(job),
+        profile_date=_day(job.updated_at or job.created_at),
+        briefings=briefings,
+        feedback=feedback,
+        candidate_notes=candidate_notes,
+        profile=_profile_lines(candidate),
+        documents=[
+            bewertung.SourceDocument(
+                kind=d.kind,
+                filename=d.filename,
+                date=_day(d.created_at),
+                text=_document_text(d),
+            )
+            for d in docs
+        ],
+        checks=_hard_checks(candidate, job, failures),
+        hard_failures=failures,
+    )

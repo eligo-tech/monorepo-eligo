@@ -127,6 +127,14 @@ manual edit runs, attributed to that person, with a WRITE receipt naming who
 asked, through which client, and who confirmed. The AI client itself only
 ever creates a pending row in `agent_proposals`.
 
+The in-app AI evaluation (ELI-42, `pipeline/evaluation/`) uses the same
+door: the model's answer is checked by code (score 0–10, technologies
+grounded in the candidate's own material, no salary or health data in the
+client text, failed hard filters repeated as flags) and stored as a pending
+`assessment` proposal with client `eligo-ki`. Confirming runs
+`pipeline.set_assessment` with the CHECKED fields; the raw answer never
+reaches `application_assessments`.
+
 ---
 
 ## 2. Data classification
@@ -148,7 +156,7 @@ the model is wrong.
 | **Personal data** | candidates, managers/contacts (incl. anything enriched or tenant-sourced) | `candidates`, `managers` | yes | **yes** |
 | **Tenant record (accountability)** | that an erasure request was handled: when asked, when done, by whom, counts | `erasure_requests` | yes | no — names nobody, not even the erased row's id |
 | **Personal data (pseudonymous)** | HMAC fingerprints of an erased person's import ids and e-mails, so the next import does not re-create them | `tenant_suppressions` | yes | **yes, while the key exists** — kept because honouring the request needs it (Art. 17(3)(b)); lifted, never deleted |
-| **Personal data (transient)** | changes an AI client proposed, waiting for a person: candidate name in the title, a drafted note | `agent_proposals` | yes | **yes** — text and name erased on every decision and nightly after 7 days |
+| **Personal data (transient)** | changes an AI client proposed, waiting for a person: candidate name in the title, a drafted note; an in-app AI Kandidatenauswertung (ELI-42, kind `assessment`): the model's full answer, the checked fields, the check flags | `agent_proposals` | yes | **yes** — text and name erased on every decision and nightly after 7 days |
 | **Provenance** | each proposed field value, its source, confidence and the postcondition reasons | `enrichment_records` | yes | **yes** — the value itself; deletable, so an erasure removes it. Trade-off, deliberate: values and reasons here are not tamper-evident (the chain names the record, not its content) — erasable and tamper-evident cannot both hold for the same text |
 | **Audit** | receipts | `receipts` | yes | references only — field names and record ids, never a value or an address (`tests/test_receipts_hold_no_personal_data.py`). ⚠ Receipts written before 2026-11-02 still carry values in `summary`/`payload` (`write email='…'`, Art. 14 recipient); they are immutable, and erasure will black them out |
 

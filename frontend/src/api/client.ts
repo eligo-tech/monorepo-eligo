@@ -28,6 +28,9 @@ import type {
   AssessmentWriteDTO,
   JobCreatePayload,
   AuswertungParsedDTO,
+  EvaluationDTO,
+  EvaluationPromptDTO,
+  EvaluationProviderDTO,
   BriefingDTO,
   CriteriaSuggestionDTO,
   JobDTO,
@@ -588,6 +591,28 @@ export const api = {
     request<AuswertungParsedDTO>('/pipeline/auswertung/parse', {
       method: 'POST',
       body: JSON.stringify({ text }),
+    }),
+
+  /** The Bewertungs-Prompt for one candidate on one mandate (ELI-41):
+   *  assembled by code, for the recruiter to paste into Claude. */
+  evaluationPrompt: (applicationId: string) =>
+    request<EvaluationPromptDTO>(
+      `/pipeline/applications/${applicationId}/bewertung-prompt`,
+    ),
+
+  /** Is a model configured for the in-app evaluation (ELI-42)? */
+  evaluationProvider: () =>
+    request<EvaluationProviderDTO>('/pipeline/evaluation/provider'),
+
+  /** The open AI evaluation of one process; rejects (404) when none. */
+  evaluation: (applicationId: string) =>
+    request<EvaluationDTO>(`/pipeline/applications/${applicationId}/evaluation`),
+
+  /** Ask the model. The result is a PROPOSAL — confirm or decline it via
+   *  `confirmProposal` / `declineProposal`; nothing is stored before. */
+  evaluate: (applicationId: string) =>
+    request<EvaluationDTO>(`/pipeline/applications/${applicationId}/evaluation`, {
+      method: 'POST',
     }),
 
   /** Put a candidate on a mandate. Idempotent per pair — assigning twice

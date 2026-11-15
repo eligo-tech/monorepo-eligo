@@ -37,7 +37,15 @@ LIFETIME = dt.timedelta(days=7)
 
 #: What a decided or expired proposal is called once the person's name is
 #: gone. The receipts keep the record references; the row keeps no name.
-KIND_LABEL = {"step": "Prozessschritt", "candidate_note": "Notiz"}
+KIND_LABEL = {
+    "step": "Prozessschritt",
+    "candidate_note": "Notiz",
+    "assessment": "Kandidatenauswertung",
+}
+
+#: Argument keys that hold free text about a person. Erased on every
+#: decision and on expiry; the ids and the model name stay for the audit.
+_FREE_TEXT_KEYS = ("text", "assessment", "flags")
 
 PENDING, CONFIRMED, DECLINED, STALE, EXPIRED = (
     "pending", "confirmed", "declined", "stale", "expired",
@@ -177,11 +185,64 @@ async def _note_apply(
         raise ProposalStale("the candidate is no longer in this workspace")
 
 
+async def _assessment_snapshot(
+    session: AsyncSession, tenant_id: uuid.UUID, args: dict
+) -> dict | None:
+    """The assessment as it is now. Confirming an AI evaluation must not
+    overwrite one a recruiter saved after the evaluation was made."""
+    from app.domain.pipeline import service as pipeline
+
+    application_id = uuid.UUID(args["application_id"])
+    app = await pipeline.get_application(
+        session, tenant_id=tenant_id, application_id=application_id
+    )
+    if app is None:
+        return None
+    row = await pipeline.get_assessment(
+        session, tenant_id=tenant_id, application_id=application_id
+    )
+    if row is None:
+        return {"assessment": None}
+    return {
+        "assessment": {
+            "fit_score": row.fit_score,
+            "assessed_at": _iso(pipeline.as_utc(row.assessed_at)),
+            "updated_at": _iso(pipeline.as_utc(row.updated_at)),
+        }
+    }
+
+
+async def _assessment_apply(
+    session: AsyncSession, tenant_id: uuid.UUID, args: dict, user_id: str | None, name: str | None
+) -> None:
+    """Store the CHECKED evaluation — what `evaluation.checks` let through,
+    not the raw answer — through the same write a manual save runs."""
+    from app.domain.pipeline import service as pipeline
+
+    a = args["assessment"] or {}
+    basis = f"KI-Vorschlag ({args.get('model') or 'Modell unbekannt'}), übernommen von {name or 'Recruiter'}"
+    if a.get("basis"):
+        basis += f" · {a['basis']}"
+    await pipeline.set_assessment(
+        session,
+        tenant_id=tenant_id,
+        application_id=uuid.UUID(args["application_id"]),
+        fit_score=a.get("fit_score"),
+        verdict=a.get("verdict"),
+        strengths=a.get("strengths") or [],
+        risks=a.get("risks") or [],
+        client_summary=a.get("client_summary"),
+        technologies=a.get("technologies") or [],
+        basis=basis[:400],
+        assessed_at=dt.datetime.fromisoformat(a["assessed_at"]) if a.get("assessed_at") else None,
+    )
+
+
 async def _lock_subject(session: AsyncSession, tenant_id: uuid.UUID, kind: str, args: dict) -> None:
-    """Lock what a confirm is about. Steps: the process row, which every human
-    step write also locks (`pipeline.get_application(lock=True)`). Notes only
-    append, so there is nothing to overwrite and nothing to lock."""
-    if kind == "step":
+    """Lock what a confirm is about. Steps and assessments: the process row,
+    which every human step write also locks (`pipeline.get_application(lock=True)`).
+    Notes only append, so there is nothing to overwrite and nothing to lock."""
+    if kind in ("step", "assessment"):
         from app.domain.pipeline import service as pipeline
 
         await pipeline.get_application(
@@ -192,6 +253,7 @@ async def _lock_subject(session: AsyncSession, tenant_id: uuid.UUID, kind: str, 
 APPLIERS: dict[str, tuple[Snapshot, Apply]] = {
     "step": (_step_snapshot, _step_apply),
     "candidate_note": (_note_snapshot, _note_apply),
+    "assessment": (_assessment_snapshot, _assessment_apply),
 }
 
 
@@ -364,7 +426,11 @@ async def expire_all() -> dict[str, int]:
 
 
 def _erased(args: dict) -> dict:
-    return {**args, "text": None} if "text" in (args or {}) else dict(args or {})
+    out = dict(args or {})
+    for key in _FREE_TEXT_KEYS:
+        if key in out:
+            out[key] = None
+    return out
 
 
 async def _open(session: AsyncSession, tenant_id: uuid.UUID, proposal_id: uuid.UUID) -> AgentProposal:
@@ -474,6 +540,15 @@ async def confirm(
     await apply(session, tenant_id, args, user_id, name)  # commits
     await session.refresh(row)
     return row
+
+
+async def supersede(
+    session: AsyncSession, *, row: AgentProposal, user_id: str | None, name: str | None
+) -> None:
+    """Close an open proposal because a newer one about the same thing
+    replaces it ("stale", text erased). The caller commits."""
+    await _claim(session, row, STALE, user_id, name)
+    await _receipt(session, row, STALE, user_id, name)
 
 
 async def decline(
