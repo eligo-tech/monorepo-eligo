@@ -53,6 +53,7 @@ import type {
   SavedSearchDTO,
 } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
+import { isAdmin, useMe } from '../useMe'
 import { ContactsPanel } from './ContactsPanel'
 import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
@@ -307,6 +308,8 @@ function SavedSearches({
   searches: SavedSearchDTO[]
   reload: () => void
 }) {
+  // ELI-27: deleting is an admin's job; the server refuses anyone else.
+  const admin = isAdmin(useMe())
   if (searches.length === 0) return null
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -331,18 +334,20 @@ function SavedSearches({
               </span>
             )}
           </button>
-          <button
-            type="button"
-            aria-label={t('{label} löschen', { label: saved.label })}
-            onClick={async () => {
-              await api.deleteSavedSearch(saved.id).catch(() => {})
-              reload()
-              onDeleted()
-            }}
-            className="text-cockpit-faint transition-colors hover:text-coral-400"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {admin && (
+            <button
+              type="button"
+              aria-label={t('{label} löschen', { label: saved.label })}
+              onClick={async () => {
+                await api.deleteSavedSearch(saved.id).catch(() => {})
+                reload()
+                onDeleted()
+              }}
+              className="text-cockpit-faint transition-colors hover:text-coral-400"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </span>
       ))}
     </div>
