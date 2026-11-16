@@ -82,6 +82,28 @@ _NOT_A_FIRM = {
     "jobs-oberlausitz.de", "karriere-suedwestfalen.de", "ams.at", "hokify.at",
 }
 
+#: Company directories, register portals, encyclopedias, search engines and
+#: social networks — they describe a firm, they are not its website. Met as
+#: web-search results (`companies/website_search.py`) and filtered there
+#: only (`search_usable`): several are real firms (amazon.de, ebay.de), whose
+#: own domain a workspace entered must stay a candidate.
+_DIRECTORIES = {
+    "northdata.de", "northdata.com", "firmenwissen.de", "wer-zu-wem.de",
+    "gelbeseiten.de", "dasoertliche.de", "dastelefonbuch.de", "11880.com",
+    "goyellow.de", "cylex.de", "cylex-branchenbuch.de", "werliefertwas.de",
+    "wlw.de", "firmeneintrag.de", "firmenabc.at", "herold.at", "moneyhouse.ch",
+    "moneyhouse.de", "local.ch", "search.ch", "zefix.ch", "handelsregister.de",
+    "unternehmensregister.de", "bundesanzeiger.de", "online-handelsregister.de",
+    "implisense.com", "companyhouse.de", "creditreform.de", "dnb.com",
+    "kompass.com", "wikipedia.org", "wikidata.org", "bing.com", "google.de",
+    "duckduckgo.com", "yahoo.com", "youtube.com", "tiktok.com", "twitter.com",
+    "x.com", "pinterest.com", "pinterest.de", "trustpilot.com", "trustpilot.de",
+    "yelp.de", "yelp.com", "provenexpert.com", "golocal.de",
+    "kununu.de", "indeed.de", "stepstone.at", "stepstone.ch", "xing.de",
+    "linkedin.de", "facebook.de", "amazon.de", "amazon.com", "ebay.de",
+    "glassdoor.ch", "glassdoor.at", "arbeitgeber-check.de", "crunchbase.com",
+}
+
 #: Regional ad papers' boards: hamburger-jobanzeiger.de, aachener-jobanzeiger.de …
 _BOARD_LABEL = re.compile(r"jobanzeiger$")
 
@@ -131,6 +153,12 @@ def _usable(domain: str) -> bool:
         and not domain.endswith(".jobs")  # a TLD for job boards
         and not _BOARD_LABEL.search(domain.split(".")[0])
     )
+
+
+def search_usable(domain: str) -> bool:
+    """A web-search result domain worth an Impressum fetch: `_usable`, and
+    not a directory, register, encyclopedia or social network."""
+    return _usable(domain) and domain not in _DIRECTORIES
 
 
 def _squash(value: str) -> str:

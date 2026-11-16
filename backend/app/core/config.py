@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     # ELI-25: the cheap model that reads ads the contact rules named nobody in
     # (`hub/contact_model.py`). Set it empty to switch that layer off.
     hub_contacts_model: str = "gpt-4o-mini"
+    # ELI-39 website finder: Brave Search API key (`companies/website_search.py`).
+    # Unset → no web search; the company Impressum check uses only the
+    # workspace's own websites. Only company names (+ town) are sent. Never logged.
+    search_api_key: str | None = None
 
     # --- Interviewer agent (gated feature) -------------------------------
     # Three gates, all of which must open (see `domain/features`):

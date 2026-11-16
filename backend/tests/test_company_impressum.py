@@ -364,3 +364,310 @@ async def test_an_error_on_one_candidate_is_retried_after_a_week_not_a_quarter()
     assert (await _run(tenant, down))["error"] == 1
     assert (await _get(cid)).impressum["status"] == "error"
     assert (await _run(tenant, _Fetcher(_tempton()), NOW + dt.timedelta(days=8)))["verified"] == 1
+
+
+# --- Website finder by web search -------------------------------------------
+# A company with no website candidate (or whose candidates' Impressum names
+# another firm) is looked up by name (+ town). The search only PROPOSES
+# domains; the same Impressum checks decide. No network: a fake search client.
+
+
+class _Search:
+    """Answers query → result URLs (or raises); records every query. The
+    caller spends `remaining`; the await lets concurrent reads interleave."""
+
+    def __init__(self, results: list[str] | Exception | None = None, budget: int = 20) -> None:
+        self.results = results if results is not None else []
+        self.queries: list[str] = []
+        self.remaining = budget
+
+    async def search(self, query: str) -> list[str] | None:
+        await asyncio.sleep(0.01)
+        self.queries.append(query)
+        if isinstance(self.results, Exception):
+            raise self.results
+        return list(self.results)
+
+
+async def _run_search(tenant: uuid.UUID, fetcher: _Fetcher, searcher, now: dt.datetime = NOW) -> dict:
+    async with SessionLocal() as s:
+        return await impressum.check_companies(
+            s, tenant_id=tenant, fetcher=fetcher, searcher=searcher, limit=20, now=now
+        )
+
+
+async def _company_in(tenant: uuid.UUID, name: str, location: str | None, **kw) -> uuid.UUID:
+    cid = await _company(tenant, name, **kw)
+    async with SessionLocal() as s:
+        (await s.get(Company, cid)).location = location
+        await s.commit()
+    return cid
+
+
+async def test_without_a_search_key_there_is_no_search_client() -> None:
+    from app.domain.companies import website_search
+
+    assert website_search.from_settings(api_key=None, budget=20) is None
+    assert website_search.from_settings(api_key="", budget=20) is None
+    assert website_search.from_settings(api_key="k", budget=0) is None
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH")
+    outcome = await _run_search(tenant, _Fetcher(_tempton()), None)
+    assert outcome["no_domain"] == 1 and outcome["searched"] == 0
+    assert "search" not in (await _get(cid)).impressum
+
+
+async def test_a_found_website_is_verified_through_the_impressum_and_committed() -> None:
+    tenant = uuid.uuid4()
+    cid = await _company_in(tenant, "Tempton Group GmbH", "Essen")
+    search = _Search([
+        "https://www.northdata.de/Tempton+Group+GmbH,+Essen/HRB+28871",
+        "https://de.linkedin.com/company/tempton",
+        "https://www.tempton.de/impressum",
+    ])
+    fetcher = _Fetcher(_tempton())
+    outcome = await _run_search(tenant, fetcher, search)
+    company = await _get(cid)
+    assert search.queries == ["Tempton Group GmbH Essen Impressum"]
+    assert outcome["verified"] == 1 and outcome["searched"] == 1
+    facts = company.impressum
+    assert facts["status"] == "verified" and facts["vat_id"] == "DE252406571"
+    assert facts["found_by"] == "search" and facts["search"]["domains"] == ["tempton.de"]
+    assert facts["candidates"] == []  # the workspace's own candidates, unchanged
+    assert company.domain == "tempton.de"
+    # Directories and social networks are never fetched.
+    assert not any("northdata" in u or "linkedin" in u for u in fetcher.requested)
+    async with SessionLocal() as s:
+        records = (await s.scalars(select(EnrichmentRecord).where(EnrichmentRecord.entity_id == cid))).all()
+    assert sorted(r.field for r in records) == ["domain", "impressum"]
+    assert all("web search" in r.source_detail for r in records)
+
+
+def test_directory_and_aggregator_domains_are_filtered() -> None:
+    urls = [
+        "https://www.northdata.de/x", "https://www.firmenwissen.de/x", "https://www.wer-zu-wem.de/x",
+        "https://www.gelbeseiten.de/x", "https://www.dasoertliche.de/x", "https://www.kununu.com/de/x",
+        "https://de.indeed.com/x", "https://www.stepstone.de/x", "https://de.wikipedia.org/wiki/X",
+        "https://www.youtube.com/x", "https://www.google.com/maps/x", "https://www.bing.com/x",
+        "https://www.handelsregister.de/x", "https://www.unternehmensregister.de/x",
+        "https://www.moneyhouse.ch/x", "https://www.xing.com/pages/x", "https://www.facebook.com/x",
+        "https://www.instagram.com/x", "https://www.linkedin.com/company/x",
+        "https://www.muster-bau.de/kontakt", "https://muster-bau.de/impressum", "not a url",
+    ]
+    assert impressum.search_domains(urls) == ["muster-bau.de"]
+
+
+async def test_a_search_runs_after_the_own_candidates_named_another_firm() -> None:
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH", emails=("m.mustermann@other-group.de",))
+    other = {
+        "https://other-group.de/": (200, '<a href="/impressum">Impressum</a>'),
+        "https://other-group.de/impressum": (200, _html("Impressum\nOther Group GmbH\nHRB 1 Amtsgericht Köln")),
+    }
+    search = _Search(["https://tempton.de/"])
+    fetcher = _Fetcher({**other, **_tempton()})
+    assert (await _run_search(tenant, fetcher, search))["verified"] == 1
+    assert fetcher.requested[0] == "https://other-group.de/"  # the workspace's own lead first
+    facts = (await _get(cid)).impressum
+    assert facts["domain"] == "tempton.de" and facts["found_by"] == "search"
+    assert facts["candidates"] == ["other-group.de"]
+
+
+async def test_a_verified_own_candidate_is_never_searched() -> None:
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH", domain="tempton.de")
+    search = _Search(["https://tempton.de/"])
+    await _run_search(tenant, _Fetcher(_tempton()), search)
+    assert search.queries == [] and (await _get(cid)).impressum["found_by"] == "workspace"
+
+
+async def test_a_search_is_not_repeated_within_the_period() -> None:
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Muster Bau GmbH")
+    search = _Search(["https://muster-bau.de/"])
+    await _run_search(tenant, _Fetcher({}), search)
+    facts = (await _get(cid)).impressum
+    assert facts["status"] == "no_impressum" and facts["search"]["domains"] == ["muster-bau.de"]
+    assert facts["search"]["name"] == "Muster Bau GmbH"
+
+    again = _Search(["https://muster-bau.de/"])
+    assert (await _run_search(tenant, _Fetcher({}), again, NOW + dt.timedelta(days=30)))["checked"] == 0
+    assert again.queries == []
+    # A quarter later: asked again, once.
+    later = _Search(["https://muster-bau.de/"])
+    await _run_search(tenant, _Fetcher({}), later, NOW + dt.timedelta(days=91))
+    assert len(later.queries) == 1
+
+
+async def test_a_company_settled_before_the_finder_existed_is_searched() -> None:
+    # Prod: 138 "no domain" and 71 "not named" companies checked without a
+    # search must not wait a quarter once the key is set.
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH", emails=("m.mustermann@other-group.de",))
+    await _run(tenant, _Fetcher({}))
+    assert (await _get(cid)).impressum["status"] == "no_impressum"
+    search = _Search(["https://tempton.de/"])
+    out = await _run_search(tenant, _Fetcher(_tempton()), search, NOW + dt.timedelta(days=1))
+    assert out["verified"] == 1 and len(search.queries) == 1
+
+
+async def test_a_renamed_company_is_searched_again() -> None:
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Muster Bau GmbH")
+    await _run_search(tenant, _Fetcher({}), _Search([]))
+    async with SessionLocal() as s:
+        (await s.get(Company, cid)).name = "Muster Hochbau GmbH"
+        await s.commit()
+    again = _Search([])
+    await _run_search(tenant, _Fetcher({}), again, NOW + dt.timedelta(days=1))
+    assert again.queries == ["Muster Hochbau GmbH Impressum"]
+
+
+async def test_stored_search_domains_are_retried_without_searching() -> None:
+    # A site error on the found domain: retried after a week from the stored
+    # result, not by asking the search provider again.
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH")
+    await _run_search(tenant, _Fetcher({"https://tempton.de/": (503, None)}), _Search(["https://tempton.de/"]))
+    assert (await _get(cid)).impressum["status"] == "error"
+    again = _Search(["https://elsewhere.de/"])
+    out = await _run_search(tenant, _Fetcher(_tempton()), again, NOW + dt.timedelta(days=8))
+    assert out["verified"] == 1 and again.queries == []
+
+
+async def test_a_search_error_does_not_break_the_batch() -> None:
+    tenant = uuid.uuid4()
+    lost = await _company(tenant, "Aaa Muster GmbH")
+    ok = await _company(tenant, "Tempton Group GmbH", domain="tempton.de")
+    out = await _run_search(tenant, _Fetcher(_tempton()), _Search(RuntimeError("search down")))
+    assert out["checked"] == 2 and out["verified"] == 1 and out["no_domain"] == 1
+    assert out["search_failed"] == 1 and out["searched"] == 0
+    assert (await _get(ok)).impressum["status"] == "verified"
+    facts = (await _get(lost)).impressum
+    assert facts["search"]["failed"] is True and facts["search"]["domains"] == []
+    # Not again within the day (the daily loop would re-pick it batch after
+    # batch while the provider is down) — but the next day.
+    soon = _Search(["https://muster.de/"])
+    assert (await _run_search(tenant, _Fetcher({}), soon, NOW + dt.timedelta(hours=2)))["checked"] == 0
+    later = _Search([])
+    await _run_search(tenant, _Fetcher({}), later, NOW + dt.timedelta(days=1, hours=1))
+    assert later.queries == ["Aaa Muster GmbH Impressum"]
+
+
+async def test_a_suspected_natural_person_is_never_searched() -> None:
+    tenant = uuid.uuid4()
+    await _company(tenant, "Andreas Uwe Weiss")
+    search = _Search(["https://weiss-personal.de/"])
+    assert (await _run_search(tenant, _Fetcher({}), search))["checked"] == 0
+    assert search.queries == []
+
+
+async def test_searches_stay_within_the_budget() -> None:
+    tenant = uuid.uuid4()
+    for name in ("Aaa Bau GmbH", "Bbb Bau GmbH", "Ccc Bau GmbH"):
+        await _company(tenant, name)
+    search = _Search([], budget=2)
+    out = await _run_search(tenant, _Fetcher({}), search)
+    assert len(search.queries) == 2 and out["searched"] == 2 and out["search_failed"] == 0
+    # The one left out is not marked failed: it is simply searched next time.
+    async with SessionLocal() as s:
+        rows = (await s.scalars(select(Company).where(Company.tenant_id == tenant))).all()
+    assert sorted("search" in c.impressum for c in rows) == [False, True, True]
+
+
+async def test_a_company_due_only_for_the_search_is_not_fetched_again() -> None:
+    # Its own website was read last week (another firm's Impressum): only the
+    # finder's domains are fetched now, on a budget slot reserved for it.
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH", emails=("m.mustermann@other-group.de",))
+    await _run(tenant, _Fetcher({}))
+    await _company(tenant, "Aaa Neu GmbH")  # due anyway, sorts first, also wants a search
+    search = _Search(["https://tempton.de/"], budget=1)
+    fetcher = _Fetcher(_tempton())
+    await _run_search(tenant, fetcher, search, NOW + dt.timedelta(days=7))
+    assert search.queries == ["Tempton Group GmbH Impressum"]
+    assert not any("other-group" in u for u in fetcher.requested)
+    assert (await _get(cid)).impressum["status"] == "verified"
+
+
+async def test_a_search_answer_survives_a_read_that_did_not_finish() -> None:
+    # The query is paid for: a batch timeout on the found site must not make
+    # the next batch ask the provider again.
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Slow Bau GmbH")
+    async with SessionLocal() as s:
+        await impressum.check_companies(
+            s, tenant_id=tenant, fetcher=_Slow({}), searcher=_Search(["https://slow.de/"]),
+            limit=20, now=NOW, seconds=0.5,
+        )
+    assert (await _get(cid)).impressum["search"]["domains"] == ["slow.de"]
+    again = _Search(["https://elsewhere.de/"])
+    out = await _run_search(tenant, _Fetcher({}), again)
+    assert again.queries == [] and out["checked"] == 1
+
+
+class _Broken(_Fetcher):
+    async def get(self, url: str) -> sites.SitePage:
+        if "broken.de" in url:
+            raise RuntimeError("boom")
+        return await super().get(url)
+
+
+async def test_a_search_answer_survives_a_failed_read() -> None:
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Broken Bau GmbH")
+    out = await _run_search(tenant, _Broken({}), _Search(["https://broken.de/"]))
+    facts = (await _get(cid)).impressum
+    assert out["error"] == 1 and facts["status"] == "error"
+    assert facts["search"]["domains"] == ["broken.de"]
+
+
+def test_a_domain_the_workspace_entered_is_never_filtered_as_a_directory() -> None:
+    # Directories are filtered from SEARCH results only: amazon.de is a firm.
+    assert impressum.website_candidates("https://www.amazon.de", ["a@ebay.de"]) == ["amazon.de", "ebay.de"]
+    assert impressum.search_domains(["https://www.amazon.de/dp/1", "https://ebay.de/"]) == []
+
+
+def test_the_query_holds_the_town_not_a_street() -> None:
+    assert impressum.search_query("Muster GmbH", "Hauptstr. 1, 45127 Essen") == "Muster GmbH 45127 Essen Impressum"
+    assert impressum.search_query("Muster GmbH", " Essen ") == "Muster GmbH Essen Impressum"
+    assert impressum.search_query("Muster GmbH", None) == "Muster GmbH Impressum"
+
+
+async def test_the_search_query_never_reaches_the_logs(caplog) -> None:
+    import logging
+
+    import httpx
+
+    from app.domain.companies import website_search
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"web": {"results": []}})
+
+    client = website_search.BraveSearch("k-123", min_interval=0, transport=httpx.MockTransport(handler))
+    with caplog.at_level(logging.DEBUG):
+        async with client:
+            await client.search("Geheimkunde GmbH Essen Impressum")
+    assert "Geheimkunde" not in caplog.text and "k-123" not in caplog.text
+
+
+async def test_the_brave_client_reads_result_urls_and_degrades_to_none() -> None:
+    import httpx
+
+    from app.domain.companies import website_search
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if "fail" in str(request.url):
+            return httpx.Response(429)
+        return httpx.Response(200, json={"web": {"results": [{"url": "https://tempton.de/"}, {"title": "x"}]}})
+
+    client = website_search.BraveSearch("k-123", budget=3, min_interval=0, transport=httpx.MockTransport(handler))
+    async with client:
+        assert await client.search("Tempton Group GmbH Essen") == ["https://tempton.de/"]
+        assert await client.search("fail") is None
+    assert seen[0].headers["X-Subscription-Token"] == "k-123"
+    assert seen[0].url.params["q"] == "Tempton Group GmbH Essen" and seen[0].url.params["country"] == "de"
+    assert client.remaining == 3  # the budget is the caller's to spend
