@@ -201,6 +201,7 @@ async def _read(fetcher, name: str, candidates: list[str], pages: dict[str, asyn
     if not candidates:
         return {"status": SITE_NO_DOMAIN, "domain": None}
     result: dict = {}
+    error: dict | None = None
     for domain in candidates:
         if domain not in pages:
             pages[domain] = asyncio.ensure_future(fetch_impressum(fetcher, domain))
@@ -210,8 +211,12 @@ async def _read(fetcher, name: str, candidates: list[str], pages: dict[str, asyn
         status = verdict(page.status, facts.is_impressum, named)
         result = {"status": status, "domain": domain, "page": page, "facts": facts, "named": named}
         if status == SITE_VERIFIED:
-            break
-    return result
+            return result
+        if status == SITE_ERROR and error is None:
+            error = result
+    # A candidate that failed may still be the one: "error" is asked again
+    # after a week, the last candidate's settled answer only after a quarter.
+    return error or result
 
 
 async def check_companies(

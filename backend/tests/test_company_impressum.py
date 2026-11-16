@@ -353,3 +353,14 @@ async def test_writing_the_found_website_is_its_own_receipted_change() -> None:
         writes = (await s.scalars(select(Receipt).where(Receipt.tenant_id == tenant, Receipt.action == "write"))).all()
     assert sorted(r.field for r in records) == ["domain", "impressum"] and all(r.committed for r in records)
     assert sorted(w.payload["field"] for w in writes) == ["domain", "impressum"]
+
+
+async def test_an_error_on_one_candidate_is_retried_after_a_week_not_a_quarter() -> None:
+    """The own domain was down; the contact's mail domain has no Impressum.
+    The company is "error", not "no Impressum": asked again after a week."""
+    tenant = uuid.uuid4()
+    cid = await _company(tenant, "Tempton Group GmbH", domain="tempton.de", emails=("m.mustermann@tempton-gruppe.de",))
+    down = _Fetcher({"https://tempton.de/": (503, None), "https://tempton-gruppe.de/": (200, "<p>Willkommen</p>")})
+    assert (await _run(tenant, down))["error"] == 1
+    assert (await _get(cid)).impressum["status"] == "error"
+    assert (await _run(tenant, _Fetcher(_tempton()), NOW + dt.timedelta(days=8)))["verified"] == 1

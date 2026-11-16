@@ -11,7 +11,7 @@ discipline applied to employers (`sites.py`):
 
   ads (text + the BA's `externeURL`) → `domains.domain_candidates`
     → `SiteFetcher` (robots.txt, identified, paced, public hosts only)
-    → `find_impressum_link` → `parse_impressum`
+    → `find_impressum_links` → `parse_impressum`
     → `names_firm`: the Impressum must name THIS employer as its operator.
 
 Only then are facts kept. A parent company's or a job board's Impressum is
@@ -42,7 +42,7 @@ from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.domain.hub.adapters.impressum import find_impressum_link, names_firm, parse_impressum
+from app.domain.hub.adapters.impressum import find_impressum_links, names_firm, parse_impressum
 from app.domain.hub.adapters.partner_pages import page_text
 from app.domain.hub.domains import domain_candidates, registrable_domain
 from app.domain.hub.models import (
@@ -167,17 +167,38 @@ async def _ads(session: AsyncSession, company_id: uuid.UUID) -> list[tuple[str, 
     return out
 
 
+#: Where an Impressum usually sits when the homepage links none we recognise
+#: (2026-11-16: 76 of 687 workspace companies read "ohne Impressum" with
+#: only the link and `/impressum` tried).
+IMPRESSUM_PATHS = ("/impressum", "/imprint", "/impressum.html", "/impressum/", "/de/impressum", "/legal-notice")
+#: Pages tried after the homepage, at most — each one a paced request.
+MAX_IMPRESSUM_PAGES = 7
+
+
 async def fetch_impressum(fetcher, domain: str) -> _Page:
-    """A domain's homepage, then its Impressum (the linked page, else /impressum).
+    """A domain's homepage, then its Impressum: the linked page first (as
+    before), then other Impressum-like links, then `IMPRESSUM_PATHS` — until
+    one reads as an Impressum. A first page that is blocked or failed ends the
+    search as before; a later one ends it too, reported as the first page.
     Shared with the workspace companies' check (`companies/impressum.py`)."""
     home = await fetcher.get(f"https://{domain}/")
-    page, impressum_url = home, None
-    if home.status == 200:
-        site = registrable_domain(urlparse(home.final_url).hostname) or domain
-        impressum_url = find_impressum_link(home.html, home.final_url, site) or urljoin(home.final_url, "/impressum")
-        page = await fetcher.get(impressum_url)
-    text = page_text(page.html) if page.status == 200 else ""
-    return _Page(url=home.url, impressum_url=impressum_url, status=page.status, text=text, note=page.note)
+    if home.status != 200:
+        return _Page(url=home.url, impressum_url=None, status=home.status, text="", note=home.note)
+    site = registrable_domain(urlparse(home.final_url).hostname) or domain
+    tries = find_impressum_links(home.html, home.final_url, site)
+    tries += [u for path in IMPRESSUM_PATHS if (u := urljoin(home.final_url, path)) not in tries]
+    first: _Page | None = None
+    for url in tries[:MAX_IMPRESSUM_PAGES]:
+        page = await fetcher.get(url)
+        text = page_text(page.html) if page.status == 200 else ""
+        found = _Page(url=home.url, impressum_url=url, status=page.status, text=text, note=page.note)
+        if verdict(page.status, parse_impressum(text).is_impressum, True) == SITE_VERIFIED:
+            return found  # reads as an Impressum; whose it is, the caller decides
+        if first is None:
+            first = found
+        if page.status in (STATUS_BLOCKED, STATUS_ERROR, 401, 403, 408, 429) or page.status >= 500:
+            break  # the site said no, or not now: no further paths asked
+    return first
 
 
 async def _check(fetcher, name: str, ads, pages: dict[str, asyncio.Task]) -> list[_Try]:
