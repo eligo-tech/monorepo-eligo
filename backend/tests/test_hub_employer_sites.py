@@ -252,3 +252,62 @@ async def test_a_suppressed_employer_takes_its_checks_with_it() -> None:
         await suppression.suppress(s, scope="company", name="Alois Mayr Bauwaren GmbH", reason="objection")
     async with SessionLocal() as s:
         assert await s.scalar(select(func.count()).select_from(HubSiteCheck)) == 0
+
+
+# ---------------------------------------------------------------------------
+# More Impressum pages: other link labels, then a short list of usual paths
+# ---------------------------------------------------------------------------
+
+_TEMPTON_TEXT = _html((FX / "tempton_de.txt").read_text())
+
+
+async def test_an_impressum_at_imprint_is_found_when_impressum_is_missing() -> None:
+    fetcher = _Fetcher({
+        "https://tempton.de/": (200, "<a href='/jobs'>Jobs</a>"),
+        "https://tempton.de/imprint": (200, _TEMPTON_TEXT),
+    })
+    page = await employer_sites.fetch_impressum(fetcher, "tempton.de")
+    assert page.status == 200 and page.impressum_url == "https://tempton.de/imprint"
+    assert "DE252406571" in page.text.replace(" ", "")
+    assert fetcher.requested == ["https://tempton.de/", "https://tempton.de/impressum", "https://tempton.de/imprint"]
+
+
+async def test_a_rechtliche_hinweise_link_is_followed_after_the_impressum_link_fails() -> None:
+    fetcher = _Fetcher({
+        "https://tempton.de/": (
+            200,
+            '<a href="/impressum">Impressum</a> <a href="/rechtliches">Rechtliche Hinweise</a>'
+            ' <a href="https://other.de/impressum">Impressum</a>',
+        ),
+        "https://tempton.de/impressum": (200, "<p>Seite im Aufbau</p>"),
+        "https://tempton.de/rechtliches": (200, _TEMPTON_TEXT),
+    })
+    page = await employer_sites.fetch_impressum(fetcher, "tempton.de")
+    assert page.impressum_url == "https://tempton.de/rechtliches" and page.text
+    assert not any("other.de" in u for u in fetcher.requested)  # same site only, as before
+
+
+async def test_the_linked_impressum_is_read_without_trying_other_paths() -> None:
+    fetcher = _Fetcher(_tempton())
+    page = await employer_sites.fetch_impressum(fetcher, "tempton.de")
+    assert page.impressum_url == "https://tempton.de/impressum"
+    assert fetcher.requested == ["https://tempton.de/", "https://tempton.de/impressum"]
+
+
+async def test_without_any_impressum_the_tries_are_bounded_and_the_first_is_reported() -> None:
+    fetcher = _Fetcher({"https://tempton.de/": (200, "<a href='/jobs'>Jobs</a>")})
+    page = await employer_sites.fetch_impressum(fetcher, "tempton.de")
+    assert page.impressum_url == "https://tempton.de/impressum" and page.status == 404 and page.text == ""
+    assert len(fetcher.requested) == len(set(fetcher.requested)) <= 1 + employer_sites.MAX_IMPRESSUM_PAGES
+    assert "https://tempton.de/de/impressum" in fetcher.requested
+
+
+async def test_a_blocked_impressum_is_not_worked_around() -> None:
+    fetcher = _Fetcher({
+        "https://tempton.de/": (200, '<a href="/impressum">Impressum</a>'),
+        "https://tempton.de/impressum": (sites.STATUS_BLOCKED, None),
+        "https://tempton.de/imprint": (200, _TEMPTON_TEXT),
+    })
+    page = await employer_sites.fetch_impressum(fetcher, "tempton.de")
+    assert page.status == sites.STATUS_BLOCKED
+    assert fetcher.requested == ["https://tempton.de/", "https://tempton.de/impressum"]

@@ -349,3 +349,26 @@ def find_impressum_link(html: str | None, base_url: str, domain: str) -> str | N
             if safe_url(url, domain):
                 return url
     return None
+
+
+#: Wider than `_IMPRESSUM_LINK`: also "Rechtliche Hinweise", which is
+#: sometimes the Impressum and sometimes only a disclaimer — so these links are
+#: tried only after `find_impressum_link`'s, never instead of it.
+_ANY_IMPRESSUM_LINK = re.compile(
+    r"impressum|imprint|legal[\s_-]?notice|rechtliche[\s_-]?hinweise|anbieterkennzeichnung", re.IGNORECASE
+)
+
+
+def find_impressum_links(html: str | None, base_url: str, domain: str) -> list[str]:
+    """Every same-site link that may be the Impressum, in page order, without
+    repeats — `find_impressum_link`'s answer always first."""
+    out: list[str] = []
+    first = find_impressum_link(html, base_url, domain)
+    if first:
+        out.append(first)
+    for href, label in _LINK.findall(html or ""):
+        if _ANY_IMPRESSUM_LINK.search(href) or _ANY_IMPRESSUM_LINK.search(re.sub(r"<[^>]+>", " ", label)):
+            url = urljoin(base_url, href.strip())
+            if safe_url(url, domain) and url not in out:
+                out.append(url)
+    return out
