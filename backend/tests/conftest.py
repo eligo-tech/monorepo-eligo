@@ -18,6 +18,8 @@ os.environ.setdefault("ELIGO_DATABASE_URL", "sqlite+aiosqlite:///./ci_test.db")
 os.environ.setdefault("ELIGO_ADMIN_DATABASE_URL", os.environ["ELIGO_DATABASE_URL"])
 os.environ.setdefault("ELIGO_LLM_PROVIDER", "heuristic")
 os.environ.setdefault("ELIGO_DB_SSL", "false")
+# No web search from tests, even with a key in a local `.env`.
+os.environ.setdefault("ELIGO_SEARCH_API_KEY", "")
 
 import pytest  # noqa: E402 — after the env is pinned, before fixtures use the app
 

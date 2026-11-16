@@ -838,18 +838,27 @@ async def auto_link_companies(
 @router.post("/companies/impressum/check")
 async def check_company_impressum(
     limit: int = Query(default=20, ge=1, le=50),
+    search: int | None = Query(default=None, ge=0, le=50),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
 ) -> dict[str, int]:
     """ELI-39: workspace companies Markt cannot answer for — their website
-    (own domain, else contacts' company mail), its Impressum, VAT id and
-    register, through the verification gate. Machine-only (RULE 1): the daily
-    hub-company-links workflow calls it in batches; each workspace in its own
-    session, pinned to it."""
-    from app.domain.companies import impressum
+    (own domain, else contacts' company mail, else a web search when
+    `ELIGO_SEARCH_API_KEY` is set; at most `search` queries, default `limit`),
+    its Impressum, VAT id and register, through the verification gate.
+    Machine-only (RULE 1): the daily hub-company-links workflow calls it in
+    batches; each workspace in its own session, pinned to it."""
+    from app.core.config import settings
+    from app.domain.companies import impressum, website_search
     from app.domain.hub import sites
 
+    searcher = website_search.from_settings(
+        api_key=settings.search_api_key, budget=limit if search is None else search
+    )
     async with sites.SiteFetcher() as fetcher:
-        return await impressum.check_all_workspaces(fetcher=fetcher, limit=limit)
+        if searcher is None:
+            return await impressum.check_all_workspaces(fetcher=fetcher, limit=limit)
+        async with searcher:
+            return await impressum.check_all_workspaces(fetcher=fetcher, limit=limit, searcher=searcher)
 
 
 @router.post("/agencies/sites/check")

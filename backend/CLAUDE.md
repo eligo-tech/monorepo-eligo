@@ -314,7 +314,20 @@ These are enforced in code. Do not route around them.
   only when unambiguous: two different valid VAT ids, or two different
   registers of one kind, read as nothing. `company_switchboards` serves Markt's
   reading first, else this one; `GET /companies/{id}/register` feeds the
-  Mandate's Stammdaten.
+  Mandate's Stammdaten. **Website finder** (`companies/website_search.py`,
+  only with `ELIGO_SEARCH_API_KEY`): when the own candidates are none or gave
+  `not_named`/`no_impressum`, name (+ town) + "Impressum" goes to the Brave
+  Search API; result domains (`hub.domains.search_usable`: `_usable` minus
+  directories, registers, social networks — `_DIRECTORIES`, applied to search
+  results ONLY, never to a domain the workspace holds) are tried AFTER the own
+  ones through the same checks. Kept on `impressum.search` (once per 90 days or
+  on a rename; a failed search after a day; a read cut short keeps its answer
+  as `pending`), `found_by: "search"` on the reading, "found by web search" in
+  its provenance. Paced 1 req/s, budget per request (`?search=`, default
+  `limit`), spent before the await and reserved for companies due only for the
+  finder (their own sites are not re-fetched); a search error is "no
+  candidates". httpx's request-URL log lines for the search host are dropped —
+  the query is a workspace's client list.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.

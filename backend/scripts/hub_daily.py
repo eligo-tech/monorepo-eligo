@@ -484,7 +484,8 @@ async def _check_company_impressum(client: httpx.AsyncClient, *, budget: int) ->
     register from their Impressum, in batches. Stops when the server has
     nothing left to check."""
     totals = {"checked": 0, "verified": 0, "not_named": 0, "no_impressum": 0,
-              "blocked": 0, "error": 0, "no_domain": 0, "rejected": 0}
+              "blocked": 0, "error": 0, "no_domain": 0, "rejected": 0,
+              "searched": 0, "search_failed": 0}
     empty = 0
     while totals["checked"] < budget:
         size = min(_COMPANY_IMPRESSUM_BATCH, budget - totals["checked"])
@@ -997,7 +998,8 @@ async def main() -> int:
                 f"Unternehmen-Impressum: {c['checked']} geprüft, {c['verified']} bestätigt, "
                 f"{c['no_domain']} ohne Website, {c['not_named']} fremdes Impressum, "
                 f"{c['no_impressum']} ohne Impressum, {c['blocked']} gesperrt, {c['error']} Fehler, "
-                f"{c['rejected']} nicht bestätigt"
+                f"{c['rejected']} nicht bestätigt; Websuche: {c['searched']} Anfragen, "
+                f"{c['search_failed']} fehlgeschlagen"
             )
         return 0
 
