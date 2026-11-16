@@ -319,3 +319,51 @@ async def test_no_partner_page_rows_means_no_fetch() -> None:
             "attempted": 0, "stored": 0, "failed": 0, "skipped": 0,
         }
         assert await s.scalar(select(func.count(HubObservation.id))) == 0
+
+
+async def test_the_never_read_queue_is_one_index_shaped_query(corpus) -> None:
+    """Disk IO (2026-11-16): the queue was one query — `is_active IS true`,
+    an OR of "never read" and "throttled a week ago", ordered by a CASE on
+    watched employers — which no index can serve. On prod each 20-ad batch
+    seq-scanned the ads table and sorted ~134k due rows (EXPLAIN: Parallel
+    Seq Scan + Sort): 20 calls, ~10 GB read in one weekly run. The bulk of the
+    queue (never read, any employer) is now its own query in exactly the
+    shape of the partial index `ix_hub_posting_partner_due`: bare predicates,
+    newest first, LIMIT — an index walk that stops at the batch size."""
+    from sqlalchemy import event
+
+    from app.core.database import engine
+
+    seen: list[str] = []
+
+    def record(conn, cursor, statement, params, context, many):
+        s = statement.lstrip()
+        if s.upper().startswith("SELECT") and "FROM hub_job_postings" in s and "source_page_fetched_at IS NULL" in s:
+            seen.append(" ".join(s.split()))
+
+    fetcher = FakeFetcher({u: PartnerPage(u, u, 404, None) for u in (
+        "https://board.example/other", "https://www.jobexport.de/detail/1", "https://www.heyjobs.co/x")})
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
+    try:
+        async with SessionLocal() as s:
+            await service.fetch_missing_partner_pages(s, fetcher=fetcher, limit=10)
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", record)
+
+    plain = [q for q in seen if " OR " not in q.split(" WHERE ", 1)[1] and "hub_company_id IN" not in q]
+    assert plain, seen  # the never-read, any-employer queue as its own query
+    where = plain[0].split(" WHERE ", 1)[1]
+    assert "is_active IS" not in where, plain[0]
+    assert "ORDER BY hub_job_postings.posted_at DESC" in where and "LIMIT" in where, plain[0]
+
+
+def test_the_retry_index_predicate_names_every_throttled_status() -> None:
+    """PARTNER_RETRY spells the statuses out (a cached plan cannot match a
+    parameterised IN list to an index predicate), so it must follow THROTTLED."""
+    import re
+
+    from app.domain.hub.adapters.partner_pages import THROTTLED
+    from app.domain.hub.models import PARTNER_RETRY
+
+    listed = re.search(r"source_page_status IN \(([^)]*)\)", PARTNER_RETRY).group(1)
+    assert {int(v) for v in listed.split(",")} == set(THROTTLED)

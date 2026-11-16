@@ -68,6 +68,13 @@ from app.domain.common.types import JSONBDict, JSONDict, JSONList
 #: (tests/test_hub_families.py fails until the two agree).
 JOB_FAMILY_RULES = 1
 #: Open ads to (re)label: never labelled, or labelled under older rules.
+#: The partner-page queue (`service.fetch_missing_partner_pages`, migration 0072).
+PARTNER_DUE = "is_active AND source_url IS NOT NULL AND source_page_fetched_at IS NULL"
+#: Throttled partner pages (429/503 = `adapters.partner_pages.THROTTLED`), due
+#: again a week later. Literal values, not bind parameters: a cached generic
+#: plan cannot prove a parameterised IN list implies the index predicate.
+PARTNER_RETRY = "is_active AND source_url IS NOT NULL AND source_page_status IN (429, 503)"
+
 UNCLASSIFIED = f"is_active AND (job_family_rules IS NULL OR job_family_rules < {JOB_FAMILY_RULES})"
 
 #: Version of the contact parser (`hub/contacts.py`) whose output is stored in
@@ -317,6 +324,22 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
             "id",
             postgresql_where=text(CONTACTS_DUE),
             sqlite_where=text(CONTACTS_DUE),
+        ),
+        # The partner-page pass's queue (`service.fetch_missing_partner_pages`):
+        # never-read ads with a Quelle, newest first. Empties as it drains.
+        # Postgres only: SQLite cannot index NULLS LAST, and only Postgres
+        # needs the plan.
+        Index(
+            "ix_hub_posting_partner_due",
+            text("posted_at DESC NULLS LAST"),
+            postgresql_where=text(PARTNER_DUE),
+        ).ddl_if(dialect="postgresql"),
+        # Its retry half: the few throttled pages, by when they were tried.
+        Index(
+            "ix_hub_posting_partner_retry",
+            "source_page_fetched_at",
+            postgresql_where=text(PARTNER_RETRY),
+            sqlite_where=text(PARTNER_RETRY),
         ),
         # The model pass's queue (ELI-25): small, so the partial index is too.
         Index(
