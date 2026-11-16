@@ -55,6 +55,7 @@ from app.domain.hub.models import (
     HubJobPosting,
     HubObservation,
     HubPostingPayload,
+    PARTNER_RETRY,
 )
 from app.domain.hub.resolution import (
     extract_legal_form,
@@ -810,44 +811,59 @@ async def fetch_missing_partner_pages(
 
     from app.domain.hub.adapters.partner_pages import (
         STATUS_ROBOTS,
-        THROTTLED,
         strip_control,
     )
 
+    # Three small queries instead of one OR + CASE that no index can serve:
+    # on prod each 20-ad batch seq-scanned the ads table and sorted ~134k due
+    # rows (2026-11-16, ~10 GB a weekly run). Watched employers first (a few
+    # companies, via the company index); then never-read ads, newest first —
+    # exactly the partial index `ix_hub_posting_partner_due`, so the walk stops
+    # at the batch size; then the few throttled pages due again. Predicates are
+    # bare (`is_active`, not `IS true`) so the planner can match the index.
+    now = dt.datetime.now(dt.UTC)
+    never = and_(
+        HubJobPosting.is_active,
+        HubJobPosting.source_url.is_not(None),
+        HubJobPosting.source_page_fetched_at.is_(None),
+    )
+    # The index predicate verbatim (`ix_hub_posting_partner_retry`), so even a
+    # cached generic plan can use it; THROTTLED is pinned to it by a test.
+    retry = and_(
+        sql_text(PARTNER_RETRY),
+        HubJobPosting.source_page_fetched_at < now - dt.timedelta(days=PARTNER_RETRY_AFTER_DAYS),
+    )
+
+    async def claim(where, n: int, taken: list) -> list:
+        if n <= 0:
+            return []
+        stmt = select(HubJobPosting).where(where)
+        if taken:
+            stmt = stmt.where(HubJobPosting.id.not_in([r.id for r in taken]))
+        return list(
+            (
+                await session.execute(
+                    stmt.order_by(HubJobPosting.posted_at.desc().nulls_last())
+                    .limit(n)
+                    # The weekly job and the manual "partner pages" workflow may
+                    # run at once. Without this both select the same rows and
+                    # fetch every page twice. Rows are held until the batch
+                    # commits; the other run takes the next ones. (A no-op on
+                    # SQLite, which has one writer anyway.)
+                    .with_for_update(skip_locked=True, of=HubJobPosting)
+                )
+            ).scalars()
+        )
+
+    rows: list = []
     names = await _watched_employer_names()
-    watched = (
-        HubJobPosting.hub_company_id.in_(
+    if names:
+        watched = HubJobPosting.hub_company_id.in_(
             select(HubCompany.id).where(HubCompany.normalized_name.in_(names))
         )
-        if names
-        else literal(False)
-    )
-    rows = (
-        await session.execute(
-            select(HubJobPosting)
-            .where(
-                HubJobPosting.is_active.is_(True),
-                HubJobPosting.source_url.is_not(None),
-                or_(
-                    HubJobPosting.source_page_fetched_at.is_(None),
-                    and_(
-                        HubJobPosting.source_page_status.in_(THROTTLED),
-                        HubJobPosting.source_page_fetched_at
-                        < dt.datetime.now(dt.UTC)
-                        - dt.timedelta(days=PARTNER_RETRY_AFTER_DAYS),
-                    ),
-                ),
-            )
-            .order_by(case((watched, 0), else_=1), HubJobPosting.posted_at.desc().nulls_last())
-            .limit(limit)
-            # The nightly job and the manual "partner pages" workflow may run at
-            # once. Without this both select the same never-attempted rows and
-            # fetch every page twice. Rows are held until the batch commits;
-            # the other run skips them and takes the next ones. (A no-op on
-            # SQLite, which has one writer anyway.)
-            .with_for_update(skip_locked=True, of=HubJobPosting)
-        )
-    ).scalars().all()
+        rows += await claim(and_(watched, or_(never, retry)), limit, rows)
+    rows += await claim(never, limit - len(rows), rows)
+    rows += await claim(retry, limit - len(rows), rows)
 
     rules = await suppression.load(session)
     stored = failed = skipped = 0
