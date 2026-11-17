@@ -1248,3 +1248,45 @@ export interface ContactPageDTO {
   truncated: boolean
   companies: CompanyFacetDTO[]
 }
+
+/** ELI-44: a Wiedervorlage — a dated to-do on a lead, a manager or a candidate. */
+export interface FollowUpDTO {
+  id: string
+  manager_id: string | null
+  candidate_id: string | null
+  source_interaction_id: string | null
+  /** The recruiter's calendar day, `YYYY-MM-DD`. */
+  due_date: string
+  /** Wall-clock time, `HH:MM:SS`, when one was given. */
+  due_time: string | null
+  text: string
+  status: 'open' | 'done'
+  origin: 'manual' | 'note'
+  created_at: string
+  created_by_name: string | null
+  done_at: string | null
+  done_by_name: string | null
+  subject_kind: 'lead' | 'manager' | 'candidate'
+  person_name: string
+  company_id: string | null
+  company_name: string | null
+}
+
+/** ELI-44: a follow-up date read out of a note — offered, never created. */
+export interface FollowUpSuggestionDTO {
+  due_date: string
+  phrase: string
+}
+
+export interface FollowUpWrite {
+  manager_id?: string | null
+  candidate_id?: string | null
+  due_date: string
+  due_time?: string | null
+  text: string
+  source_interaction_id?: string | null
+  origin?: 'manual' | 'note'
+}
+
+/** Who a follow-up is about — exactly one of the two. */
+export type FollowUpSubject = { managerId: string } | { candidateId: string }

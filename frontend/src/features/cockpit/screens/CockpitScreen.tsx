@@ -14,6 +14,7 @@ import { NextActionsSection } from '../sections/NextActionsSection'
 import { ProcessSection } from '../sections/ProcessSection'
 import { RevenueSection } from '../sections/RevenueSection'
 import { SignalsPanel } from '../sections/SignalsPanel'
+import { FollowUpsSection } from '../followups/FollowUpsSection'
 import { MandateDrawer } from './MandateDrawer'
 import { MandateView } from './MandateView'
 import { cn } from '@/lib/cn'
@@ -211,7 +212,10 @@ export function CockpitScreen({
 
         {/* The design's order, and it is an argument: what came in, what it is
             worth, where the work stands, what to do next — and only then the
-            scoring, which is a view ON that work rather than part of it. */}
+            scoring, which is a view ON that work rather than part of it.
+            ELI-44: the day's Wiedervorlagen come first — the recruiter's own
+            to-dos, before anything the system noticed. */}
+        <FollowUpsSection />
         <SignalsPanel signals={data.signals} />
         <RevenueSection slides={data.slides} closingIsLive={live.closing} />
         <ProcessSection

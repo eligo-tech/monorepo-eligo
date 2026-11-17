@@ -383,6 +383,16 @@ Three domain facts worth knowing before you add a field:
   output and how two systems can feed one workspace without colliding. Adding
   one = a module plus a line in the factory; nothing else changes, including
   the settings screen.
+- **`followups`** (ELI-44) are Wiedervorlagen: one row per dated to-do on
+  exactly one person (`manager_id` — Leads are managers — or
+  `candidate_id`, check constraint), open until marked done. Not a column
+  on `manager_interactions`: a note is what happened, a follow-up what is
+  still owed. `dates.suggest_dates` reads German date phrases out of a note
+  ("Anfang Februar" → first working day, a past month → next year) for
+  `POST /follow-ups/suggest`; it writes nothing — the UI offers, a person
+  confirms. Delete is admin-only (ELI-27); anyone marks done. The ELI-22/38
+  call-back date (`manager_interactions.next_action_at`) is separate and
+  unchanged.
 - **`candidates`** carries the Qualifikationsgespräch set:
   `industries` (plural — the single `industry` column is gone from the code),
   `employment_form`, `salary_minimum` next to `salary_expectation`,

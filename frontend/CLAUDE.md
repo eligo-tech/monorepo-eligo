@@ -66,7 +66,16 @@ step. The hash carries the choice so a per-job view
 can be sent to a colleague (`resolveScreen` takes the part before the slash,
 `resolveDetail` the part after). The section order follows
 `data/design/cockpit_update.html`: 01 Umsatz → 02 Laufende Prozesse (grouped by
-mandate) → Nächste beste Aktionen → 03 Jobscoring → 04 Wettbewerb.
+mandate) → Nächste beste Aktionen → 03 Jobscoring → 04 Wettbewerb. Above all of
+them sit the **Wiedervorlagen** (ELI-44, `followups/FollowUpsSection.tsx`):
+the workspace's open follow-ups, overdue (coral) → heute → demnächst, each
+linked to its person with "Erledigt" and "In Kalender" (.ics built in the
+browser, `ui/followUps.ts`); the count due today is the badge on the Cockpit
+entry of the section picker. The same list per person sits on the manager
+page, the Leads row and the candidate's notes (`followups/PersonFollowUps`);
+after a note is saved, `followups/NoteFollowUpOffer` offers the date the note
+names ("Wiedervorlage am … anlegen?") — nothing is created without the click.
+`followups/` fetches; `ui/FollowUp*.tsx` stay presentational.
 
 **Screens are ordered as a drill-down** — `cockpit` → `kandidaten` →
 `kandidatenwelt`: the whole book of business, the pool it draws on, then one

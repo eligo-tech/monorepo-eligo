@@ -32,6 +32,7 @@ from app.core.config import settings
 from app.domain.candidates.models import Candidate
 from app.domain.documents.models import CandidateDocument
 from app.domain.erasure.models import ErasureRequest, TenantSuppression
+from app.domain.followups.models import FollowUp
 from app.domain.interviews.models import Interview
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction
@@ -279,8 +280,16 @@ async def erase_candidate(
     )
     per_candidate = {
         model: await _ids(session, model.id, model.tenant_id == t, model.candidate_id == cand.id)
-        for model in (MatchReceipt, CandidateDocument, CandidateNotice, ManagerInteraction, Interview)
+        # FollowUp first: it may point at one of the notes deleted after it.
+        for model in (FollowUp, MatchReceipt, CandidateDocument, CandidateNotice, ManagerInteraction, Interview)
     }
+    # A manager's follow-up confirmed from a note naming this candidate
+    # carries that note's text: it goes with the note.
+    per_candidate[FollowUp] = sorted({
+        *per_candidate[FollowUp],
+        *await _ids(session, FollowUp.id, FollowUp.tenant_id == t,
+                    FollowUp.source_interaction_id.in_(per_candidate[ManagerInteraction])),
+    })
     linked = {str(cand.id), *map(str, applications), *map(str, steps), *map(str, assessments)}
     for ids in per_candidate.values():
         linked |= set(map(str, ids))
@@ -333,6 +342,9 @@ async def erase_manager(
     t = tenant_id
     notes = await _ids(session, ManagerInteraction.id, ManagerInteraction.tenant_id == t,
                        ManagerInteraction.manager_id == boss.id)
+    # Theirs, and any (e.g. a candidate's) copied from a note about them.
+    follow_ups = await _ids(session, FollowUp.id, FollowUp.tenant_id == t,
+                            or_(FollowUp.manager_id == boss.id, FollowUp.source_interaction_id.in_(notes)))
     linked = {str(boss.id), *map(str, notes)}
     records = await _ids(session, EnrichmentRecord.id, EnrichmentRecord.tenant_id == t,
                          EnrichmentRecord.entity_id.in_([boss.id, *notes]))
@@ -358,7 +370,7 @@ async def erase_manager(
             ],
         ),
         receipt_ids=receipts,
-        deletions=[(ManagerInteraction, notes), (EnrichmentRecord, records),
+        deletions=[(FollowUp, follow_ups), (ManagerInteraction, notes), (EnrichmentRecord, records),
                    (AgentProposal, proposals), (Manager, [boss.id])],
     )
 
