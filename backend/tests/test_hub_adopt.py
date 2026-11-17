@@ -64,11 +64,11 @@ async def test_adoption_creates_the_company_and_leaves_a_receipt(
     assert company.name == "Bayoonet AG"
     assert company.location == "Berlin"
     assert company.domain == "bayoonet.de"
-    assert company.is_client is True
+    assert company.is_client is False  # a Lead until a mandate (ELI-36)
     assert company.tenant_id == TENANT
     # the corpus row now points at the tenant's own record
     assert link.company_id == company.id
-    assert link.relationship == "client"
+    assert link.relationship == "prospect"
     assert manager is None
     assert after > before, "the crossing must leave a receipt"
 
