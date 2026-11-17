@@ -745,3 +745,90 @@ async def test_hub_daily_prints_what_it_had_when_the_api_stays_down(monkeypatch,
             await daily._check_company_impressum(c, budget=100)
     out = capsys.readouterr()
     assert "20 geprüft, 5 bestätigt" in out.out + out.err
+
+
+# --- overall totals (the job's "Unternehmen gesamt" line) ---------------------
+
+
+async def test_totals_count_every_company_of_the_workspace_by_state() -> None:
+    """The per-run line only says what one run did; the totals say how many
+    companies carry a VAT id or register at all, and why the rest do not."""
+    tenant = uuid.uuid4()
+    markt = await _company(tenant, "Tempton Group GmbH", domain="tempton.de")
+    await _linked_markt_board(tenant, markt, {"vat_id": "DE252406571"})
+    phone_only = await _company(tenant, "Phone Only GmbH")
+    await _linked_markt_board(tenant, phone_only, {"phone": "+49 201 1"})
+    own = await _company(tenant, "Tempton Personaldienstleistungen GmbH", domain="tempton.de")
+    await _company(tenant, "Andreas Uwe Weiss", domain="weiss-personal.de")  # sole trader
+    await _company(tenant, "Never Checked GmbH")
+    async with SessionLocal() as s:
+        for cid, facts in (
+            (own, {"status": "verified", "vat_id": "DE252406571", "register": "HRB 28871",
+                   "fetched_at": NOW.isoformat(), "checked_at": NOW.isoformat()}),
+            (phone_only, {"status": "not_named", "checked_at": NOW.isoformat(),
+                          "search": {"name": "Phone Only GmbH", "at": NOW.isoformat(), "domains": []}}),
+        ):
+            (await s.get(Company, cid)).impressum = facts
+        await s.commit()
+    await _company(uuid.uuid4(), "Other Workspace GmbH")  # never counted here
+
+    async with SessionLocal() as s:
+        t = await impressum.totals(s, tenant_id=tenant)
+    assert t["companies"] == 5 and t["sole_traders"] == 1
+    assert t["markt"] == 1 and t["own"] == 1 and t["filled"] == 2
+    assert t["open"] == 2 and t["unchecked"] == 1 and t["not_named"] == 1
+    assert t["searched"] == 1
+
+
+def test_the_totals_route_is_machine_only() -> None:
+    from tests.test_operator_endpoints import DECLARED_OPERATOR_ROUTES
+
+    assert ("GET", "/hub/companies/impressum/totals") in DECLARED_OPERATOR_ROUTES
+
+
+async def test_the_totals_route_answers(monkeypatch) -> None:
+    import uuid as _uuid
+
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.config import settings
+    from app.main import app
+
+    token = "totals-" + _uuid.uuid4().hex * 2
+    monkeypatch.setattr(settings, "ingest_token", token)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        r = await client.get("/api/v1/hub/companies/impressum/totals", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert {"tenants", "companies", "filled", "markt", "own", "open", "sole_traders", "unchecked"} <= r.json().keys()
+
+
+def test_hub_daily_totals_line() -> None:
+    from scripts.hub_daily import _company_totals_line
+
+    line = _company_totals_line({
+        "tenants": 5, "companies": 687, "filled": 410, "markt": 300, "own": 110, "open": 250,
+        "sole_traders": 27, "unchecked": 3, "no_domain": 100, "not_named": 60, "no_impressum": 50,
+        "blocked": 10, "error": 7, "rejected": 0, "verified": 20, "searched": 200,
+    })
+    assert line.startswith("687 in 5 Workspaces · 410 mit USt-ID/HRB (300 aus Markt, 110 eigenes Impressum)")
+    assert "250 offen" in line and "100 ohne Website" in line and "27 Einzelunternehmer" in line
+
+
+async def test_hub_daily_prints_the_totals_and_survives_when_they_fail(monkeypatch, capsys) -> None:
+    import httpx
+
+    import scripts.hub_daily as daily
+
+    monkeypatch.setattr(daily, "_RETRY_WAITS", (0.0,))
+
+    def ok(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"tenants": 1, "companies": 2, "filled": 1, "markt": 1, "own": 0,
+                                         "open": 1, "sole_traders": 0, "unchecked": 1})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(ok), base_url="http://t") as c:
+        await daily._print_company_totals(c)
+    assert "Unternehmen gesamt: 2 in 1 Workspaces" in capsys.readouterr().out
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(502)), base_url="http://t") as c:
+        await daily._print_company_totals(c)  # must not raise
+    assert "Unternehmen gesamt" in capsys.readouterr().err

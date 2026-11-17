@@ -634,3 +634,56 @@ async def check_all_workspaces(*, fetcher, limit: int, searcher=None) -> dict[st
         total["tenants"] += 1
     logger.info("company impressum: %s", total)
     return total
+
+
+#: Keys of `totals`: the open companies broken down by their stored outcome.
+TOTALS_OPEN = (*COUNTS, "unchecked")
+TOTALS_KEYS = ("companies", "filled", "markt", "own", "open", "sole_traders", "searched", *TOTALS_OPEN)
+
+
+async def totals(session: AsyncSession, *, tenant_id: uuid.UUID) -> dict[str, int]:
+    """Read-only: how many of this workspace's companies carry a VAT id or a
+    register (Markt's reading first, as `company_switchboards`, else their
+    own), and why the rest do not — by the outcome stored on each."""
+    from app.domain.hub.call_list import corpus_switchboards
+
+    companies = (await session.scalars(select(Company).where(Company.tenant_id == tenant_id))).all()
+    boards = await corpus_switchboards(session, tenant_id, [c.id for c in companies])
+    out = {**dict.fromkeys(TOTALS_KEYS, 0), "companies": len(companies)}
+    for c in companies:
+        facts = c.impressum or {}
+        if isinstance(facts.get("search"), dict):
+            out["searched"] += 1
+        markt = boards.get(c.id) or {}
+        if markt.get("vat_id") or markt.get("register"):
+            out["markt"] += 1
+        elif board(c) is not None:
+            out["own"] += 1
+        elif looks_like_natural_person(c.name):
+            out["sole_traders"] += 1
+        else:
+            out["open"] += 1
+            status = facts.get("status")
+            out[status if status in COUNTS else "unchecked"] += 1
+    out["filled"] = out["markt"] + out["own"]
+    return out
+
+
+async def totals_all_workspaces() -> dict[str, int]:
+    """`totals` summed over every workspace, each read in its own session
+    pinned to it (as `check_all_workspaces`)."""
+    from app.core.database import SessionLocal, current_tenant_var
+    from app.domain.tenants.models import Tenant
+
+    async with SessionLocal() as session:
+        tenants = (await session.scalars(select(Tenant.id).order_by(Tenant.id))).all()
+    total = dict.fromkeys(TOTALS_KEYS, 0)
+    for tenant_id in tenants:
+        token = current_tenant_var.set(str(tenant_id))
+        try:
+            async with SessionLocal() as session:
+                for key, value in (await totals(session, tenant_id=tenant_id)).items():
+                    total[key] += value
+        finally:
+            current_tenant_var.reset(token)
+    return {"tenants": len(tenants), **total}
