@@ -369,3 +369,20 @@ def test_a_summary_longer_than_a_page_breaks_inside_its_row() -> None:
     assert len(reader.pages) > 1
     # The foot is on every page.
     assert all("Firma" in (p.extract_text() or "") for p in reader.pages)
+
+
+async def test_a_layout_failure_carries_no_candidate_text(monkeypatch) -> None:
+    """ReportLab's errors quote the flowable; a crash report must not."""
+    from app.domain.presentation import service
+
+    def boom(*_a, **_k):
+        raise ValueError("Flowable too large: Nesim Celik verbindet …")
+
+    monkeypatch.setattr(service.render, "render", boom)
+    cid = await _candidate()
+    async with SessionLocal() as s:
+        comp = await service.compose(s, tenant_id=TENANT, candidate_id=cid, variant=service.V.COVER)
+    with pytest.raises(service.RenderFailed) as info:
+        service.assemble(comp)
+    assert "Celik" not in str(info.value)
+    assert info.value.__cause__ is None and info.value.__suppress_context__

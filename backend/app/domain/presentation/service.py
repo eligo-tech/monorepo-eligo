@@ -80,6 +80,10 @@ class InvalidLogo(ValueError):
     pass
 
 
+class RenderFailed(RuntimeError):
+    """The page could not be drawn. Carries no candidate text."""
+
+
 # ── Branding ──────────────────────────────────────────────────────────────
 
 
@@ -436,7 +440,12 @@ async def compose(
 
 def assemble(composition: Composition) -> bytes:
     """The cover sheet, then each file in order, as one PDF."""
-    cover = render.render(composition.sheet, composition.branding)
+    try:
+        cover = render.render(composition.sheet, composition.branding)
+    except Exception:  # noqa: BLE001
+        # ReportLab's layout errors quote the flowable — the candidate's own
+        # text. `from None` keeps it out of the log and the crash report.
+        raise RenderFailed("cover sheet could not be laid out") from None
     if not composition.documents:
         return cover
     writer = PdfWriter()
