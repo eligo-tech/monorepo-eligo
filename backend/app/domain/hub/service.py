@@ -2268,7 +2268,7 @@ async def adopt_company(
     actor: str | None = None,
     manager: dict | None = None,
     kind: str = EMPLOYER,
-    as_prospect: bool = False,
+    as_prospect: bool = True,
 ) -> tuple[Company, HubCompanyLink, object | None]:
     """Take a corpus company into this tenant's system-of-record.
 
@@ -2352,9 +2352,11 @@ async def adopt_company(
         name=hub_company.name,
         domain=hub_company.website_domain,
         location=hub_company.city,
-        # Adopting is what makes an observed employer an account. Tracking one
-        # is interest; this is the commitment, so it says so on the record.
-        # A lead's employer is a prospect until a mandate is won (ELI-22).
+        # Adopting makes an observed employer one of the workspace's own
+        # records — a Lead (prospect), not a client. Being picked from the
+        # market never makes a company a client — that is a separate, explicit
+        # step (ELI-22, ELI-36). `as_prospect=False` is kept for a caller that
+        # knows better.
         is_client=not as_prospect,
         source=f"hub:{hub_company.source}",
     )

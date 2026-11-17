@@ -750,9 +750,9 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
             {t('Ansprechpartner')}
           </Button>
           {adopted ? (
-            <span className="flex items-center gap-1.5 text-mint-400" title={t('Als Kunde übernommen')}>
+            <span className="flex items-center gap-1.5 text-mint-400" title={t('Als Lead übernommen')}>
               <Check className="h-4 w-4" />
-              {t('Kunde')}
+              {t('Lead')}
             </span>
           ) : (
             <Button onClick={() => setAdopting(true)} disabled={!anchorId}>
