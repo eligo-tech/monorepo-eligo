@@ -479,6 +479,20 @@ def _print_employer_sites(e: dict[str, int]) -> None:
 _COMPANY_IMPRESSUM_BATCH = 20
 
 
+def _company_impressum_line(c: dict[str, int]) -> str:
+    return (
+        f"{c['checked']} geprüft, {c['verified']} bestätigt, "
+        f"{c['no_domain']} ohne Website, {c['not_named']} fremdes Impressum, "
+        f"{c['no_impressum']} ohne Impressum, {c['blocked']} gesperrt, {c['error']} Fehler, "
+        f"{c['rejected']} nicht bestätigt; Websuche: "
+        + (
+            f"{c['searched']} Anfragen, {c['search_failed']} fehlgeschlagen"
+            if c["search_enabled"]
+            else "AUS (ELIGO_SEARCH_API_KEY im Backend nicht gesetzt)"
+        )
+    )
+
+
 async def _check_company_impressum(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
     """ELI-39: up to `budget` workspace companies' website, VAT id and
     register from their Impressum, in batches. Stops when the server has
@@ -489,8 +503,14 @@ async def _check_company_impressum(client: httpx.AsyncClient, *, budget: int) ->
     empty = 0
     while totals["checked"] < budget:
         size = min(_COMPANY_IMPRESSUM_BATCH, budget - totals["checked"])
-        response = await client.post(f"/hub/companies/impressum/check?limit={size}")
-        response.raise_for_status()
+        # Safe to repeat: a finished read is recorded, an unfinished one is
+        # picked again, and a paid search answer is kept. A deploy mid-run
+        # (2026-11-17) is ridden out; if the API stays down, say what got done.
+        try:
+            response = await _post_retrying(client, f"/hub/companies/impressum/check?limit={size}")
+        except httpx.HTTPError:
+            print(f"  abgebrochen nach {_company_impressum_line(totals)}", file=sys.stderr)
+            raise
         result = response.json()
         for key in totals:
             if key == "search_enabled":
@@ -997,17 +1017,7 @@ async def main() -> int:
             base_url=base, timeout=120.0, headers={"Authorization": f"Bearer {token}"}
         ) as client:
             c = await _check_company_impressum(client, budget=args.company_impressum_only)
-            print(
-                f"Unternehmen-Impressum: {c['checked']} geprüft, {c['verified']} bestätigt, "
-                f"{c['no_domain']} ohne Website, {c['not_named']} fremdes Impressum, "
-                f"{c['no_impressum']} ohne Impressum, {c['blocked']} gesperrt, {c['error']} Fehler, "
-                f"{c['rejected']} nicht bestätigt; Websuche: "
-                + (
-                    f"{c['searched']} Anfragen, {c['search_failed']} fehlgeschlagen"
-                    if c["search_enabled"]
-                    else "AUS (ELIGO_SEARCH_API_KEY im Backend nicht gesetzt)"
-                )
-            )
+            print(f"Unternehmen-Impressum: {_company_impressum_line(c)}")
         return 0
 
     if args.employer_sites_only > 0:
