@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import type { ContactRowDTO } from '@/api/types'
+import type { ContactRowDTO, ManagerDTO } from '@/api/types'
 import { t } from '@/i18n'
 
 import { ContactRow } from './ContactListScreen'
+import { ManagerProfile } from './ManagerProfile'
 
 // ELI-38 "Status on top": a lead's open next call is its status. It sits on
 // the name line — where the eye lands — not among the phone and e-mail links.
@@ -51,6 +52,41 @@ describe('ContactRow (ELI-38)', () => {
     const line = nameLine(row({ due: false, next_action_at: null }))
     expect(line).not.toContain(t('Fällig seit'))
     expect(line).not.toContain(t('Nächster Anruf'))
+  })
+})
+
+// ELI-49: the Art. 14 duty is shown and settled on the Manager page, not on
+// the Leads list — the list is for calling. The status itself stays.
+describe('ContactRow (ELI-49)', () => {
+  it('shows no Art. 14 badge or mark-as-notified link on a lead that owes the notice', () => {
+    const html = renderToStaticMarkup(<ContactRow row={row({ art14_outstanding: true })} showCompany onCalled={() => {}} />)
+    expect(html).not.toContain(t('Art. 14 offen'))
+    expect(html).not.toContain('Als informiert markieren')
+    expect(html).not.toContain('Mark as notified')
+  })
+
+  it('still shows and settles the Art. 14 status on the Manager page', () => {
+    const manager = {
+      id: 'm1',
+      company_id: 'c1',
+      full_name: 'Ina Dorsch',
+      role_title: null,
+      email: null,
+      phone: null,
+      linkedin_url: null,
+      source: 'public_web',
+      source_detail: 'https://example.invalid/ad',
+      art14_notified_at: null,
+      art14_outstanding: true,
+      notes: null,
+      status: 'active',
+      created_at: '2026-11-10T09:00:00Z',
+    } as unknown as ManagerDTO
+    const html = renderToStaticMarkup(
+      <ManagerProfile manager={manager} companyName="Telis Finanz AG" onClose={() => {}} onNotified={() => {}} />,
+    )
+    expect(html).toContain(t('Art. 14 offen'))
+    expect(html).toContain('Art. 14 erledigt')
   })
 })
 

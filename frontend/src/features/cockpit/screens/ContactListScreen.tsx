@@ -167,20 +167,8 @@ export function ContactRow({
   const today = localIsoDate()
   const [moving, setMoving] = useState(false)
   const [moveFailed, setMoveFailed] = useState(false)
-  // GDPR Art. 14: the notice is owed from adoption, not from vetting — so it
-  // is recorded here, before the person ever reaches Managers.
-  const markNotified = async () => {
-    setMoving(true)
-    setMoveFailed(false)
-    try {
-      await api.markManagerArt14Notified(row.manager_id)
-      onCalled()
-    } catch {
-      setMoveFailed(true)
-    } finally {
-      setMoving(false)
-    }
-  }
+  // GDPR Art. 14 (ELI-49): the notice is still owed from adoption, but it is
+  // shown and recorded on the Manager page, not on this calling list.
   const links = networkLinks(row)
   const promote = async () => {
     setMoving(true)
@@ -214,23 +202,6 @@ export function ContactRow({
               {followUp.due_time ? ` ${shortTime(followUp.due_time)}` : ''}
             </span>
           </Chip>
-        )}
-        {row.art14_outstanding && (
-          <>
-            <Chip tone="gold">
-              <span title={t('Aus einer öffentlichen Anzeige übernommen — die Information nach Art. 14 DSGVO steht noch aus.')}>
-                {t('Art. 14 offen')}
-              </span>
-            </Chip>
-            <button
-              type="button"
-              onClick={markNotified}
-              disabled={moving}
-              className="font-mono text-[11px] text-cockpit-faint underline hover:text-mint-400"
-            >
-              {t('Als informiert markieren')}
-            </button>
-          </>
         )}
         <span className="ml-auto font-mono text-[12px] text-cockpit-faint">
           {showCompany && (
