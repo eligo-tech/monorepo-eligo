@@ -36,7 +36,7 @@ import {
   X,
 } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
-import type { ManagerDTO, ManagerInteractionDTO } from '@/api/types'
+import type { CompanyMarketDTO, ManagerDTO, ManagerInteractionDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
 import { EraseSection } from '../erasure/EraseSection'
@@ -53,6 +53,7 @@ import {
 import { appointmentIcs, isAppointmentKind, splitAppointments } from '../ui/appointments'
 import { Button } from '../ui/forms'
 import { CONTACT_KEYS, ContactFields, contactDraftOf, contactPatch } from '../ui/contactFields'
+import { PhoneList, PhoneListEditor, phonesOf, phonesPatch } from '../ui/phoneList'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 
 const dateDe = (iso: string | null | undefined) =>
@@ -217,6 +218,9 @@ export function ManagerProfile({
   /** ELI-44: the note just saved, while its follow-up date is on offer. */
   const [offerFor, setOfferFor] = useState<SavedNote | null>(null)
   const [busy, setBusy] = useState(false)
+  // One read of the company page for the sidebar: its open jobs (ELI-33) and
+  // its Impressum switchboard, shown as "Zentrale (Firma)" (ELI-46).
+  const companyPage = useAsync(() => api.companyPage(initial.company_id), [initial.company_id])
 
   useEffect(() => {
     let alive = true
@@ -570,11 +574,7 @@ export function ManagerProfile({
               )}
             </Line>
             <Line label={t('Telefon')}>
-              {manager.phone && (
-                <a href={`tel:${manager.phone}`} className="text-mint-400 hover:underline">
-                  {manager.phone}
-                </a>
-              )}
+              <PhoneList phones={phonesOf(manager)} board={companyPage.data?.switchboard} />
             </Line>
             <Line label={t('Adresse')}>
               {address ? (
@@ -638,7 +638,7 @@ export function ManagerProfile({
             </RailSection>
           )}
 
-          <CompanyJobs companyId={manager.company_id} />
+          <CompanyJobs companyId={manager.company_id} market={companyPage.data?.market} />
 
           <RailSection title={t('Datensatz')}>
             <Line label={t('Angelegt')}>{dateDe(manager.created_at)}</Line>
@@ -680,6 +680,7 @@ function EditContact({
   onSaved: (updated: ManagerDTO) => void
 }) {
   const [draft, setDraft] = useState(() => contactDraftOf(manager))
+  const [phones, setPhones] = useState(() => phonesOf(manager))
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -690,6 +691,7 @@ function EditContact({
         type="button"
         onClick={() => {
           setDraft(contactDraftOf(manager))
+          setPhones(phonesOf(manager))
           setError(null)
           setOpen(true)
         }}
@@ -702,7 +704,11 @@ function EditContact({
   }
 
   async function save() {
-    const patch = contactPatch(manager, draft)
+    // ELI-46: numbers go as the whole list (`phones`); the single phone
+    // field is not shown here, so `phone` never appears in this patch.
+    const patch: Parameters<typeof api.updateManager>[1] = contactPatch(manager, draft)
+    const nextPhones = phonesPatch(manager, phones)
+    if (nextPhones) patch.phones = nextPhones
     if (Object.keys(patch).length === 0) {
       setOpen(false)
       return
@@ -714,7 +720,7 @@ function EditContact({
         api.updateManager(manager.id, { ...patch, override_suppression: override || undefined }),
       )
       // The PATCH answer carries no counts; keep the profile's, take the fields.
-      const fields = Object.fromEntries(CONTACT_KEYS.map((k) => [k, updated[k]]))
+      const fields = Object.fromEntries([...CONTACT_KEYS, 'phones' as const].map((k) => [k, updated[k]]))
       onSaved({ ...manager, ...fields })
       setOpen(false)
     } catch (e) {
@@ -731,7 +737,8 @@ function EditContact({
 
   return (
     <div className="mb-3 space-y-3">
-      <ContactFields value={draft} onChange={setDraft} />
+      <ContactFields value={draft} onChange={setDraft} withPhone={false} />
+      <PhoneListEditor value={phones} onChange={setPhones} />
       <div className="flex items-center gap-2">
         <Button tone="primary" onClick={() => void save()} disabled={busy}>
           <Check className="h-4 w-4" /> {busy ? t('Speichert…') : t('Speichern')}
@@ -820,9 +827,7 @@ function Appointments({
 
 /** ELI-33: what the manager's company is hiring for now, from Markt — so a
  *  call starts from the open roles. The full list is on the company page. */
-function CompanyJobs({ companyId }: { companyId: string }) {
-  const page = useAsync(() => api.companyPage(companyId), [companyId])
-  const market = page.data?.market
+function CompanyJobs({ companyId, market }: { companyId: string; market: CompanyMarketDTO | undefined }) {
   if (!market) return null
   return (
     <RailSection title={market.linked ? t('Offene Stellen ({n})', { n: String(market.total) }) : t('Offene Stellen')}>
