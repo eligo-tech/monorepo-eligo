@@ -14,6 +14,16 @@ export function localIsoDate(d: Date = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** ELI-48: the date offered when a call or note names none — a week out,
+ *  a weekend moved to the Monday after. Only a default; the person edits it
+ *  before anything is saved. */
+export function defaultFollowUpDate(today: Date = new Date()): string {
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)
+  const skip = d.getDay() === 6 ? 2 : d.getDay() === 0 ? 1 : 0
+  d.setDate(d.getDate() + skip)
+  return localIsoDate(d)
+}
+
 /** `YYYY-MM-DD` as a LOCAL date. `new Date('2027-02-01')` is UTC midnight,
  *  which is the 31st of January anywhere west of Greenwich. */
 export function parseLocalDate(isoDate: string): Date {
