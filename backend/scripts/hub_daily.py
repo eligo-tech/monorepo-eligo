@@ -485,7 +485,7 @@ async def _check_company_impressum(client: httpx.AsyncClient, *, budget: int) ->
     nothing left to check."""
     totals = {"checked": 0, "verified": 0, "not_named": 0, "no_impressum": 0,
               "blocked": 0, "error": 0, "no_domain": 0, "rejected": 0,
-              "searched": 0, "search_failed": 0}
+              "searched": 0, "search_failed": 0, "search_enabled": 0}
     empty = 0
     while totals["checked"] < budget:
         size = min(_COMPANY_IMPRESSUM_BATCH, budget - totals["checked"])
@@ -493,7 +493,10 @@ async def _check_company_impressum(client: httpx.AsyncClient, *, budget: int) ->
         response.raise_for_status()
         result = response.json()
         for key in totals:
-            totals[key] += result.get(key, 0)
+            if key == "search_enabled":
+                totals[key] = max(totals[key], result.get(key, 0))
+            else:
+                totals[key] += result.get(key, 0)
         # Slow sites can finish nothing in one batch; two in a row: done.
         empty = empty + 1 if result.get("checked", 0) == 0 else 0
         if empty >= 2:
@@ -998,8 +1001,12 @@ async def main() -> int:
                 f"Unternehmen-Impressum: {c['checked']} geprüft, {c['verified']} bestätigt, "
                 f"{c['no_domain']} ohne Website, {c['not_named']} fremdes Impressum, "
                 f"{c['no_impressum']} ohne Impressum, {c['blocked']} gesperrt, {c['error']} Fehler, "
-                f"{c['rejected']} nicht bestätigt; Websuche: {c['searched']} Anfragen, "
-                f"{c['search_failed']} fehlgeschlagen"
+                f"{c['rejected']} nicht bestätigt; Websuche: "
+                + (
+                    f"{c['searched']} Anfragen, {c['search_failed']} fehlgeschlagen"
+                    if c["search_enabled"]
+                    else "AUS (ELIGO_SEARCH_API_KEY im Backend nicht gesetzt)"
+                )
             )
         return 0
 

@@ -671,3 +671,38 @@ async def test_the_brave_client_reads_result_urls_and_degrades_to_none() -> None
     assert seen[0].headers["X-Subscription-Token"] == "k-123"
     assert seen[0].url.params["q"] == "Tempton Group GmbH Essen" and seen[0].url.params["country"] == "de"
     assert client.remaining == 3  # the budget is the caller's to spend
+
+
+async def test_the_operator_route_says_whether_the_website_finder_is_on(monkeypatch) -> None:
+    """A run that searched nothing must say whether the finder was off (no
+    key) or had nobody to search — the same zeros otherwise hide which."""
+    import uuid as _uuid
+
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.config import settings
+    from app.main import app
+
+    token = "eli39-" + _uuid.uuid4().hex * 2
+    monkeypatch.setattr(settings, "ingest_token", token)
+    headers = {"Authorization": f"Bearer {token}"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        monkeypatch.setattr(settings, "search_api_key", None)
+        off = await client.post("/api/v1/hub/companies/impressum/check?limit=5", headers=headers)
+        monkeypatch.setattr(settings, "search_api_key", "test-key")
+        on = await client.post("/api/v1/hub/companies/impressum/check?limit=5", headers=headers)
+    assert off.status_code == 200 and off.json()["search_enabled"] == 0
+    assert on.status_code == 200 and on.json()["search_enabled"] == 1
+
+
+async def test_hub_daily_prints_when_the_website_finder_is_off() -> None:
+    import httpx
+
+    from scripts.hub_daily import _check_company_impressum
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"checked": 0, "search_enabled": 0})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://t") as client:
+        totals = await _check_company_impressum(client, budget=10)
+    assert totals["search_enabled"] == 0
