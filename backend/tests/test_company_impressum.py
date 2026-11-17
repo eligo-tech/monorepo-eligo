@@ -706,3 +706,42 @@ async def test_hub_daily_prints_when_the_website_finder_is_off() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://t") as client:
         totals = await _check_company_impressum(client, budget=10)
     assert totals["search_enabled"] == 0
+
+
+async def test_hub_daily_rides_out_a_deploy_mid_run(monkeypatch) -> None:
+    """2026-11-17: a deploy restarted the API 13 minutes into a run; one
+    502 ended the job and lost every count it had collected."""
+    import httpx
+
+    import scripts.hub_daily as daily
+
+    monkeypatch.setattr(daily, "_RETRY_WAITS", (0.0, 0.0))
+    answers = iter([
+        httpx.Response(200, json={"checked": 20, "verified": 5, "search_enabled": 1}),
+        httpx.Response(502),
+        httpx.Response(200, json={"checked": 3, "verified": 1, "search_enabled": 1}),
+        httpx.Response(200, json={"checked": 0}),
+        httpx.Response(200, json={"checked": 0}),
+    ])
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: next(answers)), base_url="http://t") as c:
+        totals = await daily._check_company_impressum(c, budget=100)
+    assert totals["checked"] == 23 and totals["verified"] == 6
+
+
+async def test_hub_daily_prints_what_it_had_when_the_api_stays_down(monkeypatch, capsys) -> None:
+    import httpx
+    import pytest
+
+    import scripts.hub_daily as daily
+
+    monkeypatch.setattr(daily, "_RETRY_WAITS", (0.0,))
+    answers = iter([httpx.Response(200, json={"checked": 20, "verified": 5, "search_enabled": 1})])
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return next(answers, httpx.Response(502))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://t") as c:
+        with pytest.raises(httpx.HTTPStatusError):
+            await daily._check_company_impressum(c, budget=100)
+    out = capsys.readouterr()
+    assert "20 geprüft, 5 bestätigt" in out.out + out.err
