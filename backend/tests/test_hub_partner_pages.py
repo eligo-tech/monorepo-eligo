@@ -367,3 +367,35 @@ def test_the_retry_index_predicate_names_every_throttled_status() -> None:
 
     listed = re.search(r"source_page_status IN \(([^)]*)\)", PARTNER_RETRY).group(1)
     assert {int(v) for v in listed.split(",")} == set(THROTTLED)
+
+
+async def test_progress_counts_never_scan_the_whole_queue_side(corpus) -> None:
+    """Disk IO (2026-11-16 manual run): the three end-of-run counts read
+    ~790 MB — `is_active IS true` matches no partial index, and the total
+    ("with a Quelle") had no index at all, so each one scanned the ads table.
+    The total is now never-read + attempted; each half is one query in the
+    shape of its partial index (`PARTNER_DUE`, `PARTNER_SEEN`)."""
+    from sqlalchemy import event
+
+    from app.core.database import engine
+
+    seen: list[str] = []
+
+    def record(conn, cursor, statement, params, context, many):
+        if "count(" in statement and "FROM hub_job_postings" in statement:
+            seen.append(" ".join(statement.split()))
+
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
+    try:
+        async with SessionLocal() as s:
+            progress = await service.partner_pages_progress(s)
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", record)
+
+    assert progress == {"with_source_url": 3, "source_page_attempted": 0, "source_page_read": 0}
+    assert len(seen) == 2, seen
+    for q in seen:
+        where = q.split(" WHERE ", 1)[1]
+        assert "is_active IS" not in where, q
+        # Every count is confined to one side of the queue, never the total.
+        assert "source_page_fetched_at IS" in where, q

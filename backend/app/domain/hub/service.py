@@ -55,7 +55,9 @@ from app.domain.hub.models import (
     HubJobPosting,
     HubObservation,
     HubPostingPayload,
+    PARTNER_DUE,
     PARTNER_RETRY,
+    PARTNER_SEEN,
 )
 from app.domain.hub.resolution import (
     extract_legal_form,
@@ -908,20 +910,25 @@ async def fetch_missing_partner_pages(
 
 
 async def partner_pages_progress(session: AsyncSession) -> dict[str, int]:
-    """How many active postings have a partner page, and how many were read."""
-    base = select(func.count(HubJobPosting.id)).where(
-        HubJobPosting.is_active.is_(True), HubJobPosting.source_url.is_not(None)
+    """How many active postings have a partner page, and how many were read.
+
+    Two index-only counts, one per half of the queue (`PARTNER_DUE`,
+    `PARTNER_SEEN`); the total is their sum. Counting the total directly has
+    no index and scanned the ads table (~790 MB a run, 2026-11-16)."""
+    due = await session.scalar(
+        select(func.count()).select_from(HubJobPosting).where(sql_text(PARTNER_DUE))
     )
+    attempted, read = (
+        await session.execute(
+            select(func.count(), func.count().filter(HubJobPosting.source_page_status == 200))
+            .select_from(HubJobPosting)
+            .where(sql_text(PARTNER_SEEN))
+        )
+    ).one()
     return {
-        "with_source_url": (await session.scalar(base)) or 0,
-        "source_page_attempted": (
-            await session.scalar(base.where(HubJobPosting.source_page_fetched_at.is_not(None)))
-        )
-        or 0,
-        "source_page_read": (
-            await session.scalar(base.where(HubJobPosting.source_page_status == 200))
-        )
-        or 0,
+        "with_source_url": int(due or 0) + int(attempted or 0),
+        "source_page_attempted": int(attempted or 0),
+        "source_page_read": int(read or 0),
     }
 
 
