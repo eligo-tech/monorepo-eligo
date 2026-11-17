@@ -297,7 +297,8 @@ export function ContactRow({
               next_action_at: nextAt,
             })
             setCalling(false)
-            // ELI-44: "Anfang Februar wieder melden" in the note → offer it.
+            // ELI-44/48: offer a Wiedervorlage after every call — the date the
+            // note names ("Anfang Februar"), else a week out, editable.
             onOffer?.(logged)
             onCalled()
           }}
