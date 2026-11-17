@@ -209,3 +209,70 @@ def test_never_before_the_note_date() -> None:
     assert first("Ende des Monats", dt.date(2026, 11, 30)) == dt.date(2026, 11, 30)
     # On a Saturday after it, the month's end has passed: next month's.
     assert first("Ende des Monats", dt.date(2027, 1, 30)) == dt.date(2027, 2, 26)
+
+
+# --- ELI-48: "hey, grad gesprochen" — more phrases a call note uses ----------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Already read since ELI-44; pinned here as the ticket's list.
+        ("in zwei Wochen melden", dt.date(2026, 12, 1)),
+        ("in 10 Tagen", dt.date(2026, 11, 27)),
+        ("nächsten Monat", dt.date(2026, 12, 1)),
+        ("morgen nochmal anrufen", dt.date(2026, 11, 18)),
+        ("übermorgen", dt.date(2026, 11, 19)),
+        ("nächsten Dienstag", dt.date(2026, 11, 24)),
+        ("Ende der Woche", dt.date(2026, 11, 20)),
+        ("Ende des Monats", dt.date(2026, 11, 30)),
+        ("nach Ostern", dt.date(2027, 3, 30)),
+        # A bare weekday, or with bis/ab: the next one after the note's day.
+        ("Montag ruft er zurück", dt.date(2026, 11, 23)),
+        ("bis Donnerstag", dt.date(2026, 11, 19)),
+        ("ab Mittwoch erreichbar", dt.date(2026, 11, 18)),
+        # Said on a Tuesday, "Dienstag" means next week's.
+        ("Dienstag nochmal", dt.date(2026, 11, 24)),
+    ],
+)
+def test_call_note_phrases(text: str, expected: dt.date) -> None:
+    assert first(text) == expected
+
+
+def test_a_plural_weekday_is_a_habit_not_a_date() -> None:
+    assert suggest_dates("montags nie erreichbar", TUE) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Q1 2027 starts Fri 1 Jan (holiday) → Mon 4 Jan.
+        ("Q1", dt.date(2027, 1, 4)),
+        ("in Q1", dt.date(2027, 1, 4)),
+        ("im ersten Quartal", dt.date(2027, 1, 4)),
+        ("im 1. Quartal", dt.date(2027, 1, 4)),
+        ("Q2", dt.date(2027, 4, 1)),
+        ("im zweiten Quartal", dt.date(2027, 4, 1)),
+        # 1 Jul 2027 is a Thursday; 1 Oct 2027 a Friday.
+        ("Q3", dt.date(2027, 7, 1)),
+        ("im dritten Quartal", dt.date(2027, 7, 1)),
+        ("im vierten Quartal 2027", dt.date(2027, 10, 1)),
+        ("Q2 2027", dt.date(2027, 4, 1)),
+        ("Q2/2027", dt.date(2027, 4, 1)),
+        # The quarter we are in: from now on, the next working day.
+        ("Q4", dt.date(2026, 11, 18)),
+        ("im vierten Quartal", dt.date(2026, 11, 18)),
+    ],
+)
+def test_quarters(text: str, expected: dt.date) -> None:
+    assert first(text) == expected
+
+
+def test_a_quarter_phrase_is_quoted_without_trailing_text() -> None:
+    assert [s.phrase for s in suggest_dates("Q2 nochmal melden", TUE)] == ["Q2"]
+    assert [s.phrase for s in suggest_dates("im ersten Quartal 2027.", TUE)] == ["im ersten Quartal 2027"]
+
+
+@pytest.mark.parametrize("text", ["Q3 2026 war schwach", "im ersten Quartal 2025", "Q5", "FAQ1"])
+def test_quarters_not_offered(text: str) -> None:
+    assert suggest_dates(text, TUE) == []
