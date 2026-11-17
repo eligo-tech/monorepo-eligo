@@ -580,3 +580,35 @@ async def test_a_requested_on_date_in_the_future_is_refused() -> None:
     assert resp.status_code == 422
     async with SessionLocal() as s:
         assert await s.get(Candidate, cid) is not None
+
+
+async def test_editing_a_contact_to_an_erased_direct_number_is_refused() -> None:
+    """ELI-45: the phone is editable on the Manager page now. Create refuses an
+    erased person's direct number; an edit setting it is the same act."""
+    tenant = settings.default_tenant_id
+    await create_all()
+    async with SessionLocal() as s:
+        company = Company(tenant_id=tenant, name=f"Kunde {uuid.uuid4()}")
+        s.add(company)
+        await s.flush()
+        gone = Manager(tenant_id=tenant, company_id=company.id, full_name="Gerd Weg",
+                       phone="+49 7424 943 126")
+        other = Manager(tenant_id=tenant, company_id=company.id, full_name="Ina Bleibt")
+        s.add_all([gone, other])
+        await s.commit()
+        ids = (gone.id, other.id)
+    async with SessionLocal() as s:
+        await erasure.erase_manager(s, tenant_id=tenant, manager_id=ids[0], confirm_name="gerd weg",
+                                    reason="erasure", requested_on=dt.date(2026, 11, 3),
+                                    actor_user_id="u", actor_name="A")
+        await s.commit()
+    base = settings.api_v1_prefix
+    async with _client() as c:
+        refused = await c.patch(f"{base}/managers/{ids[1]}", json={"phone": "+49 7424 943126"})
+        other_number = await c.patch(f"{base}/managers/{ids[1]}", json={"phone": "+49 30 555 1234"})
+        confirmed = await c.patch(f"{base}/managers/{ids[1]}",
+                                  json={"phone": "+49 7424 943 126", "override_suppression": True})
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["code"] == "suppressed"
+    assert other_number.status_code == 200, other_number.text
+    assert confirmed.status_code == 200, confirmed.text

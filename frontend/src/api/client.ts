@@ -347,6 +347,7 @@ export const api = {
     first_name?: string | null
     last_name?: string | null
     role_title?: string | null
+    department?: string | null
     email?: string | null
     phone?: string | null
     linkedin_url?: string | null
@@ -355,6 +356,22 @@ export const api = {
     /** Erased here on request and come back of their own accord (409 otherwise). */
     override_suppression?: boolean
   }) => request<ManagerDTO>('/managers', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** ELI-45: correct a contact's details. Send only what changed — a new
+   *  e-mail or direct number of someone erased here is refused (409) unless
+   *  `override_suppression` says they came back of their own accord. The
+   *  answer carries no counts (job_count etc.): merge, do not replace. */
+  updateManager: (
+    id: string,
+    patch: {
+      role_title?: string | null
+      department?: string | null
+      email?: string | null
+      phone?: string | null
+      linkedin_url?: string | null
+      override_suppression?: boolean
+    },
+  ) => request<ManagerDTO>(`/managers/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 
   /** People we hold data on who have not been informed (GDPR Art. 14). */
   managersOwingArt14: () => request<ManagerDTO[]>('/managers/art14-outstanding'),

@@ -20,6 +20,7 @@ import { ApiError, api } from '@/api/client'
 import { ReaddDeclined, withReaddConfirm } from '../../erasure/readd'
 import type { ManagerDTO } from '@/api/types'
 import { Button, TextInput } from '../../ui/forms'
+import { ContactFields, EMPTY_CONTACT, contactPayload, type ContactDraft } from '../../ui/contactFields'
 
 export function SetContact({
   jobId,
@@ -42,8 +43,8 @@ export function SetContact({
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
-  const [role, setRole] = useState('')
-  const [email, setEmail] = useState('')
+  // ELI-45: phone, department and LinkedIn too — not only the e-mail.
+  const [contact, setContact] = useState<ContactDraft>(EMPTY_CONTACT)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -73,8 +74,7 @@ export function SetContact({
         override_suppression: override || undefined,
         company_id: companyId,
         full_name: name.trim(),
-        role_title: role.trim() || null,
-        email: email.trim() || null,
+        ...contactPayload(contact),
         source: 'self_reported',
         source_detail: t('Ansprechpartner für das Mandat „{title}” erfasst', { title: jobTitle }),
       }))
@@ -83,8 +83,7 @@ export function SetContact({
       setOpen(false)
       setAdding(false)
       setName('')
-      setRole('')
-      setEmail('')
+      setContact(EMPTY_CONTACT)
     } catch (e) {
       setError(
         e instanceof ReaddDeclined ? e.message : t('Nicht gespeichert — bitte erneut versuchen.'),
@@ -158,11 +157,8 @@ export function SetContact({
 
       {adding && (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <TextInput label={t('Name')} value={name} onChange={setName} placeholder={t('Vor- und Nachname')} />
-            <TextInput label={t('Rolle')} value={role} onChange={setRole} placeholder="Head of IT" />
-            <TextInput label={t('E-Mail')} value={email} onChange={setEmail} placeholder={t('optional')} />
-          </div>
+          <TextInput label={t('Name')} value={name} onChange={setName} placeholder={t('Vor- und Nachname')} />
+          <ContactFields value={contact} onChange={setContact} />
           <div className="flex items-center gap-2">
             <Button tone="primary" onClick={() => void create()} disabled={busy || !name.trim()}>
               <Check className="h-4 w-4" /> {busy ? t('Speichert…') : t('Anlegen & zuordnen')}

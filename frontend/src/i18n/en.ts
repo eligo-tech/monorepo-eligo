@@ -1351,4 +1351,8 @@ export const EN: Record<string, string> = {
   'Wiedervorlage am {date} anlegen?': 'Create a follow-up on {date}?',
   'aus der Notiz: „{phrase}“': 'from the note: “{phrase}”',
   'Anlegen': 'Create',
+  // ELI-45: a contact's details, when adding and editing one.
+  'Abteilung': 'Department',
+  'LinkedIn-Profil': 'LinkedIn profile',
+  'Kontaktdaten bearbeiten': 'Edit contact details',
 }
