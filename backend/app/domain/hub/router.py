@@ -854,11 +854,16 @@ async def check_company_impressum(
     searcher = website_search.from_settings(
         api_key=settings.search_api_key, budget=limit if search is None else search
     )
+    # Said in every answer: a run that searched nothing looks the same with
+    # the finder off (no key) and with nobody to search.
+    enabled = int(bool(settings.search_api_key and settings.search_api_key.strip()))
     async with sites.SiteFetcher() as fetcher:
         if searcher is None:
-            return await impressum.check_all_workspaces(fetcher=fetcher, limit=limit)
-        async with searcher:
-            return await impressum.check_all_workspaces(fetcher=fetcher, limit=limit, searcher=searcher)
+            counts = await impressum.check_all_workspaces(fetcher=fetcher, limit=limit)
+        else:
+            async with searcher:
+                counts = await impressum.check_all_workspaces(fetcher=fetcher, limit=limit, searcher=searcher)
+    return {**counts, "search_enabled": enabled}
 
 
 @router.post("/agencies/sites/check")
