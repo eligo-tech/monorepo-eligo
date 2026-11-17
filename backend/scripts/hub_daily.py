@@ -493,6 +493,29 @@ def _company_impressum_line(c: dict[str, int]) -> str:
     )
 
 
+def _company_totals_line(t: dict[str, int]) -> str:
+    g = t.get
+    return (
+        f"{g('companies', 0)} in {g('tenants', 0)} Workspaces · {g('filled', 0)} mit USt-ID/HRB "
+        f"({g('markt', 0)} aus Markt, {g('own', 0)} eigenes Impressum) · {g('open', 0)} offen "
+        f"({g('unchecked', 0)} ungeprüft, {g('no_domain', 0)} ohne Website, {g('not_named', 0)} fremdes Impressum, "
+        f"{g('no_impressum', 0)} ohne Impressum, {g('verified', 0)} bestätigt ohne USt-ID/HRB, "
+        f"{g('blocked', 0)} gesperrt, {g('error', 0)} Fehler, {g('rejected', 0)} nicht bestätigt; "
+        f"{g('searched', 0)} je gesucht) · {g('sole_traders', 0)} Einzelunternehmer"
+    )
+
+
+async def _print_company_totals(client: httpx.AsyncClient) -> None:
+    """The overall state after a run. Only a summary: if it cannot be read,
+    the run itself still succeeded, so this warns and does not fail."""
+    try:
+        response = await _post_retrying(client, "/hub/companies/impressum/totals", method="GET")
+    except httpx.HTTPError as exc:
+        print(f"  Unternehmen gesamt: nicht lesbar ({exc})", file=sys.stderr)
+        return
+    print(f"Unternehmen gesamt: {_company_totals_line(response.json())}")
+
+
 async def _check_company_impressum(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:
     """ELI-39: up to `budget` workspace companies' website, VAT id and
     register from their Impressum, in batches. Stops when the server has
@@ -557,8 +580,9 @@ async def _classify_families(client: httpx.AsyncClient, *, budget: int) -> dict[
 _RETRY_WAITS = (15.0, 30.0, 60.0, 120.0)
 
 
-async def _post_retrying(client: httpx.AsyncClient, url: str) -> httpx.Response:
-    """POST an idempotent batch, retrying a 5xx or a dropped connection.
+async def _post_retrying(client: httpx.AsyncClient, url: str, *, method: str = "POST") -> httpx.Response:
+    """POST an idempotent batch (or `method="GET"` a read), retrying a 5xx or a
+    dropped connection.
 
     Only for passes that are safe to repeat — the ad-contacts pass reads a
     queue and replaces its rows, so a batch that ran but whose answer was lost
@@ -567,7 +591,7 @@ async def _post_retrying(client: httpx.AsyncClient, url: str) -> httpx.Response:
     """
     for wait in (*_RETRY_WAITS, None):
         try:
-            response = await client.post(url)
+            response = await client.request(method, url)
             if response.status_code < 500:
                 response.raise_for_status()
                 return response
@@ -1018,6 +1042,7 @@ async def main() -> int:
         ) as client:
             c = await _check_company_impressum(client, budget=args.company_impressum_only)
             print(f"Unternehmen-Impressum: {_company_impressum_line(c)}")
+            await _print_company_totals(client)
         return 0
 
     if args.employer_sites_only > 0:

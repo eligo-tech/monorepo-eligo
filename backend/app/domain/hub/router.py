@@ -866,6 +866,16 @@ async def check_company_impressum(
     return {**counts, "search_enabled": enabled}
 
 
+@router.get("/companies/impressum/totals")
+async def company_impressum_totals(_tenant_id: uuid.UUID = Depends(get_ingest_tenant)) -> dict[str, int]:
+    """ELI-39: every workspace's companies by state — with a VAT id or
+    register (from Markt or their own Impressum), open by stored outcome, sole
+    traders. Read-only; machine-only like the check, for the job's summary."""
+    from app.domain.companies import impressum
+
+    return await impressum.totals_all_workspaces()
+
+
 @router.post("/agencies/sites/check")
 async def check_agency_sites(
     limit: int = Query(default=5, ge=1, le=50),

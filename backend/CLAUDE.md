@@ -328,6 +328,10 @@ These are enforced in code. Do not route around them.
   finder (their own sites are not re-fetched); a search error is "no
   candidates". httpx's request-URL log lines for the search host are dropped —
   the query is a workspace's client list.
+  After each run the job prints "Unternehmen gesamt" from the read-only
+  `GET /hub/companies/impressum/totals` (machine-only): every workspace's
+  companies with a VAT id or register (Markt first, else their own), the open
+  ones by stored outcome, sole traders; a failed read warns, never fails.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.
