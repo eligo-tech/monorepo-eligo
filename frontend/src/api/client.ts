@@ -18,6 +18,9 @@ import type {
   AdoptPostingsResultDTO,
   AdoptResultDTO,
   ContactPageDTO,
+  FollowUpDTO,
+  FollowUpSuggestionDTO,
+  FollowUpWrite,
   ManagerDTO,
   ManagerInteractionDTO,
   HubSearchPageDTO,
@@ -420,6 +423,41 @@ export const api = {
     if (params.dueOnly) qs.set('due_only', 'true')
     return request<ContactPageDTO>(`/hub/call-list/contacts?${qs}`)
   },
+
+  /** ELI-44: Wiedervorlagen — by default this workspace's open ones, soonest first. */
+  followUps: (params: { status?: 'open' | 'done' | 'all'; managerId?: string; candidateId?: string } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.status) qs.set('status', params.status)
+    if (params.managerId) qs.set('manager_id', params.managerId)
+    if (params.candidateId) qs.set('candidate_id', params.candidateId)
+    return request<FollowUpDTO[]>(`/follow-ups?${qs}`)
+  },
+
+  createFollowUp: (body: FollowUpWrite) =>
+    request<FollowUpDTO>('/follow-ups', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Move, edit, mark done (`status: 'done'`) or reopen. */
+  updateFollowUp: (
+    id: string,
+    body: { due_date?: string; due_time?: string | null; text?: string; status?: 'open' | 'done' },
+  ) => request<FollowUpDTO>(`/follow-ups/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  /** Only who wrote it may delete it — a 403 otherwise. */
+  deleteFollowUp: async (id: string): Promise<void> => {
+    const res = await fetch(`${BASE}/follow-ups/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    })
+    if (!res.ok) throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+  },
+
+  /** The follow-up dates a note names, resolved against the note's day.
+   *  Reads only — the recruiter confirms by creating one. */
+  suggestFollowUps: (text: string, referenceDate: string) =>
+    request<{ suggestions: FollowUpSuggestionDTO[] }>('/follow-ups/suggest', {
+      method: 'POST',
+      body: JSON.stringify({ text, reference_date: referenceDate }),
+    }),
 
   /** ELI-23: move a bus-dev contact to Managers after the first contact. */
   promoteManager: (id: string) => request<ManagerDTO>(`/managers/${id}/promote`, { method: 'POST' }),

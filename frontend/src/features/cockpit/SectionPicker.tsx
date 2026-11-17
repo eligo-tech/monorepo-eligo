@@ -15,6 +15,21 @@ export interface SectionOption<K extends string> {
   label: string
   /** Screens that exist in the nav but have no implementation yet. */
   placeholder?: boolean
+  /** A count that needs attention (ELI-44: Wiedervorlagen due today). */
+  badge?: number
+  badgeTitle?: string
+}
+
+function Badge({ n, title }: { n?: number; title?: string }) {
+  if (!n) return null
+  return (
+    <span
+      title={title}
+      className="rounded-full border border-coral-600 bg-coral-800/40 px-1.5 font-mono text-[11px] leading-[18px] text-coral-300"
+    >
+      {n}
+    </span>
+  )
 }
 
 export function SectionPicker<K extends string>({
@@ -57,6 +72,11 @@ export function SectionPicker<K extends string>({
           Section
         </span>
         <span className="text-cockpit-text">{current?.label ?? '—'}</span>
+        {/* The screen open is not where the count lives: show the sum of the others. */}
+        <Badge
+          n={options.reduce((sum, o) => sum + (o.key === value ? 0 : (o.badge ?? 0)), 0)}
+          title={options.find((o) => o.key !== value && o.badge)?.badgeTitle}
+        />
         <ChevronDown
           className={cn(
             'h-4 w-4 text-cockpit-faint transition-transform',
@@ -92,6 +112,11 @@ export function SectionPicker<K extends string>({
                   )}
                 />
                 {option.label}
+                {option.badge ? (
+                  <span className="ml-auto">
+                    <Badge n={option.badge} title={option.badgeTitle} />
+                  </span>
+                ) : null}
                 {option.placeholder && (
                   <span className="ml-auto font-mono text-[11px] text-cockpit-faint">
                     {t('bald')}

@@ -15,6 +15,7 @@ from app.domain.candidates.router import router as candidates_router
 from app.domain.companies.router import router as companies_router
 from app.domain.documents.router import router as documents_router
 from app.domain.features.router import router as features_router
+from app.domain.followups.router import router as followups_router
 from app.domain.interviews.router import router as interviews_router
 from app.domain.imports.router import router as imports_router
 from app.domain.tenantsources.router import router as tenantsources_router
@@ -65,6 +66,7 @@ api_router.include_router(candidates_router)
 api_router.include_router(companies_router)
 api_router.include_router(documents_router)
 api_router.include_router(features_router)
+api_router.include_router(followups_router)
 api_router.include_router(interviews_router)
 api_router.include_router(imports_router)
 api_router.include_router(tenantsources_router)

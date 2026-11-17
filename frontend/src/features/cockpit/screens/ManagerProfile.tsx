@@ -40,6 +40,8 @@ import { EraseSection } from '../erasure/EraseSection'
 import { useAsync } from '@/hooks/useAsync'
 import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
 import { InteractionComposer } from '../ui/InteractionComposer'
+import { PersonFollowUps } from '../followups/PersonFollowUps'
+import { NoteFollowUpOffer, type SavedNote } from '../followups/NoteFollowUpOffer'
 import {
   MANAGER_INTERACTION_KINDS,
   interactionLabel,
@@ -206,6 +208,8 @@ export function ManagerProfile({
   const [appointments, setAppointments] = useState<ManagerInteractionDTO[] | null>(null)
   const [tab, setTab] = useState<TabKey>('notes')
   const [composing, setComposing] = useState(false)
+  /** ELI-44: the note just saved, while its follow-up date is on offer. */
+  const [offerFor, setOfferFor] = useState<SavedNote | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -215,6 +219,7 @@ export function ManagerProfile({
     setAppointments(null)
     setTab('notes')
     setComposing(false)
+    setOfferFor(null)
     api.manager(initial.id).then((m) => alive && setManager(m)).catch(() => {})
     api
       .managerInteractions(initial.id)
@@ -391,6 +396,9 @@ export function ManagerProfile({
         <Stat label={t('Notizen')} value={String(noteCount)} />
       </div>
 
+      {/* ELI-44: open Wiedervorlagen, above the conversation they came from. */}
+      <PersonFollowUps subject={{ managerId: manager.id }} />
+
       {/* --- tabs: one place that says what exists on this record ---------- */}
       <nav className="flex items-center gap-1 overflow-x-auto border-b border-cockpit-line px-6">
         {tabs.map((t) => (
@@ -443,6 +451,7 @@ export function ManagerProfile({
               onCancel={() => setComposing(false)}
               onSave={async (entry) => {
                 const row = await api.logManagerInteraction(manager.id, entry)
+                setOfferFor(row)
                 // Prepend rather than refetch: the list is sorted by when
                 // the event happened, and a note filed for last Tuesday
                 // would otherwise appear to vanish.
@@ -470,6 +479,15 @@ export function ManagerProfile({
                 setComposing(false)
               }}
             />
+          )}
+          {offerFor && (
+            <div className="border-b border-cockpit-line px-6 py-3">
+              <NoteFollowUpOffer
+                subject={{ managerId: manager.id }}
+                note={offerFor}
+                onClose={() => setOfferFor(null)}
+              />
+            </div>
           )}
           {tab === 'notes' && (
             <>

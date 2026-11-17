@@ -6,10 +6,10 @@
 
 
 import { t } from '@/i18n'
-import { locale } from '@/i18n/format'
+import { date as fmtDay, locale } from '@/i18n/format'
 
 import { useEffect, useRef, useState } from 'react'
-import { Briefcase, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
+import { BellPlus, Briefcase, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import type { ContactPageDTO, ContactRowDTO, SwitchboardDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
@@ -27,6 +27,11 @@ import { leadJobLine, mandateHref } from '../ui/leadJobs'
 import { leadPhone } from '../ui/switchboard'
 import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
+import { FollowUpForm } from '../ui/FollowUpForm'
+import { announceFollowUpsChanged, localIsoDate, parseLocalDate, shortTime } from '../ui/followUps'
+import { NoteFollowUpOffer, type SavedNote } from '../followups/NoteFollowUpOffer'
+import { useOpenFollowUps } from '../followups/useFollowUps'
+import type { FollowUpDTO } from '@/api/types'
 
 const when = (iso: string | null) =>
   iso
@@ -134,15 +139,22 @@ export function ContactRow({
   showCompany,
   onCalled,
   switchboard,
+  followUp,
 }: {
   row: ContactRowDTO
   showCompany: boolean
   onCalled: () => void
+  /** ELI-44: this lead's next open Wiedervorlage, if any. */
+  followUp?: FollowUpDTO | null
   /** ELI-30: the company's Impressum switchboard, dialled when the lead has no number. */
   switchboard?: SwitchboardDTO | null
 }) {
   const reach = leadPhone(row.phone, switchboard)
   const [calling, setCalling] = useState(false)
+  // ELI-44: a follow-up by hand, and the offer read from a call's note.
+  const [planning, setPlanning] = useState(false)
+  const [offerFor, setOfferFor] = useState<SavedNote | null>(null)
+  const today = localIsoDate()
   const [moving, setMoving] = useState(false)
   const [moveFailed, setMoveFailed] = useState(false)
   // GDPR Art. 14: the notice is owed from adoption, not from vetting — so it
@@ -183,6 +195,14 @@ export function ContactRow({
         {row.next_action_at && (
           <Chip tone={row.due ? 'gold' : undefined}>
             {row.due ? t('Fällig seit') : t('Nächster Anruf')}: {when(row.next_action_at)}
+          </Chip>
+        )}
+        {followUp && (
+          <Chip tone={followUp.due_date < today ? 'coral' : followUp.due_date === today ? 'gold' : undefined}>
+            <span title={followUp.text}>
+              {t('Wiedervorlage')}: {fmtDay(parseLocalDate(followUp.due_date))}
+              {followUp.due_time ? ` ${shortTime(followUp.due_time)}` : ''}
+            </span>
           </Chip>
         )}
         {row.art14_outstanding && (
@@ -248,6 +268,10 @@ export function ContactRow({
                 {t('Zu Managern')}
               </Button>
             </span>
+            <Button onClick={() => setPlanning((p) => !p)}>
+              <BellPlus className="h-4 w-4" />
+              {t('Wiedervorlage')}
+            </Button>
             <Button onClick={() => setCalling(true)}>
               <PhoneCall className="h-4 w-4" />
               {t('Anruf erfassen')}
@@ -285,16 +309,36 @@ export function ContactRow({
         <CallForm
           onCancel={() => setCalling(false)}
           onSave={async (outcome, nextAt, note) => {
-            await api.logManagerInteraction(row.manager_id, {
+            const logged = await api.logManagerInteraction(row.manager_id, {
               interaction_type: 'business_call',
               summary: note,
               outcome,
               next_action_at: nextAt,
             })
             setCalling(false)
+            // ELI-44: "Anfang Februar wieder melden" in the note → offer it.
+            setOfferFor(logged)
             onCalled()
           }}
         />
+      )}
+      {planning && (
+        <div className="mt-2">
+          <FollowUpForm
+            defaultDate={today}
+            onCancel={() => setPlanning(false)}
+            onSave={async (f) => {
+              await api.createFollowUp({ manager_id: row.manager_id, ...f, origin: 'manual' })
+              setPlanning(false)
+              announceFollowUpsChanged()
+            }}
+          />
+        </div>
+      )}
+      {offerFor && (
+        <div className="mt-2">
+          <NoteFollowUpOffer subject={{ managerId: row.manager_id }} note={offerFor} onClose={() => setOfferFor(null)} />
+        </div>
       )}
     </li>
   )
@@ -324,6 +368,12 @@ function ContactsTab() {
   }, [companyId, query, dueOnly, bump])
 
   const rows = page?.rows ?? []
+  // ELI-44: each lead's next open Wiedervorlage — one call for the page.
+  const { rows: followUps } = useOpenFollowUps()
+  const nextFollowUp = new Map<string, FollowUpDTO>()
+  for (const f of followUps ?? []) {
+    if (f.manager_id && !nextFollowUp.has(f.manager_id)) nextFollowUp.set(f.manager_id, f)
+  }
   const boards = new Map((page?.companies ?? []).map((c) => [c.company_id, c.switchboard ?? null]))
   const filtering = Boolean(companyId || query || dueOnly)
   const called = () => setBump((b) => b + 1)
@@ -372,7 +422,14 @@ function ContactsTab() {
       ) : (
         <ul>
           {rows.map((r) => (
-            <ContactRow key={r.manager_id} row={r} showCompany onCalled={called} switchboard={boards.get(r.company_id)} />
+            <ContactRow
+              key={r.manager_id}
+              row={r}
+              showCompany
+              onCalled={called}
+              switchboard={boards.get(r.company_id)}
+              followUp={nextFollowUp.get(r.manager_id)}
+            />
           ))}
         </ul>
       )}

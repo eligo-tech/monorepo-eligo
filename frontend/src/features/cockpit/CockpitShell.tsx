@@ -28,6 +28,7 @@ import { api } from '@/api/client'
 import type { SectionOption } from './SectionPicker'
 import { useCockpitData } from './data/useCockpitData'
 import { useMe } from './useMe'
+import { useDueFollowUpCount } from './followups/FollowUpsSection'
 import { useTypeface } from './useTypeface'
 
 export type ScreenKey =
@@ -96,6 +97,8 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
   const state = useCockpitData()
   const [typeface, setTypeface] = useTypeface()
   const me = useMe()
+  // ELI-44: Wiedervorlagen due today or overdue, on the Cockpit entry.
+  const dueFollowUps = useDueFollowUpCount()
   const [screen, setScreen] = useState<ScreenKey>(initialScreen)
   /** null while asking; then whether this workspace sees the agency finder. */
   const [agencyFinder, setAgencyFinder] = useState<boolean | null>(null)
@@ -165,7 +168,11 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         }
         typeface={typeface}
         onTypefaceChange={setTypeface}
-        screens={withAgencyScreen(SCREENS, agencyFinder === true) as SectionOption<ScreenKey>[]}
+        screens={(withAgencyScreen(SCREENS, agencyFinder === true) as SectionOption<ScreenKey>[]).map((s) =>
+          s.key === 'cockpit'
+            ? { ...s, badge: dueFollowUps, badgeTitle: t('{n} Wiedervorlagen fällig', { n: String(dueFollowUps) }) }
+            : s,
+        )}
         screen={screen}
         onScreenChange={goToScreen}
       />

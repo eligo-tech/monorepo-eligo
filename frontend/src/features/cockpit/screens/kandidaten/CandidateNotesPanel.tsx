@@ -22,6 +22,8 @@ import type { ManagerInteractionDTO } from '@/api/types'
 import { Button } from '../../ui/forms'
 import { InteractionComposer } from '../../ui/InteractionComposer'
 import { Chip } from '../../ui/primitives'
+import { PersonFollowUps } from '../../followups/PersonFollowUps'
+import { NoteFollowUpOffer, type SavedNote } from '../../followups/NoteFollowUpOffer'
 import {
   CANDIDATE_INTERACTION_KINDS,
   interactionLabel,
@@ -31,6 +33,8 @@ export function CandidateNotesPanel({ candidateId }: { candidateId: string }) {
   const [rows, setRows] = useState<ManagerInteractionDTO[] | null>(null)
   const [composing, setComposing] = useState(false)
   const [failed, setFailed] = useState(false)
+  /** ELI-44: the note just saved, while its follow-up date is on offer. */
+  const [offerFor, setOfferFor] = useState<SavedNote | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +51,7 @@ export function CandidateNotesPanel({ candidateId }: { candidateId: string }) {
 
   useEffect(() => {
     setComposing(false)
+    setOfferFor(null)
     void load()
   }, [load])
 
@@ -60,6 +65,11 @@ export function CandidateNotesPanel({ candidateId }: { candidateId: string }) {
 
   return (
     <div className="space-y-3">
+      {/* ELI-44: open Wiedervorlagen on this candidate, until done. */}
+      <PersonFollowUps subject={{ candidateId }} compact />
+      {offerFor && (
+        <NoteFollowUpOffer subject={{ candidateId }} note={offerFor} onClose={() => setOfferFor(null)} />
+      )}
       {composing ? (
         <div className="-mx-6 border-y border-cockpit-line">
           <InteractionComposer
@@ -67,6 +77,7 @@ export function CandidateNotesPanel({ candidateId }: { candidateId: string }) {
             onCancel={() => setComposing(false)}
             onSave={async (entry) => {
               const row = await api.logCandidateInteraction(candidateId, entry)
+              setOfferFor(row)
               // Prepend and re-sort rather than refetch: the list is ordered
               // by when the conversation happened, so a note filed for last
               // Tuesday would otherwise appear to vanish.
