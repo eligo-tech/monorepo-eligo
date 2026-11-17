@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react'
 import { History } from 'lucide-react'
 
 import { api } from '@/api/client'
+import { useActorLabel } from '@/auth/memberNames'
 import type { HistoryEntryDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 
@@ -65,6 +66,7 @@ export function HistoryTrail({
 }) {
   const [entries, setEntries] = useState<HistoryEntryDTO[] | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const actorLabel = useActorLabel()
 
   useEffect(() => {
     let alive = true
@@ -101,7 +103,7 @@ export function HistoryTrail({
                 <span className="font-mono text-[11.5px] text-cockpit-faint">
                   {when(entry.at)}
                 </span>
-                <span className="text-cockpit-text">{entry.actor}</span>
+                <span className="text-cockpit-text">{actorLabel(entry.actor) ?? t('unbekannt')}</span>
                 {entry.field && (
                   <span className="font-mono text-[11.5px] text-cockpit-dim">
                     {entry.field}

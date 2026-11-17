@@ -11,6 +11,7 @@ import { date as fmtDay, locale } from '@/i18n/format'
 import { useEffect, useRef, useState } from 'react'
 import { BellPlus, Briefcase, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
+import { useActorLabel } from '@/auth/memberNames'
 import type { ContactPageDTO, ContactRowDTO, SwitchboardDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Button, FIELD, SelectInput } from '../ui/forms'
@@ -159,6 +160,7 @@ export function ContactRow({
   switchboard?: SwitchboardDTO | null
 }) {
   const reach = leadPhone(row.phone, switchboard)
+  const callerName = useActorLabel()(row.last_call_by)
   const [calling, setCalling] = useState(false)
   // ELI-44: a follow-up by hand, and the offer read from a call's note.
   const [planning, setPlanning] = useState(false)
@@ -264,7 +266,7 @@ export function ContactRow({
         {row.last_call_at && (
           <span>
             {t('Zuletzt')}: {when(row.last_call_at)}
-            {row.last_call_by ? ` · ${row.last_call_by}` : ''}
+            {callerName ? ` · ${callerName}` : ''}
           </span>
         )}
         {!calling && (

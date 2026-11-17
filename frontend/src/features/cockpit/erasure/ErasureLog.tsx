@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 
 import { api } from '@/api/client'
+import { useActorLabel } from '@/auth/memberNames'
 import type { ErasureRequestDTO } from '@/api/types'
 import { date, dateTime } from '@/i18n/format'
 import { t } from '@/i18n'
@@ -18,6 +19,7 @@ const day = (iso: string) =>
 export function ErasureLog({ admin }: { admin: boolean }) {
   const [rows, setRows] = useState<ErasureRequestDTO[] | null>(null)
   const [failed, setFailed] = useState(false)
+  const actorLabel = useActorLabel()
 
   useEffect(() => {
     if (!admin) return
@@ -66,7 +68,7 @@ export function ErasureLog({ admin }: { admin: boolean }) {
           </div>
           <p className="mt-1 text-cockpit-dim">
             {summary(r.counts)}
-            {r.executed_by_name ? ` · ${t('durch {name}', { name: r.executed_by_name })}` : ''}
+            {actorLabel(r.executed_by_name) ? ` · ${t('durch {name}', { name: actorLabel(r.executed_by_name) ?? '' })}` : ''}
           </p>
           {unprotected(r.counts) && (
             <p className="mt-1 text-gold-300">{t('Ohne Sperre: weder E-Mail-Adresse noch Import-ID vorhanden.')}</p>

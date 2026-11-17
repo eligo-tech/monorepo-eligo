@@ -53,3 +53,19 @@ describe('ContactRow (ELI-38)', () => {
     expect(line).not.toContain(t('Nächster Anruf'))
   })
 })
+
+// ELI-50: a session token without a name claim leaves the Clerk user id as
+// the caller's name. The list must never print that id.
+describe('ContactRow — who called (ELI-50)', () => {
+  const markup = (r: ContactRowDTO) => renderToStaticMarkup(<ContactRow row={r} showCompany onCalled={() => {}} />)
+
+  it('never shows a raw Clerk user id', () => {
+    const html = markup(row({ last_call_by: 'user_3LC4zJ88lXZQ3nkU7HHtROiru6X' }))
+    expect(html).toContain(t('Zuletzt'))
+    expect(html).not.toContain('user_3LC4zJ88lXZQ3nkU7HHtROiru6X')
+  })
+
+  it('still shows a real name', () => {
+    expect(markup(row({ last_call_by: 'Dima Fadeev' }))).toContain('Dima Fadeev')
+  })
+})
