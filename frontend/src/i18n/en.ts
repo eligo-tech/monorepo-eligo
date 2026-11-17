@@ -1359,6 +1359,11 @@ export const EN: Record<string, string> = {
   'Wiedervorlage am {date} anlegen?': 'Create a follow-up on {date}?',
   'aus der Notiz: „{phrase}“': 'from the note: “{phrase}”',
   'Anlegen': 'Create',
+  // ELI-48: a follow-up offered after every call or note, date or not.
+  'Wiedervorlage erstellen?': 'Create a follow-up?',
+  'Kein Datum in der Notiz — Vorschlag: {date}': 'No date in the note — suggested: {date}',
+  'Wiedervorlage erstellen': 'Create follow-up',
+  'Anderes Datum…': 'Other date…',
   // ELI-45: a contact's details, when adding and editing one.
   'Abteilung': 'Department',
   'LinkedIn-Profil': 'LinkedIn profile',

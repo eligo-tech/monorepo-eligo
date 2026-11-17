@@ -32,13 +32,17 @@ const row = (over: Partial<FollowUpDTO>): FollowUpDTO => ({
 })
 
 const noop = () => undefined
+const save = () => Promise.resolve()
 
 describe('FollowUpOffer', () => {
   it('offers the date read from the note, quoting the phrase', () => {
     const html = renderToStaticMarkup(
       <FollowUpOffer
         suggestions={[{ due_date: '2027-02-01', phrase: 'Anfang Februar' }]}
+        fallbackDate="2026-11-24"
+        noteText="Anfang Februar melden"
         onConfirm={noop}
+        onSave={save}
         onDismiss={noop}
       />,
     )
@@ -56,7 +60,10 @@ describe('FollowUpOffer', () => {
           { due_date: '2026-12-01', phrase: 'in 2 Wochen' },
           { due_date: '2026-12-15', phrase: 'Mitte Dezember' },
         ]}
+        fallbackDate="2026-11-24"
+        noteText="Anfang Februar melden"
         onConfirm={noop}
+        onSave={save}
         onDismiss={noop}
       />,
     )
@@ -64,8 +71,35 @@ describe('FollowUpOffer', () => {
     expect(html).toContain('Mitte Dezember')
   })
 
-  it('says nothing when the note names no date', () => {
-    expect(renderToStaticMarkup(<FollowUpOffer suggestions={[]} onConfirm={noop} onDismiss={noop} />)).toBe('')
+  it('offers to pick another date even when the note names one (ELI-48)', () => {
+    const html = renderToStaticMarkup(
+      <FollowUpOffer
+        suggestions={[{ due_date: '2027-02-01', phrase: 'Anfang Februar' }]}
+        fallbackDate="2026-11-24"
+        noteText="Anfang Februar melden"
+        onConfirm={noop}
+        onSave={save}
+        onDismiss={noop}
+      />,
+    )
+    expect(html).toContain(t('Anderes Datum…'))
+  })
+
+  it('still offers a Wiedervorlage when the note names no date (ELI-48)', () => {
+    const html = renderToStaticMarkup(
+      <FollowUpOffer
+        suggestions={[]}
+        fallbackDate="2026-11-24"
+        noteText="grad gesprochen"
+        onConfirm={noop}
+        onSave={save}
+        onDismiss={noop}
+      />,
+    )
+    expect(html).toContain(t('Wiedervorlage erstellen?'))
+    expect(html).toContain(t('Kein Datum in der Notiz — Vorschlag: {date}', { date: fmtDate(new Date(2026, 10, 24)) }))
+    expect(html).toContain(t('Wiedervorlage erstellen'))
+    expect(html).toContain(t('Verwerfen'))
   })
 })
 
