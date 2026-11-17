@@ -25,14 +25,17 @@ import {
   ArrowLeft,
   Building2,
   CalendarDays,
+  Check,
   ExternalLink,
   Mail,
   MapPin,
+  Pencil,
   Phone,
   Plus,
   ShieldAlert,
+  X,
 } from 'lucide-react'
-import { api } from '@/api/client'
+import { ApiError, api } from '@/api/client'
 import type { ManagerDTO, ManagerInteractionDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
@@ -46,6 +49,9 @@ import {
   isContact,
 } from '../ui/interactionKinds'
 import { appointmentIcs, isAppointmentKind, splitAppointments } from '../ui/appointments'
+import { Button } from '../ui/forms'
+import { CONTACT_KEYS, ContactFields, contactDraftOf, contactPatch } from '../ui/contactFields'
+import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 
 const dateDe = (iso: string | null | undefined) =>
   iso
@@ -528,6 +534,13 @@ export function ManagerProfile({
 
         <aside className="w-full shrink-0 lg:w-[27rem]">
           <RailSection title={t('Erreichbar')}>
+            <EditContact
+              manager={manager}
+              onSaved={(updated) => {
+                setManager(updated)
+                onNotified(updated)
+              }}
+            />
             <Line label={t('Mail')}>
               {manager.email && (
                 <a
@@ -637,6 +650,82 @@ export function ManagerProfile({
   )
 }
 
+
+/** ELI-45: correct or add the contact's details here — before, a phone
+ *  number could only arrive by import. Sends only what changed, through the
+ *  same erasure confirmation as creating a contact. */
+function EditContact({
+  manager,
+  onSaved,
+}: {
+  manager: ManagerDTO
+  onSaved: (updated: ManagerDTO) => void
+}) {
+  const [draft, setDraft] = useState(() => contactDraftOf(manager))
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setDraft(contactDraftOf(manager))
+          setError(null)
+          setOpen(true)
+        }}
+        className="mb-1 flex items-center gap-1.5 font-mono text-[12px] text-mint-400 transition-colors hover:text-mint-300"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+        {t('Kontaktdaten bearbeiten')}
+      </button>
+    )
+  }
+
+  async function save() {
+    const patch = contactPatch(manager, draft)
+    if (Object.keys(patch).length === 0) {
+      setOpen(false)
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await withReaddConfirm((override) =>
+        api.updateManager(manager.id, { ...patch, override_suppression: override || undefined }),
+      )
+      // The PATCH answer carries no counts; keep the profile's, take the fields.
+      const fields = Object.fromEntries(CONTACT_KEYS.map((k) => [k, updated[k]]))
+      onSaved({ ...manager, ...fields })
+      setOpen(false)
+    } catch (e) {
+      setError(
+        e instanceof ReaddDeclined
+          ? e.message
+          : e instanceof ApiError && e.status === 422
+            ? t('Bitte Eingaben prüfen.')
+            : t('Nicht gespeichert — bitte erneut versuchen.'),
+      )
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="mb-3 space-y-3">
+      <ContactFields value={draft} onChange={setDraft} />
+      <div className="flex items-center gap-2">
+        <Button tone="primary" onClick={() => void save()} disabled={busy}>
+          <Check className="h-4 w-4" /> {busy ? t('Speichert…') : t('Speichern')}
+        </Button>
+        <Button onClick={() => setOpen(false)} disabled={busy}>
+          <X className="h-4 w-4" /> {t('Abbrechen')}
+        </Button>
+      </div>
+      {error && <p className="text-[12.5px] text-coral-400">{error}</p>}
+    </div>
+  )
+}
 
 /** ELI-40: the Termine tab. Booked meetings first, soonest on top, each with a
  *  calendar file; then the meetings that were held. */
