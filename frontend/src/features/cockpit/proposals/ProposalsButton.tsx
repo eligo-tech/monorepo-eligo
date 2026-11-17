@@ -15,6 +15,7 @@ import { Check, Sparkles, X } from 'lucide-react'
 import { t } from '@/i18n'
 import { dateTime } from '@/i18n/format'
 import { ApiError, api } from '@/api/client'
+import { useActorLabel } from '@/auth/memberNames'
 import type { ProposalDTO } from '@/api/types'
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus'
 import { Button } from '../ui/forms'
@@ -69,6 +70,7 @@ function describe(e: unknown): string {
 
 function ProposalCard({ p, onDone }: { p: ProposalDTO; onDone: () => void }) {
   const [busy, setBusy] = useState(false)
+  const actorLabel = useActorLabel()
   const [error, setError] = useState<string | null>(null)
 
   const decide = async (call: () => Promise<ProposalDTO>) => {
@@ -91,7 +93,7 @@ function ProposalCard({ p, onDone }: { p: ProposalDTO; onDone: () => void }) {
       <p className="text-[14px] font-semibold text-cockpit-text">{p.title}</p>
       <p className="mt-0.5 font-mono text-[11.5px] text-cockpit-faint">
         {t('Vorgeschlagen vom KI-Assistenten für {name} · {date}', {
-          name: p.asked_by_name ?? '—',
+          name: actorLabel(p.asked_by_name) ?? '—',
           date: dateTime(p.created_at),
         })}
       </p>

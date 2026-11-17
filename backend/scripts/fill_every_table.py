@@ -22,10 +22,11 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import os
+import re
 import sys
 import uuid
 
-from sqlalchemy import MetaData, insert, types
+from sqlalchemy import CheckConstraint, MetaData, Table, insert, types
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -61,6 +62,25 @@ def _value(table: str, col):  # noqa: ANN001, ANN202
     return _UNKNOWN
 
 
+# "exactly one of a, b": `(a IS NULL) <> (b IS NULL)`, as Postgres reflects it.
+_ONE_OF = re.compile(r"\(\s*\(?\s*(\w+)\s+IS\s+NULL\s*\)\s*<>\s*\(\s*(\w+)\s+IS\s+NULL\s*\)", re.I)
+
+
+def _left_null(table: Table) -> set[str]:
+    """Columns to leave NULL so a one-of check holds (e.g. follow_ups 0074).
+
+    Every foreign key points at its parent's row, which sets both sides of
+    `ck_follow_ups_one_person`; the second column of such a pair stays NULL.
+    """
+    out: set[str] = set()
+    for c in table.constraints:
+        if isinstance(c, CheckConstraint):
+            for _first, second in _ONE_OF.findall(str(c.sqltext)):
+                if second in table.c and table.c[second].nullable:
+                    out.add(second)
+    return out
+
+
 def _fill(sync_conn) -> list[str]:  # noqa: ANN001
     meta = MetaData()
     meta.reflect(bind=sync_conn)
@@ -70,7 +90,10 @@ def _fill(sync_conn) -> list[str]:  # noqa: ANN001
         if table.name in SKIP:
             continue
         row: dict = {}
+        null = _left_null(table)
         for col in table.columns:
+            if col.name in null:
+                continue
             fks = list(col.foreign_keys)
             if fks:
                 parent = fks[0].column
