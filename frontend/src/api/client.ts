@@ -2,6 +2,10 @@
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
   AgencyDetailDTO,
+  BrandingDTO,
+  BrandingWrite,
+  CoverSheetParams,
+  CoverSheetPreviewDTO,
   AgencyPageDTO,
   AgencyVerdict,
   EraseBody,
@@ -935,6 +939,50 @@ export const api = {
    */
   readDocument: (documentId: string) =>
     request<CVExtractionResultDTO>(`/documents/${documentId}/read`, { method: 'POST' }),
+
+  // ── Cover sheet (ELI-20) ──────────────────────────────────────────────
+
+  /** The workspace's CI. Everyone reads it; only admins change it. */
+  branding: () => request<BrandingDTO>('/branding'),
+  saveBranding: (body: BrandingWrite) =>
+    request<BrandingDTO>('/branding', { method: 'PUT', body: JSON.stringify(body) }),
+  async uploadLogo(file: File): Promise<BrandingDTO> {
+    const body = new FormData()
+    body.append('file', file)
+    const res = await fetch(`${BASE}/branding/logo`, { method: 'PUT', body, headers: await authHeaders() })
+    if (!res.ok) throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+    return res.json() as Promise<BrandingDTO>
+  },
+  async deleteLogo(): Promise<void> {
+    const res = await fetch(`${BASE}/branding/logo`, { method: 'DELETE', headers: await authHeaders() })
+    if (!res.ok) throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+  },
+  /** The logo as a blob, null when none is set. */
+  async brandingLogo(): Promise<Blob | null> {
+    const res = await fetch(`${BASE}/branding/logo`, { headers: await authHeaders() })
+    if (res.status === 404) return null
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+    return res.blob()
+  },
+  /** What the PDF will hold — empty sections, files left out. Reads only. */
+  coverSheetPreview: (candidateId: string, params: CoverSheetParams) =>
+    request<CoverSheetPreviewDTO>(`/candidates/${candidateId}/cover-sheet/preview?${coverQuery(params)}`),
+  /** The PDF. The server records the download as a disclosure (a receipt). */
+  async coverSheet(candidateId: string, params: CoverSheetParams): Promise<Blob> {
+    const res = await fetch(`${BASE}/candidates/${candidateId}/cover-sheet?${coverQuery(params)}`, {
+      headers: await authHeaders(),
+    })
+    if (!res.ok) throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+    return res.blob()
+  },
+}
+
+function coverQuery(params: CoverSheetParams): string {
+  const q = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === 'string' && value.trim()) q.set(key, value.trim())
+  }
+  return q.toString()
 }
 
 export { ApiError }

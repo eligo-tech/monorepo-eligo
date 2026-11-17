@@ -397,6 +397,18 @@ Three domain facts worth knowing before you add a field:
   confirms. Delete is admin-only (ELI-27); anyone marks done. The ELI-22/38
   call-back date (`manager_interactions.next_action_at`) is separate and
   unchanged.
+- **`presentation`** (ELI-20) renders the Kandidatenprofil a client
+  receives: `GET /candidates/{id}/cover-sheet?variant=cover|cover_cv|
+  cover_cv_references|anonymous` (+ `/preview`, which lists empty sections,
+  files left out and unset CI, and writes nothing). `service.compose`
+  decides what is on the page — fields copied 1:1, an empty one leaves its
+  row off, never a model's sentence; anonymous = initials, name and current
+  employer masked in the prose, nothing attached. `render.py` only draws
+  (ReportLab, embedded Montserrat under OFL — no system libraries); CV /
+  Zeugnis / Zertifikat PDFs are appended with pypdf, a non-PDF is named in
+  the preview and skipped. Each download is a disclosure: one READ receipt,
+  ids and variant only. The CI is `workspace_branding`, one row per
+  workspace, admin-edited (`/branding`, `/branding/logo`) — never env vars.
 - **`candidates`** carries the Qualifikationsgespräch set:
   `industries` (plural — the single `industry` column is gone from the code),
   `employment_form`, `salary_minimum` next to `salary_expectation`,

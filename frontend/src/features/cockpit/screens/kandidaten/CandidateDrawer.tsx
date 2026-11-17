@@ -17,6 +17,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Download,
+  FileDown,
   FileText,
   FileWarning,
   GraduationCap,
@@ -51,6 +52,7 @@ import { CandidateNotesPanel } from './CandidateNotesPanel'
 import { ConsentPanel } from './ConsentPanel'
 import { EraseSection } from '../../erasure/EraseSection'
 import { DossierEditor } from './DossierEditor'
+import { CoverSheetDialog } from './CoverSheetDialog'
 
 export function CandidateDrawer({
   candidate,
@@ -78,6 +80,7 @@ export function CandidateDrawer({
   const [focusField, setFocusField] = useState<string | undefined>(undefined)
   const [dto, setDto] = useState<CandidateDTO | null>(null)
   const [dtoError, setDtoError] = useState(false)
+  const [coverOpen, setCoverOpen] = useState(false)
 
   // Which mandates this person is running on. The cockpit links here; without
   // the way back, the record is a dead end — you read the CV and then have to
@@ -90,7 +93,13 @@ export function CandidateDrawer({
         .then((jobs) =>
           jobs
             .filter((j) => j.candidates.some((c) => c.candidate_id === candidate.id))
-            .map((j) => ({ id: j.job_id, title: j.job_title, client: j.company_name })),
+            .map((j) => ({
+              id: j.job_id,
+              title: j.job_title,
+              client: j.company_name,
+              applicationId:
+                j.candidates.find((c) => c.candidate_id === candidate.id)?.application_id ?? '',
+            })),
         )
         .catch(() => []),
     [candidate.id, runsKey],
@@ -160,6 +169,19 @@ export function CandidateDrawer({
 
   return (
     <Drawer onClose={onClose} wide={expanded}>
+      {coverOpen && (
+        <CoverSheetDialog
+          candidateId={candidate.id}
+          runs={(runs ?? [])
+            .filter((r) => r.applicationId)
+            .map((r) => ({
+              applicationId: r.applicationId,
+              title: r.client ? `${r.title} · ${r.client}` : r.title,
+            }))}
+          defaultPosition={candidate.currentTitle === '—' ? '' : candidate.currentTitle}
+          onClose={() => setCoverOpen(false)}
+        />
+      )}
       {/* Header */}
       <div className="flex items-start justify-between gap-4 border-b border-cockpit-line bg-cockpit-surface px-8 py-5">
         <div className="flex items-center gap-4">
@@ -199,6 +221,14 @@ export function CandidateDrawer({
               <span className="truncate">{t('Im Prozess')}: {run.client ?? run.title}</span>
             </a>
           ))}
+          <button
+            type="button"
+            onClick={() => setCoverOpen(true)}
+            title={t('Kandidatenprofil als PDF')}
+            className="flex items-center gap-1.5 rounded-xl border border-cockpit-line px-3.5 py-2 text-[13px] text-cockpit-dim transition-colors hover:border-cockpit-edge hover:text-cockpit-text"
+          >
+            <FileDown className="h-4 w-4" /> {t('Profil-PDF')}
+          </button>
           <a
             href={`mailto:${candidate.email}`}
             className="flex items-center gap-1.5 rounded-xl border border-mint-600 bg-mint-800/40 px-3.5 py-2 text-[13px] font-medium text-mint-300 transition-colors hover:bg-mint-800/70"
