@@ -74,6 +74,9 @@ PARTNER_DUE = "is_active AND source_url IS NOT NULL AND source_page_fetched_at I
 #: again a week later. Literal values, not bind parameters: a cached generic
 #: plan cannot prove a parameterised IN list implies the index predicate.
 PARTNER_RETRY = "is_active AND source_url IS NOT NULL AND source_page_status IN (429, 503)"
+#: Open ads whose partner page was tried: the other half of the progress counts
+#: (`service.partner_pages_progress`, migration 0073).
+PARTNER_SEEN = "is_active AND source_url IS NOT NULL AND source_page_fetched_at IS NOT NULL"
 
 UNCLASSIFIED = f"is_active AND (job_family_rules IS NULL OR job_family_rules < {JOB_FAMILY_RULES})"
 
@@ -340,6 +343,14 @@ class HubJobPosting(Base, IDMixin, TimestampMixin):
             "source_page_fetched_at",
             postgresql_where=text(PARTNER_RETRY),
             sqlite_where=text(PARTNER_RETRY),
+        ),
+        # The tried half, keyed on the status: the progress counts read it
+        # index-only instead of scanning the table.
+        Index(
+            "ix_hub_posting_partner_seen",
+            "source_page_status",
+            postgresql_where=text(PARTNER_SEEN),
+            sqlite_where=text(PARTNER_SEEN),
         ),
         # The model pass's queue (ELI-25): small, so the partial index is too.
         Index(
