@@ -801,7 +801,7 @@ export interface ProcessJobDTO {
 }
 
 /** What an uploaded file IS. Mirrors the backend's `DocumentKind`. */
-export type DocumentKind = 'cv' | 'transkript' | 'zeugnis' | 'zertifikat' | 'sonstiges'
+export type DocumentKind = 'cv' | 'transkript' | 'zeugnis' | 'zertifikat' | 'coversheet' | 'sonstiges'
 
 /** One file on a candidate — metadata only; the bytes come from its own URL. */
 export interface CandidateDocumentDTO {

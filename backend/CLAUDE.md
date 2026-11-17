@@ -377,7 +377,7 @@ Three domain facts worth knowing before you add a field:
   application, because the same person against another Muss-Profil is a
   different fit.
 - **`documents`** stores every file a candidate has with a `kind`
-  (cv · transkript · zeugnis · zertifikat · sonstiges). "The CV" is the newest
+  (cv · transkript · zeugnis · zertifikat · coversheet · sonstiges). "The CV" is the newest
   file *of that kind*; before the column it was simply the newest file.
 - **`atsimport`** is the seam to a customer's own system: `connectors/base.py`
   holds the neutral records (`SourcedCompany/Manager/Job/Candidate`) and the

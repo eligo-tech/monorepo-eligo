@@ -35,6 +35,7 @@ from app.domain.candidates.employment import normalize_employment_form
 from app.domain.candidates.schemas import CandidateCreate
 from app.domain.common.enums import DocumentKind, WorkPermitStatus
 from app.domain.documents import gate, parser
+from app.domain.documents.coversheet import parse_coversheet
 from app.domain.documents.models import CandidateDocument
 from app.domain.documents.extraction import get_cv_extractor
 from app.domain.documents.extraction.base import (
@@ -43,6 +44,7 @@ from app.domain.documents.extraction.base import (
     FIELD_ORDER,
     REFERENCE_FIELDS_BY_KIND,
     REFERENCE_INTERPRETED_FIELDS,
+    REFERENCE_LIST_FIELDS,
     REFERENCE_VERBATIM_FIELDS,
     TRANSCRIPT_FIELD_ORDER,
     ZEUGNIS_GRADES,
@@ -672,7 +674,7 @@ def _ground_reference(
                 review.append(f"{label}: Zitat ist keine Leistungsbeurteilung — verworfen")
                 continue
             confidence = min(confidence, _INTERPRETATION_CEILING)
-        elif f.field in ("skills", "tasks"):
+        elif f.field in REFERENCE_LIST_FIELDS:
             # A list is only as grounded as each of its items: one real quote
             # must not carry an invented task or skill along with it.
             check = _skill_in_text if f.field == "skills" else gate.is_grounded
@@ -743,7 +745,7 @@ async def read_reference(
         raise LookupError("document not found")
     if doc.kind not in READABLE_KINDS:
         raise PreconditionFailed(
-            "nur Zeugnisse und Zertifikate können gelesen werden"
+            "nur Zeugnisse, Zertifikate und Cover Sheets können gelesen werden"
         )
 
     if doc.content_type.startswith("image/"):
@@ -758,7 +760,15 @@ async def read_reference(
         reason = next((o.reason for o in pre if not o.ok), "precondition failed")
         raise PreconditionFailed(reason or "precondition failed")
 
-    raw, extractor_name = await asyncio.to_thread(_run_reference_extractor, text, doc.kind)
+    # A partner's cover sheet is our own labelled template: read by its
+    # labels, no model. Only a sheet with none of them goes to the provider.
+    raw = parse_coversheet(text) if doc.kind == DocumentKind.COVERSHEET.value else []
+    if raw:
+        extractor_name = "Cover-Sheet-Vorlage (Label-Parser)"
+    else:
+        raw, extractor_name = await asyncio.to_thread(
+            _run_reference_extractor, text, doc.kind
+        )
     notes.append(f"gelesen via {extractor_name}")
     fields, review_items = _ground_reference(raw, text, doc.kind)
     if not fields:

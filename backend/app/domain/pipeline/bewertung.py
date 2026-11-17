@@ -42,6 +42,7 @@ DOCUMENT_LABELS: dict[str, str] = {
     "transkript": "Gesprächstranskript",
     "zeugnis": "Zeugnis",
     "zertifikat": "Zertifikat",
+    "coversheet": "Cover Sheet eines Partner-Rekruiters",
     "sonstiges": "Sonstiges Dokument",
 }
 

@@ -66,7 +66,7 @@ export function serverCopy(): ServerString[] {
   push('kpis.py reason', all(kpiDefs, /^\s*unavailable_because="([^"]+)"/gm))
   push('features label', all(features, /^\s*label="([^"]+)"/gm))
   push('features reason', all(features, /^\s*reason="([^"]+)"/gm))
-  for (const block of all(extraction, /^(?:ZEUGNIS|ZERTIFIKAT)_FIELDS[^=]*= \{([^}]*)\}/gm)) {
+  for (const block of all(extraction, /^(?:ZEUGNIS|ZERTIFIKAT|COVERSHEET)_FIELDS[^=]*= \{([^}]*)\}/gm)) {
     push('reference field label', all(block, /"[a-z_]+":\s*"([^"]+)"/g))
   }
   return out

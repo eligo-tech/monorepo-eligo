@@ -54,7 +54,7 @@ class DocumentRead(BaseModel):
 
     id: uuid.UUID
     candidate_id: uuid.UUID
-    #: "cv" | "transkript" | "zeugnis" | "zertifikat" | "sonstiges"
+    #: "cv" | "transkript" | "zeugnis" | "zertifikat" | "coversheet" | "sonstiges"
     kind: str
     filename: str
     content_type: str

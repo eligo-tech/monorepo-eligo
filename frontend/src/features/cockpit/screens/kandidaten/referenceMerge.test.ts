@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { t } from '@/i18n'
 
 import type { CVFieldDTO } from '@/api/types'
-import { buildReferencePatch, type MergeBase } from './referenceMerge'
+import { buildCoverSheetPatch, buildReferencePatch, type MergeBase } from './referenceMerge'
 
 const field = (name: string, value: string, extra: Partial<CVFieldDTO> = {}): CVFieldDTO => ({
   field: name,
@@ -169,5 +169,62 @@ describe('buildReferencePatch', () => {
     const patch = buildReferencePatch(base, fields, new Set(['tasks']), 'zeugnis')
     expect(patch.skills).toBeUndefined()
     expect(Object.keys(patch).sort()).toEqual(['base_updated_at', 'focus_areas'])
+  })
+})
+
+describe('buildCoverSheetPatch — a partner filled our cover sheet (ELI-19)', () => {
+  const sheet = [
+    field('desired_position', 'IT-Administrator (m/w/d)'),
+    field('profile_summary', 'Der Kandidat ist Fachinformatiker.'),
+    field('technical_profile', 'Remote Maintenance, Patchmanagement'),
+    field('skills', 'java; Patchmanagement', { needs_review: true }),
+    field('expected_salary', 'Ca. 70.000 €'),
+    field('notice_period', '3 Monate'),
+    field('qualifications', 'Fachinformatiker für Systemintegration; B.Sc. Informatik'),
+    field('languages', 'deutsch: Muttersprache (C2); englisch: fließend (C1)'),
+    field('motivation', 'Er möchte sich weiterentwickeln.'),
+  ]
+  const withLanguages: MergeBase = { ...base, languages: ['Englisch'] }
+
+  it('maps every ticked row onto the column it belongs in', () => {
+    const patch = buildCoverSheetPatch(withLanguages, sheet, all(sheet))
+
+    expect(patch.profile_summary).toBe('Der Kandidat ist Fachinformatiker.')
+    expect(patch.technical_profile).toBe('Remote Maintenance, Patchmanagement')
+    expect(patch.salary_expectation).toBe(70000)
+    expect(patch.notice_period).toBe('3 Monate')
+    expect(patch.motivation).toBe('Er möchte sich weiterentwickeln.')
+    expect(patch.skills).toEqual(['Java', 'SQL', 'Patchmanagement'])
+    expect(patch.languages).toEqual([
+      'Englisch',
+      'deutsch: Muttersprache (C2)',
+      'englisch: fließend (C1)',
+    ])
+    // A qualification the record already holds is not added twice.
+    expect(patch.education).toEqual([
+      { degree: 'B.Sc. Informatik', institution: 'TU München' },
+      {
+        degree: 'Fachinformatiker für Systemintegration',
+        institution: '',
+        location: '',
+        start_date: '',
+        end_date: '',
+      },
+    ])
+    // No column for the target role: it goes into the notes, attributed.
+    expect(patch.other_notes).toBe(
+      `Spricht fließend Englisch.\n${t('Cover Sheet')} · ${t('Angestrebte Position')}: IT-Administrator (m/w/d)`,
+    )
+    expect(patch.base_updated_at).toBe(base.updated_at)
+  })
+
+  it('writes only what was ticked', () => {
+    const patch = buildCoverSheetPatch(base, sheet, new Set(['notice_period']))
+    expect(patch).toEqual({ notice_period: '3 Monate', base_updated_at: base.updated_at })
+  })
+
+  it('never turns a salary range into one number', () => {
+    const range = [field('expected_salary', '70.000 - 80.000 €')]
+    expect(buildCoverSheetPatch(base, range, all(range))).toEqual({})
   })
 })

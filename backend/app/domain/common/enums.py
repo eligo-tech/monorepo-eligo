@@ -345,6 +345,9 @@ class DocumentKind(str, enum.Enum):
     TRANSKRIPT = "transkript"
     ZEUGNIS = "zeugnis"
     ZERTIFIKAT = "zertifikat"
+    #: Our own "Kandidatenprofil" cover sheet as a partner recruiter filled it
+    #: in (ELI-19) — read back into proposals like a Zeugnis.
+    COVERSHEET = "coversheet"
     SONSTIGES = "sonstiges"
 
 
