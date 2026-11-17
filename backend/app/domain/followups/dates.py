@@ -28,6 +28,10 @@ Rules:
   * Nothing further out than `_HORIZON_DAYS` ("in 5 Jahren will er
     Teamleiter sein" is a plan, not a calendar entry). A two-digit year
     more than ten years ahead is last century's ("Jahrgang 12.5.85").
+  * A quarter ("Q1", "im ersten Quartal", ELI-48) is its first working
+    day; a past quarter means next year's, the current one the next
+    working day. A weekday, bare or with am/bis/ab/nächsten, is the next
+    one after the note's day ("montags" is a habit and is not read).
   * Several phrases: each is offered, in the order they appear, each date
     once, at most `MAX_SUGGESTIONS`. Overlapping matches keep the longer.
 
@@ -311,6 +315,33 @@ def _new_year(m: re.Match[str], ref: dt.date) -> dt.date:
     return d if d >= ref else _first_working(ref.year + 1, 1)
 
 
+_ORDINAL_QUARTERS = {"ersten": 1, "zweiten": 2, "dritten": 3, "vierten": 4}
+
+
+def _quarter(m: re.Match[str], ref: dt.date) -> dt.date | None:
+    """"Q1", "im ersten Quartal", "im 2. Quartal 2027": the quarter's first
+    working day. A quarter already past means next year's; the quarter we
+    are in means from now on (the next working day), like "im November"."""
+    raw = m["q"] or m["qnum"] or m["qword"]
+    quarter = _ORDINAL_QUARTERS.get(raw.lower()) or int(raw)
+    if not 1 <= quarter <= 4:
+        return None
+    month = 3 * quarter - 2
+    year = _year(m["year"], ref)
+    if year is not None:
+        d = _first_working(year, month)
+        if d >= ref:
+            return d
+        in_it = (year, quarter) == (ref.year, (ref.month - 1) // 3 + 1)
+        return _roll(ref + dt.timedelta(days=1)) if in_it else None
+    d = _first_working(ref.year, month)
+    if d >= ref:
+        return d
+    if (ref.month - 1) // 3 + 1 == quarter:
+        return _roll(ref + dt.timedelta(days=1))
+    return _first_working(ref.year + 1, month)
+
+
 def _after_easter(m: re.Match[str], ref: dt.date) -> dt.date:
     """The Tuesday after Easter Monday — the first working day after Easter."""
     d = _easter(ref.year) + dt.timedelta(days=2)
@@ -323,7 +354,8 @@ def _tomorrow(m: re.Match[str], ref: dt.date) -> dt.date:
 
 
 def _weekday(m: re.Match[str], ref: dt.date) -> dt.date:
-    """"am Freitag": the next one after the note's date."""
+    """"am Freitag", "bis Montag", a bare "Dienstag": the next one after the
+    note's date (said on a Tuesday, "Dienstag" is next week's)."""
     target = _WEEKDAYS.index(m["wd"].lower())
     return ref + dt.timedelta(days=(target - ref.weekday()) % 7 or 7)
 
@@ -371,6 +403,15 @@ _RULES: list[tuple[re.Pattern[str], Resolver]] = [
         ),
         _new_year,
     ),
+    (
+        re.compile(
+            r"\b(?:(?:im|in|ab)\s+)?(?:q(?P<q>[1-4])"
+            r"|(?:dem\s+)?(?:(?P<qnum>[1-4])\.|(?P<qword>ersten|zweiten|dritten|vierten))\s+quartal)"
+            r"(?:(?:\s*/\s*|\s+)(?P<year>20\d{2}))?\b",
+            _F,
+        ),
+        _quarter,
+    ),
     (re.compile(r"\bnach\s+(?:den\s+)?(?:ostern|osterferien|osterfeiertagen)\b", _F), _after_easter),
     # "heute Morgen" is this morning, "am Morgen" a time of day.
     (
@@ -380,7 +421,7 @@ _RULES: list[tuple[re.Pattern[str], Resolver]] = [
         ),
         _tomorrow,
     ),
-    (re.compile(rf"\b(?:am|nächsten|naechsten|kommenden|diesen)\s+(?P<wd>{'|'.join(_WEEKDAYS)})\b", _F), _weekday),
+    (re.compile(rf"\b(?:(?:am|bis|ab|nächsten|naechsten|kommenden|diesen)\s+)?(?P<wd>{'|'.join(_WEEKDAYS)})\b", _F), _weekday),
 ]
 
 

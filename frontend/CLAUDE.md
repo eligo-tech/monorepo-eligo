@@ -73,8 +73,10 @@ linked to its person with "Erledigt" and "In Kalender" (.ics built in the
 browser, `ui/followUps.ts`); the count due today is the badge on the Cockpit
 entry of the section picker. The same list per person sits on the manager
 page, the Leads row and the candidate's notes (`followups/PersonFollowUps`);
-after a note is saved, `followups/NoteFollowUpOffer` offers the date the note
-names ("Wiedervorlage am … anlegen?") — nothing is created without the click.
+after every call or note, `followups/NoteFollowUpOffer` offers a Wiedervorlage:
+the date the note names ("Wiedervorlage am … anlegen?"), or — no date in it
+(ELI-48) — the form with a week out and the note as the to-do, editable;
+nothing is created without the click.
 `followups/` fetches; `ui/FollowUp*.tsx` stay presentational.
 
 **Screens are ordered as a drill-down** — `cockpit` → `kandidaten` →
