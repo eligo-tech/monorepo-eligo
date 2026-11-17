@@ -332,6 +332,9 @@ These are enforced in code. Do not route around them.
   `GET /hub/companies/impressum/totals` (machine-only): every workspace's
   companies with a VAT id or register (Markt first, else their own), the open
   ones by stored outcome, sole traders; a failed read warns, never fails.
+  A second line, "Unternehmen ↔ Markt gesamt", shows the Markt side step by
+  step: linked → employer site checked by Markt → verified reading → VAT
+  id/register ("aus Markt"), so a low "aus Markt" names its own cause.
 - **The shared corpus holds public facts — persons only as a public source named
   them.** A contact person in a public job ad may be stored in the corpus as
   published, with provenance (posting/URL + fetch time); do not redact it.

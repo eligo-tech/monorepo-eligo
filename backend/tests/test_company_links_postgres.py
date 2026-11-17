@@ -83,3 +83,44 @@ async def test_every_workspace_is_linked_although_the_request_is_pinned_to_one()
             async with SessionLocal() as s:
                 linked = (await s.scalars(select(HubCompanyLink).where(HubCompanyLink.company_id == company))).all()
         assert len(linked) == 1, tenant
+
+
+async def test_impressum_totals_count_markt_readings_in_every_workspace_under_rls() -> None:
+    """"0 aus Markt" (2026-11-17): the totals read `hub_company_link` (tenant
+    table) and `hub_site_checks` (shared corpus) once per workspace, under
+    RLS, from a request pinned to the ingest token's workspace. A linked
+    company whose Markt employer has a verified Impressum with a VAT id
+    counts as "aus Markt" in every workspace, not only the pinned one."""
+    from app.domain.companies import impressum
+    from app.domain.hub.models import HubSiteCheck
+
+    a, a_company = await _workspace("A")
+    b, b_company = await _workspace("B")
+    for tenant, company in ((a, a_company), (b, b_company)):
+        with _as(tenant):
+            async with SessionLocal() as s:
+                # A name no workspace company has: the linking test must not
+                # find this row (the link here is set by hand).
+                name = f"Totals {uuid.uuid4().hex} GmbH"
+                hub = HubCompany(
+                    name=name, normalized_name=normalize_company_name(name),
+                    dedupe_key=f"k-{uuid.uuid4()}", resolution_basis="name_place", city="Nürnberg",
+                    source="bundesagentur", kind=EMPLOYER, first_seen_at=NOW, last_seen_at=NOW,
+                )
+                s.add(hub)
+                await s.flush()
+                s.add(HubSiteCheck(
+                    domain=f"{uuid.uuid4().hex}.de", group_key=f"employer:{hub.id}", hub_company_id=hub.id,
+                    status="verified", facts={"vat_id": "DE123456789"}, checked_at=NOW,
+                ))
+                s.add(HubCompanyLink(tenant_id=tenant, hub_company_id=hub.id, company_id=company))
+                await s.commit()
+    for tenant in (a, b):
+        with _as(tenant):
+            async with SessionLocal() as s:
+                t = await impressum.totals(s, tenant_id=tenant)
+        assert (t["linked"], t["linked_checked"], t["linked_reading"], t["markt"]) == (1, 1, 1, 1), tenant
+    with _as(a):  # as the operator request runs: pinned to one workspace
+        total = await impressum.totals_all_workspaces()
+        assert current_tenant_var.get() == str(a)
+    assert total["markt"] >= 2 and total["linked"] >= 2
