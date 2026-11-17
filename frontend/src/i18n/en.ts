@@ -1327,4 +1327,8 @@ export const EN: Record<string, string> = {
   'In Kalender': 'Add to calendar',
   'Als .ics in den eigenen Kalender übernehmen': 'Download as .ics for your own calendar',
   'Noch keine Termine. Ein Ereignis der Art „Meeting Notes“ erscheint hier — mit Datum und Uhrzeit.': 'No appointments yet. An event of type “Meeting Notes” appears here — with date and time.',
+  // ELI-45: a contact's details, when adding and editing one.
+  'Abteilung': 'Department',
+  'LinkedIn-Profil': 'LinkedIn profile',
+  'Kontaktdaten bearbeiten': 'Edit contact details',
 }

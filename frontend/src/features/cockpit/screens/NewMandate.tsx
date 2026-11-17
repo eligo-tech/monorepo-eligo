@@ -43,6 +43,7 @@ import {
   TextInput,
 } from '../ui/forms'
 import { Label } from '../ui/primitives'
+import { ContactFields, EMPTY_CONTACT, contactPayload, type ContactDraft } from '../ui/contactFields'
 
 
 /** The typed name, when it is not one of the rows: what would be created.
@@ -222,8 +223,8 @@ export function NewMandate({
   const [managerId, setManagerId] = useState<string | null>(null)
   const [managerDraft, setManagerDraft] = useState('')
   const [managerQuery, setManagerQuery] = useState('')
-  const [managerRole, setManagerRole] = useState('')
-  const [managerEmail, setManagerEmail] = useState('')
+  // ELI-45: every detail the contact record holds, not only the e-mail.
+  const [managerContact, setManagerContact] = useState<ContactDraft>(EMPTY_CONTACT)
   const [location, setLocation] = useState('')
   const [salaryMin, setSalaryMin] = useState('')
   const [salaryMax, setSalaryMax] = useState('')
@@ -322,8 +323,7 @@ export function NewMandate({
             override_suppression: override || undefined,
             company_id: client,
             full_name: newContact,
-            role_title: managerRole.trim() || null,
-            email: managerEmail.trim() || null,
+            ...contactPayload(managerContact),
             // Provenance on the way in: the Art. 14 flow reads this later,
             // and a contact with no recorded origin cannot be assessed for
             // it afterwards.
@@ -471,20 +471,7 @@ export function NewMandate({
               icon={UserRound}
             />
             {newContact && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <TextInput
-                  label={t('Rolle')}
-                  value={managerRole}
-                  onChange={setManagerRole}
-                  placeholder="Head of IT"
-                />
-                <TextInput
-                  label={t('E-Mail')}
-                  value={managerEmail}
-                  onChange={setManagerEmail}
-                  placeholder={t('optional')}
-                />
-              </div>
+              <ContactFields value={managerContact} onChange={setManagerContact} />
             )}
           </>
         )}

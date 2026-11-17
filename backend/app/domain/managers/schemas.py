@@ -94,13 +94,15 @@ class ManagerCreate(BaseModel):
     override_suppression: bool = False
     company_id: uuid.UUID
     full_name: str = Field(min_length=1, max_length=200)
-    first_name: str | None = None
-    last_name: str | None = None
-    role_title: str | None = None
-    department: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    linkedin_url: str | None = None
+    #: Capped at the column widths (ELI-45): past them Postgres refuses the
+    #: row and the recruiter would see a 500 instead of a 422.
+    first_name: str | None = Field(default=None, max_length=120)
+    last_name: str | None = Field(default=None, max_length=120)
+    role_title: str | None = Field(default=None, max_length=200)
+    department: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=320)
+    phone: str | None = Field(default=None, max_length=50)
+    linkedin_url: str | None = Field(default=None, max_length=300)
     #: Required in practice even though it defaults: a person record whose
     #: origin is unknown cannot be assessed for Art. 14 later.
     source: ConfidenceSource = ConfidenceSource.SELF_REPORTED
@@ -113,13 +115,15 @@ class ManagerUpdate(BaseModel):
     #: came back of their own accord.
     override_suppression: bool = False
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
-    first_name: str | None = None
-    last_name: str | None = None
-    role_title: str | None = None
-    department: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    linkedin_url: str | None = None
+    #: Capped at the column widths (ELI-45): past them Postgres refuses the
+    #: row and the recruiter would see a 500 instead of a 422.
+    first_name: str | None = Field(default=None, max_length=120)
+    last_name: str | None = Field(default=None, max_length=120)
+    role_title: str | None = Field(default=None, max_length=200)
+    department: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=320)
+    phone: str | None = Field(default=None, max_length=50)
+    linkedin_url: str | None = Field(default=None, max_length=300)
     notes: str | None = None
     status: str | None = None
 

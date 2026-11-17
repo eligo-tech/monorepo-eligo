@@ -521,3 +521,49 @@ async def test_list_reports_the_whole_contact_pool() -> None:
         assert filtered.headers["x-total-count"] == "4"
 
         assert (await c.get("/api/v1/managers", params={"limit": 1000})).status_code == 200
+
+
+# --- ELI-45: contact details entered by hand --------------------------------
+
+
+async def test_a_contact_created_with_a_mandate_keeps_every_detail_and_can_be_edited() -> None:
+    """ELI-45: the recruiter adds Telefon, Rolle, Abteilung and LinkedIn when
+    creating the contact, and corrects them later on the Manager page."""
+    async with _api() as c:
+        cid = (await c.post("/api/v1/companies", json={"name": "Kontaktdaten GmbH"})).json()["id"]
+        created = await c.post("/api/v1/managers", json={
+            "company_id": cid, "full_name": "Jana Ruf", "role_title": "Head of IT",
+            "department": "IT", "email": "jana.ruf@kontaktdaten.de", "phone": "+49 30 1234567",
+            "linkedin_url": "https://www.linkedin.com/in/janaruf", "source": "self_reported",
+        })
+        assert created.status_code == 201, created.text
+        body = created.json()
+        assert (body["phone"], body["department"], body["linkedin_url"]) == (
+            "+49 30 1234567", "IT", "https://www.linkedin.com/in/janaruf")
+
+        edited = await c.patch(f"/api/v1/managers/{body['id']}", json={
+            "phone": "+49 171 7654321", "role_title": "CTO", "department": None,
+        })
+        assert edited.status_code == 200, edited.text
+        after = edited.json()
+        assert (after["phone"], after["role_title"], after["department"]) == ("+49 171 7654321", "CTO", None)
+        # Untouched fields stay; provenance is not rewritten by an edit.
+        assert after["email"] == "jana.ruf@kontaktdaten.de"
+        assert after["source"] == "self_reported"
+
+
+@pytest.mark.parametrize(
+    "field,limit",
+    [("phone", 50), ("email", 320), ("role_title", 200), ("department", 120), ("linkedin_url", 300)],
+)
+async def test_an_overlong_contact_detail_is_a_422_not_a_database_error(field, limit) -> None:
+    """The columns are VARCHAR(n). Without a cap on the wire, Postgres refuses
+    the row and the recruiter sees a 500 for an over-long paste."""
+    async with _api() as c:
+        cid = (await c.post("/api/v1/companies", json={"name": f"Länge {field}"})).json()["id"]
+        too_long = "x" * (limit + 1)
+        create = await c.post("/api/v1/managers", json={"company_id": cid, "full_name": "Lang", field: too_long})
+        assert create.status_code == 422, create.text
+        ok = await c.post("/api/v1/managers", json={"company_id": cid, "full_name": "Lang"})
+        patch = await c.patch(f"/api/v1/managers/{ok.json()['id']}", json={field: too_long})
+        assert patch.status_code == 422, patch.text

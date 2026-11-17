@@ -265,6 +265,16 @@ async def update_manager(
         await erasure.guard_readd(
             session, tenant_id=tenant_id, email=changes["email"], override=override
         )
+    if changes.get("phone") and changes["phone"] != manager.phone and not override:
+        # ELI-45: the phone is editable on the Manager page. Create refuses an
+        # erased person's direct number; setting it by an edit is the same act.
+        # Phone only — the surname is this record's own and did not change.
+        from app.domain.erasure import service as erasure
+
+        guard = await erasure.person_guard(session, tenant_id)
+        on = guard.erased_on(company_name=None, surname=None, phone=changes["phone"])
+        if on is not None:
+            raise erasure.Suppressed(on)
     for field, value in changes.items():
         setattr(manager, field, value)
     await session.commit()
