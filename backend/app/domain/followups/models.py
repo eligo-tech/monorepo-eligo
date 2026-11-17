@@ -62,7 +62,7 @@ class FollowUp(Base, IDMixin, TenantMixin, TimestampMixin):
     #: The note it came from, if any. SET NULL: deleting a note must not take
     #: the open to-do with it.
     source_interaction_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("manager_interactions.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("manager_interactions.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     due_date: Mapped[dt.date] = mapped_column(Date, nullable=False)

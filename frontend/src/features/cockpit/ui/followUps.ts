@@ -132,5 +132,28 @@ export function followUpIcs(
     'END:VEVENT',
     'END:VCALENDAR',
   ]
-  return lines.join('\r\n') + '\r\n'
+  return lines.map(fold).join('\r\n') + '\r\n'
+}
+
+/** RFC 5545 §3.1: lines longer than 75 octets are folded (CRLF + one space),
+ *  measured in UTF-8 bytes and never inside a character — "ü" is two. */
+function fold(line: string): string {
+  const enc = new TextEncoder()
+  const parts: string[] = []
+  let current = ''
+  let bytes = 0
+  for (const ch of line) {
+    const size = enc.encode(ch).length
+    // Continuation lines start with a space, which counts toward the 75.
+    const limit = parts.length === 0 ? 75 : 74
+    if (bytes + size > limit) {
+      parts.push(current)
+      current = ''
+      bytes = 0
+    }
+    current += ch
+    bytes += size
+  }
+  parts.push(current)
+  return parts.join('\r\n ')
 }

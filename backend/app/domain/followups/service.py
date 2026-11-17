@@ -128,10 +128,18 @@ async def create(
     if owner is None:
         raise NotFound("person")
     if payload.source_interaction_id is not None:
+        # The note must be about the same person: a follow-up copies its
+        # text, and erasing a person must find every copy (review of #277).
+        same_person = (
+            ManagerInteraction.manager_id == payload.manager_id
+            if payload.manager_id is not None
+            else ManagerInteraction.candidate_id == payload.candidate_id
+        )
         note = await session.scalar(
             select(ManagerInteraction.id).where(
                 ManagerInteraction.id == payload.source_interaction_id,
                 ManagerInteraction.tenant_id == tenant_id,
+                same_person,
             )
         )
         if note is None:

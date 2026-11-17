@@ -107,6 +107,16 @@ describe('followUpIcs', () => {
     expect(ics).toContain('DESCRIPTION:Anruf\\; Budget\\, Q1')
   })
 
+  it('folds long lines at 75 octets without splitting a character (RFC 5545 §3.1)', () => {
+    const text = 'Bedarf für 2027 klären — Ansprechpartnerin Frau Müller-Lüdenscheidt, Rückruf erwünscht; '.repeat(4)
+    const ics = followUpIcs(row({ text }), 'Wiedervorlage — Jürgen Groß-Übelhör', now)
+    const lines = ics.split('\r\n')
+    for (const line of lines) expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75)
+    // Unfolding gives the escaped text back intact.
+    const unfolded = ics.replace(/\r\n /g, '')
+    expect(unfolded).toContain(`DESCRIPTION:${text.replace(/;/g, '\\;').replace(/,/g, '\\,')}`)
+  })
+
   it('rolls an end past midnight into the next day', () => {
     const ics = followUpIcs(row({ due_date: '2026-12-31', due_time: '23:45:00' }), 'X', now)
     expect(ics).toContain('DTEND:20270101T001500')

@@ -284,3 +284,60 @@ async def test_erasing_the_person_erases_their_follow_ups(monkeypatch) -> None:
     async with SessionLocal() as s:
         left = (await s.scalars(select(FollowUp.text))).all()
     assert left == ["bleibt"]
+
+
+async def test_a_note_about_someone_else_is_not_a_source() -> None:
+    await create_all()
+    p = await _people()
+    async with SessionLocal() as s:
+        note = ManagerInteraction(
+            tenant_id=TENANT, manager_id=p["lead"], interaction_type="note",
+            occurred_at=dt.datetime.now(dt.UTC), summary="über Petra",
+        )
+        s.add(note)
+        await s.commit()
+        note_id = note.id
+    async with _api() as client:
+        r = await client.post(
+            f"{API}/follow-ups",
+            json={"manager_id": str(p["manager"]), "due_date": "2026-12-01", "text": "x", "source_interaction_id": str(note_id)},
+        )
+    assert r.status_code == 404
+
+
+async def test_erasing_a_candidate_takes_a_follow_up_copied_from_a_note_about_them(monkeypatch) -> None:
+    """A manager note can name a candidate; a follow-up confirmed from it
+    carries the note's text. Erasing the candidate deletes the note — and
+    the follow-up that copied it (review of #277)."""
+    from app.domain.erasure import service as erasure
+
+    monkeypatch.setattr(settings, "suppression_key", "k" * 40)
+    await create_all()
+    p = await _people()
+    async with SessionLocal() as s:
+        note = ManagerInteraction(
+            tenant_id=TENANT, manager_id=p["manager"], candidate_id=p["candidate"], interaction_type="note",
+            occurred_at=dt.datetime.now(dt.UTC), summary="Erika Muster vorgestellt, Anfang Februar Feedback",
+        )
+        s.add(note)
+        await s.flush()
+        s.add(FollowUp(
+            tenant_id=TENANT, manager_id=p["manager"], due_date=dt.date(2027, 2, 1),
+            text="Erika Muster vorgestellt, Anfang Februar Feedback", source_interaction_id=note.id, origin="note",
+        ))
+        await s.commit()
+    async with SessionLocal() as s:
+        await erasure.erase_candidate(
+            s, tenant_id=TENANT, candidate_id=p["candidate"], confirm_name="Erika Muster", reason="erasure",
+            requested_on=dt.date(2026, 11, 17), actor_user_id="u", actor_name="A",
+        )
+        await s.commit()
+    async with SessionLocal() as s:
+        assert (await s.scalars(select(FollowUp.text))).all() == []
+
+
+async def test_suggest_refuses_an_unbounded_text() -> None:
+    await create_all()
+    async with _api() as client:
+        r = await client.post(f"{API}/follow-ups/suggest", json={"text": "x" * 20_001, "reference_date": "2026-11-17"})
+    assert r.status_code == 422

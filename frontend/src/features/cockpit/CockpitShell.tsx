@@ -170,7 +170,11 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         onTypefaceChange={setTypeface}
         screens={(withAgencyScreen(SCREENS, agencyFinder === true) as SectionOption<ScreenKey>[]).map((s) =>
           s.key === 'cockpit'
-            ? { ...s, badge: dueFollowUps, badgeTitle: t('{n} Wiedervorlagen fällig', { n: String(dueFollowUps) }) }
+            ? { ...s, badge: dueFollowUps, badgeTitle:
+                  dueFollowUps === 1
+                    ? t('1 Wiedervorlage fällig')
+                    : t('{n} Wiedervorlagen fällig', { n: String(dueFollowUps) }),
+              }
             : s,
         )}
         screen={screen}

@@ -82,7 +82,9 @@ class SuggestRequest(BaseModel):
     """The note's text and the day it is about (the note's date, in the
     recruiter's own calendar)."""
 
-    text: str
+    #: Capped: notes can be whole transcripts, and the reader only needs the
+    #: part a follow-up date is in.
+    text: str = Field(max_length=20_000)
     reference_date: dt.date
 
 

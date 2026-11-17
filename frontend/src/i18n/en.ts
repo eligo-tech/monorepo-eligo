@@ -1329,6 +1329,8 @@ export const EN: Record<string, string> = {
   'Noch keine Termine. Ein Ereignis der Art „Meeting Notes“ erscheint hier — mit Datum und Uhrzeit.': 'No appointments yet. An event of type “Meeting Notes” appears here — with date and time.',
   // ELI-44: Wiedervorlagen (follow-ups)
   '{n} Wiedervorlagen fällig': '{n} follow-ups due',
+  '1 Wiedervorlage fällig': '1 follow-up due',
+  'Wiedervorlage für alle löschen?': 'Delete this follow-up for everyone?',
   'Wiedervorlagen': 'Follow-ups',
   'Wiedervorlage': 'Follow-up',
   '{due} fällig · {open} offen': '{due} due · {open} open',

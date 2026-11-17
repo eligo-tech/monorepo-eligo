@@ -3,7 +3,7 @@
 
 import { t } from '@/i18n'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { api } from '@/api/client'
 import type { FollowUpDTO, FollowUpSubject } from '@/api/types'
@@ -17,29 +17,36 @@ export function useOpenFollowUps(subject?: FollowUpSubject) {
   const candidateId = subject && 'candidateId' in subject ? subject.candidateId : undefined
   const [rows, setRows] = useState<FollowUpDTO[] | null>(null)
   const [failed, setFailed] = useState(false)
+  // Only the latest request may answer: two quick "Erledigt" clicks fire two
+  // loads, and an older one landing last would bring a closed row back.
+  const latest = useRef(0)
 
   const load = useCallback(() => {
-    let live = true
+    const mine = ++latest.current
     api
       .followUps({ managerId, candidateId })
       .then((found) => {
-        if (!live) return
+        if (mine !== latest.current) return
         setRows(found)
         setFailed(false)
       })
-      .catch(() => live && setFailed(true))
-    return () => {
-      live = false
-    }
+      .catch(() => mine === latest.current && setFailed(true))
   }, [managerId, candidateId])
 
-  useEffect(() => load(), [load])
   useEffect(() => {
-    const onChange = () => void load()
+    // Another person: never show the previous one's rows meanwhile.
+    setRows(null)
+    load()
+    return () => {
+      latest.current++
+    }
+  }, [load])
+  useEffect(() => {
+    const onChange = () => load()
     window.addEventListener(FOLLOW_UPS_CHANGED, onChange)
     return () => window.removeEventListener(FOLLOW_UPS_CHANGED, onChange)
   }, [load])
-  useRefreshOnFocus(() => void load())
+  useRefreshOnFocus(load)
 
   return { rows, failed, reload: load }
 }
@@ -56,7 +63,8 @@ export function downloadFollowUpIcs(row: FollowUpDTO): void {
   a.href = url
   a.download = `wiedervorlage-${row.due_date}.ics`
   a.click()
-  URL.revokeObjectURL(url)
+  // Not at once: Firefox and Safari cancel a download whose URL is gone.
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 /** Mark done, then tell every list. */

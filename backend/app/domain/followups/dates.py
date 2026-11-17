@@ -18,9 +18,16 @@ Rules:
   * A COMPUTED date that falls on a weekend or on 1.1. / 25.12. / 26.12.
     (holidays in all of DACH) moves to the next working day. A date written
     out ("am 21.11.", "am 3. Februar") is kept as written.
-  * Never before the note's date: a resolved date in the past moves to the
-    next occurrence (next year, next month, next week), and an explicit
-    date with a year that is already past is not a follow-up at all.
+  * Never before the note's date. A date with a year that is already past
+    is CV history or a past event, not a follow-up: nothing is offered. A
+    date without a year (or a month, a KW) that passed within the last
+    `_RECENT_DAYS` is a past event too ("Gespräch am 12.11. war gut",
+    "im Oktober war er krank"); further back, it means next year's ("am
+    3.2." written in November). "im November" said in November means from
+    now on: the next working day.
+  * Nothing further out than `_HORIZON_DAYS` ("in 5 Jahren will er
+    Teamleiter sein" is a plan, not a calendar entry). A two-digit year
+    more than ten years ahead is last century's ("Jahrgang 12.5.85").
   * Several phrases: each is offered, in the order they appear, each date
     once, at most `MAX_SUGGESTIONS`. Overlapping matches keep the longer.
 
@@ -39,6 +46,11 @@ from dataclasses import dataclass
 
 #: Offered at most per note: a note naming five dates is not five to-dos.
 MAX_SUGGESTIONS = 3
+
+#: A date this recently past, named without a year, is a past event.
+_RECENT_DAYS = 92
+#: Suggestions further out than this are plans, not follow-ups.
+_HORIZON_DAYS = 3 * 366
 
 #: Fixed holidays shared by Germany, Austria and Switzerland.
 _HOLIDAYS = frozenset({(1, 1), (12, 25), (12, 26)})
@@ -116,11 +128,23 @@ def _easter(year: int) -> dt.date:
     return dt.date(year, month, day)
 
 
-def _year(raw: str | None) -> int | None:
+def _year(raw: str | None, ref: dt.date) -> int | None:
     if not raw:
         return None
     value = int(raw)
-    return 2000 + value if value < 100 else value
+    if value >= 100:
+        return value
+    return 2000 + value if value <= ref.year % 100 + 10 else 1900 + value
+
+
+def _upcoming(this_year: dt.date, next_year: dt.date, ref: dt.date) -> dt.date | None:
+    """This year's date if it is still ahead; nothing if it passed recently
+    (a past event); next year's if it passed long ago."""
+    if this_year >= ref:
+        return this_year
+    if (ref - this_year).days <= _RECENT_DAYS:
+        return None
+    return next_year
 
 
 # --- vocabulary --------------------------------------------------------------
@@ -175,25 +199,28 @@ def _number(word: str) -> int:
 Resolver = Callable[[re.Match[str], dt.date], dt.date | None]
 
 
-def _named_month(m: re.Match[str], ref: dt.date) -> dt.date:
+def _named_month(m: re.Match[str], ref: dt.date) -> dt.date | None:
     """"Anfang Februar", "im März", "ab Mai 2027"."""
     month = _month_number(m["month"])
     part = m.groupdict().get("part")
-    year = _year(m["year"])
+    year = _year(m["year"], ref)
     if year is not None:
-        return _part(part, year, month)
+        d = _part(part, year, month)
+        return d if d >= ref else None
     d = _part(part, ref.year, month)
-    return d if d >= ref else _part(part, ref.year + 1, month)
+    if d < ref and part is None and month == ref.month:
+        return _roll(ref + dt.timedelta(days=1))  # "im November", said in November
+    return _upcoming(d, _part(part, ref.year + 1, month), ref)
 
 
 def _day_month_name(m: re.Match[str], ref: dt.date) -> dt.date | None:
     """"am 3. Februar" — kept as written."""
-    return _explicit(int(m["day"]), _month_number(m["month"]), _year(m["year"]), ref)
+    return _explicit(int(m["day"]), _month_number(m["month"]), _year(m["year"], ref), ref)
 
 
 def _numeric(m: re.Match[str], ref: dt.date) -> dt.date | None:
     """"am 3.2.", "03.02.2027", "3.2.27" — kept as written."""
-    return _explicit(int(m["day"]), int(m["mon"]), _year(m["year"]), ref)
+    return _explicit(int(m["day"]), int(m["mon"]), _year(m["year"], ref), ref)
 
 
 def _explicit(day: int, month: int, year: int | None, ref: dt.date) -> dt.date | None:
@@ -202,24 +229,27 @@ def _explicit(day: int, month: int, year: int | None, ref: dt.date) -> dt.date |
             d = dt.date(year, month, day)
             return d if d >= ref else None
         d = dt.date(ref.year, month, day)
-        return d if d >= ref else dt.date(ref.year + 1, month, day)
+        if d >= ref:
+            return d
+        return _upcoming(d, dt.date(ref.year + 1, month, day), ref)
     except ValueError:
         return None  # 40.13., or 29.2. in a common year
 
 
 def _calendar_week(m: re.Match[str], ref: dt.date) -> dt.date | None:
     week = int(m["week"])
-    year = _year(m["year"])
+    year = _year(m["year"], ref)
     try:
         if year is not None:
-            return dt.date.fromisocalendar(year, week, 1)
+            d = dt.date.fromisocalendar(year, week, 1)
+            return d if d >= ref or (year, week) == ref.isocalendar()[:2] else None
         iso_year, iso_week, _ = ref.isocalendar()
         d = dt.date.fromisocalendar(iso_year, week, 1)
         if d >= ref:
             return d
         if week == iso_week:  # "diese KW" said mid-week: the week is now
             return ref
-        return dt.date.fromisocalendar(iso_year + 1, week, 1)
+        return _upcoming(d, dt.date.fromisocalendar(iso_year + 1, week, 1), ref)
     except ValueError:
         return None  # KW 0, KW 54, KW 53 in a 52-week year
 
@@ -288,7 +318,7 @@ def _after_easter(m: re.Match[str], ref: dt.date) -> dt.date:
 
 
 def _tomorrow(m: re.Match[str], ref: dt.date) -> dt.date:
-    days = 2 if m[0].lower().startswith(("über", "ueber")) else 1
+    days = 2 if m[0].lower().startswith(("über", "ueber")) else 1  # "übermorgen", "ueber morgen"
     return _roll(ref + dt.timedelta(days=days))
 
 
@@ -345,7 +375,7 @@ _RULES: list[tuple[re.Pattern[str], Resolver]] = [
     # "heute Morgen" is this morning, "am Morgen" a time of day.
     (
         re.compile(
-            r"(?<!heute )(?<!gestern )(?<!am )(?<!guten )(?<!jeden )(?<!den )\b(?:über|ueber)?morgen\b",
+            r"(?<!heute )(?<!gestern )(?<!am )(?<!guten )(?<!jeden )(?<!den )\b(?:(?:über|ueber)\s?)?morgen\b",
             _F,
         ),
         _tomorrow,
@@ -368,7 +398,7 @@ def suggest_dates(text: str, reference: dt.date) -> list[DateSuggestion]:
             if resolve is _week and not (m["part"] or m["which"]):
                 continue
             d = resolve(m, reference)
-            if d is None:
+            if d is None or d < reference or (d - reference).days > _HORIZON_DAYS:
                 continue
             end = m.end()
             month = m.groupdict().get("month")

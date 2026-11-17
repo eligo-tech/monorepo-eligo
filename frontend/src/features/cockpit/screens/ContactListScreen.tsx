@@ -140,12 +140,21 @@ export function ContactRow({
   onCalled,
   switchboard,
   followUp,
+  offer,
+  onOffer,
+  onOfferClose,
 }: {
   row: ContactRowDTO
   showCompany: boolean
   onCalled: () => void
   /** ELI-44: this lead's next open Wiedervorlage, if any. */
   followUp?: FollowUpDTO | null
+  /** ELI-44: the note of the call just logged, while its date is on offer.
+   *  Held by the list, not the row: the refetch after a call can take the
+   *  row off a filtered list, and the offer must outlive it. */
+  offer?: SavedNote | null
+  onOffer?: (note: SavedNote) => void
+  onOfferClose?: () => void
   /** ELI-30: the company's Impressum switchboard, dialled when the lead has no number. */
   switchboard?: SwitchboardDTO | null
 }) {
@@ -153,7 +162,6 @@ export function ContactRow({
   const [calling, setCalling] = useState(false)
   // ELI-44: a follow-up by hand, and the offer read from a call's note.
   const [planning, setPlanning] = useState(false)
-  const [offerFor, setOfferFor] = useState<SavedNote | null>(null)
   const today = localIsoDate()
   const [moving, setMoving] = useState(false)
   const [moveFailed, setMoveFailed] = useState(false)
@@ -317,7 +325,7 @@ export function ContactRow({
             })
             setCalling(false)
             // ELI-44: "Anfang Februar wieder melden" in the note → offer it.
-            setOfferFor(logged)
+            onOffer?.(logged)
             onCalled()
           }}
         />
@@ -335,9 +343,9 @@ export function ContactRow({
           />
         </div>
       )}
-      {offerFor && (
+      {offer && (
         <div className="mt-2">
-          <NoteFollowUpOffer subject={{ managerId: row.manager_id }} note={offerFor} onClose={() => setOfferFor(null)} />
+          <NoteFollowUpOffer subject={{ managerId: row.manager_id }} note={offer} onClose={() => onOfferClose?.()} />
         </div>
       )}
     </li>
@@ -374,6 +382,14 @@ function ContactsTab() {
   for (const f of followUps ?? []) {
     if (f.manager_id && !nextFollowUp.has(f.manager_id)) nextFollowUp.set(f.manager_id, f)
   }
+  const [offers, setOffers] = useState<Map<string, { note: SavedNote; name: string }>>(new Map())
+  const closeOffer = (managerId: string) =>
+    setOffers((prev) => {
+      const next = new Map(prev)
+      next.delete(managerId)
+      return next
+    })
+  const shown = new Set(rows.map((r) => r.manager_id))
   const boards = new Map((page?.companies ?? []).map((c) => [c.company_id, c.switchboard ?? null]))
   const filtering = Boolean(companyId || query || dueOnly)
   const called = () => setBump((b) => b + 1)
@@ -406,6 +422,12 @@ function ContactsTab() {
         <Button type="submit">{t('Suchen')}</Button>
       </form>
       {error && <p className="text-[13px] text-coral-400">{error}</p>}
+      {[...offers].filter(([id]) => !shown.has(id)).map(([id, { note, name }]) => (
+        <div key={id} className="mb-3 space-y-1">
+          <p className="font-mono text-[11px] text-cockpit-faint">{name}</p>
+          <NoteFollowUpOffer subject={{ managerId: id }} note={note} onClose={() => closeOffer(id)} />
+        </div>
+      ))}
       {page && (
         <p className="mb-2 font-mono text-[12px] text-cockpit-faint">
           {page.truncated
@@ -429,6 +451,9 @@ function ContactsTab() {
               onCalled={called}
               switchboard={boards.get(r.company_id)}
               followUp={nextFollowUp.get(r.manager_id)}
+              offer={offers.get(r.manager_id)?.note ?? null}
+              onOffer={(note) => setOffers((prev) => new Map(prev).set(r.manager_id, { note, name: r.full_name }))}
+              onOfferClose={() => closeOffer(r.manager_id)}
             />
           ))}
         </ul>

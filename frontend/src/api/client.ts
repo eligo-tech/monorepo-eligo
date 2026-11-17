@@ -442,7 +442,7 @@ export const api = {
     body: { due_date?: string; due_time?: string | null; text?: string; status?: 'open' | 'done' },
   ) => request<FollowUpDTO>(`/follow-ups/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
-  /** Only who wrote it may delete it — a 403 otherwise. */
+  /** Admins only (ELI-27) — a 403 otherwise; everyone else marks it done. */
   deleteFollowUp: async (id: string): Promise<void> => {
     const res = await fetch(`${BASE}/follow-ups/${id}`, {
       method: 'DELETE',

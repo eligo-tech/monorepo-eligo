@@ -60,6 +60,7 @@ def upgrade() -> None:
         op.create_index("ix_follow_ups_tenant_id", _TABLE, ["tenant_id"])
         op.create_index("ix_follow_ups_manager_id", _TABLE, ["manager_id"])
         op.create_index("ix_follow_ups_candidate_id", _TABLE, ["candidate_id"])
+        op.create_index("ix_follow_ups_source_interaction_id", _TABLE, ["source_interaction_id"])
         op.create_index("ix_follow_ups_tenant_status_due", _TABLE, ["tenant_id", "status", "due_date"])
 
     if bind.dialect.name == "postgresql":

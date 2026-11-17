@@ -61,8 +61,8 @@ def test_the_ticket_example() -> None:
         ("Ende Feb.", dt.date(2027, 2, 26)),
         # The current month, not yet over: this year.
         ("Ende November", dt.date(2026, 11, 30)),
-        # The current month, its start already past: next year.
-        ("Anfang November", dt.date(2027, 11, 1)),
+        # "im November" said in November: from now on, not next November.
+        ("im November", dt.date(2026, 11, 18)),
         # A year named wins.
         ("Anfang Februar 2028", dt.date(2028, 2, 1)),
         ("im Februar", dt.date(2027, 2, 1)),
@@ -148,6 +148,39 @@ def test_explicit_dates(text: str, expected: dt.date) -> None:
 def test_a_month_already_past_is_next_year_in_december() -> None:
     assert first("Anfang Januar", dt.date(2026, 12, 10)) == dt.date(2027, 1, 4)
     assert first("Mitte Dezember", dt.date(2026, 12, 10)) == dt.date(2026, 12, 15)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # CV history and past events are not follow-ups (review of #277).
+        "Er war im März 2024 bei Siemens",
+        "im Mai 2025 gewechselt",
+        "Ende Januar 2026",
+        "KW 1/2026 war Urlaub",
+        "Gespräch am 12.11. war gut",
+        "Gespräch vom 3.11.",
+        "KW 46 telefoniert",
+        "im Oktober war er krank",
+        # The current month's start, already past, is not next year's.
+        "Anfang November",
+        "Mitte November",
+        # A birth year, and a career plan, are not a calendar entry.
+        "Jahrgang 12.5.85",
+        "in 5 Jahren will er Teamleiter sein",
+        "in 999 Jahren",
+    ],
+)
+def test_the_past_and_the_far_future_are_not_offered(text: str) -> None:
+    assert suggest_dates(text, TUE) == []
+
+
+def test_more_review_cases() -> None:
+    assert first("ueber morgen") == dt.date(2026, 11, 19)
+    assert first("im Dezember melden", dt.date(2026, 12, 10)) == dt.date(2026, 12, 11)
+    # Far enough behind, a date without a year is next year's.
+    assert first("am 3.2.") == dt.date(2027, 2, 3)
+    assert first("Anfang Juni wieder melden") == dt.date(2027, 6, 1)
 
 
 def test_nothing_to_read() -> None:

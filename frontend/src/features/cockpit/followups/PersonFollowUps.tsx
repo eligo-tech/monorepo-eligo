@@ -89,10 +89,20 @@ export function PersonFollowUps({ subject, compact }: { subject: FollowUpSubject
         rows={open}
         today={today}
         busyId={busyId}
-        onDone={(row) => void act(row, () => completeFollowUp(row))}
+        onDone={(row) => {
+          if (editing?.id === row.id) setEditing(null)
+          void act(row, () => completeFollowUp(row))
+        }}
         onCalendar={downloadFollowUpIcs}
         onEdit={(row) => setEditing(row)}
-        onDelete={admin ? (row) => void act(row, () => api.deleteFollowUp(row.id)) : undefined}
+        onDelete={
+          admin
+            ? (row) => {
+                // Removes it for everyone — so it asks first.
+                if (window.confirm(t('Wiedervorlage für alle löschen?'))) void act(row, () => api.deleteFollowUp(row.id))
+              }
+            : undefined
+        }
       />
       {error && <p className="text-[12px] text-coral-400">{error}</p>}
     </div>
