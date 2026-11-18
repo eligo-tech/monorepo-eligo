@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  autoDoneAt,
   initialStepInputs,
   isPlaced,
   placementJustHappened,
@@ -166,47 +167,71 @@ describe('initialStepInputs', () => {
   // 14:05 UTC on 15 Nov 2026 is 15:05 on a Berlin wall clock (CET, +1).
   const now = new Date('2026-11-15T14:05:00Z')
 
-  it('prefills a milestone with the current date and time', () => {
-    expect(initialStepInputs({ key: 'vorgestellt' }, now)).toEqual({
-      scheduled: '',
-      done: '2026-11-15T15:05',
-    })
-  })
-
-  it('prefills an appointment as booked now, not as done', () => {
-    expect(initialStepInputs({ key: 'interview' }, now)).toEqual({
-      scheduled: '2026-11-15T15:05',
-      done: '',
-    })
+  it('opens an appointment as booked now (ELI-28)', () => {
+    expect(initialStepInputs({ key: 'interview' }, now)).toEqual({ scheduled: '2026-11-15T15:05' })
     expect(initialStepInputs({ key: 'interviewtermin_3' }, now).scheduled).toBe('2026-11-15T15:05')
   })
 
+  it('leaves a milestone’s Termin empty — the calendar fills today on a click (ELI-21)', () => {
+    expect(initialStepInputs({ key: 'vorgestellt' }, now)).toEqual({ scheduled: '' })
+  })
+
   it('never overwrites what is already recorded', () => {
-    expect(
-      initialStepInputs({ key: 'vorgestellt', doneAt: '2026-09-01T08:30:00Z' }, now),
-    ).toEqual({ scheduled: '', done: '2026-09-01T10:30' })
-    expect(
-      initialStepInputs({ key: 'interview', scheduledAt: '2026-12-01T09:00:00Z' }, now),
-    ).toEqual({ scheduled: '2026-12-01T10:00', done: '' })
-  })
-
-  it('prefills the next step of a running process, not one further down', () => {
-    // Opening "Vertrag" two steps early to jot a note must not mark the
-    // candidate placed; the step due next is the one being recorded.
-    expect(initialStepInputs({ key: 'feedback-1', state: 'current' }, now).done).toBe(
-      '2026-11-15T15:05',
-    )
-    expect(initialStepInputs({ key: 'vertrag', state: 'pending' }, now)).toEqual({
-      scheduled: '',
-      done: '',
+    expect(initialStepInputs({ key: 'interview', scheduledAt: '2026-12-01T09:00:00Z' }, now)).toEqual({
+      scheduled: '2026-12-01T10:00',
     })
   })
 
-  it('leaves a step that already carries a verdict alone', () => {
-    expect(initialStepInputs({ key: 'feedback-1', outcome: 'pass' }, now)).toEqual({
-      scheduled: '',
-      done: '',
-    })
+  it('does not prefill a step further down the process', () => {
+    expect(initialStepInputs({ key: 'interview', state: 'pending' }, now)).toEqual({ scheduled: '' })
+  })
+})
+
+describe('autoDoneAt — "Erledigt am" is no longer typed (ELI-21)', () => {
+  const now = new Date('2026-11-18T15:12:00Z')
+  const at = now.toISOString()
+
+  it('a due milestone saved without a Termin happened now (what ELI-28 prefilled)', () => {
+    expect(autoDoneAt({ key: 'vorgestellt' }, { scheduled: '', outcome: 'open' }, now)).toBe(at)
+    expect(autoDoneAt({ key: 'feedback-1', state: 'current' }, { scheduled: '', outcome: 'open' }, now)).toBe(at)
+  })
+
+  it('a milestone given a Termin has not happened yet', () => {
+    expect(
+      autoDoneAt({ key: 'vorgestellt' }, { scheduled: '2026-11-20T10:00', outcome: 'open' }, now),
+    ).toBeUndefined()
+  })
+
+  it('a verdict is the moment the step was done', () => {
+    expect(autoDoneAt({ key: 'interview' }, { scheduled: '2026-11-20T10:00', outcome: 'pass' }, now)).toBe(at)
+    expect(autoDoneAt({ key: 'interview' }, { scheduled: '', outcome: 'out' }, now)).toBe(at)
+  })
+
+  it('an open appointment is booked, not done', () => {
+    expect(autoDoneAt({ key: 'interview' }, { scheduled: '2026-11-20T10:00', outcome: 'open' }, now)).toBeUndefined()
+  })
+
+  it('never moves a date already recorded', () => {
+    expect(
+      autoDoneAt({ key: 'vorgestellt', doneAt: '2026-09-01T08:30:00Z' }, { scheduled: '', outcome: 'pass' }, now),
+    ).toBeUndefined()
+  })
+
+  it('a step further down, opened for a note, is not done', () => {
+    expect(autoDoneAt({ key: 'vertrag', state: 'pending' }, { scheduled: '', outcome: 'open' }, now)).toBeUndefined()
+  })
+
+  it('a step that already had a verdict or a Termin is not re-dated by a note', () => {
+    expect(
+      autoDoneAt({ key: 'vorgestellt', outcome: 'pass' }, { scheduled: '', outcome: 'pass' }, now),
+    ).toBeUndefined()
+    expect(
+      autoDoneAt(
+        { key: 'vorgestellt', scheduledAt: '2026-11-10T09:00:00Z' },
+        { scheduled: '2026-11-10T10:00', outcome: 'open' },
+        now,
+      ),
+    ).toBeUndefined()
   })
 })
 
@@ -215,6 +240,8 @@ describe('presentedStep', () => {
     const s = presentedStep()
     expect(s.key).toBe('vorgestellt')
     expect(s.doneAt ?? null).toBeNull()
-    expect(initialStepInputs(s, new Date('2026-07-01T06:00:00Z')).done).toBe('2026-07-01T08:00')
+    // Saved straight after "Zu Mandat zuordnen", it is presented now.
+    const now = new Date('2026-07-01T06:00:00Z')
+    expect(autoDoneAt(s, { scheduled: '', outcome: 'open' }, now)).toBe(now.toISOString())
   })
 })
