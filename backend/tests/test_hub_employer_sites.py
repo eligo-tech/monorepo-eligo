@@ -224,6 +224,46 @@ async def test_employers_no_ad_names_a_person_for_come_first() -> None:
     assert len(await _checks(unnamed)) == 1
 
 
+async def _link(hub_company_id: uuid.UUID, *, adopted: bool = True) -> None:
+    """A workspace's link to the employer; `adopted=False` is only watching."""
+    from app.domain.companies.models import Company
+    from app.domain.hub.models import HubCompanyLink
+    from app.domain.tenants.models import Tenant
+
+    tenant = uuid.uuid4()
+    async with SessionLocal() as s:
+        s.add(Tenant(id=tenant, clerk_org_id=f"org_{tenant.hex}"))
+        await s.flush()
+        company_id = None
+        if adopted:
+            c = Company(tenant_id=tenant, name="Tempton Group GmbH", source="hub:bundesagentur")
+            s.add(c)
+            await s.flush()
+            company_id = c.id
+        s.add(HubCompanyLink(tenant_id=tenant, hub_company_id=hub_company_id, company_id=company_id))
+        await s.commit()
+
+
+async def test_employers_a_workspace_linked_come_first() -> None:
+    # 2026-11-18: 206 workspace companies linked to Markt, 1 of them ever read
+    # by this check — leads come from ads naming a person, so they sat last.
+    linked = await _company("Tempton Group GmbH", "jobs@tempton.de", named_contact=True, open_ads=1)
+    await _link(linked)
+    unlinked = await _company("Alois Mayr Bauwaren GmbH", "bewerbung@alois-mayr.at", open_ads=50)
+    await _run(_Fetcher({**_mayr(), **_tempton()}), limit=1)
+    assert len(await _checks(linked)) == 1
+    assert await _checks(unlinked) == []
+
+
+async def test_a_link_only_watching_does_not_move_an_employer_up() -> None:
+    watched = await _company("Tempton Group GmbH", "jobs@tempton.de", named_contact=True, open_ads=50)
+    await _link(watched, adopted=False)
+    unnamed = await _company("Alois Mayr Bauwaren GmbH", "bewerbung@alois-mayr.at", open_ads=1)
+    await _run(_Fetcher({**_mayr(), **_tempton()}), limit=1)
+    assert await _checks(watched) == []
+    assert len(await _checks(unnamed)) == 1
+
+
 async def test_a_domain_shared_by_branches_is_fetched_once() -> None:
     a = await _company("Alois Mayr Bauwaren GmbH", "bewerbung@alois-mayr.at")
     b = await _company("Alois Mayr Bauwaren GmbH", "jobs@alois-mayr.at")
