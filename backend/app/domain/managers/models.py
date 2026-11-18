@@ -158,7 +158,7 @@ class ManagerPhone(Base, IDMixin, TenantMixin, TimestampMixin):
     """A further number of one manager (ELI-46) — the primary is `managers.phone`.
 
     Personal data like the row it belongs to: tenant-scoped, fail-closed RLS
-    (migration 0076), deleted with the manager and by an erasure, whose
+    (migration 0077), deleted with the manager and by an erasure, whose
     suppression fingerprints every direct number here too.
     """
 
