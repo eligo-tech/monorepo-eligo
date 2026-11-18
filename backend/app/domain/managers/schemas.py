@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -88,6 +90,47 @@ class ManagerInteractionRead(BaseModel):
         return value if value.tzinfo else value.replace(tzinfo=dt.UTC)
 
 
+#: Mobil · Durchwahl · Zentrale · Sonstige (ELI-46); `models.PHONE_KINDS`.
+PhoneKind = Literal["mobile", "direct", "switchboard", "other"]
+
+
+class ManagerPhoneIn(BaseModel):
+    number: str = Field(min_length=1, max_length=50)
+    kind: PhoneKind = "other"
+    is_primary: bool = False
+
+    @field_validator("number")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("a number cannot be blank")
+        return value
+
+
+class ManagerPhoneRead(BaseModel):
+    number: str
+    kind: str
+    is_primary: bool
+
+
+def _phone_list(phones: list[ManagerPhoneIn] | None) -> list[ManagerPhoneIn] | None:
+    """One primary at most, no number twice (digits compared). Without a
+    marked primary the first number is the primary — returned first."""
+    if phones is None:
+        return None
+    if sum(p.is_primary for p in phones) > 1:
+        raise ValueError("only one number can be the primary")
+    digits = [re.sub(r"\D", "", p.number) or p.number for p in phones]
+    if len(set(digits)) != len(digits):
+        raise ValueError("the same number is listed twice")
+    if not phones:
+        return phones
+    primary = next((i for i, p in enumerate(phones) if p.is_primary), 0)
+    ordered = [phones[primary], *phones[:primary], *phones[primary + 1:]]
+    return [p.model_copy(update={"is_primary": i == 0}) for i, p in enumerate(ordered)]
+
+
 class ManagerCreate(BaseModel):
     #: The person was erased here on request and has since come back of their
     #: own accord. Without it, adding someone erased is refused (409).
@@ -124,8 +167,22 @@ class ManagerUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=320)
     phone: str | None = Field(default=None, max_length=50)
     linkedin_url: str | None = Field(default=None, max_length=300)
+    #: ELI-46: the whole list, replacing the stored one; the primary lands in
+    #: `phone`. Send either this or `phone`, not both.
+    phones: list[ManagerPhoneIn] | None = Field(default=None, max_length=20)
     notes: str | None = None
     status: str | None = None
+
+    @field_validator("phones")
+    @classmethod
+    def _phones(cls, value: list[ManagerPhoneIn] | None) -> list[ManagerPhoneIn] | None:
+        return _phone_list(value)
+
+    @model_validator(mode="after")
+    def _phone_or_phones(self) -> "ManagerUpdate":
+        if "phone" in self.model_fields_set and "phones" in self.model_fields_set:
+            raise ValueError("send phone or phones, not both")
+        return self
 
 
 class ManagerRead(BaseModel):
@@ -140,6 +197,8 @@ class ManagerRead(BaseModel):
     department: str | None
     email: str | None
     phone: str | None
+    #: ELI-46: every number, the primary (= `phone`) first.
+    phones: list[ManagerPhoneRead] = Field(default_factory=list)
     linkedin_url: str | None
     xing_url: str | None = None
     facebook_url: str | None = None

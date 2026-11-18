@@ -612,3 +612,42 @@ async def test_editing_a_contact_to_an_erased_direct_number_is_refused() -> None
     assert refused.json()["detail"]["code"] == "suppressed"
     assert other_number.status_code == 200, other_number.text
     assert confirmed.status_code == 200, confirmed.text
+
+
+async def test_erasing_a_manager_removes_every_number_and_suppresses_each() -> None:
+    """ELI-46: the extra numbers are the person's data too — they go with the
+    record, and none of them may bring the person back by an edit."""
+    from app.domain.managers.models import ManagerPhone
+
+    tenant = settings.default_tenant_id
+    await create_all()
+    async with SessionLocal() as s:
+        company = Company(tenant_id=tenant, name=f"Kunde {uuid.uuid4()}")
+        s.add(company)
+        await s.flush()
+        gone = Manager(tenant_id=tenant, company_id=company.id, full_name="Paula Weg",
+                       phone="+49 7424 943 777", phone_kind="direct")
+        gone.extra_phones = [ManagerPhone(tenant_id=tenant, number="+49 171 5550123", kind="mobile", position=1)]
+        other = Manager(tenant_id=tenant, company_id=company.id, full_name="Olaf Bleibt")
+        s.add_all([gone, other])
+        await s.commit()
+        ids = (gone.id, other.id)
+    async with SessionLocal() as s:
+        await erasure.erase_manager(s, tenant_id=tenant, manager_id=ids[0], confirm_name="paula weg",
+                                    reason="erasure", requested_on=dt.date(2026, 11, 18),
+                                    actor_user_id="u", actor_name="A")
+        await s.commit()
+    async with SessionLocal() as s:
+        assert await _count(s, ManagerPhone, manager_id=ids[0]) == 0
+    base = settings.api_v1_prefix
+    async with _client() as c:
+        refused = await c.patch(f"{base}/managers/{ids[1]}", json={"phones": [
+            {"number": "+49 30 555 1234", "kind": "direct"}, {"number": "+49 171 555 0123", "kind": "mobile"},
+        ]})
+        fine = await c.patch(f"{base}/managers/{ids[1]}", json={"phones": [{"number": "+49 30 555 1234"}]})
+        confirmed = await c.patch(f"{base}/managers/{ids[1]}", json={
+            "phones": [{"number": "+49 171 555 0123"}], "override_suppression": True})
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["code"] == "suppressed"
+    assert fine.status_code == 200, fine.text
+    assert confirmed.status_code == 200, confirmed.text

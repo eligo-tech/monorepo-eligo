@@ -25,7 +25,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -53,7 +53,16 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     department: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
+    #: The PRIMARY number (ELI-46) — what the Leads list, "Anruf erfassen"
+    #: and every older reader show. Further numbers are `extra_phones`. Kept
+    #: on this row rather than moved, so the importers and the ad-contact
+    #: adoption, which write `phone`, keep working untouched: a re-import
+    #: replaces the primary and leaves the numbers a recruiter added alone.
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    #: Kind of the primary (`PHONE_KINDS`). NULL reads as "other" (Sonstige):
+    #: every number written before ELI-46, and every importer's, is one whose
+    #: kind nobody stated.
+    phone_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     xing_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     facebook_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
@@ -111,6 +120,25 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    #: ELI-46: the numbers besides the primary. Loaded with the row
+    #: ("selectin", one IN query per batch) because `phones` is part of
+    #: every read of a manager, and an async lazy load would fail.
+    extra_phones: Mapped[list["ManagerPhone"]] = relationship(
+        "ManagerPhone",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+        order_by="ManagerPhone.position",
+    )
+
+    @property
+    def phones(self) -> list[dict]:
+        """Every number, the primary first (ELI-46)."""
+        out = []
+        if self.phone:
+            out.append({"number": self.phone, "kind": self.phone_kind or "other", "is_primary": True})
+        out += [{"number": p.number, "kind": p.kind, "is_primary": False} for p in self.extra_phones]
+        return out
 
     @property
     def art14_outstanding(self) -> bool:
@@ -120,6 +148,29 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
         and when they do the row silently stops owing a notice it still owes.
         """
         return owes_art14_notice(self.source) and self.art14_notified_at is None
+
+
+#: Mobil · Durchwahl · Zentrale · Sonstige (ELI-46).
+PHONE_KINDS = ("mobile", "direct", "switchboard", "other")
+
+
+class ManagerPhone(Base, IDMixin, TenantMixin, TimestampMixin):
+    """A further number of one manager (ELI-46) — the primary is `managers.phone`.
+
+    Personal data like the row it belongs to: tenant-scoped, fail-closed RLS
+    (migration 0077), deleted with the manager and by an erasure, whose
+    suppression fingerprints every direct number here too.
+    """
+
+    __tablename__ = "manager_phones"
+
+    manager_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("managers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    number: Mapped[str] = mapped_column(String(50), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="other", server_default="other")
+    #: Order on the card, as the recruiter entered them.
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
 
 class ManagerInteraction(Base, IDMixin, TenantMixin, TimestampMixin):
