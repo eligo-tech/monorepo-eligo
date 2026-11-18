@@ -124,3 +124,32 @@ async def test_impressum_totals_count_markt_readings_in_every_workspace_under_rl
         total = await impressum.totals_all_workspaces()
         assert current_tenant_var.get() == str(a)
     assert total["markt"] >= 2 and total["linked"] >= 2
+
+
+async def test_markt_queue_sees_every_workspaces_adopted_employers_under_rls() -> None:
+    """2026-11-18: the employer Impressum check orders linked employers first.
+    The operator request is pinned to one workspace; `hub_company_link` is
+    tenant-scoped, so a single pinned query would see only that one's links."""
+    from app.domain.hub import employer_sites
+
+    a, a_company = await _workspace("A")
+    b, b_company = await _workspace("B")
+    hubs = {}
+    for tenant, company in ((a, a_company), (b, b_company)):
+        with _as(tenant):
+            async with SessionLocal() as s:
+                name = f"Queue {uuid.uuid4().hex} GmbH"
+                hub = HubCompany(
+                    name=name, normalized_name=normalize_company_name(name),
+                    dedupe_key=f"k-{uuid.uuid4()}", resolution_basis="name_place", city="Nürnberg",
+                    source="bundesagentur", kind=EMPLOYER, first_seen_at=NOW, last_seen_at=NOW,
+                )
+                s.add(hub)
+                await s.flush()
+                s.add(HubCompanyLink(tenant_id=tenant, hub_company_id=hub.id, company_id=company))
+                await s.commit()
+                hubs[tenant] = hub.id
+    with _as(a):  # as the operator request runs: pinned to one workspace
+        linked = await employer_sites.linked_employers()
+        assert current_tenant_var.get() == str(a)
+    assert {hubs[a], hubs[b]} <= linked

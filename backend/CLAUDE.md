@@ -293,8 +293,11 @@ These are enforced in code. Do not route around them.
   Impressum (same `SiteFetcher`) → kept only when `names_firm` holds. Phone,
   VAT id (DE/ATU/CHE) and register (HRA/HRB, Austrian FN) go on the
   `hub_site_checks` row (`hub_company_id` set); website, VAT and register are
-  backfilled onto `hub_companies` only where empty. Employers no ad names a
-  person for come first; sole traders are never checked. Measured 2026-11-11:
+  backfilled onto `hub_companies` only where empty. Employers a workspace
+  adopted come first (`linked_employers`: each workspace's links read in its
+  own pinned session, RLS — 2026-11-18 only 1 of 206 had ever been read),
+  then those no ad names a person for; sole traders are never checked.
+  Measured 2026-11-11:
   164/1,000 employers verified, 140 with a phone.
 - **Workspaces' companies ↔ Markt** (`companies/market.py`, ELI-33): daily
   (`hub-company-links.yml`, 05:53 UTC, and in the weekly chain's

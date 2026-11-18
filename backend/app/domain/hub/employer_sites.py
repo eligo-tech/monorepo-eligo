@@ -55,6 +55,7 @@ from app.domain.hub.models import (
     SITE_VERIFIED,
     HubAdContact,
     HubCompany,
+    HubCompanyLink,
     HubJobPosting,
     HubObservation,
     HubPostingPayload,
@@ -114,9 +115,38 @@ def verdict(page_status: int, is_impressum: bool, named: bool) -> str:
     return SITE_VERIFIED if named else SITE_NOT_NAMED
 
 
-async def _due(session: AsyncSession, now: dt.datetime, limit: int) -> list[tuple[uuid.UUID, str]]:
+async def linked_employers() -> set[uuid.UUID]:
+    """Corpus employers any workspace adopted (a link with its own company).
+    `hub_company_link` is tenant-scoped under RLS, so each workspace is read
+    in its own session pinned to it (as `impressum.check_all_workspaces`).
+    Only corpus ids leave this function — they order a public crawl."""
+    from app.core.database import SessionLocal, current_tenant_var
+    from app.domain.tenants.models import Tenant
+
+    async with SessionLocal() as session:
+        tenants = (await session.scalars(select(Tenant.id))).all()
+    out: set[uuid.UUID] = set()
+    for tenant_id in tenants:
+        token = current_tenant_var.set(str(tenant_id))
+        try:
+            async with SessionLocal() as session:
+                out.update(await session.scalars(
+                    select(HubCompanyLink.hub_company_id).where(
+                        HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id.is_not(None)
+                    )
+                ))
+        finally:
+            current_tenant_var.reset(token)
+    return out
+
+
+async def _due(
+    session: AsyncSession, now: dt.datetime, limit: int, linked: set[uuid.UUID] | None = None
+) -> list[tuple[uuid.UUID, str]]:
     """Employers to check: open employer ads, not a suspected sole trader,
-    no check that still stands. Those no ad names a person for come first."""
+    no check that still stands. Employers a workspace adopted come first
+    (their reading answers that workspace's company page — 2026-11-18: 1 of
+    206 linked had ever been read), then those no ad names a person for."""
     standing = exists().where(
         HubSiteCheck.hub_company_id == HubCompany.id,
         or_(
@@ -139,7 +169,10 @@ async def _due(session: AsyncSession, now: dt.datetime, limit: int) -> list[tupl
             open_ad,
             ~standing,
         )
-        .order_by(named.asc(), HubCompany.open_postings_count.desc(), HubCompany.id)
+        .order_by(
+            *([HubCompany.id.in_(linked).desc()] if linked else []),
+            named.asc(), HubCompany.open_postings_count.desc(), HubCompany.id,
+        )
         .limit(limit)
     )
     return [(r.id, r.name) for r in rows]
@@ -222,7 +255,7 @@ async def _check(fetcher, name: str, ads, pages: dict[str, asyncio.Task]) -> lis
 async def check_employer_sites(session: AsyncSession, *, fetcher, limit: int = 20) -> dict[str, int]:
     """Check up to `limit` employers' Impressum; see the module docstring."""
     now = dt.datetime.now(dt.UTC)
-    due = await _due(session, now, limit)
+    due = await _due(session, now, limit, await linked_employers())
     work = [(company_id, name, await _ads(session, company_id)) for company_id, name in due]
     await session.commit()  # no transaction held open across network fetches
 
