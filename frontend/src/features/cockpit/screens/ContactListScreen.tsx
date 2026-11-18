@@ -29,9 +29,10 @@ import { leadPhone } from '../ui/switchboard'
 import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
 import { FollowUpForm } from '../ui/FollowUpForm'
+import { DateField } from '../ui/DateField'
 import { announceFollowUpsChanged, localIsoDate, parseLocalDate, shortTime } from '../ui/followUps'
 import { NoteFollowUpOffer, type SavedNote } from '../followups/NoteFollowUpOffer'
-import { useOpenFollowUps } from '../followups/useFollowUps'
+import { readDateFromText, useOpenFollowUps } from '../followups/useFollowUps'
 import type { FollowUpDTO } from '@/api/types'
 
 const when = (iso: string | null) =>
@@ -111,7 +112,7 @@ function CallForm({
         <span className="mb-1 block font-mono text-[11px] uppercase tracking-wide text-cockpit-faint">
           {needsDate(outcome) ? t('Nächster Anruf (Pflicht)') : t('Nächster Anruf (optional)')}
         </span>
-        <input type="datetime-local" value={nextAt} onChange={(e) => setNextAt(e.target.value)} className={FIELD} />
+        <DateField type="datetime-local" value={nextAt} onChange={setNextAt} className={FIELD} />
       </label>
       <label className="block min-w-0 sm:col-span-2">
         <span className="mb-1 block font-mono text-[11px] uppercase tracking-wide text-cockpit-faint">{t('Notiz')}</span>
@@ -308,6 +309,7 @@ export function ContactRow({
         <div className="mt-2">
           <FollowUpForm
             defaultDate={today}
+            readDate={readDateFromText}
             onCancel={() => setPlanning(false)}
             onSave={async (f) => {
               await api.createFollowUp({ manager_id: row.manager_id, ...f, origin: 'manual' })

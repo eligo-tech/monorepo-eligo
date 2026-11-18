@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
 import type { FollowUpDTO, FollowUpSubject } from '@/api/types'
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus'
-import { FOLLOW_UPS_CHANGED, announceFollowUpsChanged, followUpIcs } from '../ui/followUps'
+import { FOLLOW_UPS_CHANGED, announceFollowUpsChanged, followUpIcs, readFollowUpDate } from '../ui/followUps'
 
 /** Open follow-ups — the workspace's, or one person's. `rows` is null while
  *  loading; `failed` says the call did not answer, which is not "none". */
@@ -50,6 +50,10 @@ export function useOpenFollowUps(subject?: FollowUpSubject) {
 
   return { rows, failed, reload: load }
 }
+
+/** ELI-53: the date a new Wiedervorlage's text names, read now — handed to
+ *  `FollowUpForm` as `readDate`. Module-level so its identity is stable. */
+export const readDateFromText = (text: string) => readFollowUpDate(text, new Date(), api.suggestFollowUps)
 
 /** The calendar title: what it is and who it is about. */
 export const calendarTitle = (row: FollowUpDTO) =>

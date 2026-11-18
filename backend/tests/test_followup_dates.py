@@ -276,3 +276,33 @@ def test_a_quarter_phrase_is_quoted_without_trailing_text() -> None:
 @pytest.mark.parametrize("text", ["Q3 2026 war schwach", "im ersten Quartal 2025", "Q5", "FAQ1"])
 def test_quarters_not_offered(text: str) -> None:
     assert suggest_dates(text, TUE) == []
+
+
+# --- ELI-53: "morgen" on the day the bug was reported ------------------------
+# A Wiedervorlage written on Wednesday 18.11.2026 as "Neuer Anruf morgen" was
+# saved for the 18th. The reader was not the cause — the form kept its default
+# date (today) and never read its own text; fixed in the frontend. These pin
+# the reader's side of the contract on that exact day.
+
+WED = dt.date(2026, 11, 18)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Neuer Anruf morgen", dt.date(2026, 11, 19)),
+        ("Neuer Anruf für morgen", dt.date(2026, 11, 19)),
+        ("Morgen nochmal anrufen", dt.date(2026, 11, 19)),
+        ("heute nicht erreicht, morgen nochmal", dt.date(2026, 11, 19)),
+        ("übermorgen", dt.date(2026, 11, 20)),
+        ("nächste Woche", dt.date(2026, 11, 23)),
+    ],
+)
+def test_eli53_relative_days(text: str, expected: dt.date) -> None:
+    assert first(text, WED) == expected
+
+
+@pytest.mark.parametrize("text", ["heute angerufen", "Rückruf heute", "heute Morgen gesprochen"])
+def test_eli53_heute_is_not_a_follow_up(text: str) -> None:
+    # "heute" in a note says what happened today; it is not a to-do date.
+    assert suggest_dates(text, WED) == []
