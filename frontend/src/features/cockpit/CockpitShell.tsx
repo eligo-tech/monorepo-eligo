@@ -140,6 +140,17 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
     window.location.hash = id ? `kandidaten/${id}` : 'kandidaten'
   }, [])
 
+  /** ELI-52: open a record found by the command bar's search — the same
+   *  `#<screen>/<id>` a link to it would carry. */
+  const openRecord = useCallback((hash: string) => {
+    const next = resolveScreen(hash)
+    if (!next) return
+    setScreen(next)
+    setDetail(resolveDetail(hash))
+    window.location.hash = hash
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
   // Keep in step with back/forward and hash edits.
   useEffect(() => {
     const onHash = () => {
@@ -163,6 +174,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         me={me}
         query={query}
         onQueryChange={setQuery}
+        onOpenRecord={openRecord}
         searchHint={
           screen === 'mandate' ? t('Mandate filtern: Firma, Titel, Ort …') : undefined
         }

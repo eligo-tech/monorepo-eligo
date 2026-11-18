@@ -29,6 +29,7 @@ src/
 ├── features/cockpit/           # ← the product surface
 │   ├── CockpitShell.tsx        # grid background, screen switch, hash routing (owns SCREENS)
 │   ├── CommandBar.tsx          # wordmark, search, status chips, typeface switch, Clerk controls
+│   ├── GlobalSearch.tsx        # ELI-52: the search box — `/search` dropdown (Kandidaten · Mandate · Unternehmen · Leads & Manager), opens `#<screen>/<id>`; on Mandate it filters the list instead
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
 │   ├── useTypeface.ts          # the Jet · Mono · Heli switch
 │   ├── screens/                # CockpitScreen · MarktScreen · ContactListScreen (Leads) · CompanyScreen (Unternehmen) · ManagerScreen · JobsScreen (Mandate)
