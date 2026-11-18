@@ -1206,6 +1206,8 @@ export interface CompanyOverviewRowDTO {
   managers: number
   leads: number
   mandates: number
+  /** ELI-31: taken from Markt ("Übernehmen"), no contact and no manager yet. */
+  markt_lead?: boolean
   last_contact_at: string | null
   /** ELI-33 2b: Markt sites of the same name waiting for a yes or no. */
   to_review?: number

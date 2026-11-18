@@ -42,6 +42,8 @@ class CompanyOverviewRow(BaseModel):
     managers: int
     leads: int
     mandates: int
+    #: ELI-31: taken from Markt ("Übernehmen"), no contact and no manager yet.
+    markt_lead: bool = False
     last_contact_at: dt.datetime | None
     #: ELI-33: Markt sites of the same name waiting for a person's yes/no.
     to_review: int = 0

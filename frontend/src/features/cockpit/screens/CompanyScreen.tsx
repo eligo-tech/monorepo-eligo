@@ -98,6 +98,11 @@ function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
                 <span className="flex items-center gap-3 font-mono text-[12px] text-cockpit-dim">
                   {c.managers > 0 && <span>{t('{n} Manager', { n: String(c.managers) })}</span>}
                   {c.leads > 0 && <Chip tone="gold">{t('{n} Leads', { n: String(c.leads) })}</Chip>}
+                  {c.leads === 0 && c.markt_lead && (
+                    <Chip tone="gold" title={t('Aus dem Markt übernommen — noch ohne Ansprechpartner.')}>
+                      {t('Lead')}
+                    </Chip>
+                  )}
                   {c.mandates > 0 && <span>{t('{n} Mandate', { n: String(c.mandates) })}</span>}
                   {(c.to_review ?? 0) > 0 && (
                     <Chip tone="lav" title={t('Im Markt gibt es Unternehmen gleichen Namens — bitte bestätigen oder verwerfen.')}>
