@@ -9,7 +9,7 @@
 // It collapses. A mandate with five candidates is five summaries, five
 // steppers and five assessments, and the question "who is on this mandate?"
 // then needs a page of scrolling to answer. Collapsed, the card keeps the
-// line that identifies it — ref, name, role, mandate, fee — and adds the
+// line that identifies it — name, role, mandate, fee — and adds the
 // step it is on, so a folded card still says something.
 //
 // The choice is remembered per card, because a collapse that forgets itself
@@ -41,7 +41,7 @@ export function ProcessCardPanel({
   /** Only live cards can be edited: a demo card has no row to write to. */
   onAddStep?: (label: string, after: string | null) => Promise<void>
   onRemoveStep?: (step: ProcessStep) => Promise<void>
-  /** Set in the overall view: the mandate ref opens that mandate's view. */
+  /** Set in the overall view: the client name opens that mandate's view. */
   onMandateClick?: () => void
   /** Rendered between the title and the stepper — the summary, per mandate.
    *  Above the stepper on purpose: a recruiter opening a mandate asks who
@@ -71,8 +71,6 @@ export function ProcessCardPanel({
                 as a tag, so the obvious thing to click was the only thing
                 that did nothing. */}
             <h3 className="text-[19px] font-semibold text-cockpit-text">
-              <span className="font-mono font-medium">{card.candidateRef}</span>
-              <span className="text-cockpit-faint"> · </span>
               {card.candidateId ? (
                 <a
                   href={`#kandidaten/${card.candidateId}`}
@@ -98,11 +96,11 @@ export function ProcessCardPanel({
                 title={t('Mandat öffnen')}
                 className="text-cockpit-dim underline-offset-2 transition-colors hover:text-cockpit-text hover:underline"
               >
-                {card.mandateRef} · {card.client}
+                {card.client}
               </button>
             ) : (
               <>
-                {card.mandateRef} · {card.client}
+                {card.client}
               </>
             )}{' '}
             · {card.paceLabel}

@@ -22,8 +22,6 @@ export function ScoreBar({ row }: { row: JobScore }) {
   return (
     <div className="flex items-center gap-4 py-1.5">
       <span className="w-[236px] shrink-0 truncate text-[15px] text-cockpit-text">
-        <span className="font-mono text-cockpit-dim">{row.mandateRef}</span>
-        <span className="text-cockpit-faint"> · </span>
         {row.title}
       </span>
 
