@@ -1363,6 +1363,8 @@ export const EN: Record<string, string> = {
   'Erledigt': 'Done',
   'Wiedervorlage am {date} anlegen?': 'Create a follow-up on {date}?',
   'aus der Notiz: „{phrase}“': 'from the note: “{phrase}”',
+  // ELI-53: the Wiedervorlage form takes the date its own text names.
+  'Datum aus dem Text: „{phrase}“': 'date from the text: “{phrase}”',
   'Anlegen': 'Create',
   // ELI-48: a follow-up offered after every call or note, date or not.
   'Wiedervorlage erstellen?': 'Create a follow-up?',

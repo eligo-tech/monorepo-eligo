@@ -13,7 +13,7 @@ import { Button } from '../ui/forms'
 import { FollowUpForm, type FollowUpFields } from '../ui/FollowUpForm'
 import { FollowUpRows } from '../ui/FollowUpList'
 import { announceFollowUpsChanged, localIsoDate } from '../ui/followUps'
-import { completeFollowUp, downloadFollowUpIcs, useOpenFollowUps } from './useFollowUps'
+import { completeFollowUp, downloadFollowUpIcs, readDateFromText, useOpenFollowUps } from './useFollowUps'
 import { isAdmin, useMe } from '../useMe'
 
 const subjectIds = (subject: FollowUpSubject) =>
@@ -72,7 +72,9 @@ export function PersonFollowUps({ subject, compact }: { subject: FollowUpSubject
         )}
       </div>
       {failed && <p className="text-[13px] text-coral-400">{t('Wiedervorlagen konnten nicht geladen werden.')}</p>}
-      {adding && <FollowUpForm defaultDate={today} onSave={create} onCancel={() => setAdding(false)} />}
+      {adding && (
+        <FollowUpForm defaultDate={today} readDate={readDateFromText} onSave={create} onCancel={() => setAdding(false)} />
+      )}
       {editing && (
         <FollowUpForm
           key={editing.id}
