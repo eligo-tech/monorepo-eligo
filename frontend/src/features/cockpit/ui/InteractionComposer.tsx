@@ -22,11 +22,14 @@ import { CalendarPlus } from 'lucide-react'
 
 import { t } from '@/i18n'
 import { Button } from './forms'
+import { DateField } from './DateField'
+import { berlinIsoDate } from './datePicker'
 import { interactionLabel } from './interactionKinds'
 import { isAppointmentKind, nextFullHour, occurredAt } from './appointments'
 
-/** Today, as the date input wants it. */
-const today = () => new Date().toISOString().slice(0, 10)
+/** Today in Germany, as the date input wants it — not `toISOString()`,
+ *  which is UTC and filed a note written at 00:30 under yesterday (ELI-53). */
+export const composerToday = (now: Date = new Date()) => berlinIsoDate(now)
 
 /** What the composer hands to `onSave`. The time counts only for a Termin;
  *  any other kind keeps the date-only, midday-pinned behaviour. */
@@ -60,7 +63,7 @@ export function InteractionComposer({
 }) {
   const [kind, setKind] = useState<string>(defaultKind ?? kinds[0])
   const [text, setText] = useState('')
-  const [when, setWhen] = useState(today())
+  const [when, setWhen] = useState(composerToday())
   const [at, setAt] = useState(nextFullHour())
   const appointment = isAppointmentKind(kind)
   const [busy, setBusy] = useState(false)
@@ -108,10 +111,9 @@ export function InteractionComposer({
         </label>
         <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
           {t('am')}
-          <input
-            type="date"
+          <DateField
             value={when}
-            onChange={(e) => setWhen(e.target.value)}
+            onChange={setWhen}
             className="rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
           />
         </label>
