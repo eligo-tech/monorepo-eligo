@@ -173,7 +173,9 @@ function RevenueBody({
                 <div className="min-w-0 flex-1">
                   {/* A deal is a PERSON about to sign. The ref alone made
                       the one row a recruiter acts on the only one they could
-                      not open. */}
+                      not open. A live row names the person and the client,
+                      not the "#K-…"/"#A-…" uuid prefixes (ELI-24); a demo
+                      row has nothing behind it but its ref. */}
                   <div className="text-[15px] text-cockpit-text">
                     {deal.candidateId ? (
                       <a
@@ -181,8 +183,7 @@ function RevenueBody({
                         title={t('{name} — Kandidatenakte öffnen', { name: deal.candidateName ?? deal.candidateRef })}
                         className="underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
                       >
-                        <span className="font-mono">{deal.candidateRef}</span>
-                        {deal.candidateName && ` · ${deal.candidateName}`}
+                        {deal.candidateName ?? t('Kandidat')}
                         <ExternalLink className="ml-1 inline h-3.5 w-3.5 align-[-1px] text-cockpit-faint" />
                       </a>
                     ) : (
@@ -193,15 +194,17 @@ function RevenueBody({
                       <a
                         href={`#cockpit/${deal.jobId}`}
                         title={t('Mandat im Cockpit öffnen')}
-                        className="font-mono underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
+                        className="underline decoration-cockpit-line decoration-1 underline-offset-[5px] transition-colors hover:text-mint-300 hover:decoration-mint-400"
                       >
-                        {deal.mandateRef}
+                        {deal.client}
                       </a>
                     ) : (
-                      <span className="font-mono">{deal.mandateRef}</span>
+                      <>
+                        <span className="font-mono">{deal.mandateRef}</span>
+                        <span className="text-cockpit-faint"> · </span>
+                        {deal.client}
+                      </>
                     )}
-                    <span className="text-cockpit-faint"> · </span>
-                    {deal.client}
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     <Chip tone="mint">{deal.timing}</Chip>

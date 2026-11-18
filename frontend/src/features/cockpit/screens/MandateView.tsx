@@ -122,7 +122,7 @@ export function MandateView({
           {t('Die Stammdaten des Mandats plus die komplette Kandidatensuche in einem Bereich — vom Job über Ansprache bis zu den Ergebnissen.')}
         </p>
         <p className="mt-3 font-mono text-[13px] text-cockpit-faint">
-          {mandate.ref} · {mandate.client} · {mandate.cards.length}{' '}
+          {mandate.client} · {mandate.cards.length}{' '}
           {mandate.cards.length === 1 ? t('Kandidat') : t('Kandidaten')} {t('im Prozess')}
           {assessed > 0 && ` · ${t('{n} bewertet', { n: assessed })}`}
         </p>
@@ -146,7 +146,7 @@ export function MandateView({
           <div className="min-w-0 flex-1">
             <SectionHeader
               id="section-prozesse"
-              title={`${t('Laufende Prozesse')} · ${mandate.ref} · ${mandate.title}`}
+              title={`${t('Laufende Prozesse')} · ${mandate.title}`}
               tone="coral"
               hint={t('Schritte antippen · Bewertung je Mandat')}
             />

@@ -148,21 +148,14 @@ export function MandateGraph({ mandate }: { mandate: Mandate }) {
           />
           <text
             x={ROOT.x + 16}
-            y={rootY + 25}
-            className="fill-cockpit-faint font-mono text-[11px]"
-          >
-            {mandate.ref}
-          </text>
-          <text
-            x={ROOT.x + 16}
-            y={rootY + 45}
+            y={rootY + 32}
             className="fill-cockpit-text text-[13px] font-semibold"
           >
             {clip(mandate.title, 26)}
           </text>
           <text
             x={ROOT.x + 16}
-            y={rootY + 62}
+            y={rootY + 52}
             className="fill-cockpit-dim font-mono text-[11px]"
           >
             {clip(mandate.client, 22)} · {cards.length}{' '}
@@ -199,7 +192,7 @@ export function MandateGraph({ mandate }: { mandate: Mandate }) {
                 y={y + 44}
                 className="fill-cockpit-faint font-mono text-[11px]"
               >
-                {card.candidateRef} · {clip(standing(card), 30)}
+                {clip(standing(card), 30)}
               </text>
               <text
                 x={CHILD.x + CHILD.w - 16}
