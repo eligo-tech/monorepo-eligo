@@ -388,7 +388,6 @@ export const EN: Record<string, string> = {
   'Datensatz': 'Record',
   'Datenschutz': 'Data protection',
   'Datensätze': 'records',
-  'Datum „erledigt am“ nicht lesbar.': 'The “completed on” date is not readable.',
   'Deaktivieren': 'Switch off',
   'Deal-Chance beim Manager — noch nicht gelernt': 'Deal probability with this manager — not yet learned',
   'Deckt das Muss vollständig ab\nArchitektur-Verantwortung real gelebt': 'Covers the must-haves in full\nArchitecture ownership genuinely lived',

@@ -820,8 +820,17 @@ async def processes(
                 "candidate_id": candidate.id,
                 "candidate_name": candidate.full_name,
                 "stage": app.stage,
+                # Done, else booked — the rule the Präsentationen KPI counts
+                # by; the step dialog no longer asks for a done date (ELI-21).
                 "presented_at": as_utc(
-                    next((s.done_at for s in steps if s.step_key == "vorgestellt"), None)
+                    next(
+                        (
+                            s.done_at or s.scheduled_at
+                            for s in steps
+                            if s.step_key == "vorgestellt"
+                        ),
+                        None,
+                    )
                 ),
                 "next_appointment": min(
                     (
