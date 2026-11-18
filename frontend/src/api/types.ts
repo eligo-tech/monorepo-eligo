@@ -367,6 +367,15 @@ export interface AdoptResultDTO {
 }
 
 /** A hiring manager — the person a mandate belongs to. Tenant-scoped only. */
+/** ELI-46: Mobil · Durchwahl · Zentrale · Sonstige. */
+export type PhoneKind = 'mobile' | 'direct' | 'switchboard' | 'other'
+
+export interface ManagerPhoneDTO {
+  number: string
+  kind: PhoneKind | string
+  is_primary: boolean
+}
+
 export interface ManagerDTO {
   id: string
   company_id: string
@@ -376,7 +385,10 @@ export interface ManagerDTO {
   role_title: string | null
   department: string | null
   email: string | null
+  /** The primary number (ELI-46) — what the Leads list and calls dial. */
   phone: string | null
+  /** ELI-46: every number, the primary first. */
+  phones?: ManagerPhoneDTO[]
   linkedin_url: string | null
   xing_url?: string | null
   facebook_url?: string | null

@@ -26,6 +26,7 @@ import type {
   FollowUpSuggestionDTO,
   FollowUpWrite,
   ManagerDTO,
+  ManagerPhoneDTO,
   ManagerInteractionDTO,
   HubSearchPageDTO,
   HubFacetsDTO,
@@ -372,6 +373,8 @@ export const api = {
       department?: string | null
       email?: string | null
       phone?: string | null
+      /** ELI-46: the whole list, replacing the stored one. Not with `phone`. */
+      phones?: ManagerPhoneDTO[]
       linkedin_url?: string | null
       override_suppression?: boolean
     },

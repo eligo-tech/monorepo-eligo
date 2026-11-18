@@ -22,10 +22,11 @@ from app.domain.common.enums import (
 )
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
-from app.domain.managers.models import Manager, ManagerInteraction
+from app.domain.managers.models import Manager, ManagerInteraction, ManagerPhone
 from app.domain.managers.schemas import (
     ManagerCreate,
     ManagerInteractionCreate,
+    ManagerPhoneIn,
     ManagerUpdate,
 )
 
@@ -265,21 +266,46 @@ async def update_manager(
         await erasure.guard_readd(
             session, tenant_id=tenant_id, email=changes["email"], override=override
         )
-    if changes.get("phone") and changes["phone"] != manager.phone and not override:
+    phones = payload.phones if "phones" in changes else None
+    changes.pop("phones", None)
+    held = {p["number"] for p in manager.phones}
+    added = [n for n in ([changes["phone"]] if changes.get("phone") else [p.number for p in phones or []])
+             if n not in held]
+    if added and not override:
         # ELI-45: the phone is editable on the Manager page. Create refuses an
-        # erased person's direct number; setting it by an edit is the same act.
+        # erased person's direct number; setting it by an edit is the same act
+        # — for every number added (ELI-46), not only the primary.
         # Phone only — the surname is this record's own and did not change.
         from app.domain.erasure import service as erasure
 
         guard = await erasure.person_guard(session, tenant_id)
-        on = guard.erased_on(company_name=None, surname=None, phone=changes["phone"])
-        if on is not None:
-            raise erasure.Suppressed(on)
+        for number in added:
+            on = guard.erased_on(company_name=None, surname=None, phone=number)
+            if on is not None:
+                raise erasure.Suppressed(on)
     for field, value in changes.items():
         setattr(manager, field, value)
+    if phones is not None:
+        _set_phones(manager, phones)
+    elif "phone" in changes and not manager.phone and manager.extra_phones:
+        # The primary was removed by a writer that knows only `phone`: the
+        # next number moves up rather than the contact showing no primary.
+        _set_phones(manager, [ManagerPhoneIn(number=p.number, kind=p.kind) for p in manager.extra_phones])
     await session.commit()
     await session.refresh(manager)
     return manager
+
+
+def _set_phones(manager: Manager, phones: list[ManagerPhoneIn]) -> None:
+    """Store the list (ELI-46): the primary — first, see `schemas._phone_list`
+    — on the row as `phone`/`phone_kind`, the rest as `extra_phones`."""
+    primary, *rest = phones or [None]
+    manager.phone = primary.number if primary else None
+    manager.phone_kind = primary.kind if primary else None
+    manager.extra_phones = [
+        ManagerPhone(tenant_id=manager.tenant_id, number=p.number, kind=p.kind, position=i)
+        for i, p in enumerate(rest, start=1)
+    ]
 
 
 def stage_for(source: str | None) -> str:

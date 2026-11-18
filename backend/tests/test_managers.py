@@ -567,3 +567,78 @@ async def test_an_overlong_contact_detail_is_a_422_not_a_database_error(field, l
         ok = await c.post("/api/v1/managers", json={"company_id": cid, "full_name": "Lang"})
         patch = await c.patch(f"/api/v1/managers/{ok.json()['id']}", json={field: too_long})
         assert patch.status_code == 422, patch.text
+
+
+# --- ELI-46: several numbers per contact ------------------------------------
+
+
+async def test_a_contact_holds_several_numbers_with_a_kind_and_one_primary() -> None:
+    """ELI-46: Mobil, Durchwahl, Zentrale … — one is the primary, and the
+    primary is what `phone` (Leads list, "Anruf erfassen") keeps showing."""
+    async with _api() as c:
+        cid = (await c.post("/api/v1/companies", json={"name": "Mehrnummer GmbH"})).json()["id"]
+        mid = (await c.post("/api/v1/managers", json={
+            "company_id": cid, "full_name": "Lea Viel", "phone": "+49 30 111",
+        })).json()["id"]
+
+        one = (await c.get(f"/api/v1/managers/{mid}")).json()
+        # An existing single number reads as the primary "Sonstige".
+        assert one["phones"] == [{"number": "+49 30 111", "kind": "other", "is_primary": True}]
+
+        edited = await c.patch(f"/api/v1/managers/{mid}", json={"phones": [
+            {"number": "+49 30 111", "kind": "direct"},
+            {"number": "+49 171 2222", "kind": "mobile", "is_primary": True},
+            {"number": "+49 30 0", "kind": "switchboard"},
+        ]})
+        assert edited.status_code == 200, edited.text
+        body = edited.json()
+        assert body["phone"] == "+49 171 2222"
+        assert body["phones"] == [
+            {"number": "+49 171 2222", "kind": "mobile", "is_primary": True},
+            {"number": "+49 30 111", "kind": "direct", "is_primary": False},
+            {"number": "+49 30 0", "kind": "switchboard", "is_primary": False},
+        ]
+        # Read back fresh, and in the list the Leads screen reads.
+        again = (await c.get(f"/api/v1/managers/{mid}")).json()
+        assert again["phones"] == body["phones"]
+        listed = (await c.get("/api/v1/managers", params={"company_id": cid})).json()
+        rows = listed["items"] if isinstance(listed, dict) else listed
+        assert [r["phone"] for r in rows if r["id"] == mid] == ["+49 171 2222"]
+
+        # A re-import / legacy writer touching `phone` replaces the primary
+        # and leaves the other numbers alone.
+        legacy = (await c.patch(f"/api/v1/managers/{mid}", json={"phone": "+49 171 9999"})).json()
+        assert [p["number"] for p in legacy["phones"]] == ["+49 171 9999", "+49 30 111", "+49 30 0"]
+
+        # Removing every number empties `phone` too.
+        cleared = (await c.patch(f"/api/v1/managers/{mid}", json={"phones": []})).json()
+        assert (cleared["phone"], cleared["phones"]) == (None, [])
+
+
+@pytest.mark.parametrize(
+    "phones",
+    [
+        [{"number": "1", "is_primary": True}, {"number": "2", "is_primary": True}],
+        [{"number": "+49 30 1"}, {"number": "+49 (30) 1"}],
+        [{"number": "1", "kind": "fax"}],
+        [{"number": "x" * 51}],
+        [{"number": "   "}],
+    ],
+)
+async def test_an_invalid_phone_list_is_a_422(phones) -> None:
+    async with _api() as c:
+        cid = (await c.post("/api/v1/companies", json={"name": "Ungültig GmbH"})).json()["id"]
+        mid = (await c.post("/api/v1/managers", json={"company_id": cid, "full_name": "Ute"})).json()["id"]
+        r = await c.patch(f"/api/v1/managers/{mid}", json={"phones": phones})
+        assert r.status_code == 422, r.text
+
+
+async def test_without_a_marked_primary_the_first_number_is_primary() -> None:
+    async with _api() as c:
+        cid = (await c.post("/api/v1/companies", json={"name": "Erste GmbH"})).json()["id"]
+        mid = (await c.post("/api/v1/managers", json={"company_id": cid, "full_name": "Erik"})).json()["id"]
+        body = (await c.patch(f"/api/v1/managers/{mid}", json={"phones": [
+            {"number": "+49 89 1", "kind": "direct"}, {"number": "+49 160 2", "kind": "mobile"},
+        ]})).json()
+        assert body["phone"] == "+49 89 1"
+        assert [p["is_primary"] for p in body["phones"]] == [True, False]

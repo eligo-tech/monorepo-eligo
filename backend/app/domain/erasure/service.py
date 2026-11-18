@@ -35,7 +35,7 @@ from app.domain.erasure.models import ErasureRequest, TenantSuppression
 from app.domain.followups.models import FollowUp
 from app.domain.interviews.models import Interview
 from app.domain.jobs.models import Job
-from app.domain.managers.models import Manager, ManagerInteraction
+from app.domain.managers.models import Manager, ManagerInteraction, ManagerPhone
 from app.domain.matching.models import MatchReceipt
 from app.domain.notices.models import CandidateNotice
 from app.domain.pipeline.models import Application, ApplicationAssessment, ProcessStep
@@ -133,14 +133,17 @@ def _keys(
     import_ids: list[str],
     phone: str | None = None,
     person_at: str | list[str] | None = None,
+    other_phones: list[str] | tuple[str, ...] = (),
 ) -> list[tuple[str, str]]:
     keys = [("import_id", digest(tenant_id, "import_id", i)) for i in import_ids]
     if email and email.strip():
         keys.append(("email", digest(tenant_id, "email", email)))
     # ELI-22: ad contacts rarely carry an e-mail; the call list must still
     # not bring an erased contact back by phone or by name at the employer.
-    if phone_value(_direct(phone)):
-        keys.append(("phone", digest(tenant_id, "phone", phone_value(_direct(phone)) or "")))
+    # ELI-46: every direct number the contact has, not only the primary.
+    for value in dict.fromkeys(phone_value(_direct(p)) for p in (phone, *other_phones)):
+        if value:
+            keys.append(("phone", digest(tenant_id, "phone", value)))
     for value in dict.fromkeys([person_at] if isinstance(person_at, str) else (person_at or [])):
         if value:
             keys.append(("surname_at_company", digest(tenant_id, "surname_at_company", value)))
@@ -345,6 +348,10 @@ async def erase_manager(
     # Theirs, and any (e.g. a candidate's) copied from a note about them.
     follow_ups = await _ids(session, FollowUp.id, FollowUp.tenant_id == t,
                             or_(FollowUp.manager_id == boss.id, FollowUp.source_interaction_id.in_(notes)))
+    # ELI-46: the numbers besides the primary. The FK cascades too; listed so
+    # the erasure's counts name them and nothing rests on the cascade.
+    phones = await _ids(session, ManagerPhone.id, ManagerPhone.tenant_id == t, ManagerPhone.manager_id == boss.id)
+    other_phones = [p.number for p in boss.extra_phones]
     linked = {str(boss.id), *map(str, notes)}
     records = await _ids(session, EnrichmentRecord.id, EnrichmentRecord.tenant_id == t,
                          EnrichmentRecord.entity_id.in_([boss.id, *notes]))
@@ -361,6 +368,7 @@ async def erase_manager(
         keys=_keys(
             t, email=boss.email, import_ids=_import_ids(boss.external_source, boss.external_id),
             phone=boss.phone,
+            other_phones=other_phones,
             # Keyed on the employer as the ads name it (the hub link), and on
             # the workspace's own name for it — a renamed company or one
             # created by hand must still hold the person back.
@@ -370,7 +378,7 @@ async def erase_manager(
             ],
         ),
         receipt_ids=receipts,
-        deletions=[(FollowUp, follow_ups), (ManagerInteraction, notes), (EnrichmentRecord, records),
+        deletions=[(FollowUp, follow_ups), (ManagerPhone, phones), (ManagerInteraction, notes), (EnrichmentRecord, records),
                    (AgentProposal, proposals), (Manager, [boss.id])],
     )
 

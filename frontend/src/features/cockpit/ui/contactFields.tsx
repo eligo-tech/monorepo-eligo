@@ -50,9 +50,12 @@ export function contactPatch(m: ManagerDTO, draft: ContactDraft): Partial<Contac
 export function ContactFields({
   value,
   onChange,
+  withPhone = true,
 }: {
   value: ContactDraft
   onChange: (next: ContactDraft) => void
+  /** ELI-46: the Manager page edits every number in its own list instead. */
+  withPhone?: boolean
 }) {
   const set = (k: ContactKey) => (v: string) => onChange({ ...value, [k]: v })
   return (
@@ -60,7 +63,9 @@ export function ContactFields({
       <TextInput label={t('Rolle')} value={value.role_title} onChange={set('role_title')} placeholder="Head of IT" />
       <TextInput label={t('Abteilung')} value={value.department} onChange={set('department')} placeholder={t('optional')} />
       <TextInput label={t('E-Mail')} type="email" value={value.email} onChange={set('email')} placeholder={t('optional')} />
-      <TextInput label={t('Telefon')} value={value.phone} onChange={set('phone')} placeholder="+49 30 1234567" />
+      {withPhone && (
+        <TextInput label={t('Telefon')} value={value.phone} onChange={set('phone')} placeholder="+49 30 1234567" />
+      )}
       <div className="sm:col-span-2">
         <TextInput
           label={t('LinkedIn-Profil')}
