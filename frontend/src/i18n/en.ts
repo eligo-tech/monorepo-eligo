@@ -230,7 +230,7 @@ export const EN: Record<string, string> = {
   'alle {n} Einträge zeigen': 'show all {n} entries',
   'Als erledigt markieren': 'Mark as done',
   'Als Kandidat speichern': 'Save as candidate',
-  'Als Kunde übernommen': 'Adopted as a client',
+  'Als Lead übernommen': 'Adopted as a lead',
   'Als neues Mandat kopieren — Suchprofil, Kunde und Ansprechpartner, ohne den Prozess': 'Copy as a new mandate — search profile, client and contact, without the process',
   'Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen': 'Remember as a search profile — the nightly run fetches new ads for it',
   'am': 'on',
@@ -1349,6 +1349,11 @@ export const EN: Record<string, string> = {
   'Wiedervorlage am {date} anlegen?': 'Create a follow-up on {date}?',
   'aus der Notiz: „{phrase}“': 'from the note: “{phrase}”',
   'Anlegen': 'Create',
+  // ELI-48: a follow-up offered after every call or note, date or not.
+  'Wiedervorlage erstellen?': 'Create a follow-up?',
+  'Kein Datum in der Notiz — Vorschlag: {date}': 'No date in the note — suggested: {date}',
+  'Wiedervorlage erstellen': 'Create follow-up',
+  'Anderes Datum…': 'Other date…',
   // ELI-45: a contact's details, when adding and editing one.
   'Abteilung': 'Department',
   'LinkedIn-Profil': 'LinkedIn profile',

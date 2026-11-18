@@ -392,7 +392,8 @@ Three domain facts worth knowing before you add a field:
   `candidate_id`, check constraint), open until marked done. Not a column
   on `manager_interactions`: a note is what happened, a follow-up what is
   still owed. `dates.suggest_dates` reads German date phrases out of a note
-  ("Anfang Februar" → first working day, a past month → next year) for
+  ("Anfang Februar" → first working day, a past month → next year;
+  ELI-48 adds quarters "Q1"/"im ersten Quartal" and bare weekdays) for
   `POST /follow-ups/suggest`; it writes nothing — the UI offers, a person
   confirms. Delete is admin-only (ELI-27); anyone marks done. The ELI-22/38
   call-back date (`manager_interactions.next_action_at`) is separate and

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { FollowUpDTO } from '@/api/types'
 import {
   bucketFollowUps,
+  defaultFollowUpDate,
   dueCount,
   followUpIcs,
   localIsoDate,
@@ -131,5 +132,19 @@ describe('textFromNote', () => {
     expect(cut.length).toBeLessThanOrEqual(141)
     expect(cut.endsWith('…')).toBe(true)
     expect(cut).not.toContain('wor…')
+  })
+})
+
+describe('defaultFollowUpDate (ELI-48)', () => {
+  it('is a week out when the note names no date', () => {
+    // Tuesday 17 Nov 2026 → Tuesday 24 Nov.
+    expect(defaultFollowUpDate(new Date(2026, 10, 17))).toBe('2026-11-24')
+  })
+
+  it('moves a weekend to the Monday after', () => {
+    // Saturday 21 Nov → Saturday 28 → Monday 30 Nov.
+    expect(defaultFollowUpDate(new Date(2026, 10, 21))).toBe('2026-11-30')
+    // Sunday 22 Nov → Sunday 29 → Monday 30 Nov.
+    expect(defaultFollowUpDate(new Date(2026, 10, 22))).toBe('2026-11-30')
   })
 })
