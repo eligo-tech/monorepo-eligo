@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterCompanies, kindCounts } from './companyList'
+import { alreadyAdoptedId, companyHref, filterCompanies, kindCounts } from './companyList'
 
 // ELI-33: Unternehmen lists every company — clients and lead companies.
 const row = (name: string, managers: number, leads: number, location: string | null = null, to_review = 0) => ({
@@ -29,7 +29,28 @@ describe('Unternehmen filter', () => {
     expect(filterCompanies(rows, 'review', '').map((r) => r.name)).toEqual(['Altkunde AG'])
   })
 
+  it('a company taken from Markt with no contact yet is a Lead (ELI-31)', () => {
+    const taken = { ...row('Bayoonet AG', 0, 0), markt_lead: true }
+    expect(filterCompanies([...rows, taken], 'leads', '').map((r) => r.name)).toEqual([
+      'Grimme Landmaschinen', 'Bergfreunde GmbH', 'Bayoonet AG',
+    ])
+    expect(kindCounts([...rows, taken]).leads).toBe(3)
+  })
+
   it('counts each filter', () => {
     expect(kindCounts(rows)).toEqual({ all: 4, clients: 2, leads: 2, review: 1 })
+  })
+})
+
+// ELI-31: after "Übernehmen" the Markt card links to where the company landed.
+describe('where an adopted company lives', () => {
+  it('is its page under Unternehmen', () => {
+    expect(companyHref('5f1c')).toBe('#companies/5f1c')
+  })
+
+  it('reads the existing company out of a 409 from the adopt route', () => {
+    const id = '0b0c7d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e'
+    expect(alreadyAdoptedId(`{"detail":"already adopted as company ${id}"}`)).toBe(id)
+    expect(alreadyAdoptedId('{"detail":"no corpus company"}')).toBeNull()
   })
 })
