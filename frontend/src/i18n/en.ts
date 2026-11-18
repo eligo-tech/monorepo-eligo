@@ -117,7 +117,6 @@ export const EN: Record<string, string> = {
   'Lead': 'Lead',
   'Leads aus dem Markt': 'leads from Markt',
   'Leistungsbeurteilung': 'Performance assessment',
-  'Mailbox': 'Voicemail',
   'Mehr laden': 'Load more',
   'Mit Kontakt ins CRM übernehmen': 'Add to CRM with contact',
   'Name passt': 'name matches',
@@ -910,6 +909,8 @@ export const EN: Record<string, string> = {
   'Noch niemand auf diesem Mandat — „Kandidat zuordnen" setzt den ersten Prozess auf.': 'Nobody on this mandate yet — “Assign candidate” starts the first process.',
   'Noch wurde nichts geschrieben. Dieselbe Datei erneut zu importieren aktualisiert die Datensätze, statt sie zu verdoppeln.': 'Nothing has been written yet. Importing the same file again updates the records instead of duplicating them.',
   'Notiz': 'Note',
+  // ELI-35: a call's note is optional ("Nicht erreicht" needs no text).
+  'Notiz (optional)': 'Note (optional)',
   'Notiz an „{step}“': 'Note on “{step}”',
   'Notiz hinzufügen': 'Add a note',
   'Notiz zu anderen Prozessen': 'Note on the other processes',

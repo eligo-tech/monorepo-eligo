@@ -22,6 +22,7 @@ import {
   callOutcomeLabel,
   canSaveCall,
   needsDate,
+  nextCallInstant,
 } from '../ui/callOutcomes'
 import { networkLinks } from '../ui/contactReach'
 import { leadJobLine, mandateHref } from '../ui/leadJobs'
@@ -46,8 +47,6 @@ const when = (iso: string | null) =>
       })
     : '—'
 
-/** `datetime-local` → ISO in the browser's time zone. */
-const toIso = (local: string) => (local ? new Date(local).toISOString() : null)
 
 function PhoneLink({ phone, kind }: { phone: string | null; kind?: string | null }) {
   if (!phone) return <span className="text-cockpit-faint">{t('keine Nummer')}</span>
@@ -72,7 +71,8 @@ function PhoneLink({ phone, kind }: { phone: string | null; kind?: string | null
   )
 }
 
-/** Outcome, optional next date, optional note — then save. */
+/** Outcome, optional next day, optional note — then save. "Nicht erreicht"
+ *  needs nothing else (ELI-35). */
 function CallForm({
   onSave,
   onCancel,
@@ -89,7 +89,7 @@ function CallForm({
     setBusy(true)
     setError(null)
     try {
-      await onSave(outcome, toIso(nextAt), note.trim())
+      await onSave(outcome, nextCallInstant(nextAt), note.trim())
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 409
@@ -112,10 +112,11 @@ function CallForm({
         <span className="mb-1 block font-mono text-[11px] uppercase tracking-wide text-cockpit-faint">
           {needsDate(outcome) ? t('Nächster Anruf (Pflicht)') : t('Nächster Anruf (optional)')}
         </span>
-        <DateField type="datetime-local" value={nextAt} onChange={setNextAt} className={FIELD} />
+        {/* ELI-35: a day — "Uhrzeit ist nicht relevant". */}
+        <DateField value={nextAt} onChange={setNextAt} className={FIELD} />
       </label>
       <label className="block min-w-0 sm:col-span-2">
-        <span className="mb-1 block font-mono text-[11px] uppercase tracking-wide text-cockpit-faint">{t('Notiz')}</span>
+        <span className="mb-1 block font-mono text-[11px] uppercase tracking-wide text-cockpit-faint">{t('Notiz (optional)')}</span>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={FIELD} />
       </label>
       <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
@@ -193,7 +194,7 @@ export function ContactRow({
             line, and kept by the backend until a call reaches the person. */}
         {row.next_action_at && (
           <Chip tone={row.due ? 'gold' : undefined}>
-            {row.due ? t('Fällig seit') : t('Nächster Anruf')}: {when(row.next_action_at)}
+            {row.due ? t('Fällig seit') : t('Nächster Anruf')}: {day(row.next_action_at)}
           </Chip>
         )}
         {followUp && (

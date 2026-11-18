@@ -81,3 +81,31 @@ async def test_an_interaction_without_an_outcome_is_still_fine(manager_id) -> No
 def test_an_outcome_belongs_to_a_call() -> None:
     with pytest.raises(ValidationError):
         ManagerInteractionCreate(interaction_type=InteractionType.MEETING, outcome="voicemail")
+
+
+# --- ELI-35: "Mailbox" is "Nicht erreicht" -----------------------------------
+
+
+async def test_voicemail_is_filed_as_not_reached(manager_id) -> None:
+    """The recruiters: "Nicht erreicht und Mailbox sind das gleiche". The UI
+    no longer offers Mailbox; a client that still sends it gets one outcome
+    on the record, not two spellings of it. Old `voicemail` rows stay as
+    they are — the call list already reads both as not reached."""
+    async with SessionLocal() as s:
+        row = await service.log_interaction(
+            s, tenant_id=TENANT, manager_id=manager_id,
+            payload=ManagerInteractionCreate(interaction_type=InteractionType.BUSINESS_CALL, outcome="voicemail"),
+        )
+    assert ManagerInteractionRead.model_validate(row).outcome == "not_reached"
+
+
+async def test_not_reached_needs_no_text(manager_id) -> None:
+    """ELI-35: "Bei Notiz „Nicht erreicht“ soll es nicht erforderlich sein,
+    weiteren Text einzugeben"."""
+    async with SessionLocal() as s:
+        row = await service.log_interaction(
+            s, tenant_id=TENANT, manager_id=manager_id,
+            payload=ManagerInteractionCreate(interaction_type=InteractionType.BUSINESS_CALL, outcome="not_reached"),
+        )
+    read = ManagerInteractionRead.model_validate(row)
+    assert (read.outcome, read.summary) == ("not_reached", None)
