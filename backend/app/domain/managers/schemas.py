@@ -43,6 +43,14 @@ class ManagerInteractionCreate(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _voicemail_is_not_reached(self) -> "ManagerInteractionCreate":
+        # ELI-35: "Nicht erreicht und Mailbox sind das gleiche". New calls are
+        # filed under one outcome; old `voicemail` rows stay readable.
+        if self.outcome == CallOutcome.VOICEMAIL:
+            self.outcome = CallOutcome.NOT_REACHED
+        return self
+
+    @model_validator(mode="after")
     def _call_back_has_a_date(self) -> "ManagerInteractionCreate":
         if self.outcome == CallOutcome.CALL_BACK and self.next_action_at is None:
             raise ValueError("call_back needs next_action_at — a call-back without a date never comes due")

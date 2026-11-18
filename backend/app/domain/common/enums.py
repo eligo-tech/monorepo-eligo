@@ -169,6 +169,8 @@ class CallOutcome(str, enum.Enum):
     """
 
     NOT_REACHED = "not_reached"
+    #: Retired by ELI-35 — the same as not reached. No longer offered, and a
+    #: new call sent with it is filed as NOT_REACHED; kept so old rows read.
     VOICEMAIL = "voicemail"
     #: Needs a date: a call-back without one never comes due.
     CALL_BACK = "call_back"
