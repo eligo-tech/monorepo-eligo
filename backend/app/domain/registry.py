@@ -20,6 +20,7 @@ from app.domain.managers import models as manager_models  # noqa: F401
 from app.domain.matching import models as matching_models  # noqa: F401
 from app.domain.notices import models as notice_models  # noqa: F401
 from app.domain.pipeline import models as pipeline_models  # noqa: F401
+from app.domain.presentation import models as presentation_models  # noqa: F401
 from app.domain.tenantsources import models as tenantsources_models  # noqa: F401
 from app.domain.projects import models as project_models  # noqa: F401
 from app.domain.proposals import models as proposal_models  # noqa: F401

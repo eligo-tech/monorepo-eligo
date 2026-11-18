@@ -314,7 +314,8 @@ async def test_a_settled_check_is_retried_after_a_quarter() -> None:
     assert (await _run(tenant, _Fetcher(_tempton()), NOW + dt.timedelta(days=91)))["verified"] == 1
 
 
-async def _linked_markt_board(tenant: uuid.UUID, cid: uuid.UUID, facts: dict) -> None:
+async def _linked_markt_board(tenant: uuid.UUID, cid: uuid.UUID, facts: dict | None, status: str = "verified") -> None:
+    """Link `cid` to a Markt employer; `facts=None`: Markt never read its site."""
     async with SessionLocal() as s:
         hub = HubCompany(
             name="Tempton Group GmbH", normalized_name=normalize_company_name("Tempton Group GmbH"),
@@ -323,8 +324,9 @@ async def _linked_markt_board(tenant: uuid.UUID, cid: uuid.UUID, facts: dict) ->
         )
         s.add(hub)
         await s.flush()
-        s.add(HubSiteCheck(domain="tempton.de", group_key=f"employer:{hub.id}", hub_company_id=hub.id,
-                           status="verified", facts=facts, checked_at=NOW))
+        if facts is not None:
+            s.add(HubSiteCheck(domain="tempton.de", group_key=f"employer:{hub.id}", hub_company_id=hub.id,
+                               status=status, facts=facts, checked_at=NOW))
         s.add(HubCompanyLink(tenant_id=tenant, hub_company_id=hub.id, company_id=cid))
         await s.commit()
 
@@ -780,6 +782,40 @@ async def test_totals_count_every_company_of_the_workspace_by_state() -> None:
     assert t["searched"] == 1
 
 
+async def test_totals_say_how_many_companies_markt_could_answer_for() -> None:
+    """"0 aus Markt" (2026-11-17) is only readable next to how many companies
+    are linked at all, how many of those Markt has read, and how many have a
+    reading — a gap at each step names a different cause."""
+    tenant = uuid.uuid4()
+    with_vat = await _company(tenant, "Tempton Group GmbH")
+    await _linked_markt_board(tenant, with_vat, {"vat_id": "DE252406571"})
+    phone_only = await _company(tenant, "Phone Only GmbH")
+    await _linked_markt_board(tenant, phone_only, {"phone": "+49 201 1"})
+    not_named = await _company(tenant, "Not Named GmbH")
+    await _linked_markt_board(tenant, not_named, {}, status="not_named")
+    never_read = await _company(tenant, "Never Read GmbH")
+    await _linked_markt_board(tenant, never_read, None)
+    await _company(tenant, "Not Linked GmbH")
+    async with SessionLocal() as s:  # a site tracked, never adopted: not a link
+        hub = HubCompany(
+            name="Watched GmbH", normalized_name=normalize_company_name("Watched GmbH"),
+            dedupe_key=f"k-{uuid.uuid4()}", resolution_basis="name_place", source="bundesagentur",
+            kind=EMPLOYER, first_seen_at=NOW, last_seen_at=NOW,
+        )
+        s.add(hub)
+        await s.flush()
+        s.add(HubCompanyLink(tenant_id=tenant, hub_company_id=hub.id, company_id=None))
+        await s.commit()
+
+    async with SessionLocal() as s:
+        t = await impressum.totals(s, tenant_id=tenant)
+    assert t["companies"] == 5
+    assert t["linked"] == 4
+    assert t["linked_checked"] == 3
+    assert t["linked_reading"] == 2
+    assert t["markt"] == 1
+
+
 def test_the_totals_route_is_machine_only() -> None:
     from tests.test_operator_endpoints import DECLARED_OPERATOR_ROUTES
 
@@ -812,6 +848,13 @@ def test_hub_daily_totals_line() -> None:
     })
     assert line.startswith("687 in 5 Workspaces · 410 mit USt-ID/HRB (300 aus Markt, 110 eigenes Impressum)")
     assert "250 offen" in line and "100 ohne Website" in line and "27 Einzelunternehmer" in line
+
+
+def test_hub_daily_markt_line() -> None:
+    from scripts.hub_daily import _company_markt_line
+
+    line = _company_markt_line({"linked": 420, "linked_checked": 90, "linked_reading": 30, "markt": 0})
+    assert line == "420 mit Markt verknüpft · 90 davon von Markt gelesen · 30 mit Markt-Impressum · 0 mit USt-ID/HRB aus Markt"
 
 
 async def test_hub_daily_prints_the_totals_and_survives_when_they_fail(monkeypatch, capsys) -> None:
