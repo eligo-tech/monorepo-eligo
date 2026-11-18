@@ -26,7 +26,7 @@ import { Check, Download, FileText, Loader2, Sparkles, UploadCloud } from 'lucid
 
 import { ApiError, api } from '@/api/client'
 import { ReaddDeclined, withReaddConfirm } from '../../erasure/readd'
-import { buildReferencePatch } from './referenceMerge'
+import { buildCoverSheetPatch, buildReferencePatch } from './referenceMerge'
 import { type ReadableKind, isReadable, readsAfterUpload } from './attachmentRules'
 import type {
   CVExtractionResultDTO,
@@ -44,12 +44,13 @@ const KIND_LABEL: Record<DocumentKind, string> = {
   transkript: t('Transkript'),
   zeugnis: t('Zeugnis'),
   zertifikat: t('Zertifikat'),
+  coversheet: t('Cover Sheet'),
   sonstiges: t('Sonstiges'),
 }
 
 /** What can be attached from the drop zone, in the order a recruiter needs
  *  them. The transcript has its own button: it is read, not filed. */
-const UPLOAD_KINDS = ['zeugnis', 'zertifikat', 'cv', 'sonstiges'] as const
+const UPLOAD_KINDS = ['zeugnis', 'zertifikat', 'coversheet', 'cv', 'sonstiges'] as const
 
 /** Extracted field name → the candidate column it belongs in.
  *
@@ -222,7 +223,10 @@ export function AttachmentsPanel({
     setError(null)
     try {
       const current = await api.candidate(candidateId)
-      const patch = buildReferencePatch(current, proposals.fields, chosen, kind)
+      const patch =
+        kind === 'coversheet'
+          ? buildCoverSheetPatch(current, proposals.fields, chosen)
+          : buildReferencePatch(current, proposals.fields, chosen, kind)
       if (Object.keys(patch).length === 0) {
         setNotice(t('Alles Ausgewählte steht schon im Datensatz.'))
         setProposals(null)

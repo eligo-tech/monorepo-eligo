@@ -183,7 +183,8 @@ _TRANSCRIPT_SCHEMA = {
 
 _REFERENCE_SYSTEM = (
     "You read a German employment reference (Arbeitszeugnis) or a certificate "
-    "(Zertifikat) about a candidate. The first line of the user message names "
+    "(Zertifikat) or a partner recruiter's filled cover sheet (Coversheet) "
+    "about a candidate. The first line of the user message names "
     "which. Rules:\n"
     "1. EVIDENCE: every field carries `evidence`, a sentence or phrase copied "
     "VERBATIM from the document that states the value. Anything you cannot "
@@ -203,6 +204,12 @@ _REFERENCE_SYSTEM = (
     "ausreichend). Its evidence is that sentence. Omit it if there is none.\n"
     "4. Zertifikat fields: `certificate_name`, `issuer`, `issued_on` (as "
     "written), `skills` (as rule 2).\n"
+    "4b. Coversheet (a partner recruiter's candidate profile) fields: "
+    "`desired_position`, `profile_summary`, `technical_profile` (the technology "
+    "stack as written), `skills` (as rule 2), `expected_salary`, "
+    "`notice_period`, `qualifications` and `languages` ('; '-separated, each "
+    "as written), `motivation` (the reason for changing jobs). Never read the "
+    "partner's own contact person, e-mail or phone as the candidate's.\n"
     "5. Never infer, complete or translate a value. CONFIDENCE in [0,1]: how "
     "plainly the document states it. No commentary."
 )

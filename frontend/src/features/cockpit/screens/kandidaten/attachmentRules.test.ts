@@ -23,4 +23,10 @@ describe('readsAfterUpload', () => {
     expect(isReadable('zeugnis')).toBe(true)
     expect(isReadable('cv')).toBe(false)
   })
+
+  it('reads a partner cover sheet after upload like a Zeugnis (ELI-19)', () => {
+    expect(isReadable('coversheet')).toBe(true)
+    expect(readsAfterUpload('coversheet', 'application/pdf')).toBe(true)
+    expect(readsAfterUpload('coversheet', 'image/png')).toBe(false)
+  })
 })

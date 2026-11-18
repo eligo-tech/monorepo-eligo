@@ -21,6 +21,7 @@ export type MergeBase = Pick<CandidateDTO, 'updated_at' | 'skills' | 'work_histo
   focus_areas?: string[] | null
   other_notes?: string | null
   education?: EducationDTO[] | string[] | null
+  languages?: string[] | null
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
@@ -156,6 +157,74 @@ export function buildReferencePatch(
         entry,
       ]
     }
+  }
+
+  if (Object.keys(patch).length) patch.base_updated_at = base.updated_at
+  return patch
+}
+
+/** "Ca. 70.000 €" → 70000. A range ("70.000 - 80.000 €") or no figure at
+ *  all is null: which end of a range is the expectation is a person's call,
+ *  and gluing the digits together would invent a seven-figure salary. */
+function singleAmount(value: string): number | null {
+  const amounts = value.match(/\d{1,3}(?:[.\s']\d{3})+|\d+/g) ?? []
+  return amounts.length === 1 ? Number(amounts[0].replace(/\D/g, '')) : null
+}
+
+/** Ticked rows from a partner's filled cover sheet (ELI-19) → one PATCH.
+ *
+ *  Text fields the sheet states once (summary, stack, notice period,
+ *  motivation) replace the record's value — ticking them is the decision.
+ *  Lists are merged as for a Zeugnis. The target role has no column and is
+ *  filed in the notes, attributed to the cover sheet. */
+export function buildCoverSheetPatch(
+  base: MergeBase,
+  fields: CVFieldDTO[],
+  chosen: Set<string>,
+): CandidateUpdatePayload {
+  const value = (name: string) => fields.find((f) => f.field === name)?.value ?? ''
+  const picked = (name: string) => chosen.has(name) && value(name) !== ''
+  const patch: CandidateUpdatePayload = {}
+
+  if (picked('profile_summary')) patch.profile_summary = value('profile_summary')
+  if (picked('technical_profile')) patch.technical_profile = value('technical_profile')
+  if (picked('notice_period')) patch.notice_period = value('notice_period')
+  if (picked('motivation')) patch.motivation = value('motivation')
+  if (picked('expected_salary')) {
+    const amount = singleAmount(value('expected_salary'))
+    if (amount !== null) patch.salary_expectation = amount
+  }
+  if (picked('skills')) {
+    const merged = mergeList(base.skills ?? [], splitList(value('skills')))
+    if (merged) patch.skills = merged
+  }
+  if (picked('languages')) {
+    const merged = mergeList(base.languages ?? [], splitList(value('languages')))
+    if (merged) patch.languages = merged
+  }
+  if (picked('qualifications')) {
+    const education = base.education ?? []
+    const held = new Set(
+      education.map((e) => norm(typeof e === 'string' ? e : (e.degree ?? ''))),
+    )
+    const fresh = splitList(value('qualifications')).filter((q) => !held.has(norm(q)))
+    if (fresh.length) {
+      patch.education = [
+        ...education.map((e) => (typeof e === 'string' ? { degree: e } : e)),
+        ...fresh.map((degree) => ({
+          degree,
+          institution: '',
+          location: '',
+          start_date: '',
+          end_date: '',
+        })),
+      ]
+    }
+  }
+  if (picked('desired_position')) {
+    const line = `${t('Cover Sheet')} · ${t('Angestrebte Position')}: ${value('desired_position')}`
+    const current = base.other_notes ?? ''
+    if (!current.includes(line)) patch.other_notes = [current, line].filter(Boolean).join('\n')
   }
 
   if (Object.keys(patch).length) patch.base_updated_at = base.updated_at

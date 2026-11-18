@@ -181,21 +181,44 @@ ZERTIFIKAT_FIELDS: dict[str, str] = {
     "issued_on": "Ausgestellt am",
     "skills": "Skills",
 }
+#: A partner's filled cover sheet ("Kandidatenprofil", ELI-19). Names follow
+#: the record's vocabulary (`expected_salary` as in `CV_FIELDS`);
+#: `desired_position` and `qualifications` have no column of their own and
+#: are filed by the cockpit (notes, Ausbildung).
+COVERSHEET_FIELDS: dict[str, str] = {
+    "desired_position": "Angestrebte Position",
+    "profile_summary": "Zusammenfassung",
+    "technical_profile": "Technologie Stack",
+    "skills": "Skills",
+    "expected_salary": "Gehaltsvorstellung",
+    "notice_period": "Kündigungsfrist",
+    "qualifications": "Qualifikationen",
+    "languages": "Sprachkenntnisse",
+    "motivation": "Wechselmotivation",
+}
 #: Which fields each readable kind may yield. A Zertifikat read with Zeugnis
 #: vocabulary ("employer") must not get that value through.
 REFERENCE_FIELDS_BY_KIND: dict[str, dict[str, str]] = {
     "zeugnis": ZEUGNIS_FIELDS,
     "zertifikat": ZERTIFIKAT_FIELDS,
+    "coversheet": COVERSHEET_FIELDS,
 }
-REFERENCE_FIELDS: dict[str, str] = {**ZEUGNIS_FIELDS, **ZERTIFIKAT_FIELDS}
+REFERENCE_FIELDS: dict[str, str] = {
+    **ZEUGNIS_FIELDS, **ZERTIFIKAT_FIELDS, **COVERSHEET_FIELDS
+}
 REFERENCE_FIELD_ORDER: list[str] = list(REFERENCE_FIELDS.keys())
 
 #: Values that must themselves appear in the text — names, dates, titles. The
 #: others (a task summary, a grade) only have to quote a real sentence.
 REFERENCE_VERBATIM_FIELDS = frozenset(
     {"employer", "role_title", "period", "leaving_reason", "assessment_quote",
-     "certificate_name", "issuer", "issued_on"}
+     "certificate_name", "issuer", "issued_on",
+     "desired_position", "profile_summary", "technical_profile",
+     "expected_salary", "notice_period", "motivation"}
 )
+#: '; '-separated values: every item must be in the document on its own, so
+#: one real quote cannot carry an invented item along.
+REFERENCE_LIST_FIELDS = frozenset({"skills", "tasks", "languages", "qualifications"})
 #: A reading of coded Zeugnissprache, not a fact the document states.
 REFERENCE_INTERPRETED_FIELDS = frozenset({"assessment_grade"})
 #: The German grade scale — the only values an interpretation may take.

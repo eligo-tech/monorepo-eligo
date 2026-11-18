@@ -4,10 +4,10 @@
 import type { DocumentKind } from '@/api/types'
 
 /** The kinds `POST /documents/{id}/read` accepts. */
-export type ReadableKind = 'zeugnis' | 'zertifikat'
+export type ReadableKind = 'zeugnis' | 'zertifikat' | 'coversheet'
 
 export function isReadable(kind: DocumentKind): kind is ReadableKind {
-  return kind === 'zeugnis' || kind === 'zertifikat'
+  return kind === 'zeugnis' || kind === 'zertifikat' || kind === 'coversheet'
 }
 
 /** A Zeugnis or Zertifikat is read right after it is uploaded — unless it is
