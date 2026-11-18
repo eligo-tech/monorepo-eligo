@@ -105,7 +105,7 @@ export function BriefingPanel({
         tag={t('Briefing')}
         tone="gold"
         title={t('Was der Kunde gesagt hat')}
-        note={`${mandate.ref} · ${rows.length} ${rows.length === 1 ? t('Eintrag') : t('Einträge')}`}
+        note={`${rows.length} ${rows.length === 1 ? t('Eintrag') : t('Einträge')}`}
         collapsed={collapsed}
         onToggle={() => setCollapsed((shut) => !shut)}
       />

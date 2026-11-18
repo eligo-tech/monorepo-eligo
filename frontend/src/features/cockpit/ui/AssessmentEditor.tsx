@@ -314,7 +314,7 @@ export function AssessmentEditor({
       <Half
         tag="A · C · D"
         title={t('Passung zu diesem Mandat')}
-        note={t('{ref} · gilt nur für dieses Mandat', { ref: card.mandateRef })}
+        note={t('gilt nur für dieses Mandat')}
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-4">
