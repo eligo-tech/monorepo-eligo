@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -61,6 +61,9 @@ async def create_company(
 #: "Kunde" = at least one manager; "Lead" = at least one new contact taken
 #: from Markt (stage bus_dev). A client with new contacts is both. Not
 #: `is_client`: the imports set it on every row (measured 2026-11-12).
+#: ELI-31: a company taken from Markt with "Übernehmen" and no contact yet
+#: (source `hub:…`, `is_client = false` since ELI-36, no manager) is a Lead
+#: too — the Markt card says "✓ Lead", so the Leads filter has to show it.
 OVERVIEW_KINDS = ("all", "clients", "leads")
 
 
@@ -105,13 +108,17 @@ async def overview(
         .scalar_subquery()
         .label("last_contact_at")
     )
-    stmt = select(Company.id, Company.name, Company.location, managers, leads, mandates, last_contact).where(
-        Company.tenant_id == tenant_id
+    markt_lead = and_(
+        Company.source.like("hub:%"), Company.is_client.is_(False), _count_people("manager") == 0
     )
+    stmt = select(
+        Company.id, Company.name, Company.location, managers, leads, mandates, last_contact,
+        markt_lead.label("markt_lead"),
+    ).where(Company.tenant_id == tenant_id)
     if kind == "clients":
         stmt = stmt.where(_count_people("manager") > 0)
     elif kind == "leads":
-        stmt = stmt.where(_count_people("bus_dev") > 0)
+        stmt = stmt.where(or_(_count_people("bus_dev") > 0, markt_lead))
     if q and q.strip():
         needle = q.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         stmt = stmt.where(func.lower(Company.name).like(f"%{needle}%", escape="\\"))
@@ -127,6 +134,7 @@ async def overview(
             "managers": int(r.managers or 0),
             "leads": int(r.leads or 0),
             "mandates": int(r.mandates or 0),
+            "markt_lead": bool(r.markt_lead),
             "last_contact_at": _aware(r.last_contact_at),
             # ELI-33 step 2b: Markt sites of the same name to confirm or dismiss.
             "to_review": review.get(r.id, 0),

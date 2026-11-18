@@ -93,7 +93,9 @@ hand-entered people — with phone, e-mail, LinkedIn/XING (stored profile, else 
 people search) and the adoption date. After the first contact "Zu Managern"
 promotes the record to the Manager screen. **Unternehmen** (`CompanyScreen`,
 ELI-33) lists EVERY company of the workspace — Alle / Kunden (≥1 manager) /
-Leads (≥1 bus-dev contact); not `is_client`, which imports set on every row —
+Leads (≥1 bus-dev contact, or taken from Markt with "Übernehmen" and no
+contact/manager yet — `markt_lead`, ELI-31; the Markt card then links
+"✓ Lead · öffnen" to `#companies/<id>`); not `is_client`, which imports set on every row —
 and one page per company (`#companies/<id>`): managers, leads, mandates, the
 Impressum switchboard, the open jobs in Markt and the careers page
 (`companies/market.py`; also in the manager page's sidebar), "Manager hinzufügen".
