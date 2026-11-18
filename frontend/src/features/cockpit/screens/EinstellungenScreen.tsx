@@ -24,6 +24,7 @@ import type { MeDTO, SourceCapabilitiesDTO, TenantSourceDTO } from '@/api/types'
 import { isAdmin } from '../useMe'
 import { ErasureLog } from '../erasure/ErasureLog'
 import { AiFeaturesPanel } from './AiFeaturesPanel'
+import { BrandingPanel } from './BrandingPanel'
 import { FileImportPanel } from './FileImportPanel'
 import { Button, TextInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
@@ -392,12 +393,23 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
         <AiFeaturesPanel admin={admin} />
       </section>
 
+      {/* ELI-20: the CI every cover sheet is drawn in. */}
+      <section className="space-y-5">
+        <SectionHeader
+          id="section-ci"
+          index="04"
+          title={t('Kandidatenprofil · CI')}
+          hint={t('Logo, Farbe und AGB-Hinweis für Kunden-PDFs')}
+        />
+        <BrandingPanel admin={admin} />
+      </section>
+
       {/* GDPR Art. 17/21 inside the workspace. Erasing happens on the
           person's own page; this is the record that it happened. */}
       <section className="space-y-5">
         <SectionHeader
           id="section-loeschung"
-          index="04"
+          index="05"
           title={t('Löschanträge')}
           hint={t('DSGVO Art. 17 und 21')}
         />

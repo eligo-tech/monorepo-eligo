@@ -28,6 +28,8 @@ certifi==2026.10.23
     #   sentry-sdk
 cffi==2.1.1
     # via cryptography
+charset-normalizer==3.5.2
+    # via reportlab
 click==8.5.0
     # via
     #   laufwise
@@ -96,6 +98,8 @@ opentelemetry-api==1.45.1
     #   mcp
 pgvector==0.5.1
     # via eligolabs-backend (pyproject.toml)
+pillow==13.0.0
+    # via reportlab
 pycparser==3.12
     # via cffi
 pydantic==2.14.1
@@ -135,6 +139,8 @@ referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-specifications
+reportlab==5.1.0
+    # via eligolabs-backend (pyproject.toml)
 rich==15.0.0
     # via laufwise
 rpds-py==2026.9.1
