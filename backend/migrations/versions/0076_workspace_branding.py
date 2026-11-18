@@ -10,8 +10,8 @@ Fail-closed RLS like every tenant table, applied OUTSIDE the create branch:
 `create_all` on startup makes tables without policies, so a database where
 it ran first would otherwise keep this table unpoliced (see 0041, 0044).
 
-Revision ID: 0077
-Revises: 0074
+Revision ID: 0076
+Revises: 0075
 """
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0077"
-down_revision: str | None = "0074"
+revision: str = "0076"
+down_revision: str | None = "0075"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
