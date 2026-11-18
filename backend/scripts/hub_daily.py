@@ -453,8 +453,15 @@ async def _check_employer_sites(client: httpx.AsyncClient, *, budget: int) -> di
     empty = 0
     while totals["checked"] < budget:
         size = min(_EMPLOYER_SITE_BATCH, budget - totals["checked"])
-        response = await client.post(f"/hub/employers/sites/check?limit={size}")
-        response.raise_for_status()
+        # Safe to repeat: a finished read is recorded, an unfinished one is
+        # picked again. A deploy mid-run (2026-11-18: run 44358743908 died on
+        # one 502 after 3h20m) is ridden out; if the API stays down, say what
+        # got done before failing.
+        try:
+            response = await _post_retrying(client, f"/hub/employers/sites/check?limit={size}")
+        except httpx.HTTPError:
+            print(f"  abgebrochen nach {_employer_sites_line(totals)}", file=sys.stderr)
+            raise
         result = response.json()
         for key in totals:
             totals[key] += result.get(key, 0)
@@ -466,12 +473,16 @@ async def _check_employer_sites(client: httpx.AsyncClient, *, budget: int) -> di
     return totals
 
 
-def _print_employer_sites(e: dict[str, int]) -> None:
-    print(
-        f"Arbeitgeber-Impressum: {e['checked']} geprüft, {e['verified']} bestätigt, "
+def _employer_sites_line(e: dict[str, int]) -> str:
+    return (
+        f"{e['checked']} geprüft, {e['verified']} bestätigt, "
         f"{e['no_domain']} ohne Website, {e['not_named']} fremdes Impressum, "
         f"{e['no_impressum']} ohne Impressum, {e['blocked']} gesperrt, {e['error']} Fehler"
     )
+
+
+def _print_employer_sites(e: dict[str, int]) -> None:
+    print(f"Arbeitgeber-Impressum: {_employer_sites_line(e)}")
 
 
 #: Workspace companies per request. The server stops waiting after 90 s
