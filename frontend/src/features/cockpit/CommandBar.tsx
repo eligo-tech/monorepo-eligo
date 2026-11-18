@@ -6,11 +6,11 @@
 
 import { t } from '@/i18n'
 
-import { Search } from 'lucide-react'
 import { OrganizationSwitcher, UserButton } from '@clerk/clerk-react'
 import { authEnabled } from '@/auth/config'
 import { Figure, SegmentedControl } from './ui/primitives'
 import { SectionPicker, type SectionOption } from './SectionPicker'
+import { GlobalSearch } from './GlobalSearch'
 import { ProposalsButton } from './proposals/ProposalsButton'
 import type { ScreenKey } from './CockpitShell'
 import { cn } from '@/lib/cn'
@@ -51,6 +51,7 @@ export function CommandBar({
   query,
   onQueryChange,
   searchHint,
+  onOpenRecord,
   typeface,
   onTypefaceChange,
   screens,
@@ -63,8 +64,11 @@ export function CommandBar({
   query: string
   onQueryChange: (q: string) => void
   /** What this box does on the current screen. The term reaches the Jobs
-   *  list, so the placeholder says so instead of promising a global search. */
+   *  list, so the placeholder says so instead of promising a global search,
+   *  and no dropdown covers the list it filters. Unset: the global search. */
   searchHint?: string
+  /** ELI-52: open a search hit by its cockpit hash (`kandidaten/<id>`, …). */
+  onOpenRecord: (hash: string) => void
   typeface: Typeface
   onTypefaceChange: (t: Typeface) => void
   screens: SectionOption<ScreenKey>[]
@@ -83,16 +87,14 @@ export function CommandBar({
           <span className="font-mono text-[13px] text-cockpit-faint">{t('· Personalberatung')}</span>
         </div>
 
-        {/* Global search */}
-        <label className="relative flex min-w-[18rem] flex-1 items-center 2xl:max-w-[30rem]">
-          <Search className="pointer-events-none absolute left-4 h-[17px] w-[17px] text-cockpit-faint" />
-          <input
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder={searchHint ?? t('Kandidat, Mandat oder Firma suchen …')}
-            className="w-full rounded-xl border border-cockpit-line bg-cockpit-inset py-2.5 pl-11 pr-4 text-[15px] text-cockpit-text placeholder:text-cockpit-faint focus:border-cockpit-edge focus:outline-none"
-          />
-        </label>
+        {/* Global search (ELI-52) */}
+        <GlobalSearch
+          query={query}
+          onQueryChange={onQueryChange}
+          placeholder={searchHint ?? t('Kandidat, Mandat, Firma oder Kontakt suchen …')}
+          suggest={!searchHint}
+          onOpen={onOpenRecord}
+        />
 
         {/* System state, as the design puts it: what the machine owes you and
             whether a human is still in the loop. Both are demo values — there

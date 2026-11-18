@@ -63,6 +63,7 @@ import type {
   ProcessStepDTO,
   ReportingOverviewDTO,
   SwitchboardDTO,
+  SearchResultsDTO,
 } from './types'
 
 // Dev: '/api/v1' (Vite proxies to :8000). Prod: set VITE_API_BASE_URL to the
@@ -150,6 +151,11 @@ export const api = {
   },
 
   candidates: () => request<CandidateDTO[]>('/candidates?limit=1000'),
+
+  /** ELI-52: the command bar's search — this workspace's candidates,
+   *  mandates, companies and contacts by name, a few of each. Never Markt. */
+  search: (q: string, init?: RequestInit) =>
+    request<SearchResultsDTO>(`/search?q=${encodeURIComponent(q)}`, init),
 
   /** Fetch a single candidate's full record (used to seed the edit form). */
   candidate: (id: string) => request<CandidateDTO>(`/candidates/${id}`),

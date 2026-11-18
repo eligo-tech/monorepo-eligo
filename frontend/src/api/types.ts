@@ -1,6 +1,21 @@
 // Backend DTOs — mirror the FastAPI response_model schemas under /api/v1.
 // Captured from live responses; keep in sync with backend/app/domain/*/schemas.py.
 
+/** ELI-52: one hit of the command bar's search — a pointer to a record of
+ *  this workspace, never its contact data. */
+export interface SearchHitDTO {
+  id: string
+  label: string
+  subtitle: string | null
+}
+
+export interface SearchResultsDTO {
+  candidates: SearchHitDTO[]
+  jobs: SearchHitDTO[]
+  companies: SearchHitDTO[]
+  contacts: (SearchHitDTO & { kind: 'lead' | 'manager' })[]
+}
+
 /** One structured role from the CV (dates + achievement highlights). Legacy
  *  rows may instead carry `{ company, years }`. */
 export interface WorkRoleDTO {
