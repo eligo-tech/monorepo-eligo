@@ -29,6 +29,8 @@ import { useAsync } from '@/hooks/useAsync'
 import { useRemembered } from '@/hooks/useRemembered'
 import { Panel } from '../../ui/primitives'
 import { Button } from '../../ui/forms'
+import { DateField } from '../../ui/DateField'
+import { berlinIsoDate } from '../../ui/datePicker'
 import { PanelHead } from './parts'
 import type { Mandate } from '../../data/types'
 
@@ -39,8 +41,8 @@ const dateDe = (iso: string) =>
     year: 'numeric',
   })
 
-/** Today, as the date input wants it. */
-const today = () => new Date().toISOString().slice(0, 10)
+/** Today in Germany, as the date input wants it (not UTC — ELI-53). */
+const today = () => berlinIsoDate()
 
 export function BriefingPanel({
   mandate,
@@ -152,10 +154,9 @@ export function BriefingPanel({
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
               {t('am')}
-              <input
-                type="date"
+              <DateField
                 value={when}
-                onChange={(e) => setWhen(e.target.value)}
+                onChange={setWhen}
                 className="rounded-md border border-cockpit-line bg-cockpit-inset px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
               />
             </label>
