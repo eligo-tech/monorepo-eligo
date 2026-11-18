@@ -122,3 +122,26 @@ async def test_the_routes() -> None:
         assert page.status_code == 200 and page.json()["company"]["name"] == "Routen GmbH"
         assert (await client.get(f"/api/v1/companies/{uuid.uuid4()}/page")).status_code == 404
         assert (await client.get("/api/v1/companies/overview", params={"kind": "nonsense"})).status_code == 422
+
+
+async def test_a_company_taken_from_markt_without_a_contact_is_a_lead() -> None:
+    """ELI-31: "Übernehmen" on a Markt card without a contact makes the
+    company a Lead (ELI-36: `is_client = false`, source `hub:…`). It must
+    show under the Leads filter, not only under Alle — the card says
+    "✓ Lead", so the list has to agree."""
+    await _seed()
+    async with SessionLocal() as s:
+        s.add(Company(tenant_id=TENANT, name="Bayoonet AG", source="hub:bundesagentur", is_client=False))
+        # Taken from Markt, but a manager since: a client, no longer a lead.
+        won = Company(tenant_id=TENANT, name="Gewonnen GmbH", source="hub:bundesagentur", is_client=False)
+        s.add(won)
+        await s.flush()
+        s.add(Manager(tenant_id=TENANT, company_id=won.id, stage="manager", full_name="Max Muster"))
+        await s.commit()
+    rows = {r["name"]: r for r in await _overview()}
+    assert rows["Bayoonet AG"]["markt_lead"] is True
+    assert rows["Gewonnen GmbH"]["markt_lead"] is False
+    # An imported company with no people is neither (imports set is_client).
+    assert rows["Altkunde AG"]["markt_lead"] is False
+    leads = {r["name"] for r in await _overview(kind="leads")}
+    assert leads == {"Grimme Landmaschinenfabrik GmbH & Co. KG", "Bergfreunde GmbH", "Bayoonet AG"}

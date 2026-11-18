@@ -59,6 +59,7 @@ import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { Button, FIELD } from '../ui/forms'
 import { adoptLeads, leadError, leadSummary } from '../ui/leadAdopt'
+import { alreadyAdoptedId, companyHref } from '../ui/companyList'
 
 /**
  * Which rung of the identity ladder established this employer.
@@ -500,10 +501,13 @@ function AdoptDialog({
   hit,
   onClose,
   onAdopted,
+  onAlreadyHere,
 }: {
   hit: HubEmployerHitDTO
   onClose: () => void
   onAdopted: (result: AdoptResultDTO) => void
+  /** 409: already in this workspace — its company id, so the card links to it. */
+  onAlreadyHere?: (companyId: string) => void
 }) {
   const [name, setName] = useState('')
   const [role, setRole] = useState('')
@@ -538,6 +542,11 @@ function AdoptDialog({
       }
       onAdopted(result)
     } catch (e) {
+      const existing = e instanceof ApiError && e.status === 409 ? alreadyAdoptedId(e.message) : null
+      if (existing && onAlreadyHere) {
+        onAlreadyHere(existing)
+        return
+      }
       setError(
         e instanceof ApiError && e.status === 409
           ? t('Dieses Unternehmen gehört bereits zu diesem Workspace.')
@@ -631,7 +640,8 @@ function AdoptDialog({
 function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] }) {
   const [tracked, setTracked] = useState(hit.tracked)
   const [adopting, setAdopting] = useState(false)
-  const [adopted, setAdopted] = useState(false)
+  // ELI-31: the workspace's own company once taken — the card links there.
+  const [adoptedId, setAdoptedId] = useState<string | null>(null)
   const [art14, setArt14] = useState(false)
   const [saving, setSaving] = useState(false)
   // The people this employer's ads name, with phone and the ad line — saving
@@ -640,7 +650,7 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
   // Bumped when the dialog adopts, so an open contacts panel re-reads and
   // saves its next person as a manager of the adopted company.
   const [contactsReload, setContactsReload] = useState(0)
-  const markAdopted = useCallback(() => setAdopted(true), [])
+  const markAdopted = useCallback((companyId: string) => setAdoptedId(companyId), [])
   // Ads ticked to become lead jobs, and the ones already taken (ELI-22).
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [taken, setTaken] = useState<Set<string>>(new Set())
@@ -672,7 +682,8 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
       const landed = result.results.filter((r) => r.job_id).map((r) => r.posting_id)
       setTaken((prev) => new Set([...prev, ...landed]))
       setSelected(new Set())
-      if (landed.length > 0) setAdopted(true)
+      const companyId = result.results.find((r) => r.job_id && r.company_id)?.company_id
+      if (companyId) setAdoptedId(companyId)
       setLeadNote(leadSummary(result, retried))
     } catch (e) {
       setLeadNote(leadError(e))
@@ -749,11 +760,16 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
             <Users className="h-4 w-4" />
             {t('Ansprechpartner')}
           </Button>
-          {adopted ? (
-            <span className="flex items-center gap-1.5 text-mint-400" title={t('Als Lead übernommen')}>
+          {adoptedId ? (
+            // ELI-31: say where it went — Unternehmen → Leads, its own page.
+            <a
+              href={companyHref(adoptedId)}
+              className="flex items-center gap-1.5 text-mint-400 hover:text-mint-300"
+              title={t('Als Lead übernommen — unter Unternehmen öffnen')}
+            >
               <Check className="h-4 w-4" />
-              {t('Lead')}
-            </span>
+              {t('Lead · öffnen')}
+            </a>
           ) : (
             <Button onClick={() => setAdopting(true)} disabled={!anchorId}>
               <UserRound className="h-4 w-4" />
@@ -777,7 +793,7 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
         <div className="mt-3 border-t border-cockpit-line/60 pt-3">
           <ContactsPanel
             company={{ hub_company_id: anchorId, company_id: null }}
-            onAdopted={() => setAdopted(true)}
+            onAdopted={markAdopted}
             onKnownCompany={markAdopted}
             reload={contactsReload}
           />
@@ -788,9 +804,13 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
         <AdoptDialog
           hit={hit}
           onClose={() => setAdopting(false)}
+          onAlreadyHere={(companyId) => {
+            setAdopting(false)
+            setAdoptedId(companyId)
+          }}
           onAdopted={(result) => {
             setAdopting(false)
-            setAdopted(true)
+            setAdoptedId(result.company_id)
             setArt14(result.art14_outstanding)
             setContactsReload((k) => k + 1)
           }}
