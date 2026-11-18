@@ -5,7 +5,8 @@
 // server stores a plain date ("Anfang Februar" is 01.02., wherever you are)
 // and has no idea which time zone the person reading it sits in.
 
-import type { FollowUpDTO } from '@/api/types'
+import type { FollowUpDTO, FollowUpSuggestionDTO } from '@/api/types'
+import { berlinIsoDate } from './datePicker'
 
 /** `YYYY-MM-DD` of the LOCAL calendar day — not `toISOString()`, which is
  *  UTC and turns 23:30 in Berlin into tomorrow. */
@@ -22,6 +23,27 @@ export function defaultFollowUpDate(today: Date = new Date()): string {
   const skip = d.getDay() === 6 ? 2 : d.getDay() === 0 ? 1 : 0
   d.setDate(d.getDate() + skip)
   return localIsoDate(d)
+}
+
+/** ELI-53: the date a Wiedervorlage's own text names ("Neuer Anruf morgen"
+ *  → tomorrow), read by the backend's reader against today in Germany. The
+ *  form used to keep its default — today — whatever the text said. Null when
+ *  the text names no date or the reader cannot be reached: the form then
+ *  keeps the date it has. `suggest` is `api.suggestFollowUps`, passed in so
+ *  this stays free of fetching. */
+export async function readFollowUpDate(
+  text: string,
+  now: Date,
+  suggest: (text: string, referenceDate: string) => Promise<{ suggestions: FollowUpSuggestionDTO[] }>,
+): Promise<FollowUpSuggestionDTO | null> {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  try {
+    const { suggestions } = await suggest(trimmed, berlinIsoDate(now))
+    return suggestions[0] ?? null
+  } catch {
+    return null
+  }
 }
 
 /** `YYYY-MM-DD` as a LOCAL date. `new Date('2027-02-01')` is UTC midnight,

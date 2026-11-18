@@ -11,6 +11,7 @@ import { api } from '@/api/client'
 import type { ErasureRequestDTO } from '@/api/types'
 import { t } from '@/i18n'
 
+import { DateField } from '../ui/DateField'
 import { isAdmin, useMe } from '../useMe'
 import { describeEraseError, namesMatch, summary, todayIso, unprotected } from './erasureView'
 
@@ -167,11 +168,10 @@ function EraseDialog({
             </label>
             <label className="block">
               <span className="text-[12px] text-cockpit-faint">{t('Verlangt am')}</span>
-              <input
-                type="date"
+              <DateField
                 value={requestedOn}
                 max={todayIso()}
-                onChange={(e) => setRequestedOn(e.target.value)}
+                onChange={setRequestedOn}
                 className="mt-1 w-full rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1.5 text-cockpit-text"
               />
             </label>

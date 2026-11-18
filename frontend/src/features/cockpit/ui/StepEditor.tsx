@@ -18,6 +18,7 @@ import { ApiError, api } from '@/api/client'
 import { cn } from '@/lib/cn'
 import { Panel } from './primitives'
 import { Button, FIELD } from './forms'
+import { DateField } from './DateField'
 import type { JobDTO } from '@/api/types'
 import type { ProcessCard, ProcessStep, StepState } from '../data/types'
 
@@ -383,11 +384,11 @@ export function StepEditor({
               {t('Termin (Ortszeit Deutschland)')}
             </span>
             <div className="flex items-center gap-2">
-              <input
+              <DateField
                 ref={terminRef}
                 type="datetime-local"
                 value={scheduled}
-                onChange={(e) => setScheduled(e.target.value)}
+                onChange={setScheduled}
                 className={cn(FIELD, 'flex-1')}
               />
               {scheduled && (
@@ -408,11 +409,11 @@ export function StepEditor({
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
               {t('Erledigt am')}
             </span>
-            <input
+            <DateField
               ref={doneRef}
               type="datetime-local"
               value={doneOn}
-              onChange={(e) => setDoneOn(e.target.value)}
+              onChange={setDoneOn}
               className={cn(FIELD, 'w-full')}
             />
           </label>
