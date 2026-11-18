@@ -243,6 +243,19 @@ async def test_processes_group_by_mandate(application) -> None:
     assert candidate["next_appointment"] == dt.datetime(2026, 9, 17, 16, 0, tzinfo=dt.UTC)
 
 
+async def test_presented_at_falls_back_to_the_termin(application) -> None:
+    """ELI-21: the step dialog no longer has "Erledigt am". A presentation
+    booked with a Termin only is dated by that Termin — the same
+    done-else-scheduled rule the Präsentationen KPI counts by."""
+    async with SessionLocal() as s:
+        await service.set_step(
+            s, tenant_id=TENANT, application_id=application,
+            step_key="vorgestellt", scheduled_at=dt.datetime(2026, 11, 20, 9, 0, tzinfo=dt.UTC),
+        )
+        [entry] = await service.processes(s, tenant_id=TENANT)
+    assert entry["candidates"][0]["presented_at"] == dt.datetime(2026, 11, 20, 9, 0, tzinfo=dt.UTC)
+
+
 async def test_an_assigned_candidate_appears_before_being_presented(
     application,
 ) -> None:
