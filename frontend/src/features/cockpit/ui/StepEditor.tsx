@@ -82,14 +82,18 @@ function fromBerlinInput(value: string): string | null {
   return toBerlinInput(iso) === value.trim().slice(0, 16) ? iso : null
 }
 
-// ── The dialog opens on "now" (ELI-28) ──────────────────────────────────────
+// ── The dialog opens on "now" (ELI-28), "Erledigt am" is gone (ELI-21) ─────
 //
-// "Vorauswahl ist immer das aktuelle Datum mit der aktuellen Uhrzeit." A step
-// nothing has been recorded on opens with the current Berlin date AND time in
-// the one field the step is about: an appointment is booked now, anything
-// else is done now. Never both — prefilling "erledigt" on an interview would
-// say it happened the moment somebody opened it to book it — and never over
-// a value already on the record.
+// "Vorauswahl ist immer das aktuelle Datum mit der aktuellen Uhrzeit." An
+// appointment step nothing has been recorded on opens booked for now. The
+// other steps (Vorgestellt, Feedback, Vertrag …) used to open with "Erledigt
+// am" = now; ELI-21 removed that field — the dialog has one date, the Termin,
+// whose calendar opens on today when clicked (`DateField`).
+//
+// The done date still matters: it is when the candidate was presented
+// (`presented_at`, the Präsentationen KPI) and it marks the step reached.
+// So it is recorded automatically, at the moment of saving, in exactly the
+// cases the old prefill recorded it — never typed, never moved once set.
 
 /** Steps whose date is an appointment. Mirrors `kind="appointment"` in
  *  backend/app/domain/pipeline/steps.py, plus the extra interview rounds. */
@@ -97,20 +101,42 @@ const APPOINTMENT_STEPS = new Set(['interview', 'finaltermin'])
 const isAppointment = (key: string): boolean =>
   APPOINTMENT_STEPS.has(key) || key.startsWith('interviewtermin_')
 
+/** Nothing recorded on it yet. */
+const untouched = (step: StepFacts): boolean =>
+  !step.scheduledAt && !step.doneAt && (step.outcome ?? 'open') === 'open'
+
+/** Only the step due next. One further down ("Vertrag" while the interview is
+ *  pending) opened to jot a note must not be recorded — that would place the
+ *  candidate. */
+const isDue = (step: { state?: StepState }): boolean => step.state === undefined || step.state === 'current'
+
 export function initialStepInputs(
   step: StepFacts & { state?: StepState },
   now: Date = new Date(),
-): { scheduled: string; done: string } {
+): { scheduled: string } {
   const scheduled = toBerlinInput(step.scheduledAt)
-  const done = toBerlinInput(step.doneAt)
-  const untouched = !scheduled && !done && (step.outcome ?? 'open') === 'open'
-  // Only the step due next. One further down ("Vertrag" while the interview
-  // is pending) opened to jot a note must not be recorded as done — that
-  // would place the candidate.
-  const due = step.state === undefined || step.state === 'current'
-  if (!untouched || !due) return { scheduled, done }
-  const at = toBerlinInput(now.toISOString())
-  return isAppointment(step.key) ? { scheduled: at, done: '' } : { scheduled: '', done: at }
+  if (!untouched(step) || !isDue(step) || !isAppointment(step.key)) return { scheduled }
+  return { scheduled: toBerlinInput(now.toISOString()) }
+}
+
+/** The done date this save records, or undefined to leave it as it is.
+ *
+ *  * A date already on the record is never moved.
+ *  * A NEW verdict (positiv / abgesagt) is the moment the step was done.
+ *  * A due, untouched milestone saved without a Termin happened now — what
+ *    the old "Erledigt am" prefill said (ELI-28).
+ *  * Anything else — an appointment booked, a milestone given a Termin, a
+ *    note on a later step — has not happened yet. */
+export function autoDoneAt(
+  step: StepFacts & { state?: StepState },
+  saved: { scheduled: string; outcome: string },
+  now: Date = new Date(),
+): string | undefined {
+  if (step.doneAt) return undefined
+  const verdict = saved.outcome !== 'open' && saved.outcome !== (step.outcome ?? 'open')
+  if (verdict) return now.toISOString()
+  if (!isAppointment(step.key) && isDue(step) && untouched(step) && !saved.scheduled) return now.toISOString()
+  return undefined
 }
 
 /** The step a fresh assignment opens on: "Vorgestellt", nothing recorded. */
@@ -219,13 +245,11 @@ export function StepEditor({
   // Read once, at open: the clock must not move under the recruiter's typing.
   const [initial] = useState(() => initialStepInputs(step))
   const [scheduled, setScheduled] = useState(initial.scheduled)
-  const [doneOn, setDoneOn] = useState(initial.done)
   const [outcome, setOutcome] = useState(step.outcome ?? 'open')
   const [note, setNote] = useState(step.note ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const terminRef = useRef<HTMLInputElement>(null)
-  const doneRef = useRef<HTMLInputElement>(null)
   // 'form' is the step editor; the other two are the ELI-8 question and its
   // answer, shown in the same dialog because that is where the recruiter
   // already is.
@@ -250,28 +274,20 @@ export function StepEditor({
       setError(t('Termin nicht lesbar — bitte Datum und Uhrzeit angeben.'))
       return
     }
-    if (doneRef.current?.validity.badInput) {
-      setError(t('Datum „erledigt am“ nicht lesbar.'))
-      return
-    }
-    const doneIso = doneOn ? fromBerlinInput(doneOn) : null
-    if (doneOn && !doneIso) {
-      setError(t('Datum „erledigt am“ nicht lesbar.'))
-      return
-    }
+    // ELI-21: not typed any more — recorded when the step happened.
+    const doneIso = autoDoneAt(step, { scheduled, outcome })
 
     setBusy(true)
     setError(null)
     // Anything the recruiter emptied is cleared explicitly — leaving a field
     // out means 'unchanged', so a cancelled appointment would otherwise stay.
-    const clear: ('scheduled_at' | 'done_at' | 'note')[] = []
+    const clear: ('scheduled_at' | 'note')[] = []
     if (!scheduled && step.scheduledAt) clear.push('scheduled_at')
-    if (!doneOn && step.doneAt) clear.push('done_at')
     if (!note.trim() && step.note) clear.push('note')
     try {
       const saved = await api.setProcessStep(card.id, step.key, {
         scheduled_at: scheduledIso ?? undefined,
-        done_at: doneIso ?? undefined,
+        done_at: doneIso,
         outcome,
         note: note.trim() || undefined,
         clear,
@@ -405,18 +421,6 @@ export function StepEditor({
             </div>
           </label>
 
-          <label className="block space-y-1">
-            <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
-              {t('Erledigt am')}
-            </span>
-            <DateField
-              ref={doneRef}
-              type="datetime-local"
-              value={doneOn}
-              onChange={setDoneOn}
-              className={cn(FIELD, 'w-full')}
-            />
-          </label>
 
           <div className="space-y-1">
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
