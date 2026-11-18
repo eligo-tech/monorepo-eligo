@@ -230,7 +230,7 @@ export const EN: Record<string, string> = {
   'alle {n} Einträge zeigen': 'show all {n} entries',
   'Als erledigt markieren': 'Mark as done',
   'Als Kandidat speichern': 'Save as candidate',
-  'Als Kunde übernommen': 'Adopted as a client',
+  'Als Lead übernommen': 'Adopted as a lead',
   'Als neues Mandat kopieren — Suchprofil, Kunde und Ansprechpartner, ohne den Prozess': 'Copy as a new mandate — search profile, client and contact, without the process',
   'Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen': 'Remember as a search profile — the nightly run fetches new ads for it',
   'am': 'on',
