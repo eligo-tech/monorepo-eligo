@@ -138,7 +138,7 @@ export function SuchprofilPanel({
         tag={t('Suchprofil')}
         tone="lav"
         title={t('Ideales Kandidatenprofil')}
-        note={t('aus dem Mandat {ref} · {title}', { ref: mandate.ref, title: mandate.title })}
+        note={t('aus dem Mandat {title}', { title: mandate.title })}
         collapsed={collapsed}
         onToggle={() => setCollapsed((shut) => !shut)}
       />

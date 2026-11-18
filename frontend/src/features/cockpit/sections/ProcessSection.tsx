@@ -39,7 +39,7 @@ function bestStand(cards: ProcessCard[]): string {
   return open ? open.label : t('Vertrag')
 }
 
-function MandateHead({ mandate }: { mandate: Mandate }) {
+export function MandateHead({ mandate }: { mandate: Mandate }) {
   const count = mandate.cards.length
   // Fee is demo-only until a Honorarmodell exists; a header reading
   // "Fee € 0" would be worse than one that stays quiet about money.
@@ -52,7 +52,7 @@ function MandateHead({ mandate }: { mandate: Mandate }) {
     <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-cockpit-line bg-cockpit-inset px-3.5 py-2.5">
       <div className="min-w-0">
         <span className="text-[14px] font-semibold text-cockpit-text">
-          <span className="font-mono font-medium">{mandate.ref}</span> · {mandate.title}
+          {mandate.title}
         </span>
         <span className="block text-[11.5px] text-cockpit-dim">{mandate.client}</span>
       </div>

@@ -170,8 +170,6 @@ function StatusPicker({
   )
 }
 
-const mandateRef = (id: string) => `#A-${id.slice(0, 4)}`
-
 export function JobsScreen({
   query = '',
   onClearQuery,
@@ -236,7 +234,6 @@ export function JobsScreen({
             { text: job.title, weight: 3 },
             { text: companyName(job.client_company_id), weight: 3 },
             { text: job.location ?? '', weight: 2 },
-            { text: mandateRef(job.id), weight: 2 },
             { text: job.status, weight: 1 },
           ],
           term,
@@ -321,7 +318,7 @@ export function JobsScreen({
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder={t('Mandat, Firma, Ort oder #A-Nummer — Tippfehler erlaubt')}
+              placeholder={t('Mandat, Firma oder Ort — Tippfehler erlaubt')}
               className="w-full bg-transparent py-2 text-[14px] text-cockpit-text placeholder:text-cockpit-faint focus:outline-none"
             />
             {filter && (
