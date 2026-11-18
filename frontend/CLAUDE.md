@@ -36,7 +36,7 @@ src/
 │   │   ├── MandateEditor.tsx   # "Mandat bearbeiten" — the Suchprofil, from the Mandate list
 │   │   ├── MandateView.tsx     # the per-job workspace ("Mandat & Kandidatensuche")
 │   │   ├── mandate/            # its nine panels (Stammdaten · Feedback · Aktivität · …)
-│   │   └── kandidaten/         # KandidatenScreen · CandidateDrawer · DossierEditor · CvUploadModal · AttachmentsPanel
+│   │   └── kandidaten/         # KandidatenScreen · CandidateDrawer · DossierEditor · CvUploadModal · AttachmentsPanel · CoverSheetDialog (ELI-20 Profil-PDF; its CI is BrandingPanel in Einstellungen)
 │   ├── sections/               # SignalsPanel · Revenue (01) · Process (02) · NextActions · JobScoring (03) · Competition (04)
 │   ├── ui/                     # primitives.tsx · forms.tsx · Gauge · ProcessStepper · ScoreBar · Carousel
 │   └── data/                   # types · mock (demo baseline) · adapters (DTO joins) · useCockpitData

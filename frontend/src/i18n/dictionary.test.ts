@@ -13,6 +13,7 @@ import { preferredLang, setLang, STORAGE_KEY, t } from './index'
  *  sides at the same level of escaping is the only way to see that. */
 const SAME_IN_BOTH = new Set([
   'Leads',
+  'Logo',
   'Leads ({n})',
   'Name *',
   'Website',

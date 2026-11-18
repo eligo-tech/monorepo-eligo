@@ -505,6 +505,15 @@ def _company_totals_line(t: dict[str, int]) -> str:
     )
 
 
+def _company_markt_line(t: dict[str, int]) -> str:
+    """Why "aus Markt" is what it is: each step that can lose a company."""
+    g = t.get
+    return (
+        f"{g('linked', 0)} mit Markt verknüpft · {g('linked_checked', 0)} davon von Markt gelesen · "
+        f"{g('linked_reading', 0)} mit Markt-Impressum · {g('markt', 0)} mit USt-ID/HRB aus Markt"
+    )
+
+
 async def _print_company_totals(client: httpx.AsyncClient) -> None:
     """The overall state after a run. Only a summary: if it cannot be read,
     the run itself still succeeded, so this warns and does not fail."""
@@ -514,6 +523,7 @@ async def _print_company_totals(client: httpx.AsyncClient) -> None:
         print(f"  Unternehmen gesamt: nicht lesbar ({exc})", file=sys.stderr)
         return
     print(f"Unternehmen gesamt: {_company_totals_line(response.json())}")
+    print(f"Unternehmen ↔ Markt gesamt: {_company_markt_line(response.json())}")
 
 
 async def _check_company_impressum(client: httpx.AsyncClient, *, budget: int) -> dict[str, int]:

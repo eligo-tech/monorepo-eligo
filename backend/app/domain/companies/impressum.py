@@ -638,7 +638,11 @@ async def check_all_workspaces(*, fetcher, limit: int, searcher=None) -> dict[st
 
 #: Keys of `totals`: the open companies broken down by their stored outcome.
 TOTALS_OPEN = (*COUNTS, "unchecked")
-TOTALS_KEYS = ("companies", "filled", "markt", "own", "open", "sole_traders", "searched", *TOTALS_OPEN)
+#: The Markt side, step by step: linked to a Markt employer (ELI-33) →
+#: Markt has checked that employer's site at all → a verified reading with
+#: any fact (`corpus_switchboards`) → one with a VAT id or register (`markt`).
+TOTALS_MARKT = ("linked", "linked_checked", "linked_reading")
+TOTALS_KEYS = ("companies", "filled", "markt", "own", "open", "sole_traders", "searched", *TOTALS_MARKT, *TOTALS_OPEN)
 
 
 async def totals(session: AsyncSession, *, tenant_id: uuid.UUID) -> dict[str, int]:
@@ -646,10 +650,18 @@ async def totals(session: AsyncSession, *, tenant_id: uuid.UUID) -> dict[str, in
     register (Markt's reading first, as `company_switchboards`, else their
     own), and why the rest do not — by the outcome stored on each."""
     from app.domain.hub.call_list import corpus_switchboards
+    from app.domain.hub.models import HubCompanyLink, HubSiteCheck
 
     companies = (await session.scalars(select(Company).where(Company.tenant_id == tenant_id))).all()
     boards = await corpus_switchboards(session, tenant_id, [c.id for c in companies])
     out = {**dict.fromkeys(TOTALS_KEYS, 0), "companies": len(companies)}
+    linked = select(HubCompanyLink.company_id).where(
+        HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id.is_not(None)
+    )
+    out["linked"] = len(set((await session.scalars(linked)).all()))
+    read = select(HubSiteCheck.id).where(HubSiteCheck.hub_company_id == HubCompanyLink.hub_company_id).exists()
+    out["linked_checked"] = len(set((await session.scalars(linked.where(read))).all()))
+    out["linked_reading"] = len(boards)
     for c in companies:
         facts = c.impressum or {}
         if isinstance(facts.get("search"), dict):

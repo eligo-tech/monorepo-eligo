@@ -1302,3 +1302,56 @@ export interface FollowUpWrite {
 
 /** Who a follow-up is about — exactly one of the two. */
 export type FollowUpSubject = { managerId: string } | { candidateId: string }
+
+/** The workspace's CI for the cover sheet (ELI-20). Admin-edited in
+ *  Einstellungen; the logo is served from its own URL. */
+export interface BrandingDTO {
+  company_name: string | null
+  company_line: string | null
+  legal_text: string | null
+  primary_color: string
+  contact_phone: string | null
+  has_logo: boolean
+  updated_at: string | null
+  updated_by_name: string | null
+}
+
+export interface BrandingWrite {
+  company_name: string | null
+  company_line: string | null
+  legal_text: string | null
+  primary_color: string
+  contact_phone: string | null
+}
+
+/** Mirrors the backend's `CoverSheetVariant`. */
+export type CoverSheetVariant = 'cover' | 'cover_cv' | 'cover_cv_references' | 'anonymous'
+
+export interface CoverSheetAttachmentDTO {
+  document_id: string
+  filename: string
+  kind: DocumentKind
+  included: boolean
+  reason: 'not_pdf' | 'unreadable' | 'encrypted' | null
+}
+
+/** What the PDF will hold, before anyone downloads it. `missing` holds the
+ *  German section labels as printed on the page; the UI translates them. */
+export interface CoverSheetPreviewDTO {
+  variant: CoverSheetVariant
+  title: string
+  position: string | null
+  position_source: 'mandate' | 'given' | 'current_title' | null
+  missing: string[]
+  attachments: CoverSheetAttachmentDTO[]
+  branding_missing: ('logo' | 'company_line' | 'legal_text')[]
+}
+
+export interface CoverSheetParams {
+  variant: CoverSheetVariant
+  application_id?: string
+  position?: string
+  contact_name?: string
+  contact_email?: string
+  contact_phone?: string
+}
