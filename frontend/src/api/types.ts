@@ -1228,6 +1228,11 @@ export interface ContactRowDTO {
   due: boolean
   /** ELI-37: the jobs connected to the person, newest ad first (at most 5). */
   jobs?: LeadJobDTO[]
+  /** ELI-62: rows of the contact history, and when the latest happened. */
+  note_count?: number
+  last_note_at?: string | null
+  /** A history row or a free-text note — "Mit Notizen". */
+  has_notes?: boolean
 }
 
 /** ELI-37: an ad naming the lead (`url`) and/or this workspace's job (`job_id`). */
@@ -1338,10 +1343,18 @@ export interface SwitchboardDTO {
   checked_at: string
 }
 
+/** ELI-62: leads per notes chip, under the other filters. */
+export interface NoteCountsDTO {
+  all: number
+  none: number
+  with: number
+}
+
 export interface ContactPageDTO {
   rows: ContactRowDTO[]
   total: number
   truncated: boolean
+  note_counts?: NoteCountsDTO
   companies: CompanyFacetDTO[]
 }
 

@@ -299,6 +299,32 @@ def _open_follow_ups(tenant_id: uuid.UUID):
     )
 
 
+def _note_totals(tenant_id: uuid.UUID):
+    """Subquery: each manager's notes (ELI-62) — `manager_id`, `n`, `last_at`.
+
+    Every row of the contact history counts — a call (also one that did not
+    reach the person), a mail, a note, an imported aiFind note in whatever
+    raw spelling it was stored — so no `interaction_type` filter. One
+    GROUP BY for the whole page, joined, never a query per row.
+    """
+    from app.domain.managers.models import ManagerInteraction
+
+    return (
+        select(
+            ManagerInteraction.manager_id,
+            func.count(ManagerInteraction.id).label("n"),
+            func.max(ManagerInteraction.occurred_at).label("last_at"),
+        )
+        .where(ManagerInteraction.tenant_id == tenant_id, ManagerInteraction.manager_id.is_not(None))
+        .group_by(ManagerInteraction.manager_id)
+        .subquery()
+    )
+
+
+#: ELI-62: the Leads list's notes filter.
+NOTES_FILTERS = ("none", "with")
+
+
 async def contacts(
     session: AsyncSession,
     *,
@@ -307,6 +333,7 @@ async def contacts(
     company_name: str | None = None,
     q: str | None = None,
     due_only: bool = False,
+    notes: str | None = None,
     limit: int = 500,
     now: dt.datetime | None = None,
 ) -> dict:
@@ -321,6 +348,12 @@ async def contacts(
     this workspace holds contacts at, most contacts first. Companies are not a
     screen of their own: they are how this list is cut, for a recruiter and
     for an agent (`contacts.list`).
+
+    ELI-62: `notes="none"` keeps the leads nothing has been recorded on yet
+    (no contact history, no free-text note), `notes="with"` the others,
+    latest note first (a lead with only the free-text note last).
+    `note_counts` counts all / none / with under every OTHER filter, so the
+    chips show what each choice would list.
     """
     from app.domain.companies.models import Company
     from app.domain.managers.models import Manager, ManagerInteraction
@@ -331,12 +364,21 @@ async def contacts(
     # ELI-32: a lead marked "Nicht mehr kontaktieren" stays on the list (with
     # the mark) but owes no next call — never due, never on top.
     open_next = case((Manager.do_not_contact_at.is_(None), follow_up.c.next_action_at), else_=None)
+    noted = _note_totals(tenant_id)
+    has_notes = or_(
+        noted.c.n.is_not(None),
+        func.length(func.trim(func.coalesce(Manager.notes, ""))) > 0,
+    )
     base = (
-        select(Manager, Company.name, ManagerInteraction, open_next.label("open_next_at"))
+        select(
+            Manager, Company.name, ManagerInteraction, open_next.label("open_next_at"),
+            noted.c.n, noted.c.last_at, has_notes.label("has_notes"),
+        )
         .join(Company, Company.id == Manager.company_id)
         .outerjoin(latest, (latest.c.manager_id == Manager.id) & (latest.c.rank == 1))
         .outerjoin(ManagerInteraction, ManagerInteraction.id == latest.c.interaction_id)
         .outerjoin(follow_up, follow_up.c.manager_id == Manager.id)
+        .outerjoin(noted, noted.c.manager_id == Manager.id)
         # ELI-23: the Bus-Dev-Kontakte — new contacts from Markt, not yet
         # moved to Managers.
         .where(Manager.tenant_id == tenant_id, Company.tenant_id == tenant_id, Manager.stage == "bus_dev")
@@ -358,13 +400,33 @@ async def contacts(
             follow_up.c.next_action_at.is_not(None), follow_up.c.next_action_at <= now,
         )
 
-    total = await session.scalar(select(func.count()).select_from(base.subquery()))
+    # One aggregate for the total and the notes chips (ELI-62).
+    counted = base.subquery()
+    n_all, n_with = (
+        await session.execute(
+            select(func.count(), func.coalesce(func.sum(case((counted.c.has_notes, 1), else_=0)), 0))
+            .select_from(counted)
+        )
+    ).one()
+    note_counts = {"all": int(n_all or 0), "none": int(n_all or 0) - int(n_with or 0), "with": int(n_with or 0)}
+    if notes == "none":
+        base = base.where(~has_notes)
+        total = note_counts["none"]
+    elif notes == "with":
+        base = base.where(has_notes)
+        total = note_counts["with"]
+    else:
+        total = note_counts["all"]
     # NULLS LAST: Postgres would put a row without a date first ("newest").
+    order = (
+        (noted.c.last_at.is_(None), noted.c.last_at.desc())
+        if notes == "with"
+        else (open_next.is_(None), open_next.asc())
+    )
     found = (
         await session.execute(
             base.order_by(
-                open_next.is_(None),
-                open_next.asc(),
+                *order,
                 Manager.created_at.desc().nulls_last(),
                 Manager.full_name,
             ).limit(limit)
@@ -376,7 +438,7 @@ async def contacts(
 
     jobs = await lead_jobs(session, tenant_id, [row[0] for row in found])
     rows = []
-    for manager, company, call, open_next_at in found:
+    for manager, company, call, open_next_at, note_n, last_note_at, row_has_notes in found:
         nxt = aware(open_next_at)
         rows.append({
             "manager_id": manager.id,
@@ -399,6 +461,9 @@ async def contacts(
             "next_action_at": nxt,
             "due": nxt is not None and nxt <= now,
             "jobs": jobs.get(manager.id, []),
+            "note_count": int(note_n or 0),
+            "last_note_at": aware(last_note_at),
+            "has_notes": bool(row_has_notes),
         })
 
     facet = (
@@ -415,6 +480,7 @@ async def contacts(
         "rows": rows,
         "total": int(total or 0),
         "truncated": int(total or 0) > len(rows),
+        "note_counts": note_counts,
         "companies": [
             {"company_id": cid, "name": name, "contacts": n, "switchboard": boards.get(cid)} for cid, name, n in facet
         ],

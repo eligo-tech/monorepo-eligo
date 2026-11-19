@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react'
 import { BellPlus, Briefcase, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import { useActorLabel } from '@/auth/memberNames'
-import type { ContactPageDTO, ContactRowDTO, SwitchboardDTO } from '@/api/types'
+import type { ContactPageDTO, ContactRowDTO, NoteCountsDTO, SwitchboardDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
 import { Button, FIELD, SelectInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
@@ -259,6 +259,16 @@ export function ContactRow({
             {callerName ? ` · ${callerName}` : ''}
           </span>
         )}
+        {/* ELI-62: how much has happened with the lead. */}
+        {row.last_note_at ? (
+          <span>
+            {t('Letzte Notiz')}: {day(row.last_note_at)} ·{' '}
+            {row.note_count === 1 ? t('1 Notiz') : t('{n} Notizen', { n: String(row.note_count ?? 0) })}
+          </span>
+        ) : (
+          // Only the free-text note — why the lead is under "Mit Notizen".
+          row.has_notes && <span>{t('Notiz vorhanden')}</span>
+        )}
         {!calling && (
           <span className="ml-auto flex items-center gap-2">
             {moveFailed && <span className="text-coral-400">{t('Speichern fehlgeschlagen.')}</span>}
@@ -348,6 +358,53 @@ export function ContactRow({
   )
 }
 
+export type NotesChoice = '' | 'none' | 'with'
+
+/** ELI-62: Alle · Noch keine Notiz · Mit Notizen — each with how many leads
+ *  it would list under the other filters (counted by the backend). */
+export function NotesFilter({
+  value,
+  counts,
+  onChange,
+}: {
+  value: NotesChoice
+  counts: NoteCountsDTO | null
+  onChange: (value: NotesChoice) => void
+}) {
+  const options: { value: NotesChoice; label: string; n?: number }[] = [
+    { value: '', label: t('Alle'), n: counts?.all },
+    { value: 'none', label: t('Noch keine Notiz'), n: counts?.none },
+    { value: 'with', label: t('Mit Notizen'), n: counts?.with },
+  ]
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Notizen')}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          title={o.value === 'with' ? t('Neueste Notiz zuerst') : undefined}
+          className={cn(
+            'rounded-lg border px-2.5 py-1.5 font-mono text-[12px] transition-colors',
+            value === o.value
+              ? 'border-cockpit-edge bg-white/[0.06] text-cockpit-text'
+              : 'border-cockpit-line text-cockpit-faint hover:text-cockpit-dim',
+          )}
+        >
+          {o.label}
+          {o.n !== undefined && (
+            <>
+              {' '}
+              <span className="text-cockpit-dim">{o.n}</span>
+            </>
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Everyone adopted from Markt in this workspace — open call-backs first, then newest. */
 function ContactsTab() {
   const [page, setPage] = useState<ContactPageDTO | null>(null)
@@ -355,6 +412,7 @@ function ContactsTab() {
   const [q, setQ] = useState('')
   const [query, setQuery] = useState('')
   const [dueOnly, setDueOnly] = useState(false)
+  const [notes, setNotes] = useState<NotesChoice>('')
   const [error, setError] = useState<string | null>(null)
   const latest = useRef(0)
   const [bump, setBump] = useState(0)
@@ -362,14 +420,14 @@ function ContactsTab() {
   useEffect(() => {
     const mine = ++latest.current
     api
-      .callListContacts({ companyId: companyId || undefined, q: query || undefined, dueOnly })
+      .callListContacts({ companyId: companyId || undefined, q: query || undefined, dueOnly, notes: notes || undefined })
       .then((p) => {
         if (mine !== latest.current) return
         setPage(p)
         setError(null)
       })
       .catch((e) => mine === latest.current && setError(e instanceof Error ? e.message.slice(0, 200) : String(e)))
-  }, [companyId, query, dueOnly, bump])
+  }, [companyId, query, dueOnly, notes, bump])
 
   const rows = page?.rows ?? []
   // ELI-44: each lead's next open Wiedervorlage — one call for the page.
@@ -387,7 +445,7 @@ function ContactsTab() {
     })
   const shown = new Set(rows.map((r) => r.manager_id))
   const boards = new Map((page?.companies ?? []).map((c) => [c.company_id, c.switchboard ?? null]))
-  const filtering = Boolean(companyId || query || dueOnly)
+  const filtering = Boolean(companyId || query || dueOnly || notes)
   const called = () => setBump((b) => b + 1)
 
   return (
@@ -417,6 +475,9 @@ function ContactsTab() {
         </label>
         <Button type="submit">{t('Suchen')}</Button>
       </form>
+      <div className="mb-3">
+        <NotesFilter value={notes} counts={page?.note_counts ?? null} onChange={setNotes} />
+      </div>
       {error && <p className="text-[13px] text-coral-400">{error}</p>}
       {[...offers].filter(([id]) => !shown.has(id)).map(([id, { note, name }]) => (
         <div key={id} className="mb-3 space-y-1">
