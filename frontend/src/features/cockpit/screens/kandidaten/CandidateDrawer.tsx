@@ -48,6 +48,7 @@ import { HistoryTrail } from '../../ui/HistoryTrail'
 import { AssignToMandate } from './AssignToMandate'
 import { QualificationChecklist } from './QualificationChecklist'
 import { AttachmentsPanel } from './AttachmentsPanel'
+import { joinLanguage, languageLevelLabel, rankLanguages } from '../../ui/languageLevels'
 import { CandidateNotesPanel } from './CandidateNotesPanel'
 import { ConsentPanel } from './ConsentPanel'
 import { EraseSection } from '../../erasure/EraseSection'
@@ -417,8 +418,13 @@ export function CandidateDrawer({
                   <div className="mt-6">
                     <MiniLabel icon={Languages}>{t('Sprachen')}</MiniLabel>
                     <div className="flex flex-wrap gap-1.5">
-                      {p.languages.map((l) => (
-                        <Chip key={l}>{l}</Chip>
+                      {/* ELI-56: the level next to the language; an entry
+                          without one shows as it always did. */}
+                      {rankLanguages(p.languages).map((l) => (
+                        <Chip key={joinLanguage(l)}>
+                          {l.name}
+                          {l.level && <span className="text-cockpit-faint"> · {languageLevelLabel(l.level)}</span>}
+                        </Chip>
                       ))}
                     </div>
                   </div>

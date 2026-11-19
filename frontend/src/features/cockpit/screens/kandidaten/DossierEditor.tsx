@@ -5,6 +5,7 @@ import { Trash2, Save, Ban, AlertCircle, RefreshCw } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import { withReaddConfirm } from '../../erasure/readd'
 import { WORK_PERMITS, workPermitForEdit } from './workPermit'
+import { LanguageListEditor } from './LanguageListEditor'
 import type { CandidateDTO, CandidateUpdatePayload, EducationDTO, WorkRoleDTO } from '@/api/types'
 import {
   AddButton,
@@ -548,7 +549,7 @@ export function DossierEditor({
 
       <section className="mt-7">
         <GroupLabel>{t('Sprachen')}</GroupLabel>
-        <TagInput tags={d.languages} onChange={(v) => set('languages', v)} placeholder={t('Sprache hinzufügen…')} />
+        <LanguageListEditor languages={d.languages} onChange={(v) => set('languages', v)} />
       </section>
 
       <section className="mt-7" data-field="skills">
