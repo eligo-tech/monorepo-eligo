@@ -8,9 +8,8 @@
 // and the seniority/employment type have no column yet and are drawn as the
 // design draws them, marked.
 //
-// Briefing-Vollständigkeit is NOT a demo number: it counts how much of the
-// Suchprofil this mandate actually carries. That makes it the one figure on
-// the panel that improves when you fill the form in — which is the point.
+// How complete the briefing is lives in the Briefing panel below
+// (Briefing-Bewertung, ELI-47) — one score, computed by the backend.
 
 import { t } from '@/i18n'
 
@@ -27,25 +26,6 @@ import { DemoText, PanelHead, StammRow } from './parts'
 import { SetContact } from './SetContact'
 import type { Mandate } from '../../data/types'
 
-/** How complete the mandate record is, as a percentage of what matters.
- *
- *  Seven things a search cannot be run well without. Deliberately a plain
- *  count rather than a weighted score: a recruiter can see which of the seven
- *  is missing by looking at the panel, and a weighting nobody agreed would
- *  just be a number with an opinion baked in. */
-export function briefingCompleteness(mandate: Mandate, manager?: ManagerDTO): number {
-  const checks = [
-    !!mandate.title,
-    !!mandate.client,
-    mandate.mustHave.length > 0,
-    !!mandate.location,
-    mandate.salaryMin !== null || mandate.salaryMax !== null,
-    !!manager,
-    !!manager?.email || !!manager?.phone,
-  ]
-  return Math.round((checks.filter(Boolean).length / checks.length) * 100)
-}
-
 export function StammdatenPanel({
   mandate,
   company,
@@ -61,7 +41,6 @@ export function StammdatenPanel({
   managers?: ManagerDTO[]
   onChanged?: () => void
 }) {
-  const complete = briefingCompleteness(mandate, manager)
   // Reads only — the daily job fills it; nothing here fetches a website.
   const board = useAsync(
     () => (company ? api.companyRegister(company.id) : Promise.resolve(null)),
@@ -164,14 +143,6 @@ export function StammdatenPanel({
         <DemoText source={t('Seniorität und Anstellungsart sind am Mandat noch nicht erfasst')}>
           {t('Lead / Head · Festanstellung')}
         </DemoText>
-      </StammRow>
-
-      <StammRow label={t('Briefing')}>
-        {t('Vollständigkeit')}{' '}
-        <b className={complete >= 70 ? 'text-mint-300' : 'text-gold-300'}>{complete}%</b>
-        <span className="ml-2 text-cockpit-faint">
-          {t('— aus Titel, Kunde, Muss-Kriterien, Ort, Band und Ansprechpartner')}
-        </span>
       </StammRow>
 
       <StammRow label={t('Konditionen')} tone="lav">

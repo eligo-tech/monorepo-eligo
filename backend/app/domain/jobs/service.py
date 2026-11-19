@@ -122,6 +122,12 @@ async def create_job(session: AsyncSession, *, data: JobCreate) -> Job:
         salary_max=data.salary_max,
         salary_currency=data.salary_currency,
         status=data.status,
+        tasks=data.tasks,
+        nice_to_have_skills=data.nice_to_have_skills,
+        start_date=data.start_date,
+        team_size=data.team_size,
+        interview_process=data.interview_process,
+        vacancy_reason=data.vacancy_reason,
     )
     session.add(job)
     await session.commit()
@@ -151,6 +157,13 @@ _COPIED_FIELDS = (
     "salary_min",
     "salary_max",
     "salary_currency",
+    # The briefing points that describe the ROLE (ELI-47). Startdatum and
+    # Grund der Vakanz describe this one search, and a copy that arrives
+    # with last year's start date reads as clarified when it is not.
+    "tasks",
+    "nice_to_have_skills",
+    "team_size",
+    "interview_process",
 )
 
 
@@ -224,7 +237,7 @@ class ReopeningRefused(Exception):
 
 #: Columns that must never be NULLed by a PATCH (NOT NULL in the schema).
 _NON_NULLABLE = frozenset(
-    {"title", "salary_currency", "status", "requires_work_permit"}
+    {"title", "salary_currency", "status", "requires_work_permit", "nice_to_have_skills"}
 )
 
 #: Allowed mandate states. Free text here would make the Jobs list's status

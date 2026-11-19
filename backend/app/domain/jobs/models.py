@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Index, ForeignKey, Integer, String
+from sqlalchemy import Index, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -56,6 +56,26 @@ class Job(Base, IDMixin, TenantMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(30), default="active", nullable=False
     )
+
+    # ── Briefing points with no other home (ELI-47, migration 0079) ──────
+    # What the client said in the briefing call, as the recruiter wrote it
+    # down. Free text on purpose: "zum 1. März, notfalls später" and "6 Devs
+    # + PO" are answers a date or an int column would refuse. None of these
+    # is a matching input — the hard filters stay on the columns above.
+    #: Aufgaben — what the person will actually do.
+    tasks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Kann-Kriterien. Never a hard filter: nice-to-have excludes nobody.
+    nice_to_have_skills: Mapped[list] = mapped_column(
+        JSONList, default=list, nullable=False
+    )
+    #: Startdatum, as agreed ("sofort", "Q2", "zum 1. März").
+    start_date: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: Teamgröße ("6 Entwickler + PO").
+    team_size: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: Prozess beim Kunden — interview rounds, who decides.
+    interview_process: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Grund der Vakanz (Nachfolge, Wachstum, neue Abteilung …).
+    vacancy_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     #: The mandate this one was copied from (ELI-7). An inactive mandate is
     #: final, so working the role again means a new row — and without this the

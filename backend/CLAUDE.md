@@ -427,6 +427,15 @@ Three domain facts worth knowing before you add a field:
   the preview and skipped. Each download is a disclosure: one READ receipt,
   ids and variant only. The CI is `workspace_branding`, one row per
   workspace, admin-edited (`/branding`, `/branding/logo`) — never env vars.
+- **`jobs`** carries the Briefing-Bewertung (ELI-47): `jobs/briefing.py`
+  is the ONE definition of the ten briefing points (Aufgaben · Muss · Kann ·
+  Gehaltsrahmen · Standort/Remote · Startdatum · Teamgröße · Ansprechpartner
+  · Prozess · Grund der Vakanz), plain code — a point is geklärt when its
+  field holds a real value. `JobRead.briefing` = `{done, total, missing}`;
+  the frontend only labels the keys. `tasks`, `nice_to_have_skills`,
+  `start_date`, `team_size`, `interview_process`, `vacancy_reason` (0079)
+  are free text / a list, edited through the verified `update_job`, and
+  never matching inputs.
 - **`candidates`** carries the Qualifikationsgespräch set:
   `industries` (plural — the single `industry` column is gone from the code),
   `employment_form`, `salary_minimum` next to `salary_expectation`,

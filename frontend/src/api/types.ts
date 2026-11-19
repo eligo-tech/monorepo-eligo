@@ -241,6 +241,25 @@ export interface JobDTO {
   copied_from_job_id?: string | null
   created_at: string
   updated_at: string
+  /** Briefing points with no other column (ELI-47). Optional: a backend
+   *  that has not deployed yet does not send them. */
+  tasks?: string | null
+  nice_to_have_skills?: string[]
+  start_date?: string | null
+  team_size?: string | null
+  interview_process?: string | null
+  vacancy_reason?: string | null
+  /** Which of the ten briefing points are geklärt — decided by the backend
+   *  (`jobs/briefing.py`), never recomputed here. */
+  briefing?: BriefingScoreDTO
+}
+
+/** "7 von 10 Punkten geklärt" and what is still open, as point keys in the
+ *  briefing's order (`tasks` · `must_have` · … · `vacancy_reason`). */
+export interface BriefingScoreDTO {
+  done: number
+  total: number
+  missing: string[]
 }
 
 export interface CompanyDTO {
@@ -900,6 +919,12 @@ export interface JobUpdatePayload {
   salary_max?: number | null
   salary_currency?: string
   status?: string
+  tasks?: string | null
+  nice_to_have_skills?: string[]
+  start_date?: string | null
+  team_size?: string | null
+  interview_process?: string | null
+  vacancy_reason?: string | null
 }
 
 /** POST body for a new mandate. The title is the only thing truly required —
