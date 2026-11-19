@@ -1272,6 +1272,8 @@ export interface CompanyPageDTO {
     source: string | null
     /** ELI-43: Kunde / Lead — set by a person, else from the counts; null: neither. */
     status?: CompanyStatus | null
+    /** True when `status` is a person's decision, not derived from the counts. */
+    status_set?: boolean
   }
   managers: CompanyPersonDTO[]
   leads: CompanyPersonDTO[]

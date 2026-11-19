@@ -9,12 +9,15 @@ from sqlalchemy import and_, case, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.domain.companies.models import Company
 from app.domain.common.enums import ConfidenceSource
 from app.domain.companies.schemas import CompanyCreate
 from app.domain.hub.resolution import normalize_company_name, normalize_domain
 from app.domain.verification import service as verification
 from app.domain.verification.schemas import ProposedChange
+
+logger = get_logger(__name__)
 
 
 async def list_companies(
@@ -143,23 +146,32 @@ async def create_company(
         bd_signals=data.bd_signals,
     )
     session.add(company)
-    await session.flush()
-    if data.status is not None:
-        await _record_status(session, company=company, status=data.status, actor=actor)
     await session.commit()
     await session.refresh(company)
+    company_id = company.id
     if data.location:
-        for row, sites in await market.exact_matches(session, tenant_id, company_ids=[company.id]):
-            towns = sorted({h.city or h.postal_code or "" for h in sites})
-            await market.link(
-                session,
-                tenant_id=tenant_id,
-                company=row,
-                sites=sites,
-                basis=f"same name and town ({', '.join(towns)[:120]}), on create",
-                agent="company_market_link",
-                actor=actor,
-            )
+        # Best effort: the company is saved; a link that fails is retried by
+        # the daily linker rather than reported as "nicht gespeichert".
+        try:
+            for row, sites in await market.exact_matches(session, tenant_id, company_ids=[company.id]):
+                towns = sorted({h.city or h.postal_code or "" for h in sites})
+                await market.link(
+                    session,
+                    tenant_id=tenant_id,
+                    company=row,
+                    sites=sites,
+                    basis=f"same name and town ({', '.join(towns)[:120]}), on create",
+                    agent="company_market_link",
+                    actor=actor,
+                )
+        except RuntimeError:
+            await session.rollback()
+            logger.warning("company %s: market link on create failed; the daily job retries", company_id)
+        await session.refresh(company)
+    if data.status is not None:
+        # After the link, so the link's relationship says the same (`_apply`).
+        await _record_status(session, company=company, status=data.status, actor=actor)
+        await session.commit()
         await session.refresh(company)
     return company
 
@@ -301,18 +313,20 @@ async def overview(
     ]
 
 
-async def _page_status(session: AsyncSession, company: Company, people) -> str | None:
-    """Kunde / Lead for one company: a person's decision, else the overview's
-    rule (manager → Kunde; new contact or taken from Markt → Lead)."""
-    decided = await session.scalar(select(_decided()).select_from(Company).where(Company.id == company.id))
+async def _page_status(session: AsyncSession, company: Company, people) -> dict:
+    """Kunde / Lead for one company: a person's decision (`status_set`), else
+    the overview's rule (manager → Kunde; new contact or taken from Markt →
+    Lead)."""
+    decided = bool(await session.scalar(select(_decided()).select_from(Company).where(Company.id == company.id)))
     if decided:
-        return "client" if company.is_client else "lead"
+        return {"status": "client" if company.is_client else "lead", "status_set": True}
     stages = {m.stage for m, _ in people}
+    status = None
     if "manager" in stages:
-        return "client"
-    if "bus_dev" in stages or ((company.source or "").startswith("hub:") and not company.is_client):
-        return "lead"
-    return None
+        status = "client"
+    elif "bus_dev" in stages or ((company.source or "").startswith("hub:") and not company.is_client):
+        status = "lead"
+    return {"status": status, "status_set": False}
 
 
 def _aware(value):
@@ -375,7 +389,7 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
             "domain": company.domain,
             "industry": company.industry,
             "source": company.source,
-            "status": await _page_status(session, company, people),
+            **await _page_status(session, company, people),
         },
         "managers": [person(m, at) for m, at in people if m.stage != "bus_dev"],
         "leads": [person(m, at) for m, at in people if m.stage == "bus_dev"],

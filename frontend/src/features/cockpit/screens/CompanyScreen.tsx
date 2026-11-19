@@ -202,6 +202,7 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
             <StatusSwitch
               companyId={data.company.id}
               status={data.company.status ?? null}
+              decided={!!data.company.status_set}
               onDone={() => setBump((b) => b + 1)}
             />
             {data.switchboard && (
@@ -364,17 +365,20 @@ function NewCompany({ onCancel, onOpen }: { onCancel: () => void; onOpen: (id: s
 function StatusSwitch({
   companyId,
   status,
+  decided,
   onDone,
 }: {
   companyId: string
   status: CompanyStatus | null
+  /** Set by a person. A derived status can still be clicked to confirm it. */
+  decided: boolean
   onDone: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function change(next: CompanyStatus | 'unset') {
-    if (next === 'unset' || next === status || busy) return
+    if (next === 'unset' || (decided && next === status) || busy) return
     setBusy(true)
     setError(null)
     try {

@@ -109,6 +109,8 @@ class CompanyCore(BaseModel):
     #: ELI-43: Kunde / Lead — a person's decision, else what the counts say;
     #: null when neither (no manager, no lead, never decided).
     status: CompanyStatus | None = None
+    #: True when `status` is a person's decision, not derived.
+    status_set: bool = False
 
 
 class MarketJob(BaseModel):

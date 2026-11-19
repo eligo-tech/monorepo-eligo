@@ -140,6 +140,30 @@ async def test_same_name_and_town_as_a_markt_employer_links_it_at_once() -> None
         page = await service.company_page(s, tenant_id=TENANT, company_id=company.id)
     assert linked == [here_id] and elsewhere_id not in linked
     assert page["market"]["linked"] and [j["title"] for j in page["market"]["jobs"]] == ["Schnittdirektrice (m/w/d)"]
+    # The link says what the person decided: a Kunde, not a prospect.
+    async with SessionLocal() as s:
+        rel = await s.scalar(select(HubCompanyLink.relationship).where(HubCompanyLink.company_id == company.id))
+    assert rel == "client"
+    assert page["company"]["status"] == "client" and page["company"]["status_set"] is True
+
+
+async def test_a_failed_link_still_saves_the_company(monkeypatch) -> None:
+    """The company is saved before the link is tried; a link that fails must
+    not report "nicht gespeichert" — the daily linker tries again."""
+    from app.domain.companies import market
+
+    async with SessionLocal() as s:
+        s.add(_hub("Wackel GmbH", "Ulm"))
+        await s.commit()
+
+    async def _boom(*_a, **_k):
+        raise RuntimeError("market link did not land")
+
+    monkeypatch.setattr(market, "link", _boom)
+    company = await _create(name="Wackel GmbH", location="Ulm", status="lead")
+    async with SessionLocal() as s:
+        assert (await service.get_company(s, tenant_id=TENANT, company_id=company.id)) is not None
+    assert "Wackel GmbH" in await _overview("leads")
 
 
 async def test_without_an_ort_nothing_is_linked() -> None:
