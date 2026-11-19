@@ -265,6 +265,8 @@ export interface Mandate {
    *  a gap to fill, never invented. */
   location: string | null
   mustHave: string[]
+  /** Required certifications, where the job record is loaded (ELI-51). */
+  certifications?: string[]
   salaryMin: number | null
   salaryMax: number | null
   salaryCurrency: string | null

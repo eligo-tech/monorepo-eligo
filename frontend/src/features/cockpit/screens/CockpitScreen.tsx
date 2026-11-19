@@ -54,7 +54,12 @@ export function CockpitScreen({
     const byId = new Map(data.mandates.map((m) => [m.id, m]))
     const companyName = new Map((allCompanies ?? []).map((c) => [c.id, c.name]))
     for (const job of allJobs ?? []) {
-      if (byId.has(job.id)) continue
+      const running = byId.get(job.id)
+      if (running) {
+        // The process feed carries no certifications; the job row does.
+        byId.set(job.id, { ...running, certifications: job.required_certifications ?? [] })
+        continue
+      }
       byId.set(job.id, mandateFromJob(job, companyName.get(job.client_company_id) ?? null))
     }
     return [...byId.values()]

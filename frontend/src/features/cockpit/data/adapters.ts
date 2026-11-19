@@ -482,6 +482,7 @@ export function mandateFromJob(job: JobDTO, companyName: string | null): Mandate
     managerId: job.manager_id ?? undefined,
     location: job.location ?? null,
     mustHave: job.must_have_skills ?? [],
+    certifications: job.required_certifications ?? [],
     salaryMin: job.salary_min ?? null,
     salaryMax: job.salary_max ?? null,
     salaryCurrency: job.salary_currency ?? null,

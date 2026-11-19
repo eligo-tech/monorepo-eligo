@@ -71,6 +71,10 @@ const ALLOWED = new Set([
   // a role, shown as grey hints, not copy to translate.
   'Marie Hoffmann',
   'Senior Backend Engineer',
+  // ELI-51: the German forms of address on the outreach draft's switch —
+  // the choice is about the German message, so they are not translated.
+  'Sie',
+  'Du',
   // Same word in both languages.
   'Manager',
   'Business Dev.',
