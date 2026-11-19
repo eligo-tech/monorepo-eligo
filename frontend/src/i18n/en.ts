@@ -1458,4 +1458,8 @@ export const EN: Record<string, string> = {
   'Die Person bleibt gespeichert, erscheint aber nicht mehr in Anruf- und Wiedervorlagelisten.': 'The person stays on record but no longer appears in call or follow-up lists.',
   'Es wird keine Notiz gespeichert — der Löschdialog öffnet sich mit „Löschung verlangt (Art. 17)“ und dem heutigen Datum.': 'No note is saved — the erase dialog opens with "Erasure requested (Art. 17)" and today\'s date.',
   'Nur Administratoren dürfen Personen löschen. Bitte einen Admin informieren — bis dahin „Nicht mehr kontaktieren“ wählen.': 'Only administrators may erase people. Please tell an admin — until then choose "Do not contact again".',
+  '+ Unternehmen': '+ Company',
+  'Dieses Unternehmen gibt es hier schon.': 'This company is already here.',
+  'Vorhandenes Unternehmen öffnen': 'Open the existing company',
+  'Mit Ort wird das Unternehmen gleich mit seinen Stellen im Markt verknüpft, wenn Name und Ort genau passen.': 'With a location, the company is linked to its jobs in Markt right away when name and location match exactly.',
 }

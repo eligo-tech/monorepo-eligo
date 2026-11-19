@@ -10,13 +10,21 @@ import { locale } from '@/i18n/format'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, Briefcase, Building2, Mail, MapPin, Newspaper, Phone, Plus, Search, UserRound, Users } from 'lucide-react'
 import { api } from '@/api/client'
-import type { CompanyOverviewRowDTO, CompanyPersonDTO, MarketSuggestionDTO } from '@/api/types'
+import type { CompanyOverviewRowDTO, CompanyPersonDTO, CompanyStatus, MarketSuggestionDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 import { Button, FIELD } from '../ui/forms'
 import { Chip, Panel, SectionHeader, SegmentedControl } from '../ui/primitives'
-import { type CompanyKind, filterCompanies, kindCounts } from '../ui/companyList'
+import {
+  type CompanyKind,
+  EMPTY_COMPANY_FORM,
+  existingCompanyId,
+  filterCompanies,
+  kindCounts,
+  type NewCompanyForm,
+  newCompanyPayload,
+} from '../ui/companyList'
 import { JOB_STATUS_TONE, jobStatus, jobStatusLabel } from '../ui/jobStatus'
 import { telHref } from '../ui/switchboard'
 import { SwitchboardLine } from '../ui/SwitchboardLine'
@@ -43,17 +51,26 @@ function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
   const rows = useAsync<CompanyOverviewRowDTO[]>(() => api.companiesOverview(), [])
   const [kind, setKind] = useState<CompanyKind>('all')
   const [q, setQ] = useState('')
+  const [adding, setAdding] = useState(false)
   const all = rows.data ?? []
   const counts = kindCounts(all)
   const shown = useMemo(() => filterCompanies(all, kind, q), [all, kind, q])
 
   return (
     <div className="space-y-5">
-      <SectionHeader
-        title={t('Unternehmen')}
-        hint={t('Alle Unternehmen dieses Workspaces — Kunden mit Managern und Unternehmen mit neuen Leads aus dem Markt.')}
-        icon={<Building2 className="h-4 w-4" />}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SectionHeader
+          title={t('Unternehmen')}
+          hint={t('Alle Unternehmen dieses Workspaces — Kunden mit Managern und Unternehmen mit neuen Leads aus dem Markt.')}
+          icon={<Building2 className="h-4 w-4" />}
+        />
+        {!adding && (
+          <Button tone="primary" onClick={() => setAdding(true)}>
+            {t('+ Unternehmen')}
+          </Button>
+        )}
+      </div>
+      {adding && <NewCompany onCancel={() => setAdding(false)} onOpen={onOpen} />}
       <Panel className="p-4">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <SegmentedControl
@@ -98,7 +115,9 @@ function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
                 <span className="flex items-center gap-3 font-mono text-[12px] text-cockpit-dim">
                   {c.managers > 0 && <span>{t('{n} Manager', { n: String(c.managers) })}</span>}
                   {c.leads > 0 && <Chip tone="gold">{t('{n} Leads', { n: String(c.leads) })}</Chip>}
-                  {c.leads === 0 && c.markt_lead && (
+                  {c.status === 'client' && c.managers === 0 && <Chip tone="mint">{t('Kunde')}</Chip>}
+                  {c.leads === 0 && c.status === 'lead' && <Chip tone="gold">{t('Lead')}</Chip>}
+                  {c.leads === 0 && !c.status && c.markt_lead && (
                     <Chip tone="gold" title={t('Aus dem Markt übernommen — noch ohne Ansprechpartner.')}>
                       {t('Lead')}
                     </Chip>
@@ -180,6 +199,12 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
               {data.company.industry && <span>{data.company.industry}</span>}
               <CareersLink market={data.market} />
             </p>
+            <StatusSwitch
+              companyId={data.company.id}
+              status={data.company.status ?? null}
+              decided={!!data.company.status_set}
+              onDone={() => setBump((b) => b + 1)}
+            />
             {data.switchboard && (
               <div className="mt-2">
                 <SwitchboardLine board={data.switchboard} />
@@ -257,6 +282,124 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
           </Panel>
         </>
       )}
+    </div>
+  )
+}
+
+const STATUS_OPTIONS = () => [
+  { key: 'lead' as const, label: t('Lead') },
+  { key: 'client' as const, label: t('Kunde') },
+]
+
+/** ELI-43 "+ Unternehmen": Name, Ort, Website, Lead or Kunde. A duplicate
+ *  (409) offers the company that is already here; saved, its page opens. */
+function NewCompany({ onCancel, onOpen }: { onCancel: () => void; onOpen: (id: string) => void }) {
+  const [form, setForm] = useState<NewCompanyForm>(EMPTY_COMPANY_FORM)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [existing, setExisting] = useState<string | null>(null)
+  const payload = newCompanyPayload(form)
+  const set = (patch: Partial<NewCompanyForm>) => {
+    setForm((f) => ({ ...f, ...patch }))
+    setExisting(null)
+  }
+
+  async function save() {
+    if (!payload) return
+    setBusy(true)
+    setError(null)
+    setExisting(null)
+    try {
+      const made = await api.createCompany(payload)
+      onOpen(made.id)
+    } catch (e) {
+      const id = e instanceof Error ? existingCompanyId(e.message) : null
+      if (id) setExisting(id)
+      else setError(t('Nicht gespeichert — bitte erneut versuchen.'))
+    }
+    setBusy(false)
+  }
+
+  return (
+    <Panel className="p-4">
+      <form
+        className="grid gap-2 sm:grid-cols-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void save()
+        }}
+      >
+        <input
+          className={FIELD}
+          placeholder={t('Name *')}
+          value={form.name}
+          onChange={(e) => set({ name: e.target.value })}
+          required
+          autoFocus
+        />
+        <input className={FIELD} placeholder={t('Ort')} value={form.location} onChange={(e) => set({ location: e.target.value })} />
+        <input className={FIELD} placeholder={t('Website')} value={form.website} onChange={(e) => set({ website: e.target.value })} />
+        <SegmentedControl size="sm" value={form.status} onChange={(status) => set({ status })} options={STATUS_OPTIONS()} />
+        <p className="text-[12px] text-cockpit-faint sm:col-span-2">
+          {t('Mit Ort wird das Unternehmen gleich mit seinen Stellen im Markt verknüpft, wenn Name und Ort genau passen.')}
+        </p>
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+          <Button type="submit" tone="primary" disabled={busy || !payload}>
+            {t('Speichern')}
+          </Button>
+          <Button onClick={onCancel}>{t('Abbrechen')}</Button>
+          {existing && (
+            <span className="flex items-center gap-2 text-[13px] text-gold-400">
+              {t('Dieses Unternehmen gibt es hier schon.')}
+              <Button onClick={() => onOpen(existing)}>{t('Vorhandenes Unternehmen öffnen')}</Button>
+            </span>
+          )}
+          {error && <span className="text-[13px] text-coral-400">{error}</span>}
+        </div>
+      </form>
+    </Panel>
+  )
+}
+
+/** ELI-43: Lead / Kunde, set by a person — recorded with a receipt. */
+function StatusSwitch({
+  companyId,
+  status,
+  decided,
+  onDone,
+}: {
+  companyId: string
+  status: CompanyStatus | null
+  /** Set by a person. A derived status can still be clicked to confirm it. */
+  decided: boolean
+  onDone: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function change(next: CompanyStatus | 'unset') {
+    if (next === 'unset' || (decided && next === status) || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.setCompanyStatus(companyId, next)
+      onDone()
+    } catch {
+      setError(t('Nicht gespeichert — bitte erneut versuchen.'))
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-cockpit-faint">{t('Status')}</span>
+      <SegmentedControl<CompanyStatus | 'unset'>
+        size="sm"
+        value={status ?? 'unset'}
+        onChange={(next) => void change(next)}
+        options={STATUS_OPTIONS()}
+      />
+      {error && <span className="text-[13px] text-coral-400">{error}</span>}
     </div>
   )
 }

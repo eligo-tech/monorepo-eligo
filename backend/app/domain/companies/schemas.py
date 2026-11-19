@@ -5,7 +5,9 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.hub.schemas import Switchboard
 
@@ -20,8 +22,37 @@ class CompanyBase(BaseModel):
     bd_signals: dict = Field(default_factory=dict)
 
 
+#: ELI-43: a person's call — "client" (Kunde) or "lead".
+CompanyStatus = Literal["client", "lead"]
+
+
 class CompanyCreate(CompanyBase):
     tenant_id: uuid.UUID | None = None
+    #: A URL or host as typed; stored as its registrable domain.
+    website: str | None = Field(default=None, max_length=500)
+    #: ELI-43: when given, a person decided it — recorded through the gate
+    #: and from then on what Kunden / Leads go by. Left out: `is_client` is
+    #: kept as sent and the counts decide, as before.
+    status: CompanyStatus | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_required(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("name is required")
+        if len(value) > 200:
+            raise ValueError("name is too long")
+        return value
+
+    @field_validator("location", "website")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        return (value or "").strip() or None
+
+
+class CompanyStatusUpdate(BaseModel):
+    status: CompanyStatus
 
 
 class CompanyRead(CompanyBase):
@@ -44,6 +75,8 @@ class CompanyOverviewRow(BaseModel):
     mandates: int
     #: ELI-31: taken from Markt ("Übernehmen"), no contact and no manager yet.
     markt_lead: bool = False
+    #: ELI-43: a person's decision (Lead / Kunde), if one was made.
+    status: CompanyStatus | None = None
     last_contact_at: dt.datetime | None
     #: ELI-33: Markt sites of the same name waiting for a person's yes/no.
     to_review: int = 0
@@ -73,6 +106,11 @@ class CompanyCore(BaseModel):
     domain: str | None
     industry: str | None
     source: str | None
+    #: ELI-43: Kunde / Lead — a person's decision, else what the counts say;
+    #: null when neither (no manager, no lead, never decided).
+    status: CompanyStatus | None = None
+    #: True when `status` is a person's decision, not derived.
+    status_set: bool = False
 
 
 class MarketJob(BaseModel):

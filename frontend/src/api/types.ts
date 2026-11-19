@@ -1222,6 +1222,18 @@ export interface CompanyFacetDTO {
   switchboard?: SwitchboardDTO | null
 }
 
+/** ELI-43: Lead / Kunde as a person set it. */
+export type CompanyStatus = 'client' | 'lead'
+
+/** ELI-43: "+ Unternehmen" — `POST /companies`. */
+export interface NewCompanyPayload {
+  name: string
+  location: string | null
+  website: string | null
+  status: CompanyStatus
+  is_client: boolean
+}
+
 /** ELI-33: one row of Unternehmen — every company of the workspace. */
 export interface CompanyOverviewRowDTO {
   id: string
@@ -1232,6 +1244,8 @@ export interface CompanyOverviewRowDTO {
   mandates: number
   /** ELI-31: taken from Markt ("Übernehmen"), no contact and no manager yet. */
   markt_lead?: boolean
+  /** ELI-43: a person's Lead / Kunde, if one was set — then it decides. */
+  status?: CompanyStatus | null
   last_contact_at: string | null
   /** ELI-33 2b: Markt sites of the same name waiting for a yes or no. */
   to_review?: number
@@ -1256,6 +1270,10 @@ export interface CompanyPageDTO {
     domain: string | null
     industry: string | null
     source: string | null
+    /** ELI-43: Kunde / Lead — set by a person, else from the counts; null: neither. */
+    status?: CompanyStatus | null
+    /** True when `status` is a person's decision, not derived from the counts. */
+    status_set?: boolean
   }
   managers: CompanyPersonDTO[]
   leads: CompanyPersonDTO[]

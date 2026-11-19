@@ -74,17 +74,19 @@ async def _places(session: AsyncSession, tenant_id: uuid.UUID, company_ids: list
     return places
 
 
-async def exact_matches(session: AsyncSession, tenant_id: uuid.UUID) -> list[tuple[Company, list[HubCompany]]]:
+async def exact_matches(
+    session: AsyncSession, tenant_id: uuid.UUID, company_ids: list[uuid.UUID] | None = None
+) -> list[tuple[Company, list[HubCompany]]]:
     """Companies not yet linked, each with the corpus sites of the same name
-    in the same town. Sites another company here already holds are left out."""
+    in the same town. Sites another company here already holds are left out.
+    `company_ids`: only these (ELI-43: the company just created by hand)."""
     linked = select(HubCompanyLink.company_id).where(
         HubCompanyLink.tenant_id == tenant_id, HubCompanyLink.company_id.is_not(None)
     )
-    companies = (
-        await session.scalars(
-            select(Company).where(Company.tenant_id == tenant_id, Company.id.not_in(linked)).order_by(Company.name)
-        )
-    ).all()
+    stmt = select(Company).where(Company.tenant_id == tenant_id, Company.id.not_in(linked))
+    if company_ids is not None:
+        stmt = stmt.where(Company.id.in_(company_ids))
+    companies = (await session.scalars(stmt.order_by(Company.name))).all()
     if not companies:
         return []
     keys = {c.id: normalize_company_name(c.name) for c in companies}
