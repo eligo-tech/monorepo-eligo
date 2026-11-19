@@ -10,7 +10,7 @@ genuinely selects rows is the overlay routes below.
 from __future__ import annotations
 
 import uuid
-from typing import Literal, get_args
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +61,6 @@ HeadcountBucket = Literal[
     "1-3", "4-10", "11-50", "51-150", "151-300", "301-650",
     "651-1000", "1001-5000", "5001-10000", "10001+",
 ]
-assert list(get_args(HeadcountBucket)) == list(headcount.BUCKETS)
 
 
 @router.get("/sources")
@@ -140,7 +139,7 @@ async def search_hub_employers(
     ),
     size: list[Literal["s", "m", "l", "xl"]] | None = Query(
         default=None,
-        description="employer size by OPEN ADS in the corpus (no headcount exists): "
+        description="employer size by OPEN ADS in the corpus (the headcount is `employees`): "
         "s 1–4 · m 5–19 · l 20–99 · xl 100+; repeatable",
     ),
     employees: list[HeadcountBucket] | None = Query(
@@ -784,7 +783,7 @@ async def headcount_backfill(
 
 @router.post("/headcount/wikidata")
 async def headcount_wikidata(
-    limit: int = Query(default=400, ge=1, le=2_000),
+    limit: int = Query(default=120, ge=1, le=400),
     after: str | None = Query(default=None, max_length=255, description="the previous batch's last_domain"),
     _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
     db: AsyncSession = Depends(get_db),

@@ -129,6 +129,18 @@ async def test_a_value_its_own_ad_no_longer_states_is_cleared() -> None:
     assert c.employees_min is None and c.employees_source is None
 
 
+async def test_an_ad_without_stored_text_does_not_requeue_its_employer() -> None:
+    # The text pass stamps the fetch even when the source returned no text.
+    await _ingest(_result("Klinikum Muster gGmbH", ["Mit über 500 Mitarbeitern sind wir groß.", None]))
+    async with SessionLocal() as s:
+        for p in (await s.execute(select(HubJobPosting))).scalars():
+            p.description_fetched_at = dt.datetime.now(dt.UTC)
+        await s.commit()
+    await _run_backfill()
+    assert sum(r["read"] for r in await _run_backfill()) == 0
+    assert (await _company("Klinikum Muster gGmbH")).employees_min == 500
+
+
 # --- Wikidata --------------------------------------------------------------------------------
 
 
@@ -220,6 +232,30 @@ async def test_wikidata_pass_sizes_by_domain_and_keeps_newer_ad_statements() -> 
     assert again["asked"] == 0 and len(sent) == 1
 
 
+async def test_a_domain_shared_by_two_employers_is_not_an_identity() -> None:
+    # A group's site used by a subsidiary: the group's P1128 is not theirs.
+    # Ingested without a domain (one row each); the domain arrives later, e.g.
+    # from the Impressum backfill, onto two rows of different employers.
+    await _ingest(
+        _result("Gruppe Holding AG", [None]),
+        _result("Tochter Service GmbH", [None], postcode="20095", city="Hamburg"),
+    )
+    async with SessionLocal() as s:
+        for c in (await s.execute(select(HubCompany))).scalars():
+            c.website_domain = "gruppe.de"
+        await s.commit()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_sparql(("Q9", "https://gruppe.de/", "50000", "2024-01-01T00:00:00Z")))
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    async with SessionLocal() as s:
+        result = await headcount.wikidata_backfill(s, limit=100, client=wikidata.WikidataClient(http=http, pause=0))
+    assert result["sized"] == 0
+    assert (await _company("Tochter Service GmbH")).employees_min is None
+    assert (await _company("Gruppe Holding AG")).employees_min is None
+
+
 async def test_a_refused_wikidata_query_stamps_nothing() -> None:
     await _ingest(_result("Muster Klinik GmbH", [None], domain="muster-klinik.de"))
     http = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(429)))
@@ -293,6 +329,24 @@ async def test_a_range_matches_every_bucket_it_overlaps_and_unknown_is_hidden() 
     assert [h["name"] for h in big] == ["Gross AG"]
     assert both == 2
     assert unknown == 1
+
+
+async def test_the_chip_shows_the_site_the_filter_matched() -> None:
+    await _ingest(
+        _result("Kette GmbH", [None], postcode="10115", city="Berlin"),
+        _result("Kette GmbH", [None], postcode="20095", city="Hamburg"),
+    )
+    async with SessionLocal() as s:
+        rows = (await s.execute(select(HubCompany).order_by(HubCompany.city))).scalars().all()
+        rows[0].employees_min = rows[0].employees_max = 80   # Berlin, older
+        rows[0].employees_as_of = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+        rows[1].employees_min = rows[1].employees_max = 5000  # Hamburg, newer
+        rows[1].employees_as_of = dt.datetime(2026, 11, 1, tzinfo=dt.UTC)
+        for r in rows:
+            r.employees_source = "ad_text"
+        await s.commit()
+        (hit,) = await service.search_employers(s, employees=["51-150"])
+    assert hit["headcount"]["min"] == 80
 
 
 async def test_hits_carry_the_size_and_its_evidence() -> None:

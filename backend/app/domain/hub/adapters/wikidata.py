@@ -18,8 +18,10 @@ two different figures for the same date are ambiguous and skipped.
 Etiquette (https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual):
 a descriptive User-Agent without personal data (`settings.hub_user_agent`),
 batched queries via POST, one request at a time with a pause between them,
-and a 429's Retry-After honoured by stopping — the weekly job resumes next
-week. `parse_bindings` is pure, so CI tests it with no network.
+and any answer but 200 (a 429, a 5xx, a timeout) ends the pass — the weekly
+job resumes next week. A query times out after 30 s, so one operator request
+(`BATCH` x 3 domains) stays well inside the job's HTTP timeout.
+`parse_bindings` is pure, so CI tests it with no network.
 """
 
 from __future__ import annotations
@@ -40,8 +42,9 @@ SOURCE_NAME = "wikidata"
 ENDPOINT = "https://query.wikidata.org/sparql"
 #: Domains per query: 8 IRIs each, well inside the endpoint's limits.
 BATCH = 40
-#: Seconds between queries.
+#: Seconds between queries, and per query.
 PAUSE = 1.0
+QUERY_TIMEOUT = 30.0
 
 
 @dataclass(frozen=True)
@@ -134,15 +137,18 @@ class WikidataClient:
         headers = {"User-Agent": settings.hub_user_agent, "Accept": "application/sparql-results+json"}
         if self._http is not None:
             return await self._http.post(ENDPOINT, data={"query": query}, headers=headers)
-        async with httpx.AsyncClient(timeout=60.0) as http:
+        async with httpx.AsyncClient(timeout=QUERY_TIMEOUT) as http:
             return await http.post(ENDPOINT, data={"query": query}, headers=headers)
 
-    async def lookup(self, session, domains: list[str]) -> tuple[dict[str, WikidataSize], set[str]]:
-        """Matches per domain, and the domains whose query failed (not stamped)."""
+    async def lookup(self, domains: list[str]) -> tuple[dict[str, WikidataSize], set[str], list]:
+        """Matches per domain, the domains whose query failed (not stamped),
+        and one `HubObservation` per request for the caller to store — no
+        database session is held while the endpoint answers."""
         from app.domain.hub.models import HubObservation
 
         found: dict[str, WikidataSize] = {}
         failed: set[str] = set()
+        observations: list = []
         for i in range(0, len(domains), BATCH):
             batch = domains[i : i + BATCH]
             if failed:  # the endpoint refused once: stop, retry next week
@@ -159,7 +165,7 @@ class WikidataClient:
             except (httpx.HTTPError, ValueError):
                 status, payload = None, {}
             matches = parse_bindings(payload, batch) if status == 200 else {}
-            session.add(
+            observations.append(
                 HubObservation(
                     source=SOURCE_NAME,
                     request_url=ENDPOINT,
@@ -177,4 +183,4 @@ class WikidataClient:
                 failed.update(batch)
                 continue
             found.update(matches)
-        return found, failed
+        return found, failed, observations

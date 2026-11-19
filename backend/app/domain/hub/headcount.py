@@ -126,8 +126,8 @@ _OPEN_QUALS = {"weit über", "mehr als", "more than", "über", "gut", "over"}
 _NOUN = (
     r"Mitarbeitern|Mitarbeitende[nr]?|"
     r"Mitarbeiter(?:\*innen|:innen|_innen|/-innen|/innen|Innen|innen|in)?|"
-    r"Beschäftigte[nr]?|Angestellte[nr]?|Kolleginnen und Kollegen|Kolleg(?:inn)?en|"
-    r"employees|staff members"
+    # Not "Kollegen": "mit 4 Kollegen" is who you work with, not the company.
+    r"Beschäftigte[nr]?|Angestellte[nr]?|employees|staff members"
 )
 #: Up to two lowercase adjectives: "250 engagierte Mitarbeitende".
 _ADJ = r"(?-i:(?:[a-zäöüß]+(?:e|en|er)\s+){0,2})"
@@ -137,7 +137,7 @@ _AMOUNT = (
     rf"|(?P<n>{_NUM})\s*(?P<plus>\+)?)"
 )
 _STATEMENT = re.compile(
-    rf"(?<![\w.])(?:(?P<qual>{_QUAL})\s+)?{_AMOUNT}\s*{_ADJ}(?P<noun>{_NOUN})\b",
+    rf"(?<![\w./])(?:(?P<qual>{_QUAL})\s+)?{_AMOUNT}\s*(?P<adj>{_ADJ})(?P<noun>{_NOUN})\b",
     re.IGNORECASE,
 )
 #: "Mitarbeiterzahl: 51-200" — a labelled field; the label is the context.
@@ -157,7 +157,10 @@ _SKIP_BEFORE = re.compile(
     r"für|betreu\w*|unterstütz\w*|berat\w*|versorg\w*|\w*abrechnung\w*|"
     r"such\w*|gesucht|einstell\w*|verstärk\w*|ab|bis zu|pro|je|jeweils|durchschnittlich|"
     r"kunde\w*|kundin\w*|mandant\w*|auftraggeber\w*|klient\w*|patient\w*|bewohner\w*|"
-    r"schüler\w*|kinder\w*|gäste\w*|mitglied\w*)\b",
+    r"schüler\w*|kinder\w*|gäste\w*|mitglied\w*|"
+    # A span you will lead or have led, colleagues you join, placements.
+    r"ihren|ihrem|ihrer|deinen|deinem|deiner|seinen|erfahrung\w*|gemeinsam|zusammen|"
+    r"stellen|stellt|vermittel\w*|client\w*|customer\w*)\b",
     re.IGNORECASE,
 )
 #: Right AFTER the noun: a hiring tag or someone else's staff.
@@ -165,17 +168,21 @@ _SKIP_AFTER = re.compile(
     r"^\s*\((?:[mwdxi]\s*/\s*){1,3}[mwdxi]\)|^\s*\(gn\)|^\s*\(all genders?\)|"
     r"\b(?:unserer|unseren|der|ihrer|seiner) (?:kunden|mandanten|auftraggeber|klienten)\b|"
     r"\b(?:pro|je)\b|\bim team\b|\bin (?:unserem|ihrem|einem) team\b|\bin der abteilung\b|"
-    r"\bam standort\b|\bim bereich\b|\bgesucht\b",
+    r"\bam standort\b|\bim bereich\b|\bgesucht\b|^\s*ein\b|\beingestellt\b|\bzusammen\b|"
+    r"\bin elternzeit\b|\bim (?:außendienst|innendienst|home-?office|einsatz|vertrieb|urlaub)\b|"
+    r"^\s*(?:arbeitest|bildest|unterstützt|betreust)\b|"
+    r"\b(?:gestartet|gegründet|angefangen|begonnen|started|founded)\b",
     re.IGNORECASE,
 )
 #: Anywhere in the sentence: a parent group's total.
 _GROUP = re.compile(
-    r"\b(?:teil (?:der|des|einer|eines)|gehör\w*|tochter\w*|\w*gruppe\w*|group|konzern\w*|"
+    r"\b(?:teil (?:der|des|einer|eines)|gehör\w*|tochter\w*|"
+    r"(?!ziel|berufs|alters|personen|kunden|patienten|produkt)\w*gruppe\w*|group|konzern\w*|"
     r"holding|verbund\w*|muttergesellschaft|mutterkonzern)\b",
     re.IGNORECASE,
 )
 _WORLDWIDE = re.compile(
-    r"\b(?:weltweit\w*|global\w*|worldwide|international\w*|europaweit|countries|"
+    r"\b(?:weltweit\w*|global\w*|worldwide|europaweit|countries|"
     r"in (?:über |mehr als )?\d+ ländern)\b",
     re.IGNORECASE,
 )
@@ -185,6 +192,20 @@ _CONTEXT = re.compile(
     r"engagier\w*|als|insgesamt|hat|haben|heute|we|our|with|employ\w*|has|have)\b",
     re.IGNORECASE,
 )
+#: In the clause before the number (after its last comma): a past figure.
+_HISTORY = re.compile(
+    r"\b(?:gegründet|gestartet|gründung|seit|anfang|anfangs|damals|begann|begonnen|started|founded)\b",
+    re.IGNORECASE,
+)
+#: Marks today's figure when a sentence holds several.
+_CURRENT = re.compile(r"\b(?:heute|inzwischen|mittlerweile|aktuell|derzeit|today|now)\b", re.IGNORECASE)
+#: New, extra: a hiring count, not a headcount ("5 neue Mitarbeiter").
+_NEW = re.compile(r"\b(?:neue|neuen|neuer|weitere|weiteren|zusätzliche|zusätzlichen)\b", re.IGNORECASE)
+#: A figure this small needs an explicit employer phrase, not just "mit".
+_SMALL = 10
+_STRONG = re.compile(r"\b(?:wir|uns|unser\w*|beschäftig\w*|zähl\w*|we|our|employ\w*)\b", re.IGNORECASE)
+#: How far after a number "weltweit" still belongs to it.
+_AFTER_SCOPE = 15
 _SENTENCES = re.compile(r"\n+|[•·▪]|(?<=[!?;])\s+|(?<=\.)\s+(?=[A-ZÄÖÜ„\"])")
 _BEFORE_WINDOW = 80
 _AFTER_WINDOW = 50
@@ -207,6 +228,10 @@ def _bounds(m: re.Match) -> tuple[int, int | None] | None:
     if n not in _PLAUSIBLE:
         return None
     qual = (groups.get("qual") or "").lower()
+    # A bare year-like number ("haben 2024 Mitarbeiter") is skipped; "über
+    # 2000" or "2.000" says it is a count.
+    if not qual and not groups.get("plus") and re.fullmatch(r"(?:19|20)\d\d", groups["n"]):
+        return None
     if groups.get("plus") or qual in _OPEN_QUALS:
         return n, None
     return n, n
@@ -230,25 +255,39 @@ def extract_statements(text: str | None) -> list[Statement]:
             continue
         if _GROUP.search(sentence):
             continue
-        scope = "worldwide" if _WORLDWIDE.search(sentence) else "local"
         taken: list[tuple[int, int]] = []
+        here: list[tuple[Statement, bool]] = []
         for m in _LABELLED.finditer(sentence):
             bounds = _bounds(m)
             if bounds:
                 taken.append(m.span())
-                found.append(Statement(*bounds, scope, _quote(sentence, *m.span())))
+                scope = "worldwide" if _WORLDWIDE.search(sentence) else "local"
+                here.append((Statement(*bounds, scope, _quote(sentence, *m.span())), False))
         for m in _STATEMENT.finditer(sentence):
             if any(s < m.end() and m.start() < e for s, e in taken):
                 continue
             before = sentence[max(0, m.start() - _BEFORE_WINDOW) : m.start()]
             after = sentence[m.end() : m.end() + _AFTER_WINDOW]
+            clause = before.split(",")[-1]
             if _SKIP_BEFORE.search(before) or _SKIP_AFTER.search(after):
+                continue
+            if _HISTORY.search(clause) or _NEW.search(m.group("adj") or ""):
                 continue
             if not _CONTEXT.search(before):
                 continue
             bounds = _bounds(m)
-            if bounds:
-                found.append(Statement(*bounds, scope, _quote(sentence, *m.span())))
+            if not bounds:
+                continue
+            if (bounds[1] or bounds[0] + 1) <= _SMALL and not _STRONG.search(before):
+                continue
+            # Scope from the words next to THIS number, not the whole sentence.
+            scope = "worldwide" if _WORLDWIDE.search(before + after[:_AFTER_SCOPE]) else "local"
+            current = bool(_CURRENT.search(clause) or _CURRENT.search(m.group("qual") or ""))
+            here.append((Statement(*bounds, scope, _quote(sentence, *m.span())), current))
+        # Several figures in one sentence: today's, when one is marked so.
+        if len(here) > 1 and any(current for _, current in here):
+            here = [h for h in here if h[1]]
+        found += [statement for statement, _ in here]
     return found
 
 
@@ -277,7 +316,8 @@ def aggregate(items: list[tuple[Statement, str, dt.datetime | None]]) -> Choice 
         best = newest.get(key)
         if best is None or (as_utc(item[2]) or OLDEST) > (as_utc(best[2]) or OLDEST):
             newest[key] = item
-    key = max(counts, key=lambda k: (counts[k], as_utc(newest[k][2]) or OLDEST))
+    # Ties: the newest, then the larger value — never the order ads were read.
+    key = max(counts, key=lambda k: (counts[k], as_utc(newest[k][2]) or OLDEST, k[0], k[1] or 0))
     statement, ref, when = newest[key]
     return Choice(statement.min, statement.max, statement.scope, statement.quote, ref, as_utc(when))
 
@@ -461,6 +501,8 @@ async def backfill(
         return {"read": 0, "sized": 0, "cleared": 0, "last_id": None, "done": True}
 
     ids = [c.id for c in companies]
+    # Only ads with stored text compete for the slots: an ad whose fetch
+    # returned nothing must not crowd out one that says something.
     newest = (
         select(
             HubJobPosting.id,
@@ -471,10 +513,12 @@ async def backfill(
             )
             .label("rn"),
         )
+        .join(HubPostingPayload, HubPostingPayload.hub_job_posting_id == HubJobPosting.id)
         .where(
             HubJobPosting.hub_company_id.in_(ids),
             HubJobPosting.is_active.is_(True),
             HubJobPosting.description_fetched_at.is_not(None),
+            HubPostingPayload.description.is_not(None),
         )
         .subquery()
     )
@@ -493,6 +537,18 @@ async def backfill(
             .where(newest.c.rn <= ADS_PER_COMPANY)
         )
     ).all()
+    # The stamp is the newest fetch over ALL the company's open ads, with text
+    # or without — the queue compares against exactly that (`_due`), so an ad
+    # whose fetch stored no text does not re-queue its employer every week.
+    fetched = dict(
+        (
+            await session.execute(
+                select(HubJobPosting.hub_company_id, func.max(HubJobPosting.description_fetched_at))
+                .where(HubJobPosting.hub_company_id.in_(ids), HubJobPosting.is_active.is_(True))
+                .group_by(HubJobPosting.hub_company_id)
+            )
+        ).all()
+    )
     rules = await suppression.load(session)
     read = await asyncio.to_thread(_read, rows, rules)
 
@@ -501,8 +557,8 @@ async def backfill(
     values: list[dict[str, Any]] = []
     sized = cleared = 0
     for c in companies:
-        choice, refs, seen = read.get(c.id, (None, set(), _NOTHING_READ))
-        stamp = {"b_id": c.id, "b_read_at": seen}
+        choice, refs, _ = read.get(c.id, (None, set(), _NOTHING_READ))
+        stamp = {"b_id": c.id, "b_read_at": as_utc(fetched.get(c.id)) or _NOTHING_READ}
         if choice is not None and replaces(
             new_source=AD_TEXT, new_as_of=choice.as_of,
             cur_source=c.employees_source, cur_as_of=c.employees_as_of,
@@ -610,8 +666,12 @@ async def wikidata_backfill(
         await session.commit()
         return {"asked": 0, "matched": 0, "sized": 0, "failed": 0, "last_domain": None, "done": True}
 
-    answers, failed = await client.lookup(session, domains)
+    # No transaction across the outbound calls (cf. liveness.py): commit the
+    # read, ask, then write in a short transaction of its own.
+    await session.commit()
+    answers, failed, observations = await client.lookup(domains)
     asked = [d for d in domains if d not in failed]
+    session.add_all(observations)
 
     sized = 0
     if answers:
@@ -621,11 +681,19 @@ async def wikidata_backfill(
                     HubCompany.id, HubCompany.website_domain, HubCompany.employees_source,
                     HubCompany.employees_as_of, HubCompany.employees_source_ref,
                     HubCompany.employees_min, HubCompany.employees_max,
+                    HubCompany.normalized_name,
                 ).where(HubCompany.website_domain.in_(list(answers)), HubCompany.kind == EMPLOYER)
             )
         ).all()
+        # A domain several employers share (a group's site used by its
+        # subsidiaries) is no identity: the item's P1128 is the group's.
+        names: dict[str, set[str]] = {}
+        for r in rows:
+            names.setdefault(r.website_domain, set()).add(r.normalized_name)
         values = []
         for r in rows:
+            if len(names[r.website_domain]) != 1:
+                continue
             hit = answers[r.website_domain]
             if not replaces(
                 new_source=WIKIDATA, new_as_of=hit.as_of,

@@ -37,7 +37,10 @@ import httpx
 from scripts.hub_daily import _post_retrying
 
 _BATCH = 500
-_WIKIDATA_BATCH = 400
+#: Three SPARQL queries per request (adapters/wikidata.BATCH = 40): at
+#: most ~95 s, far inside the 600 s client timeout, so a retry never
+#: overlaps a request still running.
+_WIKIDATA_BATCH = 120
 
 
 async def _ad_texts(client: httpx.AsyncClient, *, deadline: float) -> dict[str, int]:

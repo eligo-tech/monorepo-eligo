@@ -952,8 +952,8 @@ export function MarktScreen() {
   // own segment); this also hides firms whose NAME says Personalberatung,
   // Personaldienstleister or Zeitarbeit (backend `hub_companies.staffing_name`).
   const [hideAgencies, setHideAgencies] = useState(true)
-  // ELI-27 "Unternehmensgröße": there is no headcount in the corpus, so size is
-  // the employer's open ads there — labelled as such, never as employees.
+  // ELI-27: the employer's open ads in the corpus — labelled "Offene Stellen",
+  // never employees; the headcount is the ELI-54 filter below.
   const [size, setSize] = useState('')
   // ELI-54 "Mitarbeitende": a real headcount (the employer's own ads,
   // Wikidata, EURES), offered once the server says enough employers have one.
@@ -1099,6 +1099,11 @@ export function MarktScreen() {
   const techCount = facets.data?.families?.find((f) => f.value === 'tech')?.count ?? 0
   const techPending = facets.data?.families_pending ?? 0
   const headcount = headcountGate(facets.data?.headcount)
+  // The control disappears below 30 % coverage: a hidden filter must not keep
+  // narrowing the search.
+  useEffect(() => {
+    if (facets.data && !headcount.show && employees.length) setEmployees([])
+  }, [facets.data, headcount.show, employees.length])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1317,7 +1322,7 @@ export function MarktScreen() {
             <option value="l">{t('20–99 offene Stellen')}</option>
             <option value="xl">{t('100+ offene Stellen')}</option>
           </select>
-          {headcount.show ? (
+          {!facets.data ? null : headcount.show ? (
             <FacetFilter
               label={t('Mitarbeitende')}
               options={
@@ -1338,9 +1343,9 @@ export function MarktScreen() {
               {t('Größenfilter folgt – Größe bekannt für {n} % der Unternehmen', { n: headcount.percent })}
             </span>
           )}
-          {/* Not offered while Tech is on: a saved search cannot keep it yet,
+          {/* Not offered while Tech or a headcount is on: a saved search cannot keep them yet,
               and "Java" saved from "Java + Tech" would quietly widen. */}
-          {hasCriteria && !alreadySaved && !techOnly && (
+          {hasCriteria && !alreadySaved && !techOnly && employees.length === 0 && (
             <Button
               onClick={saveCurrent}
               title={t('Als Suchprofil merken — der nächtliche Lauf holt dafür gezielt neue Anzeigen')}

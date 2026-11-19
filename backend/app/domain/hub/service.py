@@ -2082,8 +2082,12 @@ async def search_employers(
     sizes_by: dict[str, dict] = {}
     for row in site_rows.all():
         ids.setdefault(row.normalized_name, []).append(row.id)
-        # ELI-54: the newest dated size any site carries, with its evidence.
-        if row.employees_min is not None:
+        # ELI-54: the newest dated size any site carries, with its evidence —
+        # with a headcount filter, of the sites it matched.
+        if row.employees_min is not None and (
+            not employees
+            or any(headcount.overlaps(row.employees_min, row.employees_max, b) for b in employees)
+        ):
             seen = sizes_by.get(row.normalized_name)
             as_of = headcount.as_utc(row.employees_as_of)
             if seen is None or (as_of or headcount.OLDEST) > (seen["as_of"] or headcount.OLDEST):

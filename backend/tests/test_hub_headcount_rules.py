@@ -35,7 +35,9 @@ def _one(text: str) -> tuple[int, int | None, str]:
         ("Wir beschäftigen ca. 80 Mitarbeiter*innen in Bayern.", (80, 80)),
         ("Als mittelständisches Unternehmen mit mehr als 3.000 Mitarbeiter:innen …", (3000, None)),
         ("Wir sind ein Team? Nein: ein Unternehmen mit 45 Angestellten.", (45, 45)),
-        ("Mit unseren 120 Kolleginnen und Kollegen gestalten wir die Pflege.", (120, 120)),
+        ("Als Familienunternehmen, das seit 1950 besteht, beschäftigen wir 300 Mitarbeiter.", (300, 300)),
+        ("Wir sind ein internationales Unternehmen mit 250 Mitarbeitern.", (250, 250)),
+        ("Mit über 2000 Mitarbeitern sind wir ein großer Arbeitgeber.", (2000, None)),
         ("Bei uns arbeiten zwischen 50 und 100 Beschäftigte.", (50, 100)),
         ("Mitarbeiterzahl: 51-200", (51, 200)),
         ("Unternehmensgröße: 1.001 – 5.000 Mitarbeiter", (1001, 5000)),
@@ -95,10 +97,47 @@ def test_a_worldwide_total_is_marked_as_such() -> None:
         # No employer context at all.
         "250 Mitarbeiter",
         "Menschen: 500 Menschen vertrauen uns täglich.",
+        # Colleagues you will work with, not the company (review of #301).
+        "Mit 2 Kollegen bildest du das Team.",
+        "Gemeinsam mit 4 Kollegen betreust du die Anlage.",
+        "Mit 2-3 Mitarbeitern arbeitest du zusammen.",
+        "Mit Ihren 5 Mitarbeitern betreuen Sie den Bereich.",
+        "Sie haben bereits Erfahrung mit 10 Mitarbeitern.",
+        # Hiring, absences, field staff.
+        "Wir stellen 5 Mitarbeiter ein.",
+        "Wir haben 5 neue Mitarbeiter eingestellt.",
+        "Wir haben 3 Mitarbeiter in Elternzeit.",
+        "Mit 3 Mitarbeitern im Außendienst sind wir unterwegs.",
+        "Wir bieten 40 Stunden und 2 Mitarbeitern im Homeoffice.",
+        # Not a number of people.
+        "Wir haben 24/7 Mitarbeiter im Einsatz.",
+        "Wir haben 2024 Mitarbeiter geehrt.",
+        # History, placements, a client's size.
+        "Wir sind 2019 mit 3 Mitarbeitern gestartet.",
+        "Als Personaldienstleister vermitteln wir jährlich 2.000 Mitarbeiter.",
+        "Our client is a company with 200 employees.",
     ],
 )
 def test_skips_what_is_not_the_employers_headcount(text: str) -> None:
     assert headcount.extract_statements(text) == []
+
+
+def test_today_wins_over_the_founding_figure() -> None:
+    found = headcount.extract_statements(
+        "Gegründet 1998 mit 5 Mitarbeitern, heute über 400 Mitarbeitende."
+    )
+    assert [(s.min, s.max) for s in found] == [(400, None)]
+
+
+def test_a_worldwide_marker_belongs_to_its_number_not_the_sentence() -> None:
+    found = headcount.extract_statements("Mit 12.000 Mitarbeitenden in Deutschland und 40.000 weltweit sind wir groß.")
+    assert [(s.min, s.scope) for s in found] == [(12000, "local")]
+
+
+def test_a_target_group_is_not_a_parent_group() -> None:
+    assert headcount.extract_statements(
+        "Unsere Zielgruppe sind Familien, und mit rund 250 Mitarbeitenden sind wir für sie da."
+    )
 
 
 def test_nothing_in_an_empty_text() -> None:
@@ -143,6 +182,14 @@ def test_a_worldwide_total_is_used_only_when_nothing_else_is_said() -> None:
 
 
 # --- buckets ---------------------------------------------------------------------------
+
+
+def test_the_route_offers_the_same_buckets() -> None:
+    from typing import get_args
+
+    from app.domain.hub.router import HeadcountBucket
+
+    assert list(get_args(HeadcountBucket)) == list(headcount.BUCKETS)
 
 
 def test_the_ten_buckets_of_the_ticket() -> None:
