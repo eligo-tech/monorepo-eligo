@@ -62,6 +62,9 @@ async def test_kein_interesse_takes_the_lead_off_the_list_and_keeps_everything(m
     page = await _contacts()
     assert page["rows"] == [] and page["total"] == 0
     assert page["no_interest_total"] == 1
+    # The chip counts under the same search as the list.
+    assert (await _contacts(q="forschner"))["no_interest_total"] == 1
+    assert (await _contacts(q="niemand"))["no_interest_total"] == 0
 
     # Under the filter, with the date and the last call.
     hidden = await _contacts(no_interest=True)

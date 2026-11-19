@@ -305,13 +305,20 @@ export function ContactsPanel({
     }
     const companyId = data.company_id
     if (companyId) {
-      await withReaddConfirm((override) => api.createManager({
-        ...person,
-        override_suppression: override || undefined,
-        company_id: companyId,
-        first_name: contact.first_name,
-        last_name: contact.last_name,
-      }))
+      try {
+        await withReaddConfirm((override) => api.createManager({
+          ...person,
+          override_suppression: override || undefined,
+          company_id: companyId,
+          first_name: contact.first_name,
+          last_name: contact.last_name,
+        }))
+      } catch (e) {
+        // ELI-60: already here with "Kein Interesse" — re-read so the row
+        // shows the status instead of "Übernehmen"; the row says why.
+        if (e instanceof ApiError && e.status === 409 && e.message.includes('no_interest')) setReloadKey((k) => k + 1)
+        throw e
+      }
     } else {
       // Not adopted yet: the first saved contact adopts the employer too.
       // That crossing goes through the verification gate and leaves a receipt.

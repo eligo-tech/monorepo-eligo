@@ -384,13 +384,8 @@ async def contacts(
         # moved to Managers.
         .where(Manager.tenant_id == tenant_id, Company.tenant_id == tenant_id, Manager.stage == "bus_dev")
     )
-    # ELI-60: "Kein Interesse" leaves the list; the filter shows only them.
-    shelved = Manager.no_interest_at.is_not(None) if no_interest else Manager.no_interest_at.is_(None)
-    hidden = base.where(Manager.no_interest_at.is_not(None))
-    base = base.where(shelved)
     if company_id is not None:
         base = base.where(Manager.company_id == company_id)
-        hidden = hidden.where(Manager.company_id == company_id)
     if company_name and company_name.strip():
         base = base.where(func.lower(Company.name).like(_contains(company_name), escape="\\"))
     if q and q.strip():
@@ -400,6 +395,11 @@ async def contacts(
             func.lower(Company.name).like(like, escape="\\"),
             func.lower(func.coalesce(Manager.role_title, "")).like(like, escape="\\"),
         ))
+    # ELI-60: "Kein Interesse" leaves the list; the filter shows only them.
+    # The chip counts them under the same company and search.
+    shelved = Manager.no_interest_at.is_not(None) if no_interest else Manager.no_interest_at.is_(None)
+    hidden = base.where(Manager.no_interest_at.is_not(None))
+    base = base.where(shelved)
     if due_only:
         base = base.where(
             Manager.do_not_contact_at.is_(None),
