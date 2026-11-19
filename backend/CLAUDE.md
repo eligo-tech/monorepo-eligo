@@ -286,7 +286,7 @@ These are enforced in code. Do not route around them.
   column check on it, never a name scan per request. Size (`size=s|m|l|xl`)
   is the employer's open ads in the corpus over ALL its sites (1–4 · 5–19 ·
   20–99 · 100+) — the UI says "Offene Stellen", never "Mitarbeiter".
-- **Employer headcount** (ELI-54, `hub/headcount.py`, migration 0081):
+- **Employer headcount** (ELI-54, `hub/headcount.py`, migration 0082):
   `hub_companies.employees_min/max` (max NULL = open-ended) with provenance
   (`employees_source` ad_text · wikidata · eures, `_source_ref` = `<source>:
   <ad id>` or QID, `_evidence` = the quoted sentence, `_as_of`, `_rules`).
