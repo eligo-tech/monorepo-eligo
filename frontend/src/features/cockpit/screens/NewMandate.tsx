@@ -43,6 +43,7 @@ import {
   TextInput,
 } from '../ui/forms'
 import { Label } from '../ui/primitives'
+import { existingCompanyId } from '../ui/companyList'
 import { ContactFields, EMPTY_CONTACT, contactPayload, type ContactDraft } from '../ui/contactFields'
 
 
@@ -310,7 +311,16 @@ export function NewMandate({
     try {
       let client = companyId
       if (!client && newClient) {
-        client = (await api.createCompany({ name: newClient })).id
+        // ELI-43: a client made here is a Kunde by a person's decision; one
+        // already here under that name (409) is that client, not a second one.
+        client = await api
+          .createCompany({ name: newClient, status: 'client' })
+          .then((c) => c.id)
+          .catch((e: unknown) => {
+            const id = e instanceof Error ? existingCompanyId(e.message) : null
+            if (id) return id
+            throw e
+          })
         // Kept at once: if the contact below is refused (an erased person,
         // a failure), saving again must not create this client a second time.
         setCompanyId(client)

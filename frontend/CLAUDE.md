@@ -97,6 +97,11 @@ ELI-33) lists EVERY company of the workspace — Alle / Kunden (≥1 manager) /
 Leads (≥1 bus-dev contact, or taken from Markt with "Übernehmen" and no
 contact/manager yet — `markt_lead`, ELI-31; the Markt card then links
 "✓ Lead · öffnen" to `#companies/<id>`); not `is_client`, which imports set on every row —
+unless a person set Lead / Kunde (ELI-43: "+ Unternehmen" with Name · Ort ·
+Website · Status, or the Status switch on the company page; `status` on the
+row, backed by a committed `is_client` record) — then that decision wins;
+a create with Name + Ort links the same-name same-town Markt employer at once,
+a duplicate answers 409 and the form offers "Vorhandenes Unternehmen öffnen" —
 and one page per company (`#companies/<id>`): managers, leads, mandates, the
 Impressum switchboard, the open jobs in Markt and the careers page
 (`companies/market.py`; also in the manager page's sidebar), "Manager hinzufügen".

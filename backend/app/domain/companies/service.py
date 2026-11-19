@@ -5,12 +5,16 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.domain.companies.models import Company
+from app.domain.common.enums import ConfidenceSource
 from app.domain.companies.schemas import CompanyCreate
+from app.domain.hub.resolution import normalize_company_name, normalize_domain
+from app.domain.verification import service as verification
+from app.domain.verification.schemas import ProposedChange
 
 
 async def list_companies(
@@ -36,23 +40,163 @@ async def get_company(
     return result.scalar_one_or_none()
 
 
+class CompanyExists(ValueError):
+    """ELI-43: the workspace already has this company (same name, and the
+    same town when one was given)."""
+
+    def __init__(self, company_id: uuid.UUID) -> None:
+        super().__init__(f"company exists as {company_id}")
+        self.company_id = company_id
+
+
+def _name_key(name: str) -> str:
+    return normalize_company_name(name) or name.strip().casefold()
+
+
+async def find_existing(
+    session: AsyncSession, *, tenant_id: uuid.UUID, name: str, location: str | None
+) -> Company | None:
+    """The workspace's company of the same normalized name — in the same town
+    when a town is given (a same-name firm elsewhere is another company)."""
+    from app.domain.companies.market import town_key
+
+    key, town = _name_key(name), town_key(location)
+    rows = (
+        await session.scalars(
+            select(Company).where(Company.tenant_id == tenant_id).order_by(Company.created_at, Company.id)
+        )
+    ).all()
+    for row in rows:
+        if _name_key(row.name) != key:
+            continue
+        if town is None or town_key(row.location) == town:
+            return row
+    return None
+
+
+async def _record_status(
+    session: AsyncSession, *, company: Company, status: str, actor: str | None
+) -> None:
+    """A person's Lead / Kunde, through the verification gate: an
+    `is_client` record + VERIFY/WRITE receipts naming the person. That record
+    is what makes the status a decision (see `_decided`). Does not commit."""
+    from app.domain.hub.models import HubCompanyLink
+
+    value = status == "client"
+
+    async def _apply(_session: AsyncSession, _change: ProposedChange) -> None:
+        company.is_client = value
+        # The workspace's Markt links say the same.
+        for link in (
+            await _session.scalars(
+                select(HubCompanyLink).where(
+                    HubCompanyLink.tenant_id == company.tenant_id, HubCompanyLink.company_id == company.id
+                )
+            )
+        ).all():
+            link.relationship = "client" if value else "prospect"
+
+    result = await verification.verify_and_commit(
+        session,
+        change=ProposedChange(
+            tenant_id=company.tenant_id,
+            entity_type="company",
+            entity_id=company.id,
+            field="is_client",
+            proposed_value="true" if value else "false",
+            source=ConfidenceSource.HUMAN_VERIFIED,
+            source_detail="Status Lead/Kunde von Hand gesetzt",
+            confidence=1.0,
+        ),
+        agent="recruiter_manual_edit",
+        apply_hook=_apply,
+        actor=actor,
+    )
+    if not result.committed:  # never at confidence 1.0 — but never silently either
+        await session.rollback()
+        raise RuntimeError(f"company status not committed: {result.reason}")
+
+
 async def create_company(
-    session: AsyncSession, *, data: CompanyCreate
+    session: AsyncSession, *, data: CompanyCreate, actor: str | None = None
 ) -> Company:
+    """A company typed in by a person (ELI-43, and the new client of a new
+    mandate). Refuses a duplicate with `CompanyExists`. With a town, a Markt
+    employer of the same name in the same town is linked at once — the
+    daily linker's own rule (`market.exact_matches`), so its job ads and
+    Impressum show from the first page view; without one nothing is linked
+    (a name alone is ambiguous)."""
+    from app.domain.companies import market
+
+    tenant_id = data.tenant_id or settings.default_tenant_id
+    existing = await find_existing(session, tenant_id=tenant_id, name=data.name, location=data.location)
+    if existing is not None:
+        raise CompanyExists(existing.id)
     company = Company(
-        tenant_id=data.tenant_id or settings.default_tenant_id,
+        tenant_id=tenant_id,
         name=data.name,
-        domain=data.domain,
+        domain=data.domain or normalize_domain(data.website),
         industry=data.industry,
         location=data.location,
         is_client=data.is_client,
-        source=data.source,
+        source=data.source or "manual",
         bd_signals=data.bd_signals,
     )
     session.add(company)
+    await session.flush()
+    if data.status is not None:
+        await _record_status(session, company=company, status=data.status, actor=actor)
+    await session.commit()
+    await session.refresh(company)
+    if data.location:
+        for row, sites in await market.exact_matches(session, tenant_id, company_ids=[company.id]):
+            towns = sorted({h.city or h.postal_code or "" for h in sites})
+            await market.link(
+                session,
+                tenant_id=tenant_id,
+                company=row,
+                sites=sites,
+                basis=f"same name and town ({', '.join(towns)[:120]}), on create",
+                agent="company_market_link",
+                actor=actor,
+            )
+        await session.refresh(company)
+    return company
+
+
+async def set_status(
+    session: AsyncSession, *, tenant_id: uuid.UUID, company_id: uuid.UUID, status: str, actor: str | None
+) -> Company:
+    """ELI-43: Lead / Kunde on the company page. Raises LookupError for a
+    company not in this workspace."""
+    company = await get_company(session, tenant_id=tenant_id, company_id=company_id)
+    if company is None:
+        raise LookupError(str(company_id))
+    await _record_status(session, company=company, status=status, actor=actor)
     await session.commit()
     await session.refresh(company)
     return company
+
+
+def _decided():
+    """True where a person set Lead / Kunde (ELI-43): a committed `is_client`
+    record. Then `is_client` is that decision; elsewhere it is not (imports
+    set it on every row) and the counts decide."""
+    from app.domain.verification.models import EnrichmentRecord
+
+    return (
+        select(EnrichmentRecord.id)
+        .where(
+            EnrichmentRecord.tenant_id == Company.tenant_id,
+            EnrichmentRecord.entity_type == "company",
+            EnrichmentRecord.entity_id == Company.id,
+            EnrichmentRecord.field == "is_client",
+            EnrichmentRecord.committed.is_(True),
+        )
+        .correlate(Company)
+        .exists()
+    )
+
 
 # ---------------------------------------------------------------------------
 # Unternehmen (ELI-33): every company of the workspace, and one page each.
@@ -64,6 +208,9 @@ async def create_company(
 #: ELI-31: a company taken from Markt with "Übernehmen" and no contact yet
 #: (source `hub:…`, `is_client = false` since ELI-36, no manager) is a Lead
 #: too — the Markt card says "✓ Lead", so the Leads filter has to show it.
+#: ELI-43: where a person set Lead / Kunde (`_decided`), that decision wins:
+#: a Kunde is under Kunden without a manager, a Lead under Leads without a
+#: contact, and a company called Lead is not a Kunde for its managers.
 OVERVIEW_KINDS = ("all", "clients", "leads")
 
 
@@ -111,14 +258,24 @@ async def overview(
     markt_lead = and_(
         Company.source.like("hub:%"), Company.is_client.is_(False), _count_people("manager") == 0
     )
+    decided = _decided()
+    status = case((decided, case((Company.is_client.is_(True), "client"), else_="lead")), else_=None)
     stmt = select(
         Company.id, Company.name, Company.location, managers, leads, mandates, last_contact,
-        markt_lead.label("markt_lead"),
+        markt_lead.label("markt_lead"), status.label("status"),
     ).where(Company.tenant_id == tenant_id)
     if kind == "clients":
-        stmt = stmt.where(_count_people("manager") > 0)
+        stmt = stmt.where(
+            or_(and_(decided, Company.is_client.is_(True)), and_(not_(decided), _count_people("manager") > 0))
+        )
     elif kind == "leads":
-        stmt = stmt.where(or_(_count_people("bus_dev") > 0, markt_lead))
+        stmt = stmt.where(
+            or_(
+                _count_people("bus_dev") > 0,
+                and_(decided, Company.is_client.is_(False)),
+                and_(not_(decided), markt_lead),
+            )
+        )
     if q and q.strip():
         needle = q.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         stmt = stmt.where(func.lower(Company.name).like(f"%{needle}%", escape="\\"))
@@ -135,12 +292,27 @@ async def overview(
             "leads": int(r.leads or 0),
             "mandates": int(r.mandates or 0),
             "markt_lead": bool(r.markt_lead),
+            "status": r.status,
             "last_contact_at": _aware(r.last_contact_at),
             # ELI-33 step 2b: Markt sites of the same name to confirm or dismiss.
             "to_review": review.get(r.id, 0),
         }
         for r in rows
     ]
+
+
+async def _page_status(session: AsyncSession, company: Company, people) -> str | None:
+    """Kunde / Lead for one company: a person's decision, else the overview's
+    rule (manager → Kunde; new contact or taken from Markt → Lead)."""
+    decided = await session.scalar(select(_decided()).select_from(Company).where(Company.id == company.id))
+    if decided:
+        return "client" if company.is_client else "lead"
+    stages = {m.stage for m, _ in people}
+    if "manager" in stages:
+        return "client"
+    if "bus_dev" in stages or ((company.source or "").startswith("hub:") and not company.is_client):
+        return "lead"
+    return None
 
 
 def _aware(value):
@@ -203,6 +375,7 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
             "domain": company.domain,
             "industry": company.industry,
             "source": company.source,
+            "status": await _page_status(session, company, people),
         },
         "managers": [person(m, at) for m, at in people if m.stage != "bus_dev"],
         "leads": [person(m, at) for m, at in people if m.stage == "bus_dev"],

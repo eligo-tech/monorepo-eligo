@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { alreadyAdoptedId, companyHref, filterCompanies, kindCounts } from './companyList'
+import {
+  alreadyAdoptedId,
+  companyHref,
+  existingCompanyId,
+  filterCompanies,
+  kindCounts,
+  newCompanyPayload,
+} from './companyList'
 
 // ELI-33: Unternehmen lists every company — clients and lead companies.
 const row = (name: string, managers: number, leads: number, location: string | null = null, to_review = 0) => ({
@@ -52,5 +59,38 @@ describe('where an adopted company lives', () => {
     const id = '0b0c7d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e'
     expect(alreadyAdoptedId(`{"detail":"already adopted as company ${id}"}`)).toBe(id)
     expect(alreadyAdoptedId('{"detail":"no corpus company"}')).toBeNull()
+  })
+})
+
+// ELI-43: "+ Unternehmen" — Lead or Kunde is a person's decision, and the
+// filters go by it: a new Lead without a contact is under Leads, a new Kunde
+// without a manager under Kunden, a company called Lead is no Kunde.
+describe('a status set by a person', () => {
+  it('decides the filters', () => {
+    const lead = { ...row('Neulead GmbH', 0, 0), status: 'lead' as const }
+    const kunde = { ...row('Neukunde AG', 0, 0), status: 'client' as const }
+    const demoted = { ...row('Import KG', 3, 0), status: 'lead' as const }
+    const all = [lead, kunde, demoted]
+    expect(filterCompanies(all, 'leads', '').map((r) => r.name)).toEqual(['Neulead GmbH', 'Import KG'])
+    expect(filterCompanies(all, 'clients', '').map((r) => r.name)).toEqual(['Neukunde AG'])
+    expect(kindCounts(all)).toMatchObject({ clients: 1, leads: 2 })
+  })
+})
+
+describe('the new-company form', () => {
+  it('needs a name and sends trimmed fields, blank ones as null, Lead by default', () => {
+    expect(newCompanyPayload({ name: '  ', location: 'Ulm', website: '', status: 'lead' })).toBeNull()
+    expect(newCompanyPayload({ name: ' Neu GmbH ', location: ' ', website: ' neu.de ', status: 'lead' })).toEqual({
+      name: 'Neu GmbH', location: null, website: 'neu.de', status: 'lead', is_client: false,
+    })
+    expect(newCompanyPayload({ name: 'Kunde AG', location: 'Ulm', website: '', status: 'client' })).toEqual({
+      name: 'Kunde AG', location: 'Ulm', website: null, status: 'client', is_client: true,
+    })
+  })
+
+  it('reads the existing company out of the 409 so it can be opened', () => {
+    const id = '0b0c7d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e'
+    expect(existingCompanyId(`{"detail":"company exists as ${id}"}`)).toBe(id)
+    expect(existingCompanyId('{"detail":"nope"}')).toBeNull()
   })
 })

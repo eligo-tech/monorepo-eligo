@@ -16,6 +16,8 @@ import type {
   CompanyDTO,
   CompanyOverviewRowDTO,
   CompanyPageDTO,
+  CompanyStatus,
+  NewCompanyPayload,
   CVExtractionResultDTO,
   HubCompanyLinkDTO,
   HubCorpusStatsDTO,
@@ -163,10 +165,17 @@ export const api = {
 
   /** A new client. Needed before a mandate can hang off one, and there was
    *  no way to do it from the UI at all. */
-  createCompany: (body: { name: string; is_client?: boolean; website?: string | null }) =>
+  createCompany: (body: Partial<NewCompanyPayload> & { name: string }) =>
     request<CompanyDTO>('/companies', {
       method: 'POST',
       body: JSON.stringify({ is_client: true, ...body }),
+    }),
+
+  /** ELI-43: Lead / Kunde on the company page — a receipt names the person. */
+  setCompanyStatus: (id: string, status: CompanyStatus) =>
+    request<CompanyPageDTO>(`/companies/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
     }),
 
   /** A new mandate. `POST /jobs` has always existed; nothing called it. */

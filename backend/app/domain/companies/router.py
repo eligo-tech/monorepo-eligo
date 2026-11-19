@@ -13,7 +13,14 @@ from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.companies import service
 from app.domain.companies import market
-from app.domain.companies.schemas import CompanyCreate, CompanyOverviewRow, CompanyPage, CompanyRead, MarketSites
+from app.domain.companies.schemas import (
+    CompanyCreate,
+    CompanyOverviewRow,
+    CompanyPage,
+    CompanyRead,
+    CompanyStatusUpdate,
+    MarketSites,
+)
 from app.domain.hub.schemas import Switchboard
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -150,9 +157,31 @@ async def get_company(
 @router.post("", response_model=CompanyRead, status_code=status.HTTP_201_CREATED)
 async def create_company(
     payload: CompanyCreate,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> CompanyRead:
-    payload.tenant_id = tenant_id  # force the authenticated tenant
-    row = await service.create_company(db, data=payload)
+    """A company typed in by a person (ELI-43 "+ Unternehmen", a new
+    mandate's client). 409 "company exists as <id>" for a duplicate."""
+    payload.tenant_id = actor.tenant_id  # force the authenticated tenant
+    try:
+        row = await service.create_company(db, data=payload, actor=actor.name)
+    except service.CompanyExists as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     return CompanyRead.model_validate(row)
+
+
+@router.put("/{company_id}/status", response_model=CompanyPage)
+async def set_company_status(
+    company_id: uuid.UUID,
+    payload: CompanyStatusUpdate,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> CompanyPage:
+    """ELI-43: Lead / Kunde on the company page — a receipt names the person."""
+    try:
+        await service.set_status(
+            db, tenant_id=actor.tenant_id, company_id=company_id, status=payload.status, actor=actor.name
+        )
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found") from exc
+    return await _page_or_404(db, actor.tenant_id, company_id)
