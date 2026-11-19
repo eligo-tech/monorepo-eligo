@@ -34,6 +34,10 @@ class ManagerInteractionCreate(BaseModel):
     #: ELI-22 call list: how the call ended, and when to call again.
     outcome: CallOutcome | None = None
     next_action_at: dt.datetime | None = None
+    #: ELI-32: the person asked not to be contacted again. Saved with the
+    #: note, in the same transaction, with a receipt — the note is the
+    #: history of the request.
+    do_not_contact: bool = False
 
     @model_validator(mode="after")
     def _outcome_belongs_to_a_call(self) -> "ManagerInteractionCreate":
@@ -221,6 +225,9 @@ class ManagerRead(BaseModel):
     #: "bus_dev" | "manager" (ELI-23).
     stage: str = "manager"
     promoted_at: dt.datetime | None = None
+    #: ELI-32: marked "Nicht mehr kontaktieren", and why (a code).
+    do_not_contact_at: dt.datetime | None = None
+    do_not_contact_reason: str | None = None
     created_at: dt.datetime
 
     # --- detail, from the source's own profile ----------------------------

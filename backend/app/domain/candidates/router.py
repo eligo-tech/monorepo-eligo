@@ -181,11 +181,14 @@ async def list_candidate_interactions(
 async def log_candidate_interaction(
     candidate_id: uuid.UUID,
     payload: ManagerInteractionCreate,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> ManagerInteractionRead:
+    # Who wrote it, as on a manager's note (ELI-15) — and ELI-32's
+    # "Nicht mehr kontaktieren" is a person's act that must name them.
     row = await managers_service.log_candidate_interaction(
-        db, tenant_id=tenant_id, candidate_id=candidate_id, payload=payload
+        db, tenant_id=actor.tenant_id, candidate_id=candidate_id, payload=payload,
+        actor_user_id=actor.user_id, actor_name=actor.name,
     )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "candidate not found")

@@ -40,6 +40,9 @@ export interface CandidateDTO {
   id: string
   tenant_id: string
   full_name: string
+  /** ELI-32: marked "Nicht mehr kontaktieren" — when, and why (a code). */
+  do_not_contact_at?: string | null
+  do_not_contact_reason?: string | null
   email: string
   phone: string | null
   current_title: string | null
@@ -115,7 +118,13 @@ export interface EraseBody {
   reason: 'erasure' | 'objection'
   /** The day the person asked, YYYY-MM-DD. */
   requested_on: string
+  /** ELI-32: e-mail the person a confirmation, to the address read before
+   *  the erasure removes it. */
+  send_confirmation?: boolean
 }
+
+/** ELI-32: what became of the confirmation the erasure was asked to send. */
+export type ErasureConfirmation = 'sent' | 'failed' | 'not_configured' | 'no_email'
 
 /** One handled erasure request. Names nobody. */
 export interface ErasureRequestDTO {
@@ -131,6 +140,16 @@ export interface ErasureRequestDTO {
   lifted: number
   last_lifted_at: string | null
   last_lifted_by: string | null
+  /** On the erase response only; null when no confirmation was asked for. */
+  confirmation?: ErasureConfirmation | null
+}
+
+/** ELI-32: one person's "Nicht mehr kontaktieren" mark. */
+export interface DoNotContactDTO {
+  subject_type: 'candidate' | 'manager'
+  id: string
+  do_not_contact_at: string | null
+  do_not_contact_reason: string | null
 }
 
 export interface CandidateUpdatePayload {
@@ -415,6 +434,9 @@ export interface ManagerDTO {
   art14_outstanding: boolean
   notes: string | null
   status: string
+  /** ELI-32: marked "Nicht mehr kontaktieren" — when, and why (a code). */
+  do_not_contact_at?: string | null
+  do_not_contact_reason?: string | null
   created_at: string
   /** "MNGR197" — the reference a recruiter reads out on a call. */
   external_code?: string | null
@@ -1172,6 +1194,8 @@ export interface ContactRowDTO {
   source: string
   source_detail: string | null
   art14_outstanding: boolean
+  /** ELI-32: marked "Nicht mehr kontaktieren" — shown, never due. */
+  do_not_contact_at?: string | null
   last_outcome: string | null
   last_call_at: string | null
   last_call_by: string | null

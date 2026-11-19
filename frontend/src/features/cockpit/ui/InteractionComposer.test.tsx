@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import { t } from '@/i18n'
 
-import { InteractionComposer, composeEntry } from './InteractionComposer'
+import { InteractionComposer, canSaveNote, composeEntry } from './InteractionComposer'
 import { MANAGER_INTERACTION_KINDS } from './interactionKinds'
 
 // ELI-40. No DOM test environment here, so the composer is rendered to markup
@@ -45,5 +45,45 @@ describe('composeEntry', () => {
     expect(composeEntry('business_call', 'erreicht', '2026-11-20', '14:30').occurred_at).toBe(
       new Date('2026-11-20T12:00:00').toISOString(),
     )
+  })
+})
+
+// ELI-32: the two Datenschutz outcomes.
+describe('privacy outcomes', () => {
+  const withPrivacy = (canErase: boolean) =>
+    renderToStaticMarkup(
+      <InteractionComposer
+        kinds={MANAGER_INTERACTION_KINDS}
+        onSave={async () => undefined}
+        onCancel={() => undefined}
+        privacy={{ onErase: () => undefined, canErase }}
+      />,
+    )
+
+  it('offers "Nicht mehr kontaktieren" and "Löschen (DSGVO)" only where the page passes them', () => {
+    const html = withPrivacy(true)
+    expect(html).toContain(t('Nicht mehr kontaktieren'))
+    expect(html).toContain(t('Löschen (DSGVO)'))
+    expect(render('note')).not.toContain(t('Löschen (DSGVO)'))
+  })
+
+  it('saves "Nicht mehr kontaktieren" with the note, even without text', () => {
+    expect(composeEntry('business_call', '', '2026-11-20', '14:30', 'do_not_contact')).toMatchObject({
+      interaction_type: 'business_call',
+      summary: 'Möchte nicht mehr kontaktiert werden.',
+      do_not_contact: true,
+    })
+    expect(composeEntry('note', ' Bitte keine Anrufe ', '2026-11-20', '', 'do_not_contact').summary).toBe(
+      'Bitte keine Anrufe',
+    )
+    expect(composeEntry('note', 'x', '2026-11-20', '')).not.toHaveProperty('do_not_contact')
+  })
+
+  it('needs text for an ordinary note, none for the privacy outcomes', () => {
+    expect(canSaveNote('', '')).toBe(false)
+    expect(canSaveNote('  ', '')).toBe(false)
+    expect(canSaveNote('erreicht', '')).toBe(true)
+    expect(canSaveNote('', 'do_not_contact')).toBe(true)
+    expect(canSaveNote('', 'erase')).toBe(true)
   })
 })

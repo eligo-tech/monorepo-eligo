@@ -93,6 +93,8 @@ class ContactRow(BaseModel):
     source: str
     source_detail: str | None
     art14_outstanding: bool
+    #: ELI-32: marked "Nicht mehr kontaktieren" — shown, never due.
+    do_not_contact_at: dt.datetime | None = None
     last_outcome: str | None
     last_call_at: dt.datetime | None
     last_call_by: str | None

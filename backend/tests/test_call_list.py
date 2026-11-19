@@ -423,3 +423,26 @@ def test_a_prefixed_international_number_is_the_national_one() -> None:
 
     assert phone_value("Tel. +49 30 1234567") == phone_value("030 1234567") == "0301234567"
 
+
+async def test_a_lead_marked_do_not_contact_is_not_offered_again_from_markt(market) -> None:
+    """ELI-32: Weber was taken into the workspace from Markt but never called;
+    once he asks not to be contacted, the market tab must not offer him."""
+    from app.domain.hub.models import HubCompanyLink
+
+    async with SessionLocal() as s:
+        company = Company(tenant_id=TENANT, name="Gasthaus Linde GmbH")
+        s.add(company)
+        await s.flush()
+        s.add(HubCompanyLink(tenant_id=TENANT, hub_company_id=market["linde"], company_id=company.id))
+        weber = Manager(tenant_id=TENANT, company_id=company.id, full_name="Jan Weber", first_name="Jan",
+                        last_name="Weber", stage="bus_dev")
+        s.add(weber)
+        await s.commit()
+    assert "Weber" in {r["last_name"] for r in await _market()}
+    async with SessionLocal() as s:
+        (await s.get(Manager, weber.id)).do_not_contact_at = NOW
+        await s.commit()
+    assert "Weber" not in {r["last_name"] for r in await _market()}
+    # Another workspace's market tab is not affected.
+    assert "Weber" in {r["last_name"] for r in await _market(tenant=OTHER)}
+

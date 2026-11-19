@@ -16,9 +16,16 @@
 // Termin — the date gets a time next to it, and the saved row shows up in the
 // manager's Termine tab. Same row, same endpoint: the calendar is a view of
 // the notes, not a second copy of them. Every other kind saves as before.
+//
+// ELI-32: a page may pass `privacy`, which adds a "Datenschutz" choice —
+// "Nicht mehr kontaktieren" saves the note with the mark (one request, one
+// transaction, one receipt), "Löschen (DSGVO)" saves nothing and opens the
+// page's erase dialog instead: a note about to be erased is pointless.
 
 import { useState } from 'react'
-import { CalendarPlus } from 'lucide-react'
+import { CalendarPlus, ShieldAlert } from 'lucide-react'
+
+import { cn } from '@/lib/cn'
 
 import { t } from '@/i18n'
 import { Button } from './forms'
@@ -31,14 +38,44 @@ import { isAppointmentKind, nextFullHour, occurredAt } from './appointments'
  *  which is UTC and filed a note written at 00:30 under yesterday (ELI-53). */
 export const composerToday = (now: Date = new Date()) => berlinIsoDate(now)
 
+/** ELI-32: the Datenschutz outcome of a note — none, the mark, or erasure. */
+export type PrivacyAction = '' | 'do_not_contact' | 'erase'
+
+/** Stored when "Nicht mehr kontaktieren" is saved without words. Data, not
+ *  copy: it is the note's text and stays German in both languages. */
+export const DO_NOT_CONTACT_SUMMARY = 'Möchte nicht mehr kontaktiert werden.'
+
+export interface ComposedEntry {
+  interaction_type: string
+  summary: string
+  occurred_at: string
+  do_not_contact?: boolean
+}
+
 /** What the composer hands to `onSave`. The time counts only for a Termin;
  *  any other kind keeps the date-only, midday-pinned behaviour. */
-export function composeEntry(kind: string, text: string, date: string, time: string) {
-  return {
+export function composeEntry(
+  kind: string,
+  text: string,
+  date: string,
+  time: string,
+  privacy: PrivacyAction = '',
+): ComposedEntry {
+  const entry: ComposedEntry = {
     interaction_type: kind,
     summary: text.trim(),
     occurred_at: occurredAt(date, isAppointmentKind(kind) ? time : null),
   }
+  if (privacy === 'do_not_contact') {
+    entry.do_not_contact = true
+    if (!entry.summary) entry.summary = DO_NOT_CONTACT_SUMMARY
+  }
+  return entry
+}
+
+/** An ordinary note needs words; the two privacy outcomes do not. */
+export function canSaveNote(text: string, privacy: PrivacyAction): boolean {
+  return privacy !== '' || text.trim() !== ''
 }
 
 export function InteractionComposer({
@@ -46,6 +83,7 @@ export function InteractionComposer({
   onSave,
   onCancel,
   defaultKind,
+  privacy,
 }: {
   /** The vocabulary for the thing being annotated — `MANAGER_INTERACTION_KINDS`
    *  or `CANDIDATE_INTERACTION_KINDS`. Neither is a subset of the other:
@@ -53,13 +91,12 @@ export function InteractionComposer({
    *  manager, so one shared list would offer each half the wrong options. */
   kinds: readonly string[]
   /** Resolves when the row is written; rejects to show the error. */
-  onSave: (entry: {
-    interaction_type: string
-    summary: string
-    occurred_at: string
-  }) => Promise<unknown>
+  onSave: (entry: ComposedEntry) => Promise<unknown>
   onCancel: () => void
   defaultKind?: string
+  /** ELI-32: offer the Datenschutz outcomes. `onErase` opens the page's
+   *  erase dialog; `canErase` is false for non-admins, who are told so. */
+  privacy?: { onErase: () => void; canErase: boolean }
 }) {
   const [kind, setKind] = useState<string>(defaultKind ?? kinds[0])
   const [text, setText] = useState('')
@@ -68,14 +105,19 @@ export function InteractionComposer({
   const appointment = isAppointmentKind(kind)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [action, setAction] = useState<PrivacyAction>('')
+  const erase = action === 'erase'
 
   async function save() {
-    const summary = text.trim()
-    if (!summary || busy) return
+    if (!canSaveNote(text, action) || busy) return
+    if (erase) {
+      if (privacy?.canErase) privacy.onErase()
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      await onSave(composeEntry(kind, summary, when, at))
+      await onSave(composeEntry(kind, text, when, at, action))
       setText('')
     } catch {
       setError(t('Nicht gespeichert — bitte erneut versuchen.'))
@@ -133,16 +175,52 @@ export function InteractionComposer({
             {t('→ wird unter Termine eingetragen')}
           </span>
         )}
+        {privacy && (
+          <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
+            {t('Datenschutz')}
+            <select
+              value={action}
+              onChange={(e) => setAction(e.target.value as PrivacyAction)}
+              className={cn(
+                'rounded-md border bg-cockpit-surface px-2 py-1 font-sans text-[13px] normal-case tracking-normal focus:outline-none',
+                action ? 'border-coral-600 text-coral-300' : 'border-cockpit-line text-cockpit-text focus:border-cockpit-edge',
+              )}
+            >
+              <option value="">—</option>
+              <option value="do_not_contact">{t('Nicht mehr kontaktieren')}</option>
+              <option value="erase">{t('Löschen (DSGVO)')}</option>
+            </select>
+          </label>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Button tone="ghost" onClick={onCancel} disabled={busy}>
             {t('Abbrechen')}
           </Button>
-          <Button tone="primary" onClick={() => void save()} disabled={busy || !text.trim()}>
-            <CalendarPlus className="h-4 w-4" />
-            {busy ? t('Speichert…') : t('Ereignis speichern')}
-          </Button>
+          {erase ? (
+            <Button tone="primary" onClick={() => void save()} disabled={!privacy?.canErase}>
+              <ShieldAlert className="h-4 w-4" />
+              {t('Löschdialog öffnen')}
+            </Button>
+          ) : (
+            <Button tone="primary" onClick={() => void save()} disabled={busy || !canSaveNote(text, action)}>
+              <CalendarPlus className="h-4 w-4" />
+              {busy ? t('Speichert…') : t('Ereignis speichern')}
+            </Button>
+          )}
         </div>
       </div>
+      {action === 'do_not_contact' && (
+        <p className="text-[12px] text-coral-300">
+          {t('Die Person bleibt gespeichert, erscheint aber nicht mehr in Anruf- und Wiedervorlagelisten.')}
+        </p>
+      )}
+      {erase && (
+        <p className="text-[12px] text-coral-300">
+          {privacy?.canErase
+            ? t('Es wird keine Notiz gespeichert — der Löschdialog öffnet sich mit „Löschung verlangt (Art. 17)“ und dem heutigen Datum.')
+            : t('Nur Administratoren dürfen Personen löschen. Bitte einen Admin informieren — bis dahin „Nicht mehr kontaktieren“ wählen.')}
+        </p>
+      )}
       {error && <p className="text-[12px] text-coral-400">{error}</p>}
     </div>
   )

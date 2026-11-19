@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '@/api/client'
+import { t } from '@/i18n'
 
-import { namesMatch, suppressedOn, summary, todayIso, unprotected } from './erasureView'
+import {
+  confirmationNote,
+  describeConfirmationError,
+  namesMatch,
+  suppressedOn,
+  summary,
+  todayIso,
+  unprotected,
+} from './erasureView'
 
 const err = (status: number, detail: unknown) => new ApiError(status, JSON.stringify({ detail }))
 
@@ -42,5 +51,38 @@ describe('the result', () => {
   it('gives today in Berlin, not UTC', () => {
     // 23:30 UTC on 1 Nov is already 2 Nov in Berlin.
     expect(todayIso(new Date('2026-11-01T23:30:00Z'))).toBe('2026-11-02')
+  })
+})
+
+// ELI-32: the confirmation to the person. Compared through `t()`: another
+// test file may have switched the language for the run.
+describe('confirmationNote', () => {
+  it('says what became of the erasure confirmation', () => {
+    expect(confirmationNote('sent')).toEqual({ tone: 'mint', text: t('Bestätigung an die Person gesendet.') })
+    expect(confirmationNote('not_configured')).toEqual({
+      tone: 'gold',
+      text: t('Keine Bestätigung gesendet: E-Mail-Versand ist auf diesem Server nicht eingerichtet.'),
+    })
+    expect(confirmationNote('no_email')?.text).toBe(
+      t('Keine Bestätigung gesendet: Es war keine E-Mail-Adresse hinterlegt.'),
+    )
+    expect(confirmationNote('failed')?.tone).toBe('coral')
+    expect(confirmationNote(null)).toBeNull()
+    expect(confirmationNote(undefined)).toBeNull()
+  })
+})
+
+describe('describeConfirmationError', () => {
+  it('names the refusal instead of failing silently', () => {
+    expect(describeConfirmationError(err(503, { code: 'email_not_configured' }))).toBe(
+      t('E-Mail-Versand ist auf diesem Server nicht eingerichtet. Bitte den Betreiber informieren.'),
+    )
+    expect(describeConfirmationError(err(409, { code: 'no_email' }))).toBe(
+      t('Für diese Person ist keine E-Mail-Adresse hinterlegt.'),
+    )
+    expect(describeConfirmationError(err(502, { code: 'email_rejected' }))).toBe(
+      t('Der E-Mail-Dienst hat die Nachricht abgelehnt.'),
+    )
+    expect(describeConfirmationError(new Error('x'))).toBe(t('Senden fehlgeschlagen.'))
   })
 })

@@ -56,11 +56,13 @@ def _surname_key(last_name: str | None, full_name: str | None) -> str | None:
 
 async def _called(session: AsyncSession, tenant_id: uuid.UUID) -> set[tuple[str, str]]:
     """(employer normalized name, surname key) of every person this workspace
-    has a call outcome for — they live in follow-ups, not in the market tab."""
+    has a call outcome for — they live in follow-ups, not in the market tab —
+    and of everyone marked "Nicht mehr kontaktieren" (ELI-32), who lives in
+    neither."""
     from app.domain.companies.models import Company
     from app.domain.managers.models import Manager, ManagerInteraction
 
-    rows = await session.execute(
+    called = (
         select(HubCompany.normalized_name, Manager.last_name, Manager.full_name)
         .select_from(ManagerInteraction)
         .join(Manager, Manager.id == ManagerInteraction.manager_id)
@@ -72,8 +74,20 @@ async def _called(session: AsyncSession, tenant_id: uuid.UUID) -> set[tuple[str,
             ManagerInteraction.outcome.is_not(None),
             HubCompanyLink.tenant_id == tenant_id,
         )
-        .distinct()
     )
+    blocked = (
+        select(HubCompany.normalized_name, Manager.last_name, Manager.full_name)
+        .select_from(Manager)
+        .join(Company, Company.id == Manager.company_id)
+        .join(HubCompanyLink, HubCompanyLink.company_id == Company.id)
+        .join(HubCompany, HubCompany.id == HubCompanyLink.hub_company_id)
+        .where(
+            Manager.tenant_id == tenant_id,
+            Manager.do_not_contact_at.is_not(None),
+            HubCompanyLink.tenant_id == tenant_id,
+        )
+    )
+    rows = await session.execute(called.union(blocked))
     out: set[tuple[str, str]] = set()
     for normalized, last, full in rows.all():
         key = _surname_key(last, full)
@@ -314,8 +328,11 @@ async def contacts(
     now = now or dt.datetime.now(dt.UTC)
     latest = _latest_calls(tenant_id)
     follow_up = _open_follow_ups(tenant_id)
+    # ELI-32: a lead marked "Nicht mehr kontaktieren" stays on the list (with
+    # the mark) but owes no next call — never due, never on top.
+    open_next = case((Manager.do_not_contact_at.is_(None), follow_up.c.next_action_at), else_=None)
     base = (
-        select(Manager, Company.name, ManagerInteraction, follow_up.c.next_action_at.label("open_next_at"))
+        select(Manager, Company.name, ManagerInteraction, open_next.label("open_next_at"))
         .join(Company, Company.id == Manager.company_id)
         .outerjoin(latest, (latest.c.manager_id == Manager.id) & (latest.c.rank == 1))
         .outerjoin(ManagerInteraction, ManagerInteraction.id == latest.c.interaction_id)
@@ -336,15 +353,18 @@ async def contacts(
             func.lower(func.coalesce(Manager.role_title, "")).like(like, escape="\\"),
         ))
     if due_only:
-        base = base.where(follow_up.c.next_action_at.is_not(None), follow_up.c.next_action_at <= now)
+        base = base.where(
+            Manager.do_not_contact_at.is_(None),
+            follow_up.c.next_action_at.is_not(None), follow_up.c.next_action_at <= now,
+        )
 
     total = await session.scalar(select(func.count()).select_from(base.subquery()))
     # NULLS LAST: Postgres would put a row without a date first ("newest").
     found = (
         await session.execute(
             base.order_by(
-                follow_up.c.next_action_at.is_(None),
-                follow_up.c.next_action_at.asc(),
+                open_next.is_(None),
+                open_next.asc(),
                 Manager.created_at.desc().nulls_last(),
                 Manager.full_name,
             ).limit(limit)
@@ -372,6 +392,7 @@ async def contacts(
             "source": manager.source,
             "source_detail": manager.source_detail,
             "art14_outstanding": bool(manager.art14_outstanding),
+            "do_not_contact_at": aware(manager.do_not_contact_at),
             "last_outcome": call.outcome if call else None,
             "last_call_at": aware(call.occurred_at) if call else None,
             "last_call_by": call.actor_name if call else None,
@@ -608,7 +629,8 @@ async def follow_ups(session: AsyncSession, *, tenant_id: uuid.UUID, now: dt.dat
 
     out: dict[uuid.UUID, dict] = {}
     for call, manager, company_name in rows:
-        if call.outcome in _OFF_THE_LIST:
+        # ELI-32: "Nicht mehr kontaktieren" takes them off the Wiedervorlage.
+        if call.outcome in _OFF_THE_LIST or manager.do_not_contact_at is not None:
             continue
         nxt = aware(call.next_action_at)
         item = {

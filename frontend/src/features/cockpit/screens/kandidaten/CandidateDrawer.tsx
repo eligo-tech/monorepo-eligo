@@ -51,6 +51,8 @@ import { AttachmentsPanel } from './AttachmentsPanel'
 import { CandidateNotesPanel } from './CandidateNotesPanel'
 import { ConsentPanel } from './ConsentPanel'
 import { EraseSection } from '../../erasure/EraseSection'
+import { DoNotContactBanner } from '../../erasure/DoNotContact'
+import { isAdmin, useMe } from '../../useMe'
 import { DossierEditor } from './DossierEditor'
 import { CoverSheetDialog } from './CoverSheetDialog'
 
@@ -81,6 +83,24 @@ export function CandidateDrawer({
   const [dto, setDto] = useState<CandidateDTO | null>(null)
   const [dtoError, setDtoError] = useState(false)
   const [coverOpen, setCoverOpen] = useState(false)
+  // ELI-32: the "Nicht mehr kontaktieren" mark, read from the record (the
+  // list's view model does not carry it), and the erase dialog the note
+  // composer opens.
+  const [doNotContactAt, setDoNotContactAt] = useState<string | null>(null)
+  const [eraseOpen, setEraseOpen] = useState(false)
+  const me = useMe()
+  useEffect(() => {
+    let alive = true
+    setDoNotContactAt(null)
+    setEraseOpen(false)
+    api
+      .candidate(candidate.id)
+      .then((c) => alive && setDoNotContactAt(c.do_not_contact_at ?? null))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [candidate.id])
 
   // Which mandates this person is running on. The cockpit links here; without
   // the way back, the record is a dead end — you read the CV and then have to
@@ -549,7 +569,22 @@ export function CandidateDrawer({
                 </CvSection>
 
                 <CvSection icon={MessageSquare} title={t('Gesprächsnotizen')}>
-                  <CandidateNotesPanel candidateId={candidate.id} />
+                  {doNotContactAt && (
+                    <div className="mb-3">
+                      <DoNotContactBanner
+                        subject="candidate"
+                        id={candidate.id}
+                        since={doNotContactAt}
+                        email={candidate.email}
+                        onLifted={() => setDoNotContactAt(null)}
+                      />
+                    </div>
+                  )}
+                  <CandidateNotesPanel
+                    candidateId={candidate.id}
+                    privacy={{ canErase: isAdmin(me), onErase: () => setEraseOpen(true) }}
+                    onDoNotContact={() => setDoNotContactAt((v) => v ?? new Date().toISOString())}
+                  />
                 </CvSection>
 
                 <CvSection icon={ShieldCheck} title={t('Einwilligung')}>
@@ -567,6 +602,9 @@ export function CandidateDrawer({
                   subject="candidate"
                   id={candidate.id}
                   name={candidate.name}
+                  email={candidate.email}
+                  open={eraseOpen}
+                  onOpenChange={setEraseOpen}
                   onErased={onErased ?? onClose}
                 />
               </>

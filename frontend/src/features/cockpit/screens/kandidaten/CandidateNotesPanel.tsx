@@ -29,7 +29,17 @@ import {
   interactionLabel,
 } from '../../ui/interactionKinds'
 
-export function CandidateNotesPanel({ candidateId }: { candidateId: string }) {
+export function CandidateNotesPanel({
+  candidateId,
+  privacy,
+  onDoNotContact,
+}: {
+  candidateId: string
+  /** ELI-32: the Datenschutz outcomes — see `InteractionComposer`. */
+  privacy?: { onErase: () => void; canErase: boolean }
+  /** ELI-32: a note marked the candidate "Nicht mehr kontaktieren". */
+  onDoNotContact?: () => void
+}) {
   const [rows, setRows] = useState<ManagerInteractionDTO[] | null>(null)
   const [composing, setComposing] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -75,9 +85,21 @@ export function CandidateNotesPanel({ candidateId }: { candidateId: string }) {
           <InteractionComposer
             kinds={CANDIDATE_INTERACTION_KINDS}
             onCancel={() => setComposing(false)}
+            privacy={
+              privacy && {
+                canErase: privacy.canErase,
+                onErase: () => {
+                  setComposing(false)
+                  privacy.onErase()
+                },
+              }
+            }
             onSave={async (entry) => {
               const row = await api.logCandidateInteraction(candidateId, entry)
-              setOfferFor(row)
+              // ELI-32: no Wiedervorlage for someone who asked not to be
+              // contacted again.
+              if (entry.do_not_contact) onDoNotContact?.()
+              else setOfferFor(row)
               // Prepend and re-sort rather than refetch: the list is ordered
               // by when the conversation happened, so a note filed for last
               // Tuesday would otherwise appear to vanish.

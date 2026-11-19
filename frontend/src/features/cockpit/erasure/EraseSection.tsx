@@ -13,7 +13,13 @@ import { t } from '@/i18n'
 
 import { DateField } from '../ui/DateField'
 import { isAdmin, useMe } from '../useMe'
-import { describeEraseError, namesMatch, summary, todayIso, unprotected } from './erasureView'
+import { confirmationNote, describeEraseError, namesMatch, summary, todayIso, unprotected } from './erasureView'
+
+const NOTE_TONE = {
+  mint: 'text-mint-400',
+  gold: 'rounded-md border border-gold-600 bg-gold-800 px-3 py-2 text-gold-300',
+  coral: 'text-coral-300',
+} as const
 
 type Subject = 'candidate' | 'manager'
 
@@ -21,16 +27,27 @@ export function EraseSection({
   subject,
   id,
   name,
+  email,
   onErased,
+  open: openProp,
+  onOpenChange,
 }: {
   subject: Subject
   id: string
   name: string
+  /** ELI-32: where the confirmation can go — read now, before it is erased. */
+  email?: string | null
   /** The record is gone: close the page, reload the list. */
   onErased: () => void
+  /** ELI-32: controlled by the page when the note composer opens the dialog
+   *  ("Löschen (DSGVO)"); otherwise the section's own button does. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const me = useMe()
-  const [open, setOpen] = useState(false)
+  const [ownOpen, setOwnOpen] = useState(false)
+  const open = openProp ?? ownOpen
+  const setOpen = onOpenChange ?? setOwnOpen
   if (!isAdmin(me)) return null
   return (
     <section className="mt-10 border-t border-cockpit-line pt-5">
@@ -53,7 +70,14 @@ export function EraseSection({
         </button>
       </div>
       {open && (
-        <EraseDialog subject={subject} id={id} name={name} onClose={() => setOpen(false)} onErased={onErased} />
+        <EraseDialog
+          subject={subject}
+          id={id}
+          name={name}
+          email={email}
+          onClose={() => setOpen(false)}
+          onErased={onErased}
+        />
       )}
     </section>
   )
@@ -63,15 +87,32 @@ function EraseDialog({
   subject,
   id,
   name,
+  email,
   onClose,
   onErased,
 }: {
   subject: Subject
   id: string
   name: string
+  email?: string | null
   onClose: () => void
   onErased: () => void
 }) {
+  // ELI-32: the confirmation is offered only where it can go — an address,
+  // and a server that can send. Off until ticked; never automatic.
+  const [confirm, setConfirm] = useState(false)
+  const [canMail, setCanMail] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!email) return
+    let alive = true
+    api
+      .noticeCapability()
+      .then((c) => alive && setCanMail(c.configured))
+      .catch(() => alive && setCanMail(false))
+    return () => {
+      alive = false
+    }
+  }, [email])
   const [typed, setTyped] = useState('')
   const [reason, setReason] = useState<'erasure' | 'objection'>('erasure')
   const [requestedOn, setRequestedOn] = useState(todayIso())
@@ -99,7 +140,7 @@ function EraseDialog({
     setBusy(true)
     setError(null)
     try {
-      const body = { confirm_name: typed, reason, requested_on: requestedOn }
+      const body = { confirm_name: typed, reason, requested_on: requestedOn, send_confirmation: confirm && !!email }
       setDone(subject === 'candidate' ? await api.eraseCandidate(id, body) : await api.eraseManager(id, body))
     } catch (e) {
       setError(describeEraseError(e))
@@ -137,6 +178,14 @@ function EraseDialog({
             <p className="text-[12.5px] text-cockpit-faint">
               {t('Im ATS des Kunden, in heruntergeladenen Exporten und in Sicherungen ist die Person damit nicht gelöscht.')}
             </p>
+            {(() => {
+              const note = confirmationNote(done.confirmation)
+              return note ? (
+                <p role="status" className={NOTE_TONE[note.tone]}>
+                  {note.text}
+                </p>
+              ) : null
+            })()}
             <div className="flex justify-end">
               <button
                 type="button"
@@ -186,6 +235,22 @@ function EraseDialog({
                 className="mt-1 w-full rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1.5 text-cockpit-text"
               />
             </label>
+            {email && canMail === true && (
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={confirm}
+                  onChange={(e) => setConfirm(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>{t('Bestätigung an {email} senden', { email })}</span>
+              </label>
+            )}
+            {email && canMail === false && (
+              <p className="text-[12.5px] text-cockpit-faint">
+                {t('Eine Bestätigung per E-Mail ist nicht möglich: E-Mail-Versand ist auf diesem Server nicht eingerichtet.')}
+              </p>
+            )}
             {error && (
               <p role="alert" className="text-coral-300">
                 {error}
