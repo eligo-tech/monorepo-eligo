@@ -458,11 +458,13 @@ export const api = {
     }),
 
   /** Kontakte (ELI-23): contacts taken from Markt (stage bus_dev) — open call-backs first (ELI-38), then newest. */
-  callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean }) => {
+  callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean; notes?: 'none' | 'with' }) => {
     const qs = new URLSearchParams()
     if (params.companyId) qs.set('company_id', params.companyId)
     if (params.q) qs.set('q', params.q)
     if (params.dueOnly) qs.set('due_only', 'true')
+    // ELI-62: "Noch keine Notiz" / "Mit Notizen".
+    if (params.notes) qs.set('notes', params.notes)
     return request<ContactPageDTO>(`/hub/call-list/contacts?${qs}`)
   },
 

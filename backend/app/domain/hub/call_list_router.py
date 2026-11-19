@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, ValidationError
@@ -101,6 +102,11 @@ class ContactRow(BaseModel):
     next_action_at: dt.datetime | None
     due: bool
     jobs: list[LeadJob] = Field(default_factory=list)
+    #: ELI-62: rows of the contact history, and when the latest happened.
+    note_count: int = 0
+    last_note_at: dt.datetime | None = None
+    #: A history row or a free-text note — "Mit Notizen".
+    has_notes: bool = False
 
 
 class CompanyFacet(BaseModel):
@@ -111,10 +117,20 @@ class CompanyFacet(BaseModel):
     switchboard: Switchboard | None = None
 
 
+class NoteCounts(BaseModel):
+    all: int
+    none: int
+    with_: int = Field(alias="with", serialization_alias="with")
+
+    model_config = {"populate_by_name": True}
+
+
 class ContactPage(BaseModel):
     rows: list[ContactRow]
     total: int
     truncated: bool
+    #: ELI-62: leads per notes chip, under the other filters.
+    note_counts: NoteCounts
     companies: list[CompanyFacet]
 
 
@@ -152,13 +168,14 @@ async def contacts(
     company_id: uuid.UUID | None = None,
     q: str | None = Query(default=None, max_length=120),
     due_only: bool = False,
+    notes: Literal["none", "with"] | None = Query(default=None, description="ELI-62: none | with"),
     limit: int = Query(default=500, ge=1, le=1000),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ContactPage:
     """"Kontakte": every contact in this workspace — open call-backs first (ELI-38), then newest first (ELI-23)."""
     return ContactPage(**await call_list.contacts(
-        db, tenant_id=tenant_id, company_id=company_id, q=q, due_only=due_only, limit=limit))
+        db, tenant_id=tenant_id, company_id=company_id, q=q, due_only=due_only, notes=notes, limit=limit))
 
 
 @router.get("/follow-ups", response_model=list[FollowUpRow])
