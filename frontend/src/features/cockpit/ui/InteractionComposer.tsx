@@ -58,8 +58,21 @@ export interface ComposedEntry {
   do_not_contact?: boolean
 }
 
+/** ELI-56: a date field whose day was cleared or half-typed ("tt.11.2026")
+ *  reports '' — and `new Date('T12:00:00').toISOString()` throws. That threw
+ *  inside save(), so every retry said "Nicht gespeichert" and no request was
+ *  ever sent. Only a whole, real calendar day counts. */
+export function isCompleteDay(date: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!m) return false
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  return d.getUTCFullYear() === Number(m[1]) && d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3])
+}
+
 /** What the composer hands to `onSave`. The time counts only for a Termin;
- *  any other kind keeps the date-only, midday-pinned behaviour. */
+ *  any other kind keeps the date-only, midday-pinned behaviour. Never throws:
+ *  an incomplete date is stopped by `canSaveNote` first, and if one slips
+ *  through it is filed under today rather than failing the save. */
 export function composeEntry(
   kind: string,
   text: string,
@@ -70,7 +83,7 @@ export function composeEntry(
   const entry: ComposedEntry = {
     interaction_type: kind,
     summary: text.trim(),
-    occurred_at: occurredAt(date, isAppointmentKind(kind) ? time : null),
+    occurred_at: occurredAt(isCompleteDay(date) ? date : composerToday(), isAppointmentKind(kind) ? time : null),
   }
   if (privacy === 'do_not_contact') {
     entry.do_not_contact = true
@@ -95,15 +108,19 @@ export function profilesFollowUp(now: Date = new Date()): NoteFollowUp {
 
 /** An ordinary note needs words; the two privacy outcomes do not, and
  *  neither does "Anonyme Profile gesendet" — but its Wiedervorlage needs a
- *  day and a to-do. */
+ *  day and a to-do. Anything that saves a note needs a complete date
+ *  (ELI-56) — erasure saves none. */
 export function canSaveNote(
   text: string,
   privacy: PrivacyAction,
   kind?: string,
   followUp?: NoteFollowUp | null,
+  date?: string,
 ): boolean {
+  if (privacy === 'erase') return true
+  if (date !== undefined && !isCompleteDay(date)) return false
   if (privacy !== '') return true
-  if (kind === PROFILES_SENT) return Boolean(followUp?.due_date && followUp.text.trim())
+  if (kind === PROFILES_SENT) return Boolean(followUp && isCompleteDay(followUp.due_date) && followUp.text.trim())
   return text.trim() !== ''
 }
 
@@ -141,7 +158,7 @@ export function InteractionComposer({
   const sendsProfiles = kind === PROFILES_SENT
   // Nobody is to be asked for feedback who asked not to be contacted.
   const filedFollowUp = sendsProfiles && action === '' ? { ...followUp, text: followUp.text.trim() } : null
-  const ready = canSaveNote(text, action, kind, sendsProfiles && action === '' ? followUp : null)
+  const ready = canSaveNote(text, action, kind, sendsProfiles && action === '' ? followUp : null, when)
 
   async function save() {
     if (!ready || busy) return
@@ -250,6 +267,11 @@ export function InteractionComposer({
           )}
         </div>
       </div>
+      {!erase && !isCompleteDay(when) && (
+        <p className="text-[12px] text-coral-300">
+          {t('Datum unvollständig — bitte Tag, Monat und Jahr eingeben oder im Kalender wählen.')}
+        </p>
+      )}
       {sendsProfiles && action === '' && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gold-600/60 bg-gold-800/20 px-3 py-2">
           <label className="flex min-w-0 flex-1 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-gold-400">

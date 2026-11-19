@@ -31,6 +31,7 @@ import { Panel } from '../../ui/primitives'
 import { Button } from '../../ui/forms'
 import { DateField } from '../../ui/DateField'
 import { berlinIsoDate } from '../../ui/datePicker'
+import { isCompleteDay } from '../../ui/InteractionComposer'
 import { PanelHead } from './parts'
 import { BriefingCheck } from './BriefingCheck'
 import { scoreLine } from './briefingPoints'
@@ -109,7 +110,8 @@ export function BriefingPanel({
 
   async function save() {
     const summary = text.trim()
-    if (!summary || !mandate.jobId || busy) return
+    // ELI-56: a cleared or half-typed date is '' and would throw below.
+    if (!summary || !mandate.jobId || busy || !isCompleteDay(when)) return
     setBusy(true)
     setError(null)
     try {
@@ -219,13 +221,18 @@ export function BriefingPanel({
             <Button
               tone="primary"
               onClick={() => void save()}
-              disabled={busy || !text.trim()}
+              disabled={busy || !text.trim() || !isCompleteDay(when)}
               className="ml-auto"
             >
               <MessageSquareQuote className="h-4 w-4" />
               {busy ? t('Speichert…') : t('Briefing notieren')}
             </Button>
           </div>
+          {!isCompleteDay(when) && (
+            <p className="text-[12px] text-coral-300">
+              {t('Datum unvollständig — bitte Tag, Monat und Jahr eingeben oder im Kalender wählen.')}
+            </p>
+          )}
           {error && <p className="text-[12px] text-coral-400">{error}</p>}
         </div>
         </>

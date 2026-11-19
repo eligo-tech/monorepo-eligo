@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import { t } from '@/i18n'
 
-import { InteractionComposer, canSaveNote, composeEntry } from './InteractionComposer'
+import { InteractionComposer, canSaveNote, composeEntry, isCompleteDay } from './InteractionComposer'
 import { MANAGER_INTERACTION_KINDS } from './interactionKinds'
 
 // ELI-40. No DOM test environment here, so the composer is rendered to markup
@@ -80,10 +80,32 @@ describe('privacy outcomes', () => {
   })
 
   it('needs text for an ordinary note, none for the privacy outcomes', () => {
-    expect(canSaveNote('', '')).toBe(false)
-    expect(canSaveNote('  ', '')).toBe(false)
-    expect(canSaveNote('erreicht', '')).toBe(true)
-    expect(canSaveNote('', 'do_not_contact')).toBe(true)
-    expect(canSaveNote('', 'erase')).toBe(true)
+    const day = '2026-11-20'
+    expect(canSaveNote('', '', 'note', null, day)).toBe(false)
+    expect(canSaveNote('  ', '', 'note', null, day)).toBe(false)
+    expect(canSaveNote('erreicht', '', 'note', null, day)).toBe(true)
+    expect(canSaveNote('', 'do_not_contact', 'note', null, day)).toBe(true)
+    expect(canSaveNote('', 'erase', 'note', null, day)).toBe(true)
+  })
+})
+
+// ELI-56: a candidate note "could not be saved". A date field whose day was
+// cleared or half-typed ("tt.11.2026") reports '' — and `occurredAt('')`
+// threw a RangeError inside save(), so the composer said "Nicht gespeichert —
+// bitte erneut versuchen" and never sent a request. Retrying could not help.
+describe('an incomplete date', () => {
+  it('is caught before saving instead of failing every retry', () => {
+    expect(isCompleteDay('')).toBe(false)
+    expect(isCompleteDay('2026-11')).toBe(false)
+    expect(isCompleteDay('2026-02-31')).toBe(false)
+    expect(isCompleteDay('2026-11-19')).toBe(true)
+    expect(canSaveNote('Kurz telefoniert', '', 'note', null, '')).toBe(false)
+    expect(canSaveNote('', 'do_not_contact', 'note', null, '')).toBe(false)
+    // Erasure saves no note, so it needs no date.
+    expect(canSaveNote('', 'erase', 'note', null, '')).toBe(true)
+  })
+
+  it('never makes composeEntry throw', () => {
+    expect(() => composeEntry('candidate_qualification', 'x', '', '')).not.toThrow()
   })
 })
