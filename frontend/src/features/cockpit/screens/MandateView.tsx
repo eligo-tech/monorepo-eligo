@@ -128,16 +128,19 @@ export function MandateView({
         </p>
       </header>
 
-      <StammdatenPanel
-        mandate={mandate}
-        company={company}
-        manager={manager}
-        managers={managers}
-        onChanged={onChanged}
-      />
+      {/* The anchor "Ansprechpartner fehlt" scrolls to (ELI-47). */}
+      <div id="section-stammdaten" className="scroll-mt-24">
+        <StammdatenPanel
+          mandate={mandate}
+          company={company}
+          manager={manager}
+          managers={managers}
+          onChanged={onChanged}
+        />
+      </div>
 
       {/* What the client asked for, before what the candidates answered. */}
-      <BriefingPanel mandate={mandate} managers={managers ?? []} />
+      <BriefingPanel mandate={mandate} managers={managers ?? []} onChanged={onChanged} />
 
       <FeedbackPanel mandate={mandate} onChanged={onChanged} />
 

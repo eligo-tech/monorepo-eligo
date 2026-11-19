@@ -803,6 +803,9 @@ export const api = {
     return res.json() as Promise<CVExtractionResultDTO>
   },
 
+  /** One mandate, with its briefing score (ELI-47). */
+  job: (jobId: string) => request<JobDTO>(`/jobs/${jobId}`),
+
   /** Edit a mandate's Suchprofil. Each changed field leaves a receipt. */
   updateJob: (jobId: string, patch: JobUpdatePayload) =>
     request<JobDTO>(`/jobs/${jobId}`, {

@@ -5,9 +5,10 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from app.domain.common.enums import JobStatus, normalise_job_status
+from app.domain.jobs import briefing as briefing_points
 
 
 class JobBase(BaseModel):
@@ -32,6 +33,14 @@ class JobBase(BaseModel):
     #: `active` or `inactive` (ELI-7). The default is what a new mandate is:
     #: somebody is only writing it down because the client asked for it.
     status: str = JobStatus.ACTIVE.value
+    #: Briefing points (ELI-47) — see `models.Job` and `briefing.POINTS`.
+    #: Bounded: each change is copied whole into its EnrichmentRecord.
+    tasks: str | None = Field(default=None, max_length=4000)
+    nice_to_have_skills: list[str] = Field(default_factory=list)
+    start_date: str | None = Field(default=None, max_length=120)
+    team_size: str | None = Field(default=None, max_length=120)
+    interview_process: str | None = Field(default=None, max_length=4000)
+    vacancy_reason: str | None = Field(default=None, max_length=4000)
 
 
 class JobCreate(JobBase):
@@ -62,6 +71,18 @@ class JobRead(JobBase):
         """
         return normalise_job_status(value) if isinstance(value, str) else value
 
+    @field_validator("nice_to_have_skills", mode="before")
+    @classmethod
+    def _no_null_list(cls, value: object) -> object:
+        # A row written before migration 0079's default reached it.
+        return [] if value is None else value
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def briefing(self) -> briefing_points.BriefingScore:
+        """Which of the ten briefing points are geklärt (ELI-47)."""
+        return briefing_points.assess(self)
+
 
 class JobUpdate(BaseModel):
     """PATCH payload for editing a mandate.
@@ -86,6 +107,12 @@ class JobUpdate(BaseModel):
     salary_max: int | None = Field(default=None, ge=0)
     salary_currency: str | None = None
     status: str | None = None
+    tasks: str | None = Field(default=None, max_length=4000)
+    nice_to_have_skills: list[str] | None = None
+    start_date: str | None = Field(default=None, max_length=120)
+    team_size: str | None = Field(default=None, max_length=120)
+    interview_process: str | None = Field(default=None, max_length=4000)
+    vacancy_reason: str | None = Field(default=None, max_length=4000)
 
 
 class JobCopy(BaseModel):

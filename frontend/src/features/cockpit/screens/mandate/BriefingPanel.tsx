@@ -24,7 +24,7 @@ import { useMemo, useState } from 'react'
 import { MessageSquareQuote } from 'lucide-react'
 
 import { api } from '@/api/client'
-import type { BriefingDTO, ManagerDTO } from '@/api/types'
+import type { BriefingDTO, JobDTO, ManagerDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { useRemembered } from '@/hooks/useRemembered'
 import { Panel } from '../../ui/primitives'
@@ -32,6 +32,8 @@ import { Button } from '../../ui/forms'
 import { DateField } from '../../ui/DateField'
 import { berlinIsoDate } from '../../ui/datePicker'
 import { PanelHead } from './parts'
+import { BriefingCheck } from './BriefingCheck'
+import { scoreLine } from './briefingPoints'
 import type { Mandate } from '../../data/types'
 
 const dateDe = (iso: string) =>
@@ -47,10 +49,14 @@ const today = () => berlinIsoDate()
 export function BriefingPanel({
   mandate,
   managers,
+  onChanged,
 }: {
   mandate: Mandate
   /** Contacts at this client, to say who was spoken to. */
   managers?: ManagerDTO[]
+  /** Re-read the cockpit after the briefing points were saved — the
+   *  Suchprofil and Stammdaten show some of the same fields. */
+  onChanged?: () => void
 }) {
   const [text, setText] = useState('')
   const [when, setWhen] = useState(today())
@@ -73,6 +79,28 @@ export function BriefingPanel({
     [mandate.jobId, key],
   )
   const rows = data ?? []
+
+  // The job itself, for the Briefing-Bewertung (ELI-47): the cockpit's
+  // mandate carries only the Suchprofil, the score comes with the job.
+  // Re-read when the cockpit hands down a changed mandate (a contact set in
+  // the Stammdaten, criteria added in the Suchprofil).
+  const [reload, setReload] = useState(0)
+  const { data: current } = useAsync<JobDTO | null>(
+    () => (mandate.jobId ? api.job(mandate.jobId).catch(() => null) : Promise.resolve(null)),
+    [
+      mandate.jobId,
+      mandate.managerId,
+      mandate.location,
+      mandate.salaryMin,
+      mandate.salaryMax,
+      mandate.mustHave.join('|'),
+      reload,
+    ],
+    // A save re-reads in the background; blanking would unmount the form.
+    { keepPrevious: true },
+  )
+  // Never another mandate's score while this one loads.
+  const job = current && current.id === mandate.jobId ? current : null
 
   const nameOf = useMemo(() => {
     const byId = new Map((managers ?? []).map((m) => [m.id, m.full_name]))
@@ -107,13 +135,26 @@ export function BriefingPanel({
         tag={t('Briefing')}
         tone="gold"
         title={t('Was der Kunde gesagt hat')}
-        note={`${rows.length} ${rows.length === 1 ? t('Eintrag') : t('Einträge')}`}
+        note={`${rows.length} ${rows.length === 1 ? t('Eintrag') : t('Einträge')}${
+          job?.briefing ? ` · ${scoreLine(job.briefing)}` : ''
+        }`}
         collapsed={collapsed}
         onToggle={() => setCollapsed((shut) => !shut)}
       />
 
       {collapsed ? null : (
         <>
+        {job?.briefing && (
+          <BriefingCheck
+            key={job.id}
+            job={job}
+            onSaved={() => {
+              setReload((k) => k + 1)
+              onChanged?.()
+            }}
+          />
+        )}
+
         {loading && rows.length === 0 && (
           <p className="font-mono text-[12px] text-cockpit-faint">{t('lädt…')}</p>
         )}
