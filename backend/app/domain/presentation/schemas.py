@@ -31,6 +31,8 @@ class BrandingRead(BaseModel):
     primary_color: str
     contact_phone: str | None = None
     has_logo: bool = False
+    #: ELI-55: the workspace's icon in the cockpit header.
+    has_header_icon: bool = False
     updated_at: dt.datetime | None = None
     updated_by_name: str | None = None
 

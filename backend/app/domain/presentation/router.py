@@ -89,6 +89,60 @@ async def delete_logo(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ── Header icon (ELI-55) ──────────────────────────────────────────────────
+
+#: An SVG is markup. Even rebuilt (service.sanitize_svg), it is served so
+#: that opening the URL directly can run nothing and load nothing.
+_ICON_HEADERS = {
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "private, no-store",
+}
+
+
+@router.get("/branding/header-icon")
+async def get_header_icon(
+    actor: Actor = Depends(get_current_actor), db: AsyncSession = Depends(get_db)
+) -> Response:
+    row = await service.get_branding(db, tenant_id=actor.tenant_id)
+    if row is None or row.header_icon is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no header icon")
+    return Response(
+        content=row.header_icon,
+        media_type=row.header_icon_content_type or "image/png",
+        headers=_ICON_HEADERS,
+    )
+
+
+@router.put("/branding/header-icon", response_model=BrandingRead)
+async def upload_header_icon(
+    file: UploadFile = File(...),
+    actor: Actor = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> BrandingRead:
+    content = await file.read(service.LOGO_MAX_BYTES + 1)
+    try:
+        row = await service.set_header_icon(
+            db,
+            tenant_id=actor.tenant_id,
+            content=content,
+            content_type=file.content_type,
+            editor=actor.name,
+        )
+    except service.InvalidLogo as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    return service.branding_read(row)
+
+
+@router.delete("/branding/header-icon", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_header_icon(
+    actor: Actor = Depends(require_admin_to_delete),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await service.clear_header_icon(db, tenant_id=actor.tenant_id, editor=actor.name)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ── Cover sheet ───────────────────────────────────────────────────────────
 
 

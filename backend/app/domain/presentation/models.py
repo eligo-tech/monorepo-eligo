@@ -42,4 +42,9 @@ class WorkspaceBranding(Base, IDMixin, TenantMixin, TimestampMixin):
     contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     logo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     logo_content_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    #: ELI-55: the small mark left of "Cockpit" in the app's dark header — a
+    #: separate slot because the cover-sheet logo is drawn for white paper.
+    #: PNG, JPEG or an SVG rebuilt by `service.sanitize_svg`.
+    header_icon: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    header_icon_content_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     updated_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)

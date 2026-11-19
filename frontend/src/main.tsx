@@ -6,7 +6,8 @@ import { clerkKey } from './auth/config'
 import { ClerkTokenBridge } from './auth/ClerkTokenBridge'
 import { initLang } from './i18n'
 import { ErrorBoundary } from './components/ErrorBoundary'
-// Self-hosted faces for the cockpit typeface switch (no CDN at runtime).
+// Self-hosted faces for the landing page (no CDN at runtime). The cockpit
+// uses the system grotesk since ELI-55.
 import '@fontsource/inter/400.css'
 import '@fontsource/inter/500.css'
 import '@fontsource/inter/600.css'

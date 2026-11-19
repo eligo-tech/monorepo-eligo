@@ -153,6 +153,8 @@ def test_the_admin_only_routes_are_the_ones_we_meant() -> None:
         # once by an admin. Downloading a cover sheet is everybody's work.
         ("PUT", "/branding"),
         ("PUT", "/branding/logo"),
+        # ELI-55: the workspace's icon in everyone's header.
+        ("PUT", "/branding/header-icon"),
     }
 
 

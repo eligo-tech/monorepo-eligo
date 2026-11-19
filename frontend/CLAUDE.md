@@ -28,10 +28,10 @@ src/
 ├── App.tsx                     # landing page ↔ cockpit, by URL hash
 ├── features/cockpit/           # ← the product surface
 │   ├── CockpitShell.tsx        # grid background, screen switch, hash routing (owns SCREENS)
-│   ├── CommandBar.tsx          # wordmark, search, status chips, typeface switch, Clerk controls
+│   ├── CommandBar.tsx          # workspace mark (ui/WorkspaceMark: branding header icon, else Eligo) + wordmark, search, status chips, Clerk controls
 │   ├── GlobalSearch.tsx        # ELI-52: the search box — `/search` dropdown (Kandidaten · Mandate · Unternehmen · Leads & Manager), opens `#<screen>/<id>`; on Mandate it filters the list instead
 │   ├── Navigator.tsx           # arrow cluster: ←/→ screen, ↑/↓ section, + keyboard
-│   ├── useTypeface.ts          # the Jet · Mono · Heli switch
+│   ├── useHeaderIcon.ts        # ELI-55: the workspace header icon from /branding/header-icon
 │   ├── screens/                # CockpitScreen · MarktScreen · ContactListScreen (Leads) · CompanyScreen (Unternehmen) · ManagerScreen · JobsScreen (Mandate)
 │   │   ├── ContactsPanel.tsx   # Markt "Ansprechpartner": people a company's public ads name → adopt
 │   │   ├── MandateEditor.tsx   # "Mandat bearbeiten" — the Suchprofil, from the Mandate list
@@ -184,8 +184,8 @@ Conventions:
 
 - **Mono is semantic.** Every number, all-caps label, chip, record reference and
   section hint is `font-mono`; names, headings and prose are `font-sans`. Both
-  resolve through `--font-ui` / `--font-mono` CSS vars so the command bar's
-  `Jet · Mono · Heli` control can swap faces — never hard-code a font family.
+  resolve through `--font-ui` / `--font-mono` CSS vars (`index.css`), so the
+  one typeface (system grotesk "Heli" since ELI-55) is set in one place — never hard-code a font family.
   Mono digits are `tabular-nums` (set in `index.css`) so values don't jitter.
 - **Every figure carries provenance.** Displayed numbers are `Figure` objects
   (`{ value, provenance, source }`), not bare numbers, and are rendered through

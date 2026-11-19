@@ -1396,6 +1396,8 @@ export interface BrandingDTO {
   primary_color: string
   contact_phone: string | null
   has_logo: boolean
+  /** ELI-55: the workspace's icon in the cockpit header. */
+  has_header_icon: boolean
   updated_at: string | null
   updated_by_name: string | null
 }

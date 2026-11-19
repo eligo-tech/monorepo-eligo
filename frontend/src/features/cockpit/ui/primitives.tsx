@@ -213,7 +213,7 @@ export function Money({
   return <Figure figure={figure} format={format} prefix="€ " className={className} />
 }
 
-/** Segmented control — Jahr / Quartal / Monat / Tag, and the typeface switch. */
+/** Segmented control — Jahr / Quartal / Monat / Tag, and the language switch. */
 export function SegmentedControl<T extends string>({
   options,
   value,
