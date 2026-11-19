@@ -1,4 +1,6 @@
-// The fixed command bar: wordmark, global search, Section picker, typeface switch.
+// The fixed command bar: workspace mark + wordmark, global search, Section
+// picker. ELI-55 removed the tagline, the Human-in-the-Loop pill and the
+// Jet · Mono · Heli switch — Heli is the one typeface now (index.css).
 //
 // It also carries the tenant + account controls. Those used to live in TopNav,
 // which the cockpit replaces — dropping them would take organisation switching
@@ -16,7 +18,7 @@ import type { ScreenKey } from './CockpitShell'
 import { cn } from '@/lib/cn'
 import type { MeDTO } from '@/api/types'
 import type { CockpitStatus } from './data/types'
-import type { Typeface } from './useTypeface'
+import { WorkspaceMark } from './ui/WorkspaceMark'
 import { getLang, setLang, type Lang } from '@/i18n'
 
 //: Both labels are two letters and language-neutral, so the control reads
@@ -26,24 +28,6 @@ const LANGUAGES: { key: Lang; label: string }[] = [
   { key: 'en', label: 'EN' },
 ]
 
-const TYPEFACES: { key: Typeface; label: string }[] = [
-  { key: 'jet', label: 'Jet' },
-  { key: 'mono', label: 'Mono' },
-  { key: 'heli', label: 'Heli' },
-]
-
-/** Circular gauge mark — the cockpit's own logo. */
-function CockpitMark() {
-  return (
-    <span className="flex h-8 w-8 items-center justify-center rounded-full border border-mint-600 text-mint-400">
-      <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" aria-hidden>
-        <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.4" />
-        <path d="M12 12 16 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        <circle cx="12" cy="12" r="1.6" fill="currentColor" />
-      </svg>
-    </span>
-  )
-}
 
 export function CommandBar({
   status,
@@ -52,8 +36,7 @@ export function CommandBar({
   onQueryChange,
   searchHint,
   onOpenRecord,
-  typeface,
-  onTypefaceChange,
+  headerIconUrl,
   screens,
   screen,
   onScreenChange,
@@ -69,8 +52,8 @@ export function CommandBar({
   searchHint?: string
   /** ELI-52: open a search hit by its cockpit hash (`kandidaten/<id>`, …). */
   onOpenRecord: (hash: string) => void
-  typeface: Typeface
-  onTypefaceChange: (t: Typeface) => void
+  /** ELI-55: the workspace's own header icon (object URL); null = Eligo mark. */
+  headerIconUrl: string | null
   screens: SectionOption<ScreenKey>[]
   screen: ScreenKey
   onScreenChange: (key: ScreenKey) => void
@@ -80,11 +63,10 @@ export function CommandBar({
       <div className="flex flex-wrap items-center gap-3 px-6 py-3 2xl:flex-nowrap">
         {/* Wordmark */}
         <div className="flex shrink-0 items-center gap-3">
-          <CockpitMark />
+          <WorkspaceMark iconUrl={headerIconUrl} />
           <span className="text-[19px] font-semibold tracking-[0.12em] text-cockpit-text">
             COCKPIT
           </span>
-          <span className="font-mono text-[13px] text-cockpit-faint">{t('· Personalberatung')}</span>
         </div>
 
         {/* Global search (ELI-52) */}
@@ -96,10 +78,10 @@ export function CommandBar({
           onOpen={onOpenRecord}
         />
 
-        {/* System state, as the design puts it: what the machine owes you and
-            whether a human is still in the loop. Both are demo values — there
-            is no datalauf queue in the backend yet — so the count carries its
-            provenance marker rather than passing as measured. */}
+        {/* System state: what the machine owes you. A demo value — there is
+            no datalauf queue in the backend yet — so the count carries its
+            provenance marker rather than passing as measured. The
+            "Human-in-the-Loop aktiv" pill was taken out in ELI-55. */}
         <div className="flex shrink-0 items-center gap-2">
           {/* What Claude proposed, waiting for a person. Hidden when empty. */}
           <ProposalsButton />
@@ -109,12 +91,6 @@ export function CommandBar({
               <span className="h-[7px] w-[7px] rounded-full bg-gold-400" />
               {t('Datenlauf fällig ·')} <Figure figure={status.pendingChanges} />{' '}
               {t('Änderungen')}
-            </span>
-          )}
-          {status.humanInTheLoop && (
-            <span className="flex items-center gap-2 rounded-xl border border-mint-600/45 bg-mint-800/25 px-3 py-1.5 text-[13px] text-mint-300">
-              <span className="h-[7px] w-[7px] rounded-full bg-mint-400" />
-              {t('Human-in-the-Loop aktiv')}
             </span>
           )}
         </div>
@@ -178,14 +154,6 @@ export function CommandBar({
           options={LANGUAGES}
           value={getLang()}
           onChange={setLang}
-          size="sm"
-          className="shrink-0"
-        />
-
-        <SegmentedControl
-          options={TYPEFACES}
-          value={typeface}
-          onChange={onTypefaceChange}
           size="sm"
           className="shrink-0"
         />

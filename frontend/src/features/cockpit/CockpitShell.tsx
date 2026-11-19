@@ -29,7 +29,7 @@ import type { SectionOption } from './SectionPicker'
 import { useCockpitData } from './data/useCockpitData'
 import { useMe } from './useMe'
 import { useDueFollowUpCount } from './followups/FollowUpsSection'
-import { useTypeface } from './useTypeface'
+import { useHeaderIcon } from './useHeaderIcon'
 
 export type ScreenKey =
   | 'cockpit'
@@ -95,7 +95,7 @@ export const resolveDetail = (hash: string): string | null =>
 
 export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: ScreenKey }) {
   const state = useCockpitData()
-  const [typeface, setTypeface] = useTypeface()
+  const headerIconUrl = useHeaderIcon()
   const me = useMe()
   // ELI-44: Wiedervorlagen due today or overdue, on the Cockpit entry.
   const dueFollowUps = useDueFollowUpCount()
@@ -178,8 +178,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
         searchHint={
           screen === 'mandate' ? t('Mandate filtern: Firma, Titel, Ort …') : undefined
         }
-        typeface={typeface}
-        onTypefaceChange={setTypeface}
+        headerIconUrl={headerIconUrl}
         screens={(withAgencyScreen(SCREENS, agencyFinder === true) as SectionOption<ScreenKey>[]).map((s) =>
           s.key === 'cockpit'
             ? { ...s, badge: dueFollowUps, badgeTitle:

@@ -21,6 +21,7 @@ from __future__ import annotations
 import io
 import re
 import uuid
+import xml.etree.ElementTree as ET  # noqa: S405 — DOCTYPE/ENTITY refused before parsing
 from dataclasses import dataclass
 
 from pypdf import PdfReader, PdfWriter
@@ -103,6 +104,7 @@ def branding_read(row: WorkspaceBranding | None) -> BrandingRead:
         primary_color=row.primary_color,
         contact_phone=row.contact_phone,
         has_logo=row.logo is not None,
+        has_header_icon=row.header_icon is not None,
         updated_at=row.updated_at,
         updated_by_name=row.updated_by_name,
     )
@@ -165,6 +167,130 @@ async def clear_logo(session: AsyncSession, *, tenant_id: uuid.UUID, editor: str
     row = await get_branding(session, tenant_id=tenant_id)
     if row is not None:
         row.logo, row.logo_content_type, row.updated_by_name = None, None, editor
+        await session.commit()
+
+
+# ── The header icon (ELI-55) ──────────────────────────────────────────────
+
+SVG = "image/svg+xml"
+HEADER_ICON_TYPES = {"image/png", "image/jpeg", SVG}
+_SVG_NS = "http://www.w3.org/2000/svg"
+#: Shapes and their grouping. No <a>, <use>, <image>, <foreignObject>,
+#: <script>, <animate>, filters or text — nothing that links, loads or runs.
+_SVG_ELEMENTS = {
+    "svg", "g", "defs", "style", "path", "rect", "circle", "ellipse",
+    "polygon", "polyline", "line",
+}
+#: Real logos nest a handful of groups; this keeps recursion far from Python's limit.
+_SVG_MAX_DEPTH = 64
+_DRAWN = {"path","rect", "circle", "ellipse", "polygon", "polyline", "line"}
+#: Geometry and paint only. No `style` attribute, no `href`, no `on*`.
+_SVG_ATTRIBUTES = {
+    "viewBox", "width", "height", "x", "y", "rx", "ry", "cx", "cy", "r",
+    "x1", "y1", "x2", "y2", "d", "points", "transform", "class", "id",
+    "fill", "fill-rule", "fill-opacity", "clip-rule", "opacity", "stroke",
+    "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit",
+    "stroke-opacity", "preserveAspectRatio",
+}
+#: A value or a class rule: no parentheses (so no url()), no "@", no quotes.
+_SAFE_VALUE = re.compile(r"^[\w\s.,#%:;{}\-]*$")
+#: transform="translate(160 214.68) rotate(180)" needs parentheses.
+_SAFE_TRANSFORM = re.compile(r"^(\s*(matrix|translate|scale|rotate|skewX|skewY)\([\d\s.,eE+\-]*\)\s*)*$")
+
+
+def _safe_attribute(name: str, value: str) -> bool:
+    if name not in _SVG_ATTRIBUTES:
+        return False
+    pattern = _SAFE_TRANSFORM if name == "transform" else _SAFE_VALUE
+    return bool(pattern.match(value))
+
+
+def sanitize_svg(content: bytes) -> bytes:
+    """The SVG rebuilt from an allow-list, or InvalidLogo.
+
+    An uploaded SVG is markup, not a picture: it can carry script, links and
+    remote loads. Nothing of the original is passed through — a new tree is
+    written holding only shapes, their geometry and fill rules. The header
+    shows it in an <img> (no script runs there either) and the route serves
+    it with a CSP that forbids everything; this is the first wall, not the
+    only one. Only UTF-8 is read, and DOCTYPE and entities are refused before
+    parsing (no expansion bombs, no external entities): the text is decoded
+    first and the parser gets that text with its XML declaration removed, so
+    no declared encoding can make it read bytes the check did not see."""
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise InvalidLogo("Das SVG muss UTF-8 sein.") from exc
+    lowered = text.lower()
+    if "<!doctype" in lowered or "<!entity" in lowered:
+        raise InvalidLogo("Die Datei ist kein lesbares SVG.")
+    text = re.sub(r"^\s*<\?xml[^>]*\?>", "", text)
+    try:
+        root = ET.fromstring(text)  # noqa: S314 — see above
+    except ET.ParseError as exc:
+        raise InvalidLogo("Die Datei ist kein lesbares SVG.") from exc
+    if root.tag != f"{{{_SVG_NS}}}svg":
+        raise InvalidLogo("Die Datei ist kein lesbares SVG.")
+
+    drawn = 0
+
+    def copy(src: ET.Element, parent: ET.Element | None, depth: int = 0) -> ET.Element | None:
+        nonlocal drawn
+        if depth > _SVG_MAX_DEPTH:
+            raise InvalidLogo("Das SVG ist zu tief verschachtelt.")
+        prefix = f"{{{_SVG_NS}}}"
+        name = src.tag[len(prefix):] if isinstance(src.tag, str) and src.tag.startswith(prefix) else ""
+        if name not in _SVG_ELEMENTS:
+            return None
+        attrs = {k: v for k, v in src.attrib.items() if _safe_attribute(k, v)}
+        el = ET.Element(name, attrs) if parent is None else ET.SubElement(parent, name, attrs)
+        if name == "style":
+            css = (src.text or "").strip()
+            el.text = css if _SAFE_VALUE.match(css) else ""
+            return el
+        drawn += name in _DRAWN
+        for child in src:
+            copy(child, el, depth + 1)
+        return el
+
+    out = copy(root, None)
+    if out is None or not drawn:
+        raise InvalidLogo("Das SVG enthält keine Form.")
+    out.set("xmlns", _SVG_NS)
+    return ET.tostring(out, encoding="utf-8", xml_declaration=False)
+
+
+def check_header_icon(content: bytes, content_type: str | None) -> tuple[bytes, str]:
+    """What is stored, and its media type — or InvalidLogo."""
+    if content_type not in HEADER_ICON_TYPES:
+        raise InvalidLogo("Nur PNG, JPEG oder SVG.")
+    if len(content) > LOGO_MAX_BYTES:
+        raise InvalidLogo("Höchstens 1 MB.")
+    if content_type == SVG:
+        return sanitize_svg(content), SVG
+    return content, check_logo(content, content_type)
+
+
+async def set_header_icon(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    content: bytes,
+    content_type: str | None,
+    editor: str,
+) -> WorkspaceBranding:
+    stored, kind = check_header_icon(content, content_type)
+    row = await _row(session, tenant_id)
+    row.header_icon, row.header_icon_content_type, row.updated_by_name = stored, kind, editor
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+async def clear_header_icon(session: AsyncSession, *, tenant_id: uuid.UUID, editor: str) -> None:
+    row = await get_branding(session, tenant_id=tenant_id)
+    if row is not None:
+        row.header_icon, row.header_icon_content_type, row.updated_by_name = None, None, editor
         await session.commit()
 
 

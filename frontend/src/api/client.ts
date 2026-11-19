@@ -997,6 +997,25 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, res.statusText)
     return res.blob()
   },
+  /** ELI-55: the header icon — PNG, JPEG or SVG (rebuilt by the server). */
+  async uploadHeaderIcon(file: File): Promise<BrandingDTO> {
+    const body = new FormData()
+    body.append('file', file)
+    const res = await fetch(`${BASE}/branding/header-icon`, { method: 'PUT', body, headers: await authHeaders() })
+    if (!res.ok) throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+    return res.json() as Promise<BrandingDTO>
+  },
+  async deleteHeaderIcon(): Promise<void> {
+    const res = await fetch(`${BASE}/branding/header-icon`, { method: 'DELETE', headers: await authHeaders() })
+    if (!res.ok) throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+  },
+  /** The header icon as a blob, null when none is set. */
+  async brandingHeaderIcon(): Promise<Blob | null> {
+    const res = await fetch(`${BASE}/branding/header-icon`, { headers: await authHeaders() })
+    if (res.status === 404) return null
+    if (!res.ok) throw new ApiError(res.status, res.statusText)
+    return res.blob()
+  },
   /** What the PDF will hold — empty sections, files left out. Reads only. */
   coverSheetPreview: (candidateId: string, params: CoverSheetParams) =>
     request<CoverSheetPreviewDTO>(`/candidates/${candidateId}/cover-sheet/preview?${coverQuery(params)}`),

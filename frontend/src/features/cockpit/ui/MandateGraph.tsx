@@ -303,8 +303,8 @@ const MANDATE_PAD = 16
 const MANDATE_CONTROLS = 58
 
 /** Advance width of one character in the mono face, as a fraction of the font
- *  size. JetBrains Mono — and the two faces the Jet · Mono · Heli switch puts in
- *  its place — are 0.6em, which is what makes the character budget below an
+ *  size. The system mono (ui-monospace / SF Mono / Menlo — the one face since
+ *  ELI-55) is 0.6em, which is what makes the character budget below an
  *  exact width rather than a guess. */
 const MONO_ADVANCE = 0.6
 

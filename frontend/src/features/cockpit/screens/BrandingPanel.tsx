@@ -14,6 +14,8 @@ import { ApiError, api } from '@/api/client'
 import type { BrandingDTO } from '@/api/types'
 import { Button, FieldLabel, TextArea, TextInput } from '../ui/forms'
 import { Panel } from '../ui/primitives'
+import { WorkspaceMark } from '../ui/WorkspaceMark'
+import { BRANDING_CHANGED } from '../useHeaderIcon'
 
 const HEX = /^#[0-9A-Fa-f]{6}$/
 
@@ -22,6 +24,102 @@ function describe(e: unknown): string {
   if (e.status === 403) return t('Nur Administratoren können das CI ändern.')
   if (e.status === 422) return t('Nicht gespeichert: Logo als PNG oder JPEG bis 1 MB, Farbe als #RRGGBB.')
   return t('Fehlgeschlagen (HTTP {status}).', { status: String(e.status) })
+}
+
+/** ELI-55: the icon left of "COCKPIT" in everyone's header. Its own slot —
+ *  the header is dark, the PDF white — so it is previewed on the header's
+ *  ground, not on paper. */
+function HeaderIconSlot({ admin, has: initial }: { admin: boolean; has: boolean }) {
+  const [has, setHas] = useState(initial)
+  // Bumped on every save, so replacing one icon with another re-reads it
+  // even though `has` stays true.
+  const [version, setVersion] = useState(0)
+  const [url, setUrl] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => setHas(initial), [initial])
+  useEffect(() => {
+    let live = true
+    let made: string | null = null
+    void (has ? api.brandingHeaderIcon().catch(() => null) : Promise.resolve(null)).then((blob) => {
+      if (!live) return
+      made = blob ? URL.createObjectURL(blob) : null
+      setUrl(made)
+    })
+    return () => {
+      live = false
+      if (made) URL.revokeObjectURL(made)
+    }
+  }, [has, version])
+
+  async function run(call: () => Promise<boolean>, done: string) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      setHas(await call())
+      setVersion((v) => v + 1)
+      window.dispatchEvent(new Event(BRANDING_CHANGED))
+      setMessage({ error: false, text: done })
+    } catch (e) {
+      setMessage({
+        error: true,
+        text:
+          e instanceof ApiError && e.status === 422
+            ? t('Nicht gespeichert: Symbol als PNG, JPEG oder SVG bis 1 MB.')
+            : describe(e),
+      })
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="mt-5">
+      <FieldLabel>{t('Symbol in der Kopfzeile')}</FieldLabel>
+      <div className="flex h-16 items-center justify-center rounded-xl border border-cockpit-line bg-cockpit-bg p-3">
+        <WorkspaceMark iconUrl={url} />
+      </div>
+      {admin && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/svg+xml"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (f)
+                void run(async () => (await api.uploadHeaderIcon(f)).has_header_icon, t('Symbol gespeichert.'))
+            }}
+          />
+          <Button onClick={() => fileRef.current?.click()} disabled={busy}>
+            <ImageUp className="h-4 w-4" /> {t('Symbol hochladen')}
+          </Button>
+          {has && (
+            <Button
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  await api.deleteHeaderIcon()
+                  return false
+                }, t('Symbol entfernt.'))
+              }
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      )}
+      <p className="mt-2 font-mono text-[11px] text-cockpit-faint">
+        {t('Helles Symbol auf dunklem Grund · PNG, JPEG oder SVG · ohne Symbol: Eligo')}
+      </p>
+      {message && (
+        <p className={`mt-1.5 text-[12px] ${message.error ? 'text-coral-400' : 'text-mint-300'}`}>{message.text}</p>
+      )}
+    </div>
+  )
 }
 
 export function BrandingPanel({ admin }: { admin: boolean }) {
@@ -146,6 +244,7 @@ export function BrandingPanel({ admin }: { admin: boolean }) {
             </div>
           )}
           <p className="mt-2 font-mono text-[11px] text-cockpit-faint">{t('PNG oder JPEG · max. 1 MB')}</p>
+          <HeaderIconSlot admin={admin} has={branding?.has_header_icon ?? false} />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

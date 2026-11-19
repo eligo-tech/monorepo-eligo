@@ -426,7 +426,10 @@ Three domain facts worth knowing before you add a field:
   Zeugnis / Zertifikat PDFs are appended with pypdf, a non-PDF is named in
   the preview and skipped. Each download is a disclosure: one READ receipt,
   ids and variant only. The CI is `workspace_branding`, one row per
-  workspace, admin-edited (`/branding`, `/branding/logo`) — never env vars.
+  workspace, admin-edited (`/branding`, `/branding/logo`, and ELI-55's
+  `/branding/header-icon` — the cockpit header mark; an SVG is rebuilt by
+  `service.sanitize_svg` from an allow-list, served with a deny-all CSP) —
+  never env vars.
 - **`jobs`** carries the Briefing-Bewertung (ELI-47): `jobs/briefing.py`
   is the ONE definition of the ten briefing points (Aufgaben · Muss · Kann ·
   Gehaltsrahmen · Standort/Remote · Startdatum · Teamgröße · Ansprechpartner

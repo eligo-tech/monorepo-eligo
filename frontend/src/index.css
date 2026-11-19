@@ -2,24 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Typeface switch ────────────────────────────────────────────────────────
-   Tailwind's font-sans / font-mono resolve through these two vars, so the
-   command bar's Jet · Mono · Heli control only has to set data-typeface on
-   <html>. `jet` is the default and matches the cockpit mockups.            */
-:root,
-:root[data-typeface='jet'] {
-  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-/* All-mono: the terminal reading of the same layout. */
-:root[data-typeface='mono'] {
-  --font-ui: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-/* Grotesk: system neutral, no downloaded face. */
-:root[data-typeface='heli'] {
+/* ── Typeface ───────────────────────────────────────────────────────────────
+   Tailwind's font-sans / font-mono resolve through these two vars. ELI-55:
+   "Heli" (system grotesk, no downloaded face) is the one typeface for
+   everyone; the Jet · Mono · Heli switch and its stored choice are gone, so
+   no data-typeface attribute is read any more. The landing page still uses
+   Inter + JetBrains Mono through its own CSS.                              */
+:root {
   --font-ui: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
