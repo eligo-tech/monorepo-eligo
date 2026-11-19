@@ -6,6 +6,7 @@ import { clerkKey } from './auth/config'
 import { ClerkTokenBridge } from './auth/ClerkTokenBridge'
 import { initLang } from './i18n'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { NewVersionNotice } from './components/NewVersionNotice'
 // Self-hosted faces for the landing page (no CDN at runtime). The cockpit
 // uses the system grotesk since ELI-55.
 import '@fontsource/inter/400.css'
@@ -36,11 +37,15 @@ const tree = clerkKey ? (
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
+    <NewVersionNotice />
   </ClerkProvider>
 ) : (
-  <ErrorBoundary>
-    <App />
-  </ErrorBoundary>
+  <>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+    <NewVersionNotice />
+  </>
 )
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
