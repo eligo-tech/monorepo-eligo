@@ -25,7 +25,9 @@ PRESENTED_STEP = "vorgestellt"
 #: different conversation and belongs to a different KPI; `na` is the one
 #: that was not reached and must not count as a call made — the same rule
 #: `isContact` applies to "letzter Kontakt".
-_MANAGER_CALL_CANONICAL = ("business_call", "client_call")
+#: ELI-61: a Gesprächsnotiz is "Manager erreicht" — a conversation that
+#: happened, so it counts with the two calls.
+_MANAGER_CALL_CANONICAL = ("business_call", "client_call", "conversation")
 
 
 def manager_call_spellings() -> tuple[str, ...]:

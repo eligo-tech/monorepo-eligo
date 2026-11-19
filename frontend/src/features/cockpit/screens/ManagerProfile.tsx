@@ -53,6 +53,7 @@ import {
   isContact,
 } from '../ui/interactionKinds'
 import { appointmentIcs, isAppointmentKind, splitAppointments } from '../ui/appointments'
+import { announceFollowUpsChanged } from '../ui/followUps'
 import { Button } from '../ui/forms'
 import { CONTACT_KEYS, ContactFields, contactDraftOf, contactPatch } from '../ui/contactFields'
 import { PhoneList, PhoneListEditor, phonesOf, phonesPatch } from '../ui/phoneList'
@@ -483,11 +484,32 @@ export function ManagerProfile({
                   setEraseOpen(true)
                 },
               }}
-              onSave={async (entry) => {
+              onSave={async (entry, followUp) => {
                 const row = await api.logManagerInteraction(manager.id, entry)
-                // ELI-32: no Wiedervorlage for someone who asked not to be
-                // contacted again.
-                if (!entry.do_not_contact) setOfferFor(row)
+                if (followUp) {
+                  // ELI-61: profiles sent — the feedback Wiedervorlage the
+                  // composer already asked for, filed against this note. If
+                  // it fails the note still stands, so the ordinary offer
+                  // appears instead of an error that would invite a second
+                  // copy of the note.
+                  try {
+                    await api.createFollowUp({
+                      manager_id: manager.id,
+                      due_date: followUp.due_date,
+                      due_time: null,
+                      text: followUp.text,
+                      source_interaction_id: row.id,
+                      origin: 'note',
+                    })
+                    announceFollowUpsChanged()
+                  } catch {
+                    setOfferFor(row)
+                  }
+                } else if (!entry.do_not_contact) {
+                  // ELI-32: no Wiedervorlage for someone who asked not to be
+                  // contacted again.
+                  setOfferFor(row)
+                }
                 // Prepend rather than refetch: the list is sorted by when
                 // the event happened, and a note filed for last Tuesday
                 // would otherwise appear to vanish.

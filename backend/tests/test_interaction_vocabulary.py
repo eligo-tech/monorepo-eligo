@@ -65,7 +65,9 @@ def test_the_two_lists_are_the_ones_the_ticket_names() -> None:
     the one addition, and it is here because the rows and the composer that
     writes them already shipped."""
     assert [k.value for k in MANAGER_INTERACTION_KINDS] == [
-        "meeting", "client_call", "business_call", "message", "na", "note",
+        # ELI-61 adds the Gesprächsnotiz and "Anonyme Profile gesendet".
+        "meeting", "client_call", "business_call", "conversation", "profiles_sent",
+        "message", "na", "note",
     ]
     # "Candidate Qualification" was added to ELI-9 on 2026-11-10 and goes
     # FIRST — it is the conversation every candidate process starts with.

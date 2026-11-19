@@ -354,6 +354,10 @@ export const EN: Record<string, string> = {
   'Briefing notieren': 'Note the briefing',
   'Bundesland': 'Federal state',
   'Business Call': 'Business Call',
+  // ELI-61: two more kinds of note on a manager.
+  'Gesprächsnotiz': 'Conversation note',
+  'Anonyme Profile gesendet': 'Anonymous profiles sent',
+  'Feedback zu anonymen Profilen': 'Feedback on anonymous profiles',
   'Business Calls': 'Business Calls',
   'Business Development': 'Business Development',
   'Candidate Call': 'Candidate Call',
