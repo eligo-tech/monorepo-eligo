@@ -60,6 +60,13 @@ import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { Button, FIELD } from '../ui/forms'
 import { adoptLeads, leadError, leadSummary } from '../ui/leadAdopt'
 import { alreadyAdoptedId, companyHref } from '../ui/companyList'
+import {
+  bucketLabel,
+  HEADCOUNT_BUCKETS,
+  headcountGate,
+  headcountLabel,
+  headcountSource,
+} from './headcount'
 
 /**
  * Which rung of the identity ladder established this employer.
@@ -187,6 +194,7 @@ function FacetFilter({
   onChange,
   format = (v: string) => v,
   emptyHint,
+  hint,
 }: {
   label: string
   options: FacetValueDTO[]
@@ -195,6 +203,8 @@ function FacetFilter({
   format?: (value: string) => string
   /** Why there is nothing to choose yet. A dead grey control explains nothing. */
   emptyHint?: string
+  /** How the filter reads its values, shown above the options. */
+  hint?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -248,6 +258,11 @@ function FacetFilter({
 
       {open && (
         <div className="absolute z-50 mt-1 max-h-80 w-[22rem] overflow-y-auto rounded-xl border border-cockpit-line bg-cockpit-surface shadow-panel">
+          {hint && (
+            <p className="border-b border-cockpit-line px-3 py-2 text-[12px] leading-snug text-cockpit-faint">
+              {hint}
+            </p>
+          )}
           {selected.length > 0 && (
             <button
               type="button"
@@ -736,6 +751,20 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
           </Chip>
         )}
 
+        {hit.headcount && (
+          <Chip
+            className="cursor-help"
+            title={[
+              headcountSource(hit.headcount.source),
+              hit.headcount.evidence ? `„${hit.headcount.evidence}“` : '',
+            ]
+              .filter(Boolean)
+              .join(' — ')}
+          >
+            {t('{n} Mitarbeitende', { n: headcountLabel(hit.headcount.min, hit.headcount.max) })}
+          </Chip>
+        )}
+
         <span className="ml-auto flex items-center gap-4 font-mono text-[13px] text-cockpit-faint">
           {hit.sites > 1 && (
             <span title={t('Standorte im Korpus — dieselbe Firma, mehrfach erfasst')}>
@@ -926,6 +955,9 @@ export function MarktScreen() {
   // ELI-27 "Unternehmensgröße": there is no headcount in the corpus, so size is
   // the employer's open ads there — labelled as such, never as employees.
   const [size, setSize] = useState('')
+  // ELI-54 "Mitarbeitende": a real headcount (the employer's own ads,
+  // Wikidata, EURES), offered once the server says enough employers have one.
+  const [employees, setEmployees] = useState<string[]>([])
   const [activeSaved, setActiveSaved] = useState<string | null>(null)
   const [savedKey, setSavedKey] = useState(0)
 
@@ -946,6 +978,7 @@ export function MarktScreen() {
             correct: !query.exact,
             excludeAgencies: hideAgencies,
             sizes: size ? [size] : undefined,
+            employees: employees.length ? employees : undefined,
           })
         : Promise.resolve({ items: [], total: 0, next_cursor: null, corrections: [] }),
     [
@@ -958,6 +991,7 @@ export function MarktScreen() {
       techOnly,
       hideAgencies,
       size,
+      employees.join('|'),
     ],
   )
   // What the corpus was actually asked, once a thin answer was retried with
@@ -1001,13 +1035,14 @@ export function MarktScreen() {
         families: techOnly ? ['tech'] : undefined,
         excludeAgencies: hideAgencies,
         sizes: size ? [size] : undefined,
+        employees: employees.length ? employees : undefined,
       })
       setMore((prev) => [...prev, ...page.items])
       setCursor(page.next_cursor)
     } finally {
       setLoadingMore(false)
     }
-  }, [query, searchedQ, cursor, titlesOnly, techOnly, hideAgencies, size])
+  }, [query, searchedQ, cursor, titlesOnly, techOnly, hideAgencies, size, employees])
 
   const run = useCallback(() => {
     setActiveSaved(null)
@@ -1063,6 +1098,7 @@ export function MarktScreen() {
     !!query && (!!query.q || !!query.city || query.regions.length > 0 || query.berufsfelder.length > 0)
   const techCount = facets.data?.families?.find((f) => f.value === 'tech')?.count ?? 0
   const techPending = facets.data?.families_pending ?? 0
+  const headcount = headcountGate(facets.data?.headcount)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1266,19 +1302,42 @@ export function MarktScreen() {
             />
             {t('Personalberatungen ausblenden')}
           </button>
+          {/* ELI-27: open ADS, not staff — labelled so it is never read as
+              the Mitarbeitende filter beside it (ELI-54). */}
           <select
-            aria-label={t('Unternehmensgröße')}
-            title={t('Größe nach offenen Stellen des Unternehmens im Markt, alle Standorte zusammen — eine Mitarbeiterzahl liegt nicht vor')}
+            aria-label={t('Offene Stellen im Markt')}
+            title={t('Offene Stellen des Unternehmens im Markt, alle Standorte zusammen — nicht die Zahl der Mitarbeitenden')}
             value={size}
             onChange={(e) => setSize(e.target.value)}
             className="rounded-lg border border-cockpit-line bg-cockpit-inset px-3 py-2 text-[13px] text-cockpit-dim hover:text-cockpit-text"
           >
-            <option value="">{t('Alle Größen')}</option>
+            <option value="">{t('Offene Stellen: alle')}</option>
             <option value="s">{t('1–4 offene Stellen')}</option>
             <option value="m">{t('5–19 offene Stellen')}</option>
             <option value="l">{t('20–99 offene Stellen')}</option>
             <option value="xl">{t('100+ offene Stellen')}</option>
           </select>
+          {headcount.show ? (
+            <FacetFilter
+              label={t('Mitarbeitende')}
+              options={
+                facets.data?.headcount?.buckets?.length
+                  ? facets.data.headcount.buckets
+                  : HEADCOUNT_BUCKETS.map((value) => ({ value, count: 0 }))
+              }
+              selected={employees}
+              onChange={setEmployees}
+              format={bucketLabel}
+              hint={t('Ein Bereich (z. B. 51–200) passt zu jeder Größe, die er berührt. Unternehmen ohne Angabe werden ausgeblendet, sobald eine Größe gewählt ist.')}
+            />
+          ) : (
+            <span
+              title={t('Die Zahl der Mitarbeitenden stammt aus den eigenen Anzeigen der Unternehmen, Wikidata und EURES. Der Filter erscheint, sobald sie für mindestens 30 % der Unternehmen mit offenen Stellen bekannt ist.')}
+              className="cursor-help font-mono text-[12px] text-cockpit-faint"
+            >
+              {t('Größenfilter folgt – Größe bekannt für {n} % der Unternehmen', { n: headcount.percent })}
+            </span>
+          )}
           {/* Not offered while Tech is on: a saved search cannot keep it yet,
               and "Java" saved from "Java + Tech" would quietly widen. */}
           {hasCriteria && !alreadySaved && !techOnly && (
@@ -1358,6 +1417,14 @@ export function MarktScreen() {
                   {' '}
                   · {t('von')} <span className="text-cockpit-text">{de(results.data?.total ?? 0)}</span>{' '}
                   {t('Treffern, stärkste zuerst')}
+                </span>
+              )}
+              {employees.length > 0 && (results.data?.unknown_size ?? 0) > 0 && (
+                <span
+                  title={t('Unternehmen, die auf die übrigen Filter passen, deren Mitarbeiterzahl aber unbekannt ist — der Größenfilter blendet sie aus')}
+                >
+                  {' '}
+                  · {t('{n} ohne Angabe', { n: de(results.data?.unknown_size ?? 0) })}
                 </span>
               )}
             </p>

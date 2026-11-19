@@ -177,6 +177,35 @@ class FacetValue(BaseModel):
     count: int
 
 
+class HeadcountCoverage(BaseModel):
+    """How many hiring employers have a known headcount (ELI-54).
+
+    Computed by the weekly snapshot (`headcount.coverage`). The Markt filter
+    is offered only while `filter_available` (≥ 30% coverage).
+    """
+
+    employers: int = 0
+    known: int = 0
+    coverage: float = 0.0
+    filter_available: bool = False
+    #: Hiring employers per bucket; a range counts in every bucket it overlaps.
+    buckets: list[FacetValue] = Field(default_factory=list)
+
+
+class Headcount(BaseModel):
+    """An employer's headcount and the evidence it rests on (ELI-54)."""
+
+    min: int
+    #: None = open-ended ("über 500").
+    max: int | None = None
+    #: ad_text · wikidata · eures
+    source: str | None = None
+    #: `<source>:<ad id>` or a Wikidata QID.
+    source_ref: str | None = None
+    evidence: str | None = None
+    as_of: dt.datetime | None = None
+
+
 class HubFacets(BaseModel):
     """Filter options, derived from the corpus so none of them return nothing."""
 
@@ -186,6 +215,8 @@ class HubFacets(BaseModel):
     families: list[FacetValue] = Field(default_factory=list)
     #: Open ads the nightly backfill has not labelled yet.
     families_pending: int = 0
+    #: ELI-54 headcount coverage; None in a snapshot stored before it existed.
+    headcount: HeadcountCoverage | None = None
 
 
 class HubJobPostingHit(HubJobPostingRead):
@@ -221,6 +252,8 @@ class HubEmployerHit(BaseModel):
     suspected_natural_person: bool = False
     website_domain: str | None = None
     hub_company_ids: list[uuid.UUID] = Field(default_factory=list)
+    #: ELI-54: the newest dated headcount any site carries, None when unknown.
+    headcount: Headcount | None = None
     # The roles that justify the hit — the answer carries its own evidence.
     matching_roles: list[HubJobPostingHit] = Field(default_factory=list)
     tracked: bool = False
@@ -255,6 +288,9 @@ class HubSearchPage(BaseModel):
     next_cursor: str | None = None
     #: Terms that were rewritten before searching, so the UI can say so.
     corrections: list[QueryCorrection] = Field(default_factory=list)
+    #: With a headcount filter: employers the other filters match whose size
+    #: is unknown, hidden by it ("X ohne Angabe"). None without the filter.
+    unknown_size: int | None = None
 
 
 RELATIONSHIPS = ("watching", "prospect", "client", "ignored")

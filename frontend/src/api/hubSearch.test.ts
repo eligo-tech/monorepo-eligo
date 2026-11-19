@@ -28,4 +28,10 @@ describe('hubSearch filters', () => {
     expect((await sent({ q: 'pflege', sizes: ['s', 'xl'] })).getAll('size')).toEqual(['s', 'xl'])
     expect((await sent({ q: 'pflege' })).has('size')).toBe(false)
   })
+
+  it('sends each headcount bucket as its own param (ELI-54)', async () => {
+    const params = await sent({ q: 'pflege', employees: ['51-150', '10001+'] })
+    expect(params.getAll('employees')).toEqual(['51-150', '10001+'])
+    expect((await sent({ q: 'pflege' })).has('employees')).toBe(false)
+  })
 })

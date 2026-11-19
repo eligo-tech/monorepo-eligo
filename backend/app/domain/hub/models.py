@@ -234,6 +234,27 @@ class HubCompany(Base, IDMixin, TimestampMixin):
     )
     bd_signals: Mapped[dict] = mapped_column(JSONBDict, default=dict, nullable=False)
 
+    # --- headcount (ELI-54, `hub/headcount.py`) ---------------------------
+    # A public company fact with its provenance. Inclusive bounds; max NULL =
+    # open-ended ("über 500" → 500, NULL). Not indexed: the filter reads the
+    # few sized rows, and an unindexed column keeps the weekly stamps HOT.
+    employees_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    employees_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ad_text · wikidata · eures
+    employees_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: `<source>:<ad id>` for an ad statement, the QID for Wikidata.
+    employees_source_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: The quoted sentence (or the Wikidata statement) the value rests on.
+    employees_evidence: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: When the claim was made: the ad text's fetch, Wikidata's P585.
+    employees_as_of: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    employees_updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: The ad-text pass's stamp: rules version and the newest text it read.
+    employees_rules: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    employees_read_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: When Wikidata was last asked about this row's domain.
+    employees_wikidata_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     first_seen_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

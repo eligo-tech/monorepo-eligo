@@ -36,7 +36,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.domain.hub import gate, suppression
+from app.domain.hub import gate, headcount, suppression
 from app.domain.hub.spelling import (
     closest_word,
     has_other_spelling,
@@ -356,6 +356,20 @@ async def merge_fetch(
             domain = normalize_domain(sourced.website_domain)
             if company.website_domain is None and domain:
                 company.website_domain = domain
+        # ELI-54: a size the source states in a structured field (EURES
+        # `organisationSizeCode`), dated by this fetch; `headcount.replaces`
+        # decides against what is stored. Written only when it changes.
+        if sourced.employees_min is not None and headcount.replaces(
+            new_source=result.source, new_as_of=result.fetched_at,
+            cur_source=company.employees_source, cur_as_of=company.employees_as_of,
+        ) and (company.employees_min, company.employees_max) != (sourced.employees_min, sourced.employees_max):
+            company.employees_min = sourced.employees_min
+            company.employees_max = sourced.employees_max
+            company.employees_source = result.source
+            company.employees_source_ref = f"{result.source}:{posting.external_id}"[:200]
+            company.employees_evidence = (sourced.employees_evidence or "")[:500] or None
+            company.employees_as_of = result.fetched_at
+            company.employees_updated_at = now
 
     # Counted per distinct company, not per posting — one employer with eleven
     # vacancies is one matched company, not eleven.
@@ -1256,6 +1270,8 @@ async def _corpus_facets(session: AsyncSession) -> dict:
         "berufsfelder": [{"value": v, "count": c} for v, c in fields.all()],
         "families": [{"value": "tech", "count": int(tech or 0)}],
         "families_pending": int(pending or 0),
+        # ELI-54: who has a headcount, and whether the filter is offered.
+        "headcount": await headcount.coverage(session),
     }
 
 
@@ -1615,6 +1631,8 @@ async def _search_candidates(
     families: list[str] | None = None,
     exclude_agencies: bool = False,
     sizes: list[str] | None = None,
+    employees: list[str] | None = None,
+    employees_unknown: bool = False,
 ):
     """Which employers the query matches, and the pieces built along the way.
 
@@ -1707,6 +1725,17 @@ async def _search_candidates(
 
     if sizes:
         candidates = candidates.where(_employer_sized(candidates, sizes))
+
+    # ELI-54 headcount. An employer is sized when ANY of its sites is; a range
+    # matches every bucket it overlaps (`headcount.bucket_predicate`).
+    if employees:
+        candidates = candidates.where(
+            HubCompany.normalized_name.in_(headcount.sized_names(employees))
+        )
+    if employees_unknown:
+        candidates = candidates.where(
+            HubCompany.normalized_name.not_in(headcount.sized_names())
+        )
 
     return candidates, terms, name_hits, description_hits, posting_filters
 
@@ -1936,6 +1965,7 @@ async def search_employers(
     min_relevance: int = 1,
     exclude_agencies: bool = False,
     sizes: list[str] | None = None,
+    employees: list[str] | None = None,
 ) -> list[dict]:
     """Search the corpus and return EMPLOYERS, not company rows.
 
@@ -1968,7 +1998,7 @@ async def search_employers(
         posting_filters,
     ) = await _search_candidates(
         session, q=q, city=city, regions=regions, berufsfelder=berufsfelder, families=families,
-        exclude_agencies=exclude_agencies, sizes=sizes,
+        exclude_agencies=exclude_agencies, sizes=sizes, employees=employees,
     )
 
     # ONE predicate for what counts as a matching role, used for both the
@@ -2037,14 +2067,34 @@ async def search_employers(
             HubCompany.city,
             HubCompany.resolution_basis,
             HubCompany.website_domain,
+            HubCompany.employees_min,
+            HubCompany.employees_max,
+            HubCompany.employees_source,
+            HubCompany.employees_source_ref,
+            HubCompany.employees_evidence,
+            HubCompany.employees_as_of,
         ).where(HubCompany.normalized_name.in_(names), _employer_company())
     )
     cities: dict[str, list[str]] = {}
     basis: dict[str, str] = {}
     domains: dict[str, str] = {}
     ids: dict[str, list[uuid.UUID]] = {}
+    sizes_by: dict[str, dict] = {}
     for row in site_rows.all():
         ids.setdefault(row.normalized_name, []).append(row.id)
+        # ELI-54: the newest dated size any site carries, with its evidence.
+        if row.employees_min is not None:
+            seen = sizes_by.get(row.normalized_name)
+            as_of = headcount.as_utc(row.employees_as_of)
+            if seen is None or (as_of or headcount.OLDEST) > (seen["as_of"] or headcount.OLDEST):
+                sizes_by[row.normalized_name] = {
+                    "min": row.employees_min,
+                    "max": row.employees_max,
+                    "source": row.employees_source,
+                    "source_ref": row.employees_source_ref,
+                    "evidence": row.employees_evidence,
+                    "as_of": as_of,
+                }
         if row.city:
             bucket = cities.setdefault(row.normalized_name, [])
             if row.city not in bucket:
@@ -2151,6 +2201,7 @@ async def search_employers(
             "resolution_basis": basis.get(row.normalized_name, "name_place"),
             "website_domain": domains.get(row.normalized_name),
             "hub_company_ids": ids.get(row.normalized_name, []),
+            "headcount": sizes_by.get(row.normalized_name),
             "matching_roles": matched.get(row.normalized_name, []),
         }
         for row in groups
@@ -2168,6 +2219,8 @@ async def count_employers(
     min_relevance: int = 1,
     exclude_agencies: bool = False,
     sizes: list[str] | None = None,
+    employees: list[str] | None = None,
+    employees_unknown: bool = False,
 ) -> int:
     """How many employers the query matches in total.
 
@@ -2184,7 +2237,8 @@ async def count_employers(
         posting_filters,
     ) = await _search_candidates(
         session, q=q, city=city, regions=regions, berufsfelder=berufsfelder, families=families,
-        exclude_agencies=exclude_agencies, sizes=sizes,
+        exclude_agencies=exclude_agencies, sizes=sizes, employees=employees,
+        employees_unknown=employees_unknown,
     )
     if min_relevance <= 1:
         # Nothing is excluded, so the cheap shape is also the correct one.

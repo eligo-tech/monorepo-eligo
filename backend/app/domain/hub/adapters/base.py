@@ -66,6 +66,12 @@ class SourcedCompany:
     # The identity ladder's place when the source has no postcode or city
     # (EURES: "region:oesterreich:wien"). Never displayed, never a town.
     area: str | None = None
+    # Headcount as the source states it in a structured field (ELI-54; EURES
+    # `organisationSizeCode`). Inclusive; max None = open-ended. The evidence
+    # names the field and its raw value.
+    employees_min: int | None = None
+    employees_max: int | None = None
+    employees_evidence: str | None = None
 
 
 @dataclass

@@ -284,8 +284,10 @@ export const api = {
     correct?: boolean
     /** ELI-27: leave out firms whose name marks staffing or placement. */
     excludeAgencies?: boolean
-    /** ELI-27: employer size by open ads in the corpus — s · m · l · xl. */
+    /** ELI-27: employer by open ads in the corpus — s · m · l · xl. */
     sizes?: string[]
+    /** ELI-54: headcount buckets ("51-150", "10001+"); unknown size is left out. */
+    employees?: string[]
   }) => {
     const qs = new URLSearchParams()
     if (params.q) qs.set('q', params.q)
@@ -303,6 +305,7 @@ export const api = {
     if (params.correct === false) qs.set('correct', 'false')
     if (params.excludeAgencies) qs.set('exclude_agencies', 'true')
     params.sizes?.forEach((s) => qs.append('size', s))
+    params.employees?.forEach((e) => qs.append('employees', e))
     return request<HubSearchPageDTO>(`/hub/search?${qs}`)
   },
 

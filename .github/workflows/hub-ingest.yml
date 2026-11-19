@@ -13,6 +13,7 @@
 #
 #   ingest -> ad text x2 -> ad contacts -> EURES (+ AT/CH liveness)
 #          -> BA liveness (full listing) -> BA liveness (more checks)
+#          -> headcount (ELI-54) -> snapshot
 #
 # The cost: new ads reach Markt up to a week late, and ads closed at the
 # source (~8k/day) can show as open until the next run.
@@ -261,10 +262,37 @@ jobs:
           CHECKS: ${{ github.event.inputs.liveness_checks || '30000' }}
         run: python -m scripts.hub_liveness --checks "$CHECKS"
 
+  # Employer headcount (ELI-54, backend/app/domain/hub/headcount.py): the
+  # employers' own ad texts, read by deterministic rules — no fetch — then
+  # Wikidata P1128 by official website = the stored domain. After liveness,
+  # so closed ads are gone; before the snapshot, which stores the coverage
+  # that decides whether Markt offers the size filter (>= 30%).
+  headcount:
+    needs: liveness-more
+    if: ${{ !cancelled() && github.event.inputs.agencies_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install --no-cache-dir "httpx>=0.27"
+
+      - name: Read employer headcount
+        working-directory: backend
+        env:
+          ELIGO_API_BASE: ${{ vars.ELIGO_API_BASE }}
+          ELIGO_INGEST_TOKEN: ${{ secrets.ELIGO_INGEST_TOKEN }}
+        run: python -m scripts.hub_headcount --minutes 180 --wikidata 20000
+
   # Last: store Markt's totals and filter counts (scripts/hub_snapshot.py), so
   # Markt reads one row instead of counting the corpus after every restart.
   snapshot:
-    needs: [ingest, liveness-more]
+    needs: [ingest, liveness-more, headcount]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20

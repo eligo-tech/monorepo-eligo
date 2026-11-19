@@ -285,8 +285,30 @@ These are enforced in code. Do not route around them.
   migration 0070; "Personalberatungen ausblenden" (`exclude_agencies`) is a
   column check on it, never a name scan per request. Size (`size=s|m|l|xl`)
   is the employer's open ads in the corpus over ALL its sites (1–4 · 5–19 ·
-  20–99 · 100+), because the corpus holds no headcount — the UI says "offene
-  Stellen", never "Mitarbeiter".
+  20–99 · 100+) — the UI says "Offene Stellen", never "Mitarbeiter".
+- **Employer headcount** (ELI-54, `hub/headcount.py`, migration 0080):
+  `hub_companies.employees_min/max` (max NULL = open-ended) with provenance
+  (`employees_source` ad_text · wikidata · eures, `_source_ref` = `<source>:
+  <ad id>` or QID, `_evidence` = the quoted sentence, `_as_of`, `_rules`).
+  Free sources only, no paid/licensed data. Filled by the weekly chain's
+  `headcount` job (`scripts/hub_headcount.py`, after liveness, before the
+  snapshot) through two operator routes: `POST /hub/headcount/backfill`
+  reads the newest 20 ad texts of employers with new text (deterministic
+  rules — team/department/site, leadership span, people served, hiring
+  counts, parent-group totals are skipped; a worldwide total only when
+  nothing else is said; most frequent value, tie → newest) and
+  `POST /hub/headcount/wikidata` asks P1128 matched ONLY by official website
+  (P856) = the stored registrable domain, batched SPARQL, paced, a 429 ends
+  the pass, each request a `hub_observations` row. EURES
+  `organisationSizeCode` is stored at ingest when it spells a band (empty in
+  600/600 sampled ads). Which wins (`headcount.replaces`): the same source
+  refreshes itself; otherwise the newest dated claim (an undated one is
+  oldest). Markt's "Mitarbeitende" filter (`employees=1-3…10001+`, a range
+  matches every bucket it overlaps, unknown size hidden and counted in
+  `unknown_size`) is offered only while the snapshot's
+  `facets.headcount.filter_available` (≥ 30 % of hiring employers sized);
+  below it Markt shows the coverage instead. Bump `HEADCOUNT_RULES` to re-read
+  everything; a value its own ad no longer states is cleared.
 - **Employers' Impressum** (`hub/employer_sites.py`, `POST /hub/employers/sites/check`,
   daily at 15:23 UTC — `.github/workflows/hub-employer-sites.yml`, ELI-30). The
   last contact fallback: website from the ads (text + BA `externeURL`) →

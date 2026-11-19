@@ -66,6 +66,7 @@ from app.domain.hub.adapters.base import (
     SourceQuery,
     SourceUnreachable,
 )
+from app.domain.hub.headcount import eures_size
 from app.domain.hub.models import EMPLOYER, PRIVATE_RECRUITER
 
 logger = get_logger(__name__)
@@ -334,6 +335,8 @@ def parse_response(
         description = clean_text(record.get("description"))
         signal = staffing_signal(name, description)
         raw = {k: v for k, v in record.items() if k not in ("description", "translations")}
+        size_code = employer.get("organisationSizeCode")
+        size = eures_size(size_code if isinstance(size_code, str) else None)
         if signal:
             raw["staffing_signal"] = signal
         postings.append(
@@ -348,6 +351,11 @@ def parse_response(
                     area=f"region:{country}:{region or '-'}".lower(),
                     region=region,
                     country=country,
+                    employees_min=size[0] if size else None,
+                    employees_max=size[1] if size else None,
+                    employees_evidence=(
+                        f"EURES organisationSizeCode „{size_code}“" if size else None
+                    ),
                 ),
                 description=description,
                 region=region,
