@@ -72,14 +72,18 @@ const NOT_A_PLACE = /\b(remote|home\s*-?office|bundesweit|deutschlandweit|europa
 
 /** "80331 München, Bayern" → "München". The town is what a profile names. */
 export function placeName(location: string | null | undefined): string | null {
-  if (!location || NOT_A_PLACE.test(location)) return null
-  const first = location.split(/[,;/]|\s[–-]\s/)[0] ?? ''
-  const town = first
-    .replace(/\b\d{4,5}\b/g, '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return town || null
+  if (!location) return null
+  // Split first: "München / Remote" still names a town.
+  for (const part of location.split(/[,;/]|\s[–-]\s/)) {
+    if (NOT_A_PLACE.test(part)) continue
+    const town = part
+      .replace(/\b\d{4,5}\b/g, '')
+      .replace(/\(.*?\)/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (town) return town
+  }
+  return null
 }
 
 /** How many Muss-Kriterien start ticked: every term narrows a LinkedIn
@@ -100,8 +104,14 @@ export function suggestTerms(m: MandateFacts): SearchTerm[] {
   const titles = cleanTitle(m.title).split(/\s+[/|]\s+/)
   for (const title of titles) add(title, 'title', true)
   const titleText = titles.join(' ').toLowerCase()
-  /** A skill the title already says adds nothing but an AND. */
-  const inTitle = (s: string) => s.trim() !== '' && titleText.includes(s.trim().toLowerCase())
+  /** A skill the title already says adds nothing but an AND. Whole words
+   *  only: "Java" is not in "JavaScript Developer", and "C" is in nothing. */
+  const inTitle = (s: string) => {
+    const word = s.trim().toLowerCase()
+    if (!word) return false
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, 'u').test(titleText)
+  }
 
   let must = 0
   for (const skill of m.mustHave) {
@@ -117,8 +127,12 @@ export function suggestTerms(m: MandateFacts): SearchTerm[] {
   return out
 }
 
-const quote = (text: string) =>
-  /\s/.test(text) ? `"${text.replace(/"/g, '')}"` : text.replace(/"/g, '')
+/** Quoted when it has a space, a bracket, or IS a boolean word — otherwise
+ *  "SAP(FI)" breaks the OR group and a skill called "OR" becomes one. */
+const quote = (text: string) => {
+  const bare = text.replace(/"/g, '')
+  return /[\s()]/.test(bare) || /^(AND|OR|NOT)$/.test(bare) ? `"${bare}"` : bare
+}
 
 /** The keywords box of LinkedIn's people search. Title alternatives are
  *  ORed — "Elektroniker / Mechatroniker" is either, not both — and every
@@ -152,35 +166,38 @@ function clip(text: string, max: number): string {
 /** A first message about the mandate. A draft, never sent by Eligo: the
  *  recruiter fills in the name, edits it and sends it from their own
  *  account. Only the mandate's own fields go in — nothing about the
- *  person, because Eligo knows nothing about them. */
+ *  person, because Eligo knows nothing about them.
+ *
+ *  Always German, in an English UI too: it goes to a candidate in a
+ *  German-speaking market, and the Sie/Du switch only means anything in
+ *  German. The panel around it is translated; the message is not — so
+ *  these strings deliberately do not go through `t()`. */
 export function draftMessage(m: MandateFacts, { form, length }: DraftOptions): string {
   const du = form === 'Du'
-  const title = cleanTitle(m.title) || t('eine spannende Position')
+  const title = cleanTitle(m.title) || 'eine spannende Position'
   const place = placeName(m.location)
   const skills = m.mustHave.map((s) => s.trim()).filter(Boolean)
-  const greet = du ? t('Hallo [Vorname],') : t('Guten Tag [Name],')
+  const greet = du ? 'Hallo [Vorname],' : 'Guten Tag [Name],'
   const close = du
-    ? t('Hast du Lust auf einen kurzen Austausch?')
-    : t('Hätten Sie Interesse an einem kurzen Austausch?')
-  const sign = t('Viele Grüße')
+    ? 'Hast du Lust auf einen kurzen Austausch?'
+    : 'Hätten Sie Interesse an einem kurzen Austausch?'
+  const sign = 'Viele Grüße'
 
   const role = (roleTitle: string, at: string | null) =>
-    at
-      ? t('ich besetze gerade eine Stelle als {title} in {place}.', { title: roleTitle, place: at })
-      : t('ich besetze gerade eine Stelle als {title}.', { title: roleTitle })
+    'ich besetze gerade eine Stelle als ' + roleTitle + (at ? ' in ' + at : '') + '.'
 
   if (length === 'long') {
     const lines = [greet, '', role(title, place)]
     if (skills.length > 0) {
-      lines.push('', t('Wichtig für die Rolle:'), ...skills.map((s) => `– ${s}`))
+      lines.push('', 'Wichtig für die Rolle:', ...skills.map((s) => '– ' + s))
     }
     const certs = (m.certifications ?? []).map((c) => c.trim()).filter(Boolean)
-    if (certs.length > 0) lines.push(t('Zertifizierung: {certs}', { certs: certs.join(', ') }))
+    if (certs.length > 0) lines.push('Zertifizierung: ' + certs.join(', '))
     lines.push(
       '',
       du
-        ? t('Wenn das für dich interessant klingt, erzähle ich dir gern mehr — telefonisch oder hier per Nachricht.')
-        : t('Wenn das für Sie interessant klingt, erzähle ich Ihnen gern mehr — telefonisch oder hier per Nachricht.'),
+        ? 'Wenn das für dich interessant klingt, erzähle ich dir gern mehr — telefonisch oder hier per Nachricht.'
+        : 'Wenn das für Sie interessant klingt, erzähle ich Ihnen gern mehr — telefonisch oder hier per Nachricht.',
       close,
       '',
       sign,
@@ -194,7 +211,7 @@ export function draftMessage(m: MandateFacts, { form, length }: DraftOptions): s
     [
       greet,
       role(roleTitle, at),
-      n > 0 ? t('Gefragt sind {skills}.', { skills: skills.slice(0, n).join(', ') }) : null,
+      n > 0 ? 'Gefragt sind ' + skills.slice(0, n).join(', ') + '.' : null,
       close,
       sign,
     ]
@@ -205,7 +222,9 @@ export function draftMessage(m: MandateFacts, { form, length }: DraftOptions): s
     const text = compose(n, place, title)
     if (text.length <= CONNECTION_NOTE_LIMIT) return text
   }
-  const bare = compose(0, null, '')
-  const room = CONNECTION_NOTE_LIMIT - bare.length
-  return compose(0, null, clip(title, room))
+  // `room` can be ≤ 1 only if the fixed sentences alone outgrow the limit;
+  // then the title goes and the whole note is clipped, never overrun.
+  const room = CONNECTION_NOTE_LIMIT - compose(0, null, '').length
+  const text = room > 1 ? compose(0, null, clip(title, room)) : compose(0, null, '')
+  return clip(text, CONNECTION_NOTE_LIMIT)
 }

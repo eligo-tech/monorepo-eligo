@@ -56,6 +56,16 @@ describe('suggested search terms', () => {
     expect(terms.every((term) => term.source === 'title')).toBe(true)
   })
 
+  it('drop a skill only when the title names it as a whole word', () => {
+    const terms = suggestTerms({ title: 'JavaScript Developer', mustHave: ['Java', 'C', 'R'] })
+    expect(terms.map((term) => term.text)).toEqual(['JavaScript Developer', 'Java', 'C', 'R'])
+  })
+
+  it('keep the town when the Ort also says Remote', () => {
+    const terms = suggestTerms({ title: 'Data Engineer', mustHave: [], location: 'München / Remote' })
+    expect(terms.map((term) => term.text)).toEqual(['Data Engineer', 'München'])
+  })
+
   it('leave Remote and an empty Ort out', () => {
     expect(suggestTerms({ title: 'Data Engineer', mustHave: [], location: 'Remote' })).toHaveLength(1)
     expect(suggestTerms({ title: 'Data Engineer', mustHave: [], location: null })).toHaveLength(1)
@@ -88,6 +98,14 @@ describe('the LinkedIn keywords', () => {
     expect(searchKeywords(terms)).toBe(
       '(Elektroniker OR Mechatroniker) "SPS Programmierung" Stuttgart',
     )
+  })
+
+  it('quote a term with brackets or a boolean word, so it cannot act as an operator', () => {
+    const terms = suggestTerms({ title: 'Berater', mustHave: ['SAP(FI)', 'OR'] }).map((term) => ({
+      ...term,
+      selected: true,
+    }))
+    expect(searchKeywords(terms)).toBe('Berater "SAP(FI)" "OR"')
   })
 
   it('use only the selected terms', () => {
@@ -129,14 +147,23 @@ describe('the drafted message', () => {
     }
   })
 
-  it('fits the note limit in English too', () => {
+  it('stays German in an English UI — it goes to a German-speaking candidate', () => {
     setLang('en')
-    const text = draftMessage(
-      { title: 'X'.repeat(400), mustHave: ['Y'.repeat(200)], location: 'Z'.repeat(100) },
-      { form: 'Sie', length: 'short' },
-    )
-    expect(text.length).toBeLessThanOrEqual(CONNECTION_NOTE_LIMIT)
-    expect(text).not.toContain('Guten Tag')
+    for (const length of ['short', 'long'] as const) {
+      const text = draftMessage(mandate, { form: 'Sie', length })
+      expect(text).toContain('Guten Tag [Name]')
+      expect(text).toContain('Viele Grüße')
+    }
+  })
+
+  it('never exceeds the limit, even with an absurd title and nothing else', () => {
+    for (const title of ['X'.repeat(400), 'X'.repeat(299), '']) {
+      const text = draftMessage({ title, mustHave: ['Y'.repeat(200)], location: 'Z'.repeat(100) }, {
+        form: 'Sie',
+        length: 'short',
+      })
+      expect(text.length).toBeLessThanOrEqual(CONNECTION_NOTE_LIMIT)
+    }
   })
 
   it('speaks Du when asked', () => {

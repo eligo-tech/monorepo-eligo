@@ -84,9 +84,13 @@ function SearchHalf({ mandate }: { mandate: Mandate }) {
   const addOwn = () => {
     const text = own.replace(/\s+/g, ' ').trim()
     if (!text) return
-    const key = `own:${text.toLowerCase()}`
-    if (!terms.some((term) => term.key === key)) {
-      change([...terms, { key, text, source: 'own', selected: true }])
+    const folded = text.toLowerCase()
+    const same = terms.find((term) => term.text.toLowerCase() === folded)
+    if (same) {
+      // Already a chip (perhaps a suggested one): switch it on, do not double it.
+      change(terms.map((term) => (term === same ? { ...term, selected: true } : term)))
+    } else {
+      change([...terms, { key: `own:${folded}`, text, source: 'own', selected: true }])
     }
     setOwn('')
   }
@@ -243,6 +247,7 @@ function MessageHalf({ mandate }: { mandate: Mandate }) {
     try {
       await navigator.clipboard.writeText(text)
       setCopied('ok')
+      window.setTimeout(() => setCopied((c) => (c === 'ok' ? null : c)), 2000)
     } catch {
       // No clipboard permission (or an old browser): leave the text marked
       // so Ctrl+C does it.
