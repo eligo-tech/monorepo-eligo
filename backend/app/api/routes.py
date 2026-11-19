@@ -29,6 +29,7 @@ from app.domain.pipeline.router import router as pipeline_router
 from app.domain.presentation.router import router as presentation_router
 from app.domain.projects.router import router as projects_router
 from app.domain.proposals.router import router as proposals_router
+from app.domain.erasure.router import contact_router as do_not_contact_router
 from app.domain.erasure.router import router as erasure_router
 from app.domain.reporting.router import router as reporting_router
 from app.domain.search.router import router as search_router
@@ -83,6 +84,7 @@ api_router.include_router(notices_router)
 api_router.include_router(reporting_router)
 api_router.include_router(proposals_router)
 api_router.include_router(erasure_router)
+api_router.include_router(do_not_contact_router)
 api_router.include_router(search_router)
 api_router.include_router(searches_router)
 api_router.include_router(verification_router)

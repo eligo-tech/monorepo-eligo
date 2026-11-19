@@ -29,6 +29,9 @@ EXEMPT: dict[tuple[str, str], str] = {
     # ELI-33 "Verknüpfung aufheben": the link rows stay, marked IGNORED, with
     # a receipt — an undo of a wrong match, not a deletion.
     ("DELETE", "/companies/{company_id}/market-links"): "undo of a wrong link, receipted",
+    # ELI-32: "Wieder kontaktierbar" clears a mark the same recruiter set
+    # from a note; it removes no data, and leaves a receipt.
+    ("DELETE", "/{kind}/{person_id}/do-not-contact"): "undo of the do-not-contact mark, receipted",
 }
 
 #: Deletions that are not spelled DELETE. Art. 17 erasure is a POST because

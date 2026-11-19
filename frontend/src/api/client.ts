@@ -46,6 +46,7 @@ import type {
   PipelineBoardDTO,
   CandidateDocumentDTO,
   CandidateNoticeDTO,
+  DoNotContactDTO,
   CompetingEmployerDTO,
   DocumentKind,
   HistoryEntryDTO,
@@ -438,6 +439,8 @@ export const api = {
       /** ELI-22: how a call ended, and when to call again. */
       outcome?: string | null
       next_action_at?: string | null
+      /** ELI-32: the person asked not to be contacted again. */
+      do_not_contact?: boolean
     },
   ) =>
     request<ManagerInteractionDTO>(`/managers/${id}/interactions`, {
@@ -601,6 +604,8 @@ export const api = {
       summary: string
       occurred_at?: string
       job_id?: string | null
+      /** ELI-32: the person asked not to be contacted again. */
+      do_not_contact?: boolean
     },
   ) =>
     request<ManagerInteractionDTO>(`/candidates/${id}/interactions`, {
@@ -750,6 +755,13 @@ export const api = {
     }),
   /** The handled requests. Names nobody. */
   erasureRequests: () => request<ErasureRequestDTO[]>('/erasure/requests'),
+
+  /** ELI-32: "Wieder kontaktierbar" — undo "Nicht mehr kontaktieren". */
+  liftDoNotContact: (subject: 'candidate' | 'manager', id: string) =>
+    request<DoNotContactDTO>(`/${subject}s/${id}/do-not-contact`, { method: 'DELETE' }),
+  /** ELI-32: "Bestätigung senden" — one mail to the marked person, on this click. */
+  sendDoNotContactConfirmation: (subject: 'candidate' | 'manager', id: string) =>
+    request<{ status: 'sent' }>(`/${subject}s/${id}/do-not-contact/confirmation`, { method: 'POST' }),
 
   /** Funnel + dwell + KPIs, derived live from the record. */
   reportingOverview: () => request<ReportingOverviewDTO>('/reporting/overview'),

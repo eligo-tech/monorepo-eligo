@@ -183,6 +183,9 @@ class CandidateRead(CandidateBase):
     verification_score: float
     #: Share of key fields that merely have a value.
     completeness_score: float = 0.0
+    #: ELI-32: marked "Nicht mehr kontaktieren", and why (a code).
+    do_not_contact_at: dt.datetime | None = None
+    do_not_contact_reason: str | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
 

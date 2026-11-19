@@ -351,6 +351,17 @@ These are enforced in code. Do not route around them.
   contact and writes `tenant_suppressions` (HMAC under `ELIGO_SUPPRESSION_KEY`).
   **Every new path that creates a candidate or a manager must call
   `erasure.guard_readd` (by hand) or `erasure.import_guard` (bulk).**
+- **"Nicht mehr kontaktieren"** (ELI-32, `erasure/do_not_contact.py`):
+  `do_not_contact_at` + a reason CODE on `managers`/`candidates`, set by a
+  note saved with `do_not_contact: true` (same transaction, one receipt naming
+  the note) or by the candidate's "Nein" in the opt-in mail; undone by
+  `DELETE /{managers|candidates}/{id}/do-not-contact`. The record stays; the
+  Leads list shows it never due, the Wiedervorlage and Markt drop it, an Art. 14
+  notice is refused. **A new list of people to contact must filter on it.**
+  The confirmation mail (`…/do-not-contact/confirmation`, and
+  `send_confirmation` on an erase) uses the notice sender, on a click only;
+  the erase reads the address before wiping and mails after the commit, its
+  receipt naming the erasure request — never the person or the address.
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing

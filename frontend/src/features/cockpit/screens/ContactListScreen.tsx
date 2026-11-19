@@ -29,6 +29,7 @@ import { leadJobLine, mandateHref } from '../ui/leadJobs'
 import { leadPhone } from '../ui/switchboard'
 import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
+import { DoNotContactChip } from '../erasure/DoNotContact'
 import { FollowUpForm } from '../ui/FollowUpForm'
 import { DateField } from '../ui/DateField'
 import { announceFollowUpsChanged, localIsoDate, parseLocalDate, shortTime } from '../ui/followUps'
@@ -77,10 +78,12 @@ function CallForm({
   onSave,
   onCancel,
 }: {
-  onSave: (outcome: string, nextAt: string | null, note: string) => Promise<void>
+  onSave: (outcome: string, nextAt: string | null, note: string, doNotContact: boolean) => Promise<void>
   onCancel: () => void
 }) {
   const [outcome, setOutcome] = useState<string>('')
+  // ELI-32: the person asked not to be called again.
+  const [doNotContact, setDoNotContact] = useState(false)
   const [nextAt, setNextAt] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -89,7 +92,7 @@ function CallForm({
     setBusy(true)
     setError(null)
     try {
-      await onSave(outcome, nextCallInstant(nextAt), note.trim())
+      await onSave(outcome, nextCallInstant(nextAt), note.trim(), doNotContact)
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 409
@@ -118,6 +121,19 @@ function CallForm({
       <label className="block min-w-0 sm:col-span-2">
         <span className="mb-1 block font-mono text-[11px] uppercase tracking-wide text-cockpit-faint">{t('Notiz (optional)')}</span>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={FIELD} />
+      </label>
+      <label className="flex items-start gap-2 text-[13px] text-cockpit-dim sm:col-span-2">
+        <input
+          type="checkbox"
+          checked={doNotContact}
+          onChange={(e) => setDoNotContact(e.target.checked)}
+          className="mt-1"
+        />
+        <span>
+          <span className="text-coral-300">{t('Nicht mehr kontaktieren')}</span>
+          {' — '}
+          {t('die Person möchte keinen Kontakt mehr. Löschen (DSGVO) auf der Manager-Seite.')}
+        </span>
       </label>
       <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
         <Button tone="primary" onClick={save} disabled={busy || !canSaveCall(outcome, nextAt)}>
@@ -189,6 +205,7 @@ export function ContactRow({
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-[15px] font-medium text-cockpit-text">{row.full_name}</span>
         {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
+        {row.do_not_contact_at && <DoNotContactChip since={row.do_not_contact_at} />}
         {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
         {/* ELI-38: the open next call is the lead's status — on the name
             line, and kept by the backend until a call reaches the person. */}
@@ -291,17 +308,19 @@ export function ContactRow({
       {calling && (
         <CallForm
           onCancel={() => setCalling(false)}
-          onSave={async (outcome, nextAt, note) => {
+          onSave={async (outcome, nextAt, note, doNotContact) => {
             const logged = await api.logManagerInteraction(row.manager_id, {
               interaction_type: 'business_call',
               summary: note,
               outcome,
               next_action_at: nextAt,
+              do_not_contact: doNotContact,
             })
             setCalling(false)
             // ELI-44/48: offer a Wiedervorlage after every call — the date the
             // note names ("Anfang Februar"), else a week out, editable.
-            onOffer?.(logged)
+            // ELI-32: not to someone who asked not to be contacted again.
+            if (!doNotContact) onOffer?.(logged)
             onCalled()
           }}
         />

@@ -2,6 +2,7 @@
 // a typed name matches, and how to say what an erasure did.
 
 import { ApiError } from '@/api/client'
+import type { ErasureConfirmation } from '@/api/types'
 import { t } from '@/i18n'
 
 interface Refusal {
@@ -55,6 +56,40 @@ export function summary(counts: Record<string, number>): string {
   const blacked =
     receipts === 1 ? t('1 Quittung geschwärzt') : t('{n} Quittungen geschwärzt', { n: String(receipts) })
   return `${rows} · ${blacked}`
+}
+
+/** ELI-32: what became of the confirmation the erasure was asked to send —
+ *  said out loud, never swallowed. Null when none was asked for. */
+export function confirmationNote(
+  c: ErasureConfirmation | null | undefined,
+): { tone: 'mint' | 'gold' | 'coral'; text: string } | null {
+  switch (c) {
+    case 'sent':
+      return { tone: 'mint', text: t('Bestätigung an die Person gesendet.') }
+    case 'not_configured':
+      return { tone: 'gold', text: t('Keine Bestätigung gesendet: E-Mail-Versand ist auf diesem Server nicht eingerichtet.') }
+    case 'no_email':
+      return { tone: 'gold', text: t('Keine Bestätigung gesendet: Es war keine E-Mail-Adresse hinterlegt.') }
+    case 'failed':
+      return { tone: 'coral', text: t('Die Bestätigung konnte nicht gesendet werden — der E-Mail-Dienst hat sie abgelehnt.') }
+    default:
+      return null
+  }
+}
+
+/** ELI-32: why "Bestätigung senden" did not send. */
+export function describeConfirmationError(e: unknown): string {
+  switch (refusal(e)?.code) {
+    case 'email_not_configured':
+      return t('E-Mail-Versand ist auf diesem Server nicht eingerichtet. Bitte den Betreiber informieren.')
+    case 'no_email':
+      return t('Für diese Person ist keine E-Mail-Adresse hinterlegt.')
+    case 'email_rejected':
+      return t('Der E-Mail-Dienst hat die Nachricht abgelehnt.')
+    case 'not_marked':
+      return t('Diese Person ist nicht als „Nicht mehr kontaktieren“ markiert.')
+  }
+  return t('Senden fehlgeschlagen.')
 }
 
 export function describeEraseError(e: unknown): string {

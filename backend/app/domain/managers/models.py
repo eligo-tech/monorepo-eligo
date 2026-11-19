@@ -113,6 +113,12 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     stage: Mapped[str] = mapped_column(String(20), default="manager", server_default="manager", nullable=False)
     #: When a bus-dev contact was moved to Managers.
     promoted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: ELI-32: the person asked not to be contacted again. The record stays
+    #: (a Leads row with a red mark); the call list, the Wiedervorlage and
+    #: Markt stop offering them until a person undoes it. The reason is a
+    #: code (`requested`), never free text — the note carries the words.
+    do_not_contact_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    do_not_contact_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     interactions: Mapped[list["ManagerInteraction"]] = relationship(
         "ManagerInteraction",

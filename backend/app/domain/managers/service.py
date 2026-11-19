@@ -446,9 +446,22 @@ async def log_interaction(
     if manager is not None and kind in CONTACT_KINDS:
         _advance_last_contact(manager, occurred_at)
     session.add(interaction)
+    if payload.do_not_contact and manager is not None:
+        await _mark_do_not_contact(session, tenant_id, "manager", manager, interaction)
     await session.commit()
     await session.refresh(interaction)
     return interaction
+
+
+async def _mark_do_not_contact(session: AsyncSession, tenant_id: uuid.UUID, subject: str, person, interaction) -> None:  # noqa: ANN001
+    """ELI-32: the note says "nicht mehr kontaktieren" — mark the person in
+    the note's own transaction, the receipt naming the note."""
+    from app.domain.erasure import do_not_contact
+
+    await session.flush()
+    await do_not_contact.mark(
+        session, tenant_id=tenant_id, subject=subject, person=person, interaction_id=interaction.id,
+    )
 
 
 async def list_interactions(
@@ -564,6 +577,8 @@ async def log_candidate_interaction(
         actor_name=actor_name,
     )
     session.add(interaction)
+    if payload.do_not_contact:
+        await _mark_do_not_contact(session, tenant_id, "candidate", candidate, interaction)
     await session.commit()
     await session.refresh(interaction)
     return interaction

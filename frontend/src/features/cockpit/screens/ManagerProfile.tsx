@@ -40,6 +40,8 @@ import type { CompanyMarketDTO, ManagerDTO, ManagerInteractionDTO } from '@/api/
 import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
 import { EraseSection } from '../erasure/EraseSection'
+import { DoNotContactBanner } from '../erasure/DoNotContact'
+import { isAdmin, useMe } from '../useMe'
 import { useAsync } from '@/hooks/useAsync'
 import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
 import { InteractionComposer } from '../ui/InteractionComposer'
@@ -218,6 +220,9 @@ export function ManagerProfile({
   /** ELI-44: the note just saved, while its follow-up date is on offer. */
   const [offerFor, setOfferFor] = useState<SavedNote | null>(null)
   const [busy, setBusy] = useState(false)
+  // ELI-32: "Löschen (DSGVO)" in the composer opens the erase dialog.
+  const [eraseOpen, setEraseOpen] = useState(false)
+  const me = useMe()
   // One read of the company page for the sidebar: its open jobs (ELI-33) and
   // its Impressum switchboard, shown as "Zentrale (Firma)" (ELI-46).
   const companyPage = useAsync(() => api.companyPage(initial.company_id), [initial.company_id])
@@ -230,6 +235,7 @@ export function ManagerProfile({
     setTab('notes')
     setComposing(false)
     setOfferFor(null)
+    setEraseOpen(false)
     api.manager(initial.id).then((m) => alive && setManager(m)).catch(() => {})
     api
       .managerInteractions(initial.id)
@@ -376,6 +382,17 @@ export function ManagerProfile({
             )}
           </div>
         </div>
+        {manager.do_not_contact_at && (
+          <div className="mt-4">
+            <DoNotContactBanner
+              subject="manager"
+              id={manager.id}
+              since={manager.do_not_contact_at}
+              email={manager.email}
+              onLifted={() => setManager((m) => ({ ...m, do_not_contact_at: null, do_not_contact_reason: null }))}
+            />
+          </div>
+        )}
       </header>
 
       <div className="flex border-b border-cockpit-line bg-cockpit-inset">
@@ -459,9 +476,18 @@ export function ManagerProfile({
               kinds={MANAGER_INTERACTION_KINDS}
               defaultKind={tab === 'meetings' ? 'meeting' : undefined}
               onCancel={() => setComposing(false)}
+              privacy={{
+                canErase: isAdmin(me),
+                onErase: () => {
+                  setComposing(false)
+                  setEraseOpen(true)
+                },
+              }}
               onSave={async (entry) => {
                 const row = await api.logManagerInteraction(manager.id, entry)
-                setOfferFor(row)
+                // ELI-32: no Wiedervorlage for someone who asked not to be
+                // contacted again.
+                if (!entry.do_not_contact) setOfferFor(row)
                 // Prepend rather than refetch: the list is sorted by when
                 // the event happened, and a note filed for last Tuesday
                 // would otherwise appear to vanish.
@@ -477,6 +503,9 @@ export function ManagerProfile({
                 setManager((m) => ({
                   ...m,
                   note_count: (m.note_count ?? 0) + 1,
+                  do_not_contact_at: entry.do_not_contact
+                    ? (m.do_not_contact_at ?? new Date().toISOString())
+                    : m.do_not_contact_at,
                   // A meeting booked for later is not contact yet — the
                   // server applies the same rule.
                   last_contact_at:
@@ -549,6 +578,9 @@ export function ManagerProfile({
               subject="manager"
               id={manager.id}
               name={manager.full_name}
+              email={manager.email}
+              open={eraseOpen}
+              onOpenChange={setEraseOpen}
               onErased={onErased ?? onClose}
             />
           </div>

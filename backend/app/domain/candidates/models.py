@@ -7,7 +7,9 @@ required for EU AI Act transparency about automated data.
 
 from __future__ import annotations
 
-from sqlalchemy import Float, Integer, String, Text
+import datetime as dt
+
+from sqlalchemy import DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -152,6 +154,14 @@ class Candidate(Base, IDMixin, TenantMixin, TimestampMixin):
     completeness_score: Mapped[float] = mapped_column(
         Float, default=0.0, nullable=False
     )
+
+    #: ELI-32: the person asked not to be contacted again (on a call, or by
+    #: saying no to the opt-in mail). The record stays; the call lists, the
+    #: Art. 14 notice and the follow-up offer leave them alone until a person
+    #: undoes it. `do_not_contact_reason` is a code (`requested` ·
+    #: `opt_out_link`), never free text — the note carries the words.
+    do_not_contact_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    do_not_contact_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     # Optional embedding (JSON list on SQLite; pgvector column on Postgres).
     embedding: Mapped[list | None] = mapped_column(JSONList, nullable=True)

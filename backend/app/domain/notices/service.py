@@ -177,6 +177,13 @@ async def prepare(
     if previous is not None and previous.status == NoticeStatus.OPTED_IN.value:
         raise NoticeRefused("Diese Person hat der Speicherung bereits zugestimmt.")
 
+    if candidate.do_not_contact_at is not None:
+        # ELI-32: they asked not to be contacted; an opt-in request is contact.
+        raise NoticeRefused(
+            "Diese Person möchte nicht mehr kontaktiert werden. Es darf keine "
+            "Anfrage gesendet werden."
+        )
+
     token = secrets.token_urlsafe(32)
     confirm_url, decline_url = opt_in_links(tenant_id, token, cfg)
     notice = CandidateNotice(
@@ -332,6 +339,17 @@ async def record_response(
             "status": notice.status,
         },
     )
+    if not opted_in:
+        # ELI-32: "Nein" means "do not contact me again" — the mark the call
+        # lists read, set by the subject's own click.
+        from app.domain.erasure import do_not_contact
+
+        candidate = await session.get(Candidate, notice.candidate_id)
+        if candidate is not None and candidate.tenant_id == notice.tenant_id:
+            await do_not_contact.mark(
+                session, tenant_id=notice.tenant_id, subject="candidate", person=candidate,
+                reason="opt_out_link", agent="notices", actor="candidate (opt-in link)",
+            )
     await session.commit()
     logger.info(
         "candidate notice %s settled as %s", notice.id, notice.status
