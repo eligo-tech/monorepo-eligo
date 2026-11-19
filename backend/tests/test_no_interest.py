@@ -71,6 +71,12 @@ async def test_kein_interesse_takes_the_lead_off_the_list_and_keeps_everything(m
     (row,) = hidden["rows"]
     assert row["full_name"] == "Leonie Denkinger" and row["no_interest_at"] is not None
     assert row["last_outcome"] == "not_interested"
+    # ELI-62's notes chips work together with it, counting inside each set.
+    assert (await _contacts(notes="with"))["rows"] == []
+    both = await _contacts(no_interest=True, notes="with")
+    assert [r["full_name"] for r in both["rows"]] == ["Leonie Denkinger"]
+    assert both["note_counts"] == {"all": 1, "none": 0, "with": 1}
+    assert (await _contacts(no_interest=True, notes="none"))["rows"] == []
 
     async with SessionLocal() as s:
         manager = await s.get(Manager, first["manager_id"])
