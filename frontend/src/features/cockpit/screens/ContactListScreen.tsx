@@ -30,6 +30,7 @@ import { leadPhone } from '../ui/switchboard'
 import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
 import { DoNotContactChip } from '../erasure/DoNotContact'
+import { NoInterestChip, ReviveLeadButton } from '../leads/NoInterest'
 import { FollowUpForm } from '../ui/FollowUpForm'
 import { DateField } from '../ui/DateField'
 import { announceFollowUpsChanged, localIsoDate, parseLocalDate, shortTime } from '../ui/followUps'
@@ -206,6 +207,7 @@ export function ContactRow({
         <span className="text-[15px] font-medium text-cockpit-text">{row.full_name}</span>
         {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
         {row.do_not_contact_at && <DoNotContactChip since={row.do_not_contact_at} />}
+        {row.no_interest_at && <NoInterestChip since={row.no_interest_at} />}
         {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
         {/* ELI-38: the open next call is the lead's status — on the name
             line, and kept by the backend until a call reaches the person. */}
@@ -272,12 +274,17 @@ export function ContactRow({
         {!calling && (
           <span className="ml-auto flex items-center gap-2">
             {moveFailed && <span className="text-coral-400">{t('Speichern fehlgeschlagen.')}</span>}
-            <span title={t('Erstkontakt erledigt — als Manager übernehmen.')}>
-              <Button onClick={promote} disabled={moving}>
-                <UserCheck className="h-4 w-4" />
-                {t('Zu Managern')}
-              </Button>
-            </span>
+            {/* ELI-60: back on the list first — then everything else. */}
+            {row.no_interest_at ? (
+              <ReviveLeadButton managerId={row.manager_id} onRevived={onCalled} />
+            ) : (
+              <span title={t('Erstkontakt erledigt — als Manager übernehmen.')}>
+                <Button onClick={promote} disabled={moving}>
+                  <UserCheck className="h-4 w-4" />
+                  {t('Zu Managern')}
+                </Button>
+              </span>
+            )}
             <Button onClick={() => setPlanning((p) => !p)}>
               <BellPlus className="h-4 w-4" />
               {t('Wiedervorlage')}
@@ -413,6 +420,8 @@ function ContactsTab() {
   const [query, setQuery] = useState('')
   const [dueOnly, setDueOnly] = useState(false)
   const [notes, setNotes] = useState<NotesChoice>('')
+  // ELI-60: "Kein Interesse" leads are hidden unless this chip is on.
+  const [noInterest, setNoInterest] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const latest = useRef(0)
   const [bump, setBump] = useState(0)
@@ -420,14 +429,14 @@ function ContactsTab() {
   useEffect(() => {
     const mine = ++latest.current
     api
-      .callListContacts({ companyId: companyId || undefined, q: query || undefined, dueOnly, notes: notes || undefined })
+      .callListContacts({ companyId: companyId || undefined, q: query || undefined, dueOnly, notes: notes || undefined, noInterest })
       .then((p) => {
         if (mine !== latest.current) return
         setPage(p)
         setError(null)
       })
       .catch((e) => mine === latest.current && setError(e instanceof Error ? e.message.slice(0, 200) : String(e)))
-  }, [companyId, query, dueOnly, notes, bump])
+  }, [companyId, query, dueOnly, notes, noInterest, bump])
 
   const rows = page?.rows ?? []
   // ELI-44: each lead's next open Wiedervorlage — one call for the page.
@@ -445,7 +454,7 @@ function ContactsTab() {
     })
   const shown = new Set(rows.map((r) => r.manager_id))
   const boards = new Map((page?.companies ?? []).map((c) => [c.company_id, c.switchboard ?? null]))
-  const filtering = Boolean(companyId || query || dueOnly || notes)
+  const filtering = Boolean(companyId || query || dueOnly || notes || noInterest)
   const called = () => setBump((b) => b + 1)
 
   return (
@@ -473,6 +482,21 @@ function ContactsTab() {
           <input type="checkbox" checked={dueOnly} onChange={(e) => setDueOnly(e.target.checked)} className="accent-mint-500" />
           {t('nur fällige Rückrufe')}
         </label>
+        <button
+          type="button"
+          aria-pressed={noInterest}
+          onClick={() => setNoInterest((v) => !v)}
+          title={t('Leads mit „Kein Interesse“ — ausgeblendet, aber gespeichert.')}
+          className={cn(
+            'rounded-md border px-2 py-0.5 font-mono text-[12px] transition-colors',
+            noInterest
+              ? 'border-mint-500 text-mint-400'
+              : 'border-cockpit-line text-cockpit-dim hover:border-cockpit-edge hover:text-cockpit-text',
+          )}
+        >
+          {t('Kein Interesse')}
+          {page?.no_interest_total ? ` (${page.no_interest_total})` : ''}
+        </button>
         <Button type="submit">{t('Suchen')}</Button>
       </form>
       <div className="mb-3">

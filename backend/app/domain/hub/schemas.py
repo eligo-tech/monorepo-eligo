@@ -485,6 +485,8 @@ class ContactCandidate(BaseModel):
     evidence: list[ContactEvidence]
     #: Set when this workspace already holds the person as a manager.
     manager_id: uuid.UUID | None = None
+    #: ELI-60: that manager is a lead with "Kein Interesse" since then.
+    no_interest_at: dt.datetime | None = None
     #: "rules" or "model" (ELI-25): the model proposed it and the checks found
     #: it word for word in the ad, next to its contact data.
     found_by: str = "rules"

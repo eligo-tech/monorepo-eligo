@@ -14,6 +14,7 @@ import type { CompanyOverviewRowDTO, CompanyPersonDTO, CompanyStatus, MarketSugg
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
+import { NoInterestChip } from '../leads/NoInterest'
 import { Button, FIELD } from '../ui/forms'
 import { Chip, Panel, SectionHeader, SegmentedControl } from '../ui/primitives'
 import {
@@ -148,6 +149,7 @@ function PersonRow({ person, href }: { person: CompanyPersonDTO; href: string })
         {person.full_name}
         {person.role_title && <span className="ml-2 text-[13px] text-cockpit-faint">{person.role_title}</span>}
       </a>
+      {person.no_interest_at && <NoInterestChip since={person.no_interest_at} />}
       <span className="flex flex-wrap items-center gap-3 font-mono text-[12px] text-cockpit-dim">
         {person.phone && (
           <a href={telHref(person.phone)} className="flex items-center gap-1 hover:text-mint-400">
@@ -256,7 +258,8 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
               />
               <ul className="mt-2">
                 {data.leads.map((m) => (
-                  <PersonRow key={m.id} person={m} href="#leads" />
+                  // ELI-60: a "Kein Interesse" lead is not on the Leads list — open the person.
+                  <PersonRow key={m.id} person={m} href={m.no_interest_at ? `#managers/${m.id}` : '#leads'} />
                 ))}
               </ul>
             </Panel>

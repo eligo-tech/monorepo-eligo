@@ -334,6 +334,7 @@ async def contacts(
     q: str | None = None,
     due_only: bool = False,
     notes: str | None = None,
+    no_interest: bool = False,
     limit: int = 500,
     now: dt.datetime | None = None,
 ) -> dict:
@@ -394,6 +395,11 @@ async def contacts(
             func.lower(Company.name).like(like, escape="\\"),
             func.lower(func.coalesce(Manager.role_title, "")).like(like, escape="\\"),
         ))
+    # ELI-60: "Kein Interesse" leaves the list; the filter shows only them.
+    # The chip counts them under the same company and search.
+    shelved = Manager.no_interest_at.is_not(None) if no_interest else Manager.no_interest_at.is_(None)
+    hidden = base.where(Manager.no_interest_at.is_not(None))
+    base = base.where(shelved)
     if due_only:
         base = base.where(
             Manager.do_not_contact_at.is_(None),
@@ -417,6 +423,7 @@ async def contacts(
         total = note_counts["with"]
     else:
         total = note_counts["all"]
+    no_interest_total = await session.scalar(select(func.count()).select_from(hidden.subquery()))
     # NULLS LAST: Postgres would put a row without a date first ("newest").
     order = (
         (noted.c.last_at.is_(None), noted.c.last_at.desc())
@@ -455,6 +462,7 @@ async def contacts(
             "source_detail": manager.source_detail,
             "art14_outstanding": bool(manager.art14_outstanding),
             "do_not_contact_at": aware(manager.do_not_contact_at),
+            "no_interest_at": aware(manager.no_interest_at),
             "last_outcome": call.outcome if call else None,
             "last_call_at": aware(call.occurred_at) if call else None,
             "last_call_by": call.actor_name if call else None,
@@ -470,7 +478,8 @@ async def contacts(
         await session.execute(
             select(Company.id, Company.name, func.count(Manager.id).label("n"))
             .join(Manager, Manager.company_id == Company.id)
-            .where(Company.tenant_id == tenant_id, Manager.tenant_id == tenant_id, Manager.stage == "bus_dev")
+            .where(Company.tenant_id == tenant_id, Manager.tenant_id == tenant_id, Manager.stage == "bus_dev",
+                   shelved)
             .group_by(Company.id, Company.name)
             .order_by(func.count(Manager.id).desc(), Company.name)
         )
@@ -481,6 +490,7 @@ async def contacts(
         "total": int(total or 0),
         "truncated": int(total or 0) > len(rows),
         "note_counts": note_counts,
+        "no_interest_total": int(no_interest_total or 0),
         "companies": [
             {"company_id": cid, "name": name, "contacts": n, "switchboard": boards.get(cid)} for cid, name, n in facet
         ],

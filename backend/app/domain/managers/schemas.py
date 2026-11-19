@@ -228,6 +228,8 @@ class ManagerRead(BaseModel):
     #: ELI-32: marked "Nicht mehr kontaktieren", and why (a code).
     do_not_contact_at: dt.datetime | None = None
     do_not_contact_reason: str | None = None
+    #: ELI-60: "Kein Interesse" since — off the Leads list, record kept.
+    no_interest_at: dt.datetime | None = None
     created_at: dt.datetime
 
     # --- detail, from the source's own profile ----------------------------

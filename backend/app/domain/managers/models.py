@@ -119,6 +119,12 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     #: code (`requested`), never free text — the note carries the words.
     do_not_contact_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     do_not_contact_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    #: ELI-60: a lead called with the outcome "Kein Interesse". A SALES
+    #: status, not the ELI-32 mark: the Leads list hides them by default
+    #: (filter "Kein Interesse"), Markt shows them as such and does not take
+    #: them again; the record, the call and its note stay. Cleared by
+    #: "Wieder als Lead aufnehmen". Set only on leads (stage `bus_dev`).
+    no_interest_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     interactions: Mapped[list["ManagerInteraction"]] = relationship(
         "ManagerInteraction",

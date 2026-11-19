@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.domain.candidates.models import Candidate
 from app.domain.common.enums import (
     APPOINTMENT_INTERACTION_KINDS,
+    CallOutcome,
     ConfidenceSource,
     CONTACT_INTERACTION_KINDS,
     InteractionType,
@@ -38,6 +39,15 @@ class CompanyNotInTenant(Exception):
     write for an empty result: a manager attached to another tenant's company
     would be a cross-tenant leak, not a 404.
     """
+
+
+class NotInterested(Exception):
+    """ELI-60: the person is already this workspace's lead, marked
+    "Kein Interesse" — they are not created a second time."""
+
+    def __init__(self, manager: Manager) -> None:
+        super().__init__(str(manager.id))
+        self.manager = manager
 
 
 async def _own_company(
@@ -221,6 +231,12 @@ async def create_manager(
         if on is not None:
             raise erasure.Suppressed(on)
 
+    if stage_for(payload.source.value) == "bus_dev":
+        # ELI-60: a new lead from Markt who is already here with "Kein
+        # Interesse" is recognised (the call list's own same-person rule),
+        # not created again and not moved back into Leads.
+        await _refuse_no_interest_again(session, tenant_id, payload)
+
     manager = Manager(
         tenant_id=tenant_id,
         company_id=payload.company_id,
@@ -293,6 +309,64 @@ async def update_manager(
         _set_phones(manager, [ManagerPhoneIn(number=p.number, kind=p.kind) for p in manager.extra_phones])
     await session.commit()
     await session.refresh(manager)
+    return manager
+
+
+async def _refuse_no_interest_again(session: AsyncSession, tenant_id: uuid.UUID, payload: ManagerCreate) -> None:
+    from app.domain.hub.call_list import _existing_manager, _surname_key
+
+    key = _surname_key(payload.last_name, payload.full_name)
+    if not key:
+        return
+    first = payload.first_name
+    if not first and not payload.last_name:
+        parts = payload.full_name.split()
+        first = parts[0] if len(parts) > 1 else None
+    found = await _existing_manager(session, tenant_id, payload.company_id, key, first)
+    if found is not None and found.no_interest_at is not None:
+        raise NotInterested(found)
+
+
+async def mark_no_interest(session: AsyncSession, *, tenant_id: uuid.UUID, manager: Manager,
+                           interaction_id: uuid.UUID | None = None) -> None:
+    """ELI-60: "Kein Interesse" — the lead leaves the Leads list, the record
+    stays. Only a lead (stage `bus_dev`); a second mark keeps the first date.
+    One receipt naming the call, never its words. The caller commits."""
+    from app.domain.common.enums import ReceiptAction
+    from app.domain.verification import service as verification
+
+    if manager.stage != "bus_dev" or manager.no_interest_at is not None:
+        return
+    manager.no_interest_at = dt.datetime.now(dt.UTC)
+    payload: dict[str, object] = {"status": "no_interest"}
+    if interaction_id is not None:
+        payload["interaction_id"] = str(interaction_id)
+    await verification.append_receipt(
+        session, tenant_id=tenant_id, agent="recruiter", action=ReceiptAction.WRITE,
+        subject_type="manager", subject_id=str(manager.id), verified=True,
+        summary="Kein Interesse vermerkt", payload=payload,
+    )
+
+
+async def revive_lead(session: AsyncSession, *, tenant_id: uuid.UUID, manager_id: uuid.UUID) -> Manager | None:
+    """ELI-60: "Wieder als Lead aufnehmen" — back on the Leads list."""
+    from app.domain.common.enums import ReceiptAction
+    from app.domain.verification import service as verification
+
+    manager = await session.scalar(
+        select(Manager).where(Manager.id == manager_id, Manager.tenant_id == tenant_id)
+    )
+    if manager is None:
+        return None
+    if manager.no_interest_at is not None:
+        manager.no_interest_at = None
+        await verification.append_receipt(
+            session, tenant_id=tenant_id, agent="recruiter", action=ReceiptAction.WRITE,
+            subject_type="manager", subject_id=str(manager.id), verified=True,
+            summary="Wieder als Lead aufgenommen", payload={"status": "lead"},
+        )
+        await session.commit()
+        await session.refresh(manager)
     return manager
 
 
@@ -448,6 +522,9 @@ async def log_interaction(
     session.add(interaction)
     if payload.do_not_contact and manager is not None:
         await _mark_do_not_contact(session, tenant_id, "manager", manager, interaction)
+    if payload.outcome == CallOutcome.NOT_INTERESTED and manager is not None:
+        await session.flush()
+        await mark_no_interest(session, tenant_id=tenant_id, manager=manager, interaction_id=interaction.id)
     await session.commit()
     await session.refresh(interaction)
     return interaction

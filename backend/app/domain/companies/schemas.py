@@ -90,6 +90,8 @@ class CompanyPerson(BaseModel):
     phone: str | None
     stage: str
     last_contact_at: dt.datetime | None
+    #: ELI-60: a lead with "Kein Interesse" — shown with the date.
+    no_interest_at: dt.datetime | None = None
 
 
 class CompanyMandate(BaseModel):

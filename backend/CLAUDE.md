@@ -362,6 +362,14 @@ These are enforced in code. Do not route around them.
   `send_confirmation` on an erase) uses the notice sender, on a click only;
   the erase reads the address before wiping and mails after the commit, its
   receipt naming the erasure request — never the person or the address.
+- **"Kein Interesse"** (ELI-60) is a SALES status, not the mark above:
+  `managers.no_interest_at`, set when a lead (stage `bus_dev`) gets a call
+  with outcome `not_interested` (one receipt naming the call), cleared by
+  `DELETE /managers/{id}/no-interest` ("Wieder als Lead aufnehmen"). The
+  record, calls and notes stay; `call_list.contacts` hides them unless
+  `no_interest=true`; the Markt card shows them; `create_manager` for a
+  public-web lead the call list's `_existing_manager` recognises as such a
+  person answers 409 `{code: "no_interest"}` instead of a second record.
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing
