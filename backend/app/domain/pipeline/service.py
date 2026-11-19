@@ -896,6 +896,8 @@ _INTERACTION_LABELS = {
     "meeting": "Termin",
     "client_call": "Kundengespräch",
     "business_call": "Gespräch",
+    "conversation": "Gesprächsnotiz",
+    "profiles_sent": "Anonyme Profile gesendet",
     "briefing": "Briefing",
     "feedback": "Feedback",
 }

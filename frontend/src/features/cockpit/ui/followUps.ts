@@ -25,6 +25,24 @@ export function defaultFollowUpDate(today: Date = new Date()): string {
   return localIsoDate(d)
 }
 
+/** Days off the backend's date reader also skips (`followups/dates.py`
+ *  `_HOLIDAYS`): the ones that are holidays in all of DACH. */
+const HOLIDAYS = new Set(['01-01', '12-25', '12-26'])
+
+/** ELI-61: `YYYY-MM-DD` plus `n` working days — weekends and the DACH-wide
+ *  holidays skipped, the same calendar as the backend's reader. */
+export function addWorkingDays(isoDate: string, n: number): string {
+  const d = parseLocalDate(isoDate)
+  let left = n
+  while (left > 0) {
+    d.setDate(d.getDate() + 1)
+    const day = d.getDay()
+    const md = localIsoDate(d).slice(5)
+    if (day !== 0 && day !== 6 && !HOLIDAYS.has(md)) left -= 1
+  }
+  return localIsoDate(d)
+}
+
 /** ELI-53: the date a Wiedervorlage's own text names ("Neuer Anruf morgen"
  *  → tomorrow), read by the backend's reader against today in Germany. The
  *  form used to keep its default — today — whatever the text said. Null when

@@ -21,9 +21,14 @@
 // "Nicht mehr kontaktieren" saves the note with the mark (one request, one
 // transaction, one receipt), "Löschen (DSGVO)" saves nothing and opens the
 // page's erase dialog instead: a note about to be erased is pointless.
+//
+// ELI-61: "Anonyme Profile gesendet" brings its Wiedervorlage with it — a
+// to-do ("Feedback zu anonymen Profilen") due in three working days, both
+// editable here before saving. The page files it through the ordinary
+// follow-up endpoint once the note is written.
 
 import { useState } from 'react'
-import { CalendarPlus, ShieldAlert } from 'lucide-react'
+import { BellPlus, CalendarPlus, ShieldAlert } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
 
@@ -31,6 +36,7 @@ import { t } from '@/i18n'
 import { Button } from './forms'
 import { DateField } from './DateField'
 import { berlinIsoDate } from './datePicker'
+import { addWorkingDays } from './followUps'
 import { interactionLabel } from './interactionKinds'
 import { isAppointmentKind, nextFullHour, occurredAt } from './appointments'
 
@@ -73,9 +79,32 @@ export function composeEntry(
   return entry
 }
 
-/** An ordinary note needs words; the two privacy outcomes do not. */
-export function canSaveNote(text: string, privacy: PrivacyAction): boolean {
-  return privacy !== '' || text.trim() !== ''
+/** ELI-61: the kind that files a Wiedervorlage for the client's feedback. */
+export const PROFILES_SENT = 'profiles_sent'
+
+/** The Wiedervorlage a profiles-sent note brings along. */
+export interface NoteFollowUp {
+  due_date: string
+  text: string
+}
+
+/** ELI-61: its defaults — three working days from today in Germany. */
+export function profilesFollowUp(now: Date = new Date()): NoteFollowUp {
+  return { due_date: addWorkingDays(berlinIsoDate(now), 3), text: t('Feedback zu anonymen Profilen') }
+}
+
+/** An ordinary note needs words; the two privacy outcomes do not, and
+ *  neither does "Anonyme Profile gesendet" — but its Wiedervorlage needs a
+ *  day and a to-do. */
+export function canSaveNote(
+  text: string,
+  privacy: PrivacyAction,
+  kind?: string,
+  followUp?: NoteFollowUp | null,
+): boolean {
+  if (privacy !== '') return true
+  if (kind === PROFILES_SENT) return Boolean(followUp?.due_date && followUp.text.trim())
+  return text.trim() !== ''
 }
 
 export function InteractionComposer({
@@ -90,8 +119,9 @@ export function InteractionComposer({
    *  `business_call` is meaningless on a candidate and `candidate_call` on a
    *  manager, so one shared list would offer each half the wrong options. */
   kinds: readonly string[]
-  /** Resolves when the row is written; rejects to show the error. */
-  onSave: (entry: ComposedEntry) => Promise<unknown>
+  /** Resolves when the row is written; rejects to show the error. The
+   *  second argument is the Wiedervorlage to file with it (ELI-61), if any. */
+  onSave: (entry: ComposedEntry, followUp?: NoteFollowUp | null) => Promise<unknown>
   onCancel: () => void
   defaultKind?: string
   /** ELI-32: offer the Datenschutz outcomes. `onErase` opens the page's
@@ -107,9 +137,14 @@ export function InteractionComposer({
   const [error, setError] = useState<string | null>(null)
   const [action, setAction] = useState<PrivacyAction>('')
   const erase = action === 'erase'
+  const [followUp, setFollowUp] = useState<NoteFollowUp>(() => profilesFollowUp())
+  const sendsProfiles = kind === PROFILES_SENT
+  // Nobody is to be asked for feedback who asked not to be contacted.
+  const filedFollowUp = sendsProfiles && action === '' ? { ...followUp, text: followUp.text.trim() } : null
+  const ready = canSaveNote(text, action, kind, sendsProfiles && action === '' ? followUp : null)
 
   async function save() {
-    if (!canSaveNote(text, action) || busy) return
+    if (!ready || busy) return
     if (erase) {
       if (privacy?.canErase) privacy.onErase()
       return
@@ -117,8 +152,9 @@ export function InteractionComposer({
     setBusy(true)
     setError(null)
     try {
-      await onSave(composeEntry(kind, text, when, at, action))
+      await onSave(composeEntry(kind, text, when, at, action), filedFollowUp)
       setText('')
+      setFollowUp(profilesFollowUp())
     } catch {
       setError(t('Nicht gespeichert — bitte erneut versuchen.'))
     } finally {
@@ -141,7 +177,12 @@ export function InteractionComposer({
           {t('Art')}
           <select
             value={kind}
-            onChange={(e) => setKind(e.target.value)}
+            onChange={(e) => {
+              setKind(e.target.value)
+              // A fresh default each time, not one computed when the composer
+              // opened (it may have stayed open past midnight).
+              if (e.target.value === PROFILES_SENT) setFollowUp(profilesFollowUp())
+            }}
             className="rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
           >
             {kinds.map((value) => (
@@ -202,13 +243,35 @@ export function InteractionComposer({
               {t('Löschdialog öffnen')}
             </Button>
           ) : (
-            <Button tone="primary" onClick={() => void save()} disabled={busy || !canSaveNote(text, action)}>
+            <Button tone="primary" onClick={() => void save()} disabled={busy || !ready}>
               <CalendarPlus className="h-4 w-4" />
               {busy ? t('Speichert…') : t('Ereignis speichern')}
             </Button>
           )}
         </div>
       </div>
+      {sendsProfiles && action === '' && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gold-600/60 bg-gold-800/20 px-3 py-2">
+          <label className="flex min-w-0 flex-1 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-gold-400">
+            <BellPlus className="h-3.5 w-3.5 shrink-0" />
+            {t('Wiedervorlage')}
+            <input
+              value={followUp.text}
+              onChange={(e) => setFollowUp((f) => ({ ...f, text: e.target.value }))}
+              maxLength={500}
+              className="min-w-0 flex-1 rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
+            />
+          </label>
+          <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-cockpit-faint">
+            {t('fällig am')}
+            <DateField
+              value={followUp.due_date}
+              onChange={(due_date) => setFollowUp((f) => ({ ...f, due_date }))}
+              className="rounded-md border border-cockpit-line bg-cockpit-surface px-2 py-1 font-sans text-[13px] normal-case tracking-normal text-cockpit-text focus:border-cockpit-edge focus:outline-none"
+            />
+          </label>
+        </div>
+      )}
       {action === 'do_not_contact' && (
         <p className="text-[12px] text-coral-300">
           {t('Die Person bleibt gespeichert, erscheint aber nicht mehr in Anruf- und Wiedervorlagelisten.')}

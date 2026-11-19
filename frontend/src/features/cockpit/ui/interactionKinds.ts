@@ -17,6 +17,9 @@ export const MANAGER_INTERACTION_KINDS = [
   'meeting',
   'client_call',
   'business_call',
+  // ELI-61: a Gesprächsnotiz (manager reached) and anonymous profiles sent.
+  'conversation',
+  'profiles_sent',
   'message',
   'na',
   'note',
@@ -54,6 +57,10 @@ export function interactionLabel(value: string): string {
       return t('Client Call')
     case 'business_call':
       return t('Business Call')
+    case 'conversation':
+      return t('Gesprächsnotiz')
+    case 'profiles_sent':
+      return t('Anonyme Profile gesendet')
     case 'candidate_qualification':
       return t('Candidate Qualification')
     case 'candidate_call':

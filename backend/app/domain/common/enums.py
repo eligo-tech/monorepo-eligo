@@ -118,6 +118,15 @@ class InteractionType(str, enum.Enum):
     #: development: generating business, exchanging information, building a
     #: relationship.
     BUSINESS_CALL = "business_call"
+    #: Manager — a Gesprächsnotiz (ELI-61): the manager WAS reached, and the
+    #: note says what was discussed. For a conversation that is neither
+    #: clearly a client call nor a business call — so it counts as contact
+    #: and as a call with a manager, never as an attempt.
+    CONVERSATION = "conversation"
+    #: Manager — anonymous candidate profiles were sent (ELI-61). The cockpit
+    #: files a Wiedervorlage with the note to ask for the client's feedback.
+    #: Contact, like a message; not a call.
+    PROFILES_SENT = "profiles_sent"
     #: Candidate — the Qualifikationsgespräch: the first, structured
     #: conversation that qualifies a candidate (motivation, salary, notice,
     #: mobility). Added to ELI-9 on 2026-11-10, first on the candidate list
@@ -188,6 +197,8 @@ MANAGER_INTERACTION_KINDS: tuple[InteractionType, ...] = (
     InteractionType.MEETING,
     InteractionType.CLIENT_CALL,
     InteractionType.BUSINESS_CALL,
+    InteractionType.CONVERSATION,
+    InteractionType.PROFILES_SENT,
     InteractionType.MESSAGE,
     InteractionType.NOT_REACHED,
     InteractionType.NOTE,
@@ -221,6 +232,9 @@ _LEGACY_INTERACTION_TYPES: dict[str, InteractionType] = {
     "candidate qualification": InteractionType.CANDIDATE_QUALIFICATION,
     "e-mail": InteractionType.MESSAGE,
     "email": InteractionType.MESSAGE,
+    # ELI-61: the German labels, should an import write them.
+    "gesprächsnotiz": InteractionType.CONVERSATION,
+    "anonyme profile gesendet": InteractionType.PROFILES_SENT,
 }
 
 
@@ -256,6 +270,8 @@ CONTACT_INTERACTION_KINDS = frozenset(
         InteractionType.MEETING.value,
         InteractionType.CLIENT_CALL.value,
         InteractionType.BUSINESS_CALL.value,
+        InteractionType.CONVERSATION.value,
+        InteractionType.PROFILES_SENT.value,
         InteractionType.CANDIDATE_QUALIFICATION.value,
         InteractionType.CANDIDATE_CALL.value,
         InteractionType.MESSAGE.value,
