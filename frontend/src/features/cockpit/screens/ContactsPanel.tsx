@@ -22,6 +22,7 @@ import { Chip } from '../ui/primitives'
 import { Button } from '../ui/forms'
 import { linkedInSearchUrl, xingSearchUrl } from '../ui/contactReach'
 import { SwitchboardLine } from '../ui/SwitchboardLine'
+import { NoInterestChip } from '../leads/NoInterest'
 
 export const dateDe = (iso: string | null) =>
   iso
@@ -101,7 +102,13 @@ function ContactRow({
     try {
       await onSave(contact)
     } catch (e) {
-      setError(e instanceof ReaddDeclined ? e.message : t('Übernahme fehlgeschlagen.'))
+      setError(
+        e instanceof ReaddDeclined
+          ? e.message
+          : e instanceof ApiError && e.status === 409 && e.message.includes('no_interest')
+            ? t('Schon im Workspace — „Kein Interesse“. Nicht erneut übernommen.')
+            : t('Übernahme fehlgeschlagen.'),
+      )
     } finally {
       setSaving(false)
     }
@@ -178,7 +185,12 @@ function ContactRow({
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <NetworkLink href={linkedInSearch(contact, companyName)} label="LinkedIn" className="bg-[#0a66c2]" />
           <NetworkLink href={xingSearch(contact, companyName)} label="XING" className="bg-[#006567]" />
-          {held ? (
+          {held && contact.no_interest_at ? (
+            // ELI-60: already here as a lead with "Kein Interesse" — not taken again.
+            <a href={`#managers/${contact.manager_id}`}>
+              <NoInterestChip since={contact.no_interest_at} />
+            </a>
+          ) : held ? (
             <span className="flex items-center gap-1.5 px-2 font-mono text-[12px] text-mint-400">
               <Check className="h-4 w-4" />
               {t('im Workspace')}

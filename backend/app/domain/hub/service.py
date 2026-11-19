@@ -2900,11 +2900,15 @@ async def company_contacts(
             )
         ).scalars()
         held = {
-            person_key(m.first_name, m.last_name or m.full_name.split()[-1]): m.id
+            person_key(m.first_name, m.last_name or m.full_name.split()[-1]): m
             for m in managers
         }
         for key, person in people.items():
-            person["manager_id"] = held.get(key)
+            m = held.get(key)
+            person["manager_id"] = m.id if m else None
+            # ELI-60: shown as "Kein Interesse" — not offered to take again.
+            nat = m.no_interest_at if m else None
+            person["no_interest_at"] = nat.replace(tzinfo=dt.UTC) if nat is not None and nat.tzinfo is None else nat
 
     contacts = sorted(
         people.values(),

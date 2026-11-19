@@ -41,6 +41,7 @@ import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
 import { EraseSection } from '../erasure/EraseSection'
 import { DoNotContactBanner } from '../erasure/DoNotContact'
+import { NoInterestChip, ReviveLeadButton } from '../leads/NoInterest'
 import { isAdmin, useMe } from '../useMe'
 import { useAsync } from '@/hooks/useAsync'
 import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
@@ -383,6 +384,15 @@ export function ManagerProfile({
             )}
           </div>
         </div>
+        {manager.no_interest_at && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <NoInterestChip since={manager.no_interest_at} />
+            <ReviveLeadButton
+              managerId={manager.id}
+              onRevived={() => setManager((m) => ({ ...m, no_interest_at: null }))}
+            />
+          </div>
+        )}
         {manager.do_not_contact_at && (
           <div className="mt-4">
             <DoNotContactBanner

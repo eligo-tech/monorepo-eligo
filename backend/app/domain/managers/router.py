@@ -83,6 +83,13 @@ async def create_manager(
 ) -> ManagerRead:
     try:
         row = await service.create_manager(db, tenant_id=tenant_id, payload=payload)
+    except service.NotInterested as exc:
+        # ELI-60: already here, marked "Kein Interesse" — not a second record.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"code": "no_interest", "manager_id": str(exc.manager.id),
+             "no_interest_at": exc.manager.no_interest_at.isoformat() if exc.manager.no_interest_at else None},
+        ) from exc
     except service.CompanyNotInTenant as exc:
         # 422, not 404: the company may well exist — it is simply not this
         # tenant's to attach a person to, and saying "not found" would leak
@@ -133,6 +140,19 @@ async def promote_manager(
 ) -> ManagerRead:
     """Move a bus-dev contact to Managers after the first contact (ELI-23)."""
     row = await service.promote_manager(db, tenant_id=tenant_id, manager_id=manager_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
+    return ManagerRead.model_validate(row)
+
+
+@router.delete("/{manager_id}/no-interest", response_model=ManagerRead)
+async def revive_lead(
+    manager_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerRead:
+    """ELI-60: "Wieder als Lead aufnehmen" — clears "Kein Interesse"."""
+    row = await service.revive_lead(db, tenant_id=tenant_id, manager_id=manager_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
     return ManagerRead.model_validate(row)

@@ -458,13 +458,15 @@ export const api = {
     }),
 
   /** Kontakte (ELI-23): contacts taken from Markt (stage bus_dev) — open call-backs first (ELI-38), then newest. */
-  callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean; notes?: 'none' | 'with' }) => {
+  callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean; notes?: 'none' | 'with'; noInterest?: boolean }) => {
     const qs = new URLSearchParams()
     if (params.companyId) qs.set('company_id', params.companyId)
     if (params.q) qs.set('q', params.q)
     if (params.dueOnly) qs.set('due_only', 'true')
     // ELI-62: "Noch keine Notiz" / "Mit Notizen".
     if (params.notes) qs.set('notes', params.notes)
+    // ELI-60: only the leads with "Kein Interesse" (hidden otherwise).
+    if (params.noInterest) qs.set('no_interest', 'true')
     return request<ContactPageDTO>(`/hub/call-list/contacts?${qs}`)
   },
 
@@ -505,6 +507,9 @@ export const api = {
 
   /** ELI-23: move a bus-dev contact to Managers after the first contact. */
   promoteManager: (id: string) => request<ManagerDTO>(`/managers/${id}/promote`, { method: 'POST' }),
+
+  /** ELI-60: "Wieder als Lead aufnehmen" — clears "Kein Interesse". */
+  reviveLead: (id: string) => request<ManagerDTO>(`/managers/${id}/no-interest`, { method: 'DELETE' }),
 
   /** Records that the subject has been informed. Its own call, not a PATCH
    *  field: it asserts something happened in the world. */

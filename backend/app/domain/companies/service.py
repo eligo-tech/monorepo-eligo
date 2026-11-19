@@ -367,6 +367,7 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
             "phone": m.phone,
             "stage": m.stage,
             "last_contact_at": _aware(at),
+            "no_interest_at": _aware(m.no_interest_at),
         }
 
     jobs = (

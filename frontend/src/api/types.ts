@@ -456,6 +456,8 @@ export interface ManagerDTO {
   /** ELI-32: marked "Nicht mehr kontaktieren" — when, and why (a code). */
   do_not_contact_at?: string | null
   do_not_contact_reason?: string | null
+  /** ELI-60: a lead with "Kein Interesse" since then — off the Leads list. */
+  no_interest_at?: string | null
   created_at: string
   /** "MNGR197" — the reference a recruiter reads out on a call. */
   external_code?: string | null
@@ -682,6 +684,8 @@ export interface ContactCandidateDTO {
   evidence: ContactEvidenceDTO[]
   /** Set when this workspace already holds the person as a manager. */
   manager_id: string | null
+  /** ELI-60: that manager is a lead with "Kein Interesse" since then. */
+  no_interest_at?: string | null
   /** ELI-25: "model" — proposed by the AI, checked word for word in the ad. */
   found_by?: 'rules' | 'model'
 }
@@ -1221,6 +1225,8 @@ export interface ContactRowDTO {
   art14_outstanding: boolean
   /** ELI-32: marked "Nicht mehr kontaktieren" — shown, never due. */
   do_not_contact_at?: string | null
+  /** ELI-60: "Kein Interesse" since — only under that filter. */
+  no_interest_at?: string | null
   last_outcome: string | null
   last_call_at: string | null
   last_call_by: string | null
@@ -1289,6 +1295,8 @@ export interface CompanyPersonDTO {
   phone: string | null
   stage: string
   last_contact_at: string | null
+  /** ELI-60: a lead with "Kein Interesse" since then. */
+  no_interest_at?: string | null
 }
 
 /** ELI-33: one company — its managers, leads, mandates, Impressum switchboard. */
@@ -1356,6 +1364,8 @@ export interface ContactPageDTO {
   truncated: boolean
   note_counts?: NoteCountsDTO
   companies: CompanyFacetDTO[]
+  /** ELI-60: leads hidden as "Kein Interesse" — the filter chip's count. */
+  no_interest_total?: number
 }
 
 /** ELI-44: a Wiedervorlage — a dated to-do on a lead, a manager or a candidate. */

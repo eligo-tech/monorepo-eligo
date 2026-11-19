@@ -106,6 +106,13 @@ export const EN: Record<string, string> = {
   'Ins CRM übernehmen': 'Add to CRM',
   'Interpretation': 'interpretation',
   'Kein Interesse': 'Not interested',
+  'Kein Interesse (seit {date})': 'Not interested (since {date})',
+  'Beim Anruf kein Interesse — nicht mehr in den Leads. Anruf und Notizen bleiben gespeichert.':
+    'Not interested on the call — no longer in Leads. The call and notes are kept.',
+  'Wieder als Lead aufnehmen': 'Make a lead again',
+  'Leads mit „Kein Interesse“ — ausgeblendet, aber gespeichert.': 'Leads marked “Not interested” — hidden, but kept.',
+  'Schon im Workspace — „Kein Interesse“. Nicht erneut übernommen.':
+    'Already in the workspace — “Not interested”. Not added again.',
   'Keine Domain in den Anzeigentexten.': 'No domain in the ad texts.',
   'Keine Kontakte für diese Auswahl.': 'No contacts match this selection.',
   'Keine offenen Aktionen.': 'No open actions.',

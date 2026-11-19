@@ -96,6 +96,8 @@ class ContactRow(BaseModel):
     art14_outstanding: bool
     #: ELI-32: marked "Nicht mehr kontaktieren" — shown, never due.
     do_not_contact_at: dt.datetime | None = None
+    #: ELI-60: "Kein Interesse" since — only under the filter.
+    no_interest_at: dt.datetime | None = None
     last_outcome: str | None
     last_call_at: dt.datetime | None
     last_call_by: str | None
@@ -132,6 +134,8 @@ class ContactPage(BaseModel):
     #: ELI-62: leads per notes chip, under the other filters.
     note_counts: NoteCounts
     companies: list[CompanyFacet]
+    #: ELI-60: leads hidden as "Kein Interesse" (for the filter chip).
+    no_interest_total: int = 0
 
 
 class CallIn(BaseModel):
@@ -169,13 +173,14 @@ async def contacts(
     q: str | None = Query(default=None, max_length=120),
     due_only: bool = False,
     notes: Literal["none", "with"] | None = Query(default=None, description="ELI-62: none | with"),
+    no_interest: bool = Query(default=False, description='ELI-60: only the leads with "Kein Interesse"'),
     limit: int = Query(default=500, ge=1, le=1000),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ContactPage:
     """"Kontakte": every contact in this workspace — open call-backs first (ELI-38), then newest first (ELI-23)."""
     return ContactPage(**await call_list.contacts(
-        db, tenant_id=tenant_id, company_id=company_id, q=q, due_only=due_only, notes=notes, limit=limit))
+        db, tenant_id=tenant_id, company_id=company_id, q=q, due_only=due_only, notes=notes, no_interest=no_interest, limit=limit))
 
 
 @router.get("/follow-ups", response_model=list[FollowUpRow])

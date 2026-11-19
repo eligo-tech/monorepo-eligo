@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import type { ContactRowDTO, ManagerDTO } from '@/api/types'
 import { t } from '@/i18n'
+import { date as fmtDate } from '@/i18n/format'
 
 import { ContactRow } from './ContactListScreen'
 import { ManagerProfile } from './ManagerProfile'
@@ -103,5 +104,38 @@ describe('ContactRow — who called (ELI-50)', () => {
 
   it('still shows a real name', () => {
     expect(markup(row({ last_call_by: 'Dima Fadeev' }))).toContain('Dima Fadeev')
+  })
+})
+
+// ELI-60: "Kein Interesse" — shown under its filter with the date, and the
+// way back is "Wieder als Lead aufnehmen", not "Zu Managern".
+describe('ContactRow — Kein Interesse (ELI-60)', () => {
+  const markup = (r: ContactRowDTO) => renderToStaticMarkup(<ContactRow row={r} showCompany onCalled={() => {}} />)
+
+  it('shows the status with its date and offers to make them a lead again', () => {
+    const html = markup(row({ no_interest_at: '2026-11-18T09:00:00Z', last_outcome: 'not_interested' }))
+    expect(html).toContain(fmtDate('2026-11-18T09:00:00Z'))
+    expect(html).toContain(t('Wieder als Lead aufnehmen'))
+    expect(html).not.toContain(t('Zu Managern'))
+  })
+
+  it('a lead without the status keeps "Zu Managern"', () => {
+    const html = markup(row())
+    expect(html).toContain(t('Zu Managern'))
+    expect(html).not.toContain(t('Wieder als Lead aufnehmen'))
+  })
+
+  it('the manager page shows the status and the way back', () => {
+    const manager = {
+      id: 'm1', company_id: 'c1', full_name: 'Ina Dorsch', role_title: null, email: null, phone: null,
+      linkedin_url: null, source: 'public_web', source_detail: null, art14_notified_at: null,
+      art14_outstanding: false, notes: null, status: 'active', stage: 'bus_dev',
+      no_interest_at: '2026-11-18T09:00:00Z', created_at: '2026-11-10T09:00:00Z',
+    } as unknown as ManagerDTO
+    const html = renderToStaticMarkup(
+      <ManagerProfile manager={manager} companyName="Telis Finanz AG" onClose={() => {}} onNotified={() => {}} />,
+    )
+    expect(html).toContain(fmtDate('2026-11-18T09:00:00Z'))
+    expect(html).toContain(t('Wieder als Lead aufnehmen'))
   })
 })
