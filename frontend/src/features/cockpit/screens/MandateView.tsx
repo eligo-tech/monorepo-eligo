@@ -29,7 +29,7 @@ import { isAdmin, useMe } from '../useMe'
 import type { CompanyDTO, ManagerDTO } from '@/api/types'
 import { ActivityPanel } from './mandate/ActivityPanel'
 import { FeedbackPanel } from './mandate/FeedbackPanel'
-import { SourcingPanel } from './mandate/SourcingPanel'
+import { LinkedInSearchPanel } from './mandate/LinkedInSearchPanel'
 import { StammdatenPanel } from './mandate/StammdatenPanel'
 import { AssignCandidate } from './mandate/AssignCandidate'
 import { PanelHead } from './mandate/parts'
@@ -281,7 +281,18 @@ export function MandateView({
 
       <ActivityPanel mandate={mandate} />
       <SuchprofilPanel mandate={mandate} onChanged={onChanged} />
-      <SourcingPanel mandate={mandate} />
+      {/* Keyed on the facts it is built from: a saved Suchprofil re-suggests,
+          a re-render that changes nothing keeps the recruiter's picks. */}
+      <LinkedInSearchPanel
+        key={[
+          mandate.id,
+          mandate.title,
+          mandate.location ?? '',
+          ...mandate.mustHave,
+          ...(mandate.certifications ?? []),
+        ].join('|')}
+        mandate={mandate}
+      />
 
       {/* The mandate's own ledger. Its band and radius are hard filters, so
           "who widened the cap, and when" is the question this answers. */}
