@@ -133,21 +133,26 @@ function money(raw: string): number | null | undefined {
 const sameList = (a: string[], b: string[]) =>
   a.length === b.length && a.every((v, i) => v === b[i])
 
-/** The PATCH for what changed — only that, because every field sent leaves
- *  a receipt, and a save that re-sends ten unchanged values would say ten
- *  things were edited. */
+const clean = (list: string[]) => list.map((s) => s.trim()).filter(Boolean)
+
+/** The PATCH for what the recruiter changed — measured against `base`, the
+ *  draft as the form opened, NOT against the job as it is now. The job can
+ *  change under an open form (a Muss-Kriterium added from the Suchprofil's
+ *  chips), and diffing against it would send the stale draft value back and
+ *  silently undo that edit — on a hard filter. Only what changed is sent,
+ *  because every field sent leaves a receipt. */
 export function briefingPatch(
-  job: JobDTO,
+  base: BriefingDraft,
   d: BriefingDraft,
 ): { ok: true; patch: JobUpdatePayload } | { ok: false; error: string } {
   const patch: JobUpdatePayload = {}
   for (const f of TEXT_FIELDS) {
     const next = d[f].trim() || null
-    if (next !== ((job[f] ?? '').trim() || null)) patch[f] = next
+    if (next !== (base[f].trim() || null)) patch[f] = next
   }
   for (const f of LIST_FIELDS) {
-    const next = d[f].map((s) => s.trim()).filter(Boolean)
-    if (!sameList(next, job[f] ?? [])) patch[f] = next
+    const next = clean(d[f])
+    if (!sameList(next, clean(base[f]))) patch[f] = next
   }
   const min = money(d.salary_min)
   const max = money(d.salary_max)
@@ -157,7 +162,7 @@ export function briefingPatch(
   if (min !== null && max !== null && min > max) {
     return { ok: false, error: t('Gehalt von liegt über Gehalt bis.') }
   }
-  if (min !== (job.salary_min ?? null)) patch.salary_min = min
-  if (max !== (job.salary_max ?? null)) patch.salary_max = max
+  if (d.salary_min.trim() !== base.salary_min.trim()) patch.salary_min = min
+  if (d.salary_max.trim() !== base.salary_max.trim()) patch.salary_max = max
   return { ok: true, patch }
 }

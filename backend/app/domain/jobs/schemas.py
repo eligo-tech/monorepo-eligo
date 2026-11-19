@@ -34,12 +34,13 @@ class JobBase(BaseModel):
     #: somebody is only writing it down because the client asked for it.
     status: str = JobStatus.ACTIVE.value
     #: Briefing points (ELI-47) — see `models.Job` and `briefing.POINTS`.
-    tasks: str | None = None
+    #: Bounded: each change is copied whole into its EnrichmentRecord.
+    tasks: str | None = Field(default=None, max_length=4000)
     nice_to_have_skills: list[str] = Field(default_factory=list)
     start_date: str | None = Field(default=None, max_length=120)
     team_size: str | None = Field(default=None, max_length=120)
-    interview_process: str | None = None
-    vacancy_reason: str | None = None
+    interview_process: str | None = Field(default=None, max_length=4000)
+    vacancy_reason: str | None = Field(default=None, max_length=4000)
 
 
 class JobCreate(JobBase):
@@ -106,12 +107,12 @@ class JobUpdate(BaseModel):
     salary_max: int | None = Field(default=None, ge=0)
     salary_currency: str | None = None
     status: str | None = None
-    tasks: str | None = None
+    tasks: str | None = Field(default=None, max_length=4000)
     nice_to_have_skills: list[str] | None = None
     start_date: str | None = Field(default=None, max_length=120)
     team_size: str | None = Field(default=None, max_length=120)
-    interview_process: str | None = None
-    vacancy_reason: str | None = None
+    interview_process: str | None = Field(default=None, max_length=4000)
+    vacancy_reason: str | None = Field(default=None, max_length=4000)
 
 
 class JobCopy(BaseModel):

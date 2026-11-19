@@ -150,6 +150,18 @@ async def test_the_api_returns_the_score_and_new_fields_are_editable_with_receip
     } <= fields
 
 
+async def test_free_text_points_are_bounded() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    for field in ("tasks", "interview_process", "vacancy_reason"):
+        with pytest.raises(ValidationError):
+            JobUpdate(**{field: "x" * 4001})
+        with pytest.raises(ValidationError):
+            JobCreate(title="Dev", **{field: "x" * 4001})
+        JobUpdate(**{field: "x" * 4000})
+
+
 async def test_nice_to_have_cannot_be_nulled() -> None:
     async with SessionLocal() as s:
         row = await service.create_job(

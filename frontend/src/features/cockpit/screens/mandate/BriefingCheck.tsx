@@ -85,6 +85,8 @@ export function BriefingCheck({
 }) {
   const [editing, setEditing] = useState(false)
   const [d, setD] = useState<BriefingDraft>(() => briefingDraft(job))
+  // The draft as the form opened — what a save is diffed against.
+  const [base, setBase] = useState<BriefingDraft>(() => briefingDraft(job))
   const [focus, setFocus] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -105,7 +107,11 @@ export function BriefingCheck({
     setD((prev) => ({ ...prev, [key]: value }))
 
   function open(field?: string) {
-    if (!editing) setD(briefingDraft(job))
+    if (!editing) {
+      const fresh = briefingDraft(job)
+      setD(fresh)
+      setBase(fresh)
+    }
     setEditing(true)
     setError(null)
     if (field) setFocus(field)
@@ -123,7 +129,7 @@ export function BriefingCheck({
   }
 
   async function save() {
-    const result = briefingPatch(job, d)
+    const result = briefingPatch(base, d)
     if (!result.ok) return setError(result.error)
     if (Object.keys(result.patch).length === 0) return setEditing(false)
     setBusy(true)

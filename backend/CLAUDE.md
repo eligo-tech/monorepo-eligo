@@ -435,7 +435,9 @@ Three domain facts worth knowing before you add a field:
   the frontend only labels the keys. `tasks`, `nice_to_have_skills`,
   `start_date`, `team_size`, `interview_process`, `vacancy_reason` (0079)
   are free text / a list, edited through the verified `update_job`, and
-  never matching inputs.
+  never matching inputs. Tenant data; `interview_process` may name client
+  staff, and erasing a manager does not rewrite these texts (same as any
+  other job text).
 - **`candidates`** carries the Qualifikationsgespräch set:
   `industries` (plural — the single `industry` column is gone from the code),
   `employment_form`, `salary_minimum` next to `salary_expectation`,

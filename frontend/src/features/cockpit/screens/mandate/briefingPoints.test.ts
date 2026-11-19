@@ -99,7 +99,7 @@ describe('the briefing form', () => {
       salary_max: '95000',
       nice_to_have_skills: ['Kafka', ' '],
     }
-    expect(briefingPatch(before, d)).toEqual({
+    expect(briefingPatch(briefingDraft(before), d)).toEqual({
       ok: true,
       patch: {
         tasks: null,
@@ -112,7 +112,16 @@ describe('the briefing form', () => {
 
   it('refuses an inverted or unreadable band before sending it', () => {
     const before = job()
-    expect(briefingPatch(before, { ...briefingDraft(before), salary_min: '100000', salary_max: '90000' }).ok).toBe(false)
-    expect(briefingPatch(before, { ...briefingDraft(before), salary_min: 'viel' }).ok).toBe(false)
+    expect(briefingPatch(briefingDraft(before), { ...briefingDraft(before), salary_min: '100000', salary_max: '90000' }).ok).toBe(false)
+    expect(briefingPatch(briefingDraft(before), { ...briefingDraft(before), salary_min: 'viel' }).ok).toBe(false)
+  })
+
+  it('never sends back a field the form did not touch, even if it changed meanwhile', () => {
+    // Opened with no criteria; a chip in the Suchprofil then added "Java".
+    const opened = job()
+    const base = briefingDraft(opened)
+    const d = { ...base, team_size: '6' }
+    expect(briefingPatch(base, d)).toEqual({ ok: true, patch: { team_size: '6' } })
+    expect(briefingPatch(base, base)).toEqual({ ok: true, patch: {} })
   })
 })
