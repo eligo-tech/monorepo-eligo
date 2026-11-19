@@ -12,6 +12,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.domain.candidates.languages import normalise_languages
 from app.domain.common.enums import EmploymentForm, WorkPermitStatus
 
 # Pragmatic e-mail shape check — mirrors the extraction gate's validator. Not a
@@ -82,6 +83,13 @@ class CandidateCreate(CandidateBase):
     #: The person was erased here on request and has since come back of their
     #: own accord. Without it, adding someone erased is refused (409).
     override_suppression: bool = False
+
+    #: ELI-56: "Englisch (fließend)" is stored as "Englisch (Fließend)"; an
+    #: entry without a level stays as it is.
+    @field_validator("languages")
+    @classmethod
+    def _languages(cls, v: list[str] | None) -> list[str] | None:
+        return normalise_languages(v)
 
 
 class CandidateUpdate(BaseModel):
@@ -157,6 +165,11 @@ class CandidateUpdate(BaseModel):
     working_experience: list[str] | None = None
     # Structured CV roles ({title, company, location, dates, highlights}).
     work_history: list[dict] | None = None
+
+    @field_validator("languages")
+    @classmethod
+    def _languages(cls, v: list[str] | None) -> list[str] | None:
+        return normalise_languages(v)
 
     @field_validator("email")
     @classmethod

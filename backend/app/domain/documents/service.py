@@ -32,6 +32,7 @@ from sqlalchemy import desc, select
 
 from app.domain.candidates import service as candidates_service
 from app.domain.candidates.employment import normalize_employment_form
+from app.domain.candidates.languages import ground_language_levels, split_language, split_languages
 from app.domain.candidates.schemas import CandidateCreate
 from app.domain.common.enums import DocumentKind, WorkPermitStatus
 from app.domain.documents import gate, parser
@@ -156,6 +157,26 @@ def _ground_address_and_role(
     return out, notes
 
 
+def _ground_languages(
+    text: str, fields: list[ExtractedField]
+) -> tuple[list[ExtractedField], list[str]]:
+    """ELI-56: a language level only when the CV states it. A level whose word
+    is not in the document is dropped; the language itself stays."""
+    notes: list[str] = []
+    out: list[ExtractedField] = []
+    for f in fields:
+        if f.field != "languages":
+            out.append(f)
+            continue
+        items = split_languages(f.value) or []
+        grounded = ground_language_levels(items, text) or []
+        levels = lambda xs: sum(split_language(x)[1] is not None for x in xs)  # noqa: E731
+        if levels(grounded) < levels(items):
+            notes.append("languages: a level not stated in the document was dropped")
+        out.append(f.model_copy(update={"value": "; ".join(grounded)}))
+    return out, notes
+
+
 def _build_candidate(
     tenant_id: uuid.UUID,
     fields: list[ExtractedField],
@@ -202,7 +223,7 @@ def _build_candidate(
         total_years_experience=g("total_years_experience"),
         current_salary=_to_int(g("current_salary")),
         salary_expectation=_to_int(g("expected_salary")),
-        languages=_split_list(g("languages")),
+        languages=split_languages(g("languages")),
         education=education,
         working_experience=_split_list(g("working_experience")),
         motivation=g("motivation"),
@@ -285,6 +306,8 @@ async def extract_cv(
     sections, dropped_roles, dropped_edu = _ground_sections(text, raw_sections)
     extracted, address_notes = _ground_address_and_role(text, extracted, sections)
     notes += address_notes
+    extracted, language_notes = _ground_languages(text, extracted)
+    notes += language_notes
     sec_post = gate.evaluate(
         gate.SECTIONS_POSTCONDITIONS,
         {"roles": {"ungrounded": dropped_roles}, "education": {"ungrounded": dropped_edu}},
