@@ -32,6 +32,9 @@ EXEMPT: dict[tuple[str, str], str] = {
     # ELI-32: "Wieder kontaktierbar" clears a mark the same recruiter set
     # from a note; it removes no data, and leaves a receipt.
     ("DELETE", "/{kind}/{person_id}/do-not-contact"): "undo of the do-not-contact mark, receipted",
+    # ELI-60: "Wieder als Lead aufnehmen" clears a sales status, deletes
+    # nothing — the recruiter who set it by logging a call must undo it.
+    ("DELETE", "/managers/{manager_id}/no-interest"): "undo of the Kein-Interesse status, receipted",
 }
 
 #: Deletions that are not spelled DELETE. Art. 17 erasure is a POST because
