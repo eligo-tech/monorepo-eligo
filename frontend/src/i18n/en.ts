@@ -161,7 +161,7 @@ export const EN: Record<string, string> = {
   '{n} Mandate': '{n} mandates',
   'zuletzt {date}': 'last {date}',
   'Noch kein Manager bei diesem Unternehmen.': 'No manager at this company yet.',
-  'Neue Kontakte aus dem Markt — in den Leads anrufen und „Zu Managern“ übernehmen.': 'New contacts from the market — call them in Leads and move them "To Managers".',
+  'Neue Kontakte aus dem Markt — nach dem Erstkontakt „Zu Managern“.': 'New contacts from the market — after the first contact: "To Managers".',
   'Keine Mandate bei diesem Unternehmen.': 'No mandates at this company.',
   'Manager hinzufügen': 'Add manager',
   'Offene Stellen im Markt': 'Open jobs in the market',
