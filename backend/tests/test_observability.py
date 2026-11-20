@@ -37,12 +37,17 @@ def _carries_number(blob: str, value: int) -> bool:
 
     A plain substring check is not enough: every event carries random hex
     ids, and `6960700006bc45658fd47667d7e10f12` (a real event_id from CI)
-    contains `70000`. So the digits only count when no letter, digit or dot
-    touches them. That still matches every form a leaked value takes
-    (`"salary": "70000"`, `70000,`, `'70000'`) but never a run of digits
-    inside an id, a uuid or a fractional timestamp.
+    contains `70000`. So the digits only count when no letter or digit
+    touches them, and no dot precedes them. A trailing dot counts only
+    when it starts a fraction that changes the value: `70000.0`,
+    `Decimal('70000.00')` and `... 70000.` are the salary; `70000.5` is not.
+    That matches every form a leaked value takes (`"salary": "70000"`,
+    `70000,`, `'70000'`) but never a run of digits inside a hex id, a uuid
+    or a fractional timestamp. A unit glued on (`70000EUR`) is missed; that
+    is the price of ignoring hex ids, whose letters touch digits.
     """
-    return re.search(rf"(?<![0-9A-Za-z.]){value}(?![0-9A-Za-z.])", blob) is not None
+    pattern = rf"(?<![0-9A-Za-z.]){value}(?![0-9A-Za-z]|\.\d*[1-9])"
+    return re.search(pattern, blob) is not None
 
 
 @pytest.fixture(autouse=True)
@@ -196,6 +201,9 @@ def test_a_salary_check_ignores_the_same_digits_inside_other_values(blob) -> Non
         '{"salary": 70000, "x": 1}',
         "{'salary': '70000'}",
         '{"message": "expects 70000 EUR"}',
+        '{"salary": 70000.0}',
+        "{'salary': \"Decimal('70000.00')\"}",
+        '{"message": "expects 70000."}',
     ],
 )
 def test_a_salary_check_still_sees_a_real_leak(blob) -> None:
