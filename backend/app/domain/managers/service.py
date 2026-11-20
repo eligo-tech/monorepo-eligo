@@ -304,7 +304,6 @@ async def update_manager(
         # ELI-45: the phone is editable on the Manager page. Create refuses an
         # erased person's direct number; setting it by an edit is the same act
         # — for every number added (ELI-46), not only the primary.
-        # Phone only — the surname is this record's own and did not change.
         from app.domain.erasure import service as erasure
 
         guard = await erasure.person_guard(session, tenant_id)
@@ -312,8 +311,23 @@ async def update_manager(
             on = guard.erased_on(company_name=None, surname=None, phone=number)
             if on is not None:
                 raise erasure.Suppressed(on)
+    target = manager.company_id
     if changes.get("company_id") and changes["company_id"] != manager.company_id:
-        await _own_company(session, tenant_id=tenant_id, company_id=changes["company_id"])
+        target = (await _own_company(session, tenant_id=tenant_id, company_id=changes["company_id"])).id
+    renamed = any(f in changes and changes[f] != getattr(manager, f) for f in ("full_name", "last_name"))
+    if not override and (renamed or target != manager.company_id):
+        # ELI-66: name and company are editable. Create refuses an erased
+        # person by surname at their employer; a rename or a move onto that
+        # surname there is the same act.
+        from app.domain.erasure import service as erasure
+
+        guard = await erasure.person_guard(session, tenant_id)
+        names = await erasure.employer_names(session, tenant_id, target)
+        surname = changes.get("last_name", manager.last_name) or changes.get("full_name", manager.full_name)
+        if names:
+            on = guard.erased_on(company_name=names[0], other_names=tuple(names[1:]), surname=surname, phone=None)
+            if on is not None:
+                raise erasure.Suppressed(on)
     effective = {f: v for f, v in changes.items() if getattr(manager, f, None) != v}
     if phones is not None:
         wanted = [{"number": p.number, "kind": p.kind} for p in phones]

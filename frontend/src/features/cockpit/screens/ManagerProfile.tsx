@@ -642,6 +642,7 @@ export function ManagerProfile({
           <RailSection title={t('Erreichbar')}>
             <EditContact
               manager={manager}
+              companyName={shownCompany}
               onSaved={(updated, company) => {
                 setManager(updated)
                 if (company) setShownCompany(company)
@@ -759,9 +760,11 @@ export function ManagerProfile({
  *  same erasure confirmation as creating a contact. */
 function EditContact({
   manager,
+  companyName,
   onSaved,
 }: {
   manager: ManagerDTO
+  companyName: string
   /** `company`: the new company's name when the contact moved. */
   onSaved: (updated: ManagerDTO, company?: string) => void
 }) {
@@ -782,10 +785,19 @@ function EditContact({
           setLead(leadDraftOf(manager))
           setPhones(phonesOf(manager))
           // ELI-66: the company is one of the workspace's own.
+          // The list endpoint caps at 500; the current company always shows,
+          // so the picker never displays a company the contact is not at.
           if (companies === null)
             api
-              .companies(1000)
-              .then((rows) => setCompanies(rows.map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name))))
+              .companies(500)
+              .then((rows) => {
+                const list = rows.map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name))
+                setCompanies(
+                  list.some((c) => c.id === manager.company_id)
+                    ? list
+                    : [{ id: manager.company_id, name: companyName || '—' }, ...list],
+                )
+              })
               .catch(() => setCompanies([]))
           setError(null)
           setOpen(true)

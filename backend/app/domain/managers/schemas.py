@@ -197,9 +197,11 @@ class ManagerUpdate(BaseModel):
     @field_validator("full_name")
     @classmethod
     def _name(cls, value: str | None) -> str | None:
-        if value is not None and not value.strip():
+        # Runs only when the field is sent: an explicit null or a blank is
+        # refused (422) rather than reaching the NOT NULL column as a 500.
+        if value is None or not value.strip():
             raise ValueError("a name is required")
-        return value.strip() if value is not None else None
+        return value.strip()
 
     @field_validator("company_id")
     @classmethod
