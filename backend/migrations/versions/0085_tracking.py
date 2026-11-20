@@ -23,8 +23,8 @@ Classification: tenant record. `created_by_*`, `framework_contract_by*` and
 `tracking_preferences.user_id` are workspace members' ids/names — the same
 kind of value `actor_user_id`/`actor_name` already hold.
 
-Revision ID: 0083
-Revises: 0082
+Revision ID: 0085
+Revises: 0084
 """
 from __future__ import annotations
 
@@ -33,8 +33,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0083"
-down_revision: str | None = "0082"
+revision: str = "0085"
+down_revision: str | None = "0084"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
