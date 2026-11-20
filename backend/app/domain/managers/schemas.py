@@ -165,6 +165,55 @@ class ManagerCreate(BaseModel):
     notes: str | None = None
 
 
+def _blank_none(value: str | None) -> str | None:
+    return (value or "").strip() or None
+
+
+class LeadCreate(BaseModel):
+    """ELI-65: "+ Lead" — a lead entered by hand, for a job Markt does not
+    hold (a job ad elsewhere, a LinkedIn profile). The company is named,
+    not picked: an existing workspace company of that name is used, else
+    one is created."""
+
+    #: The person was erased here on request and has since come back of their
+    #: own accord. Without it, adding someone erased is refused (409).
+    override_suppression: bool = False
+    #: The vacancy the lead is about — required, it is why the lead exists.
+    job_title: str = Field(max_length=200)
+    #: Where the person was found: the job ad or their LinkedIn profile.
+    source_url: str | None = Field(default=None, max_length=500)
+    full_name: str = Field(max_length=200)
+    role_title: str | None = Field(default=None, max_length=200)
+    company_name: str = Field(max_length=200)
+    email: str | None = Field(default=None, max_length=320)
+    phone: str | None = Field(default=None, max_length=50)
+
+    @field_validator("job_title", "full_name", "company_name")
+    @classmethod
+    def _required(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("required")
+        return value
+
+    @field_validator("role_title", "email", "phone")
+    @classmethod
+    def _optional(cls, value: str | None) -> str | None:
+        return _blank_none(value)
+
+    @field_validator("source_url")
+    @classmethod
+    def _a_link(cls, value: str | None) -> str | None:
+        value = _blank_none(value)
+        if value is None:
+            return None
+        if not re.match(r"^https?://[^\s/]+\.[^\s]+$", value, flags=re.IGNORECASE):
+            if re.match(r"^(www\.)?[^\s/:]+\.[a-z]{2,}(/\S*)?$", value, flags=re.IGNORECASE):
+                return f"https://{value}"
+            raise ValueError("source_url must be a web link (https://…)")
+        return value
+
+
 class ManagerUpdate(BaseModel):
     #: Setting an address of someone erased here is refused (409) unless they
     #: came back of their own accord.
@@ -269,6 +318,9 @@ class ManagerRead(BaseModel):
     #: ELI-66: removed by hand — why (`agency` · `not_relevant` · `other`).
     removed_reason: str | None = None
     removed_note: str | None = None
+    #: ELI-65: the job of a lead entered by hand, and whether it was.
+    lead_job_title: str | None = None
+    manual_lead: bool = False
     created_at: dt.datetime
 
     # --- detail, from the source's own profile ----------------------------

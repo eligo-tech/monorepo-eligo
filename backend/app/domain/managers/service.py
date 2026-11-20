@@ -25,6 +25,7 @@ from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
 from app.domain.managers.models import Manager, ManagerInteraction, ManagerPhone
 from app.domain.managers.schemas import (
+    LeadCreate,
     ManagerCreate,
     ManagerInteractionCreate,
     ManagerPhoneIn,
@@ -259,6 +260,127 @@ async def create_manager(
         notes=payload.notes,
     )
     session.add(manager)
+    await session.commit()
+    await session.refresh(manager)
+    return manager
+
+
+class LeadExists(Exception):
+    """ELI-65: the person is already held at that company — a lead or a
+    manager. Shown to the recruiter instead of a second record."""
+
+    def __init__(self, manager: Manager) -> None:
+        super().__init__(str(manager.id))
+        self.manager = manager
+
+
+#: Provenance of a lead entered by hand without a link (ELI-65).
+BY_HAND = "von Hand angelegt"
+
+
+def _split_name(full_name: str) -> tuple[str | None, str]:
+    """"Anna Maria Kraft" → ("Anna Maria", "Kraft"); one word is a surname."""
+    parts = full_name.split()
+    return (" ".join(parts[:-1]) or None, parts[-1])
+
+
+def _profile_network(url: str | None) -> str | None:
+    """Which network a link is a person's profile on, if any."""
+    host = (url or "").lower().split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+    if host == "linkedin.com" or host.endswith(".linkedin.com"):
+        return "linkedin"
+    if host == "xing.com" or host.endswith(".xing.com"):
+        return "xing"
+    return None
+
+
+def lead_job_url(manager: Manager) -> str | None:
+    """The ad a hand-entered lead's job links to: its source link, unless
+    that is the person's profile (ELI-65)."""
+    url = manager.source_detail or ""
+    return url if url.startswith(("http://", "https://")) and _profile_network(url) is None else None
+
+
+async def create_manual_lead(
+    session: AsyncSession, *, tenant_id: uuid.UUID, payload: LeadCreate, actor: str | None = None
+) -> Manager:
+    """ELI-65: "+ Lead" — a lead for a job Markt does not hold.
+
+    The person comes from a job ad or a LinkedIn profile, not from the person
+    themself: `third_party_source`, so the Art. 14 notice is owed, with the
+    link (or "von Hand angelegt") as `source_detail`. Tenant data only —
+    nothing here touches `hub_*`.
+
+    The company is the workspace's own of that name (`companies.find_existing`,
+    the rule "+ Unternehmen" refuses a duplicate by), else created the way
+    "+ Unternehmen" creates one. The same person at that company already held
+    — lead or manager, by the call list's same-person rule — raises
+    `LeadExists` instead of a second record. Erased people are refused like
+    every other way of adding a person.
+    """
+    from app.domain.common.enums import ReceiptAction
+    from app.domain.companies import service as companies
+    from app.domain.companies.schemas import CompanyCreate
+    from app.domain.erasure import service as erasure
+    from app.domain.hub.call_list import _existing_manager, _surname_key
+    from app.domain.verification import service as verification
+
+    first_name, last_name = _split_name(payload.full_name)
+    company = await companies.find_existing(session, tenant_id=tenant_id, name=payload.company_name, location=None)
+    if company is not None:
+        key = _surname_key(last_name, payload.full_name)
+        found = await _existing_manager(session, tenant_id, company.id, key, first_name) if key else None
+        if found is not None:
+            raise LeadExists(found)
+
+    await erasure.guard_readd(session, tenant_id=tenant_id, email=payload.email, override=payload.override_suppression)
+    if not payload.override_suppression:
+        guard = await erasure.person_guard(session, tenant_id)
+        names = await erasure.employer_names(session, tenant_id, company.id) if company else [payload.company_name]
+        on = guard.erased_on(
+            company_name=names[0] if names else payload.company_name, other_names=tuple(names[1:]),
+            surname=last_name, phone=payload.phone,
+        )
+        if on is not None:
+            raise erasure.Suppressed(on)
+
+    if company is None:
+        company = await companies.create_company(
+            session, data=CompanyCreate(tenant_id=tenant_id, name=payload.company_name, source="manual"), actor=actor,
+        )
+    company_id = company.id
+    network = _profile_network(payload.source_url)
+    manager = Manager(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        full_name=payload.full_name,
+        first_name=first_name,
+        last_name=last_name,
+        role_title=payload.role_title,
+        email=payload.email,
+        phone=payload.phone,
+        linkedin_url=payload.source_url if network == "linkedin" else None,
+        xing_url=payload.source_url if network == "xing" else None,
+        source=ConfidenceSource.THIRD_PARTY_SOURCE.value,
+        source_detail=payload.source_url or BY_HAND,
+        stage="bus_dev",
+        lead_job_title=payload.job_title,
+    )
+    session.add(manager)
+    await session.flush()
+    # References only: receipts never hold a person's data or the link.
+    await verification.append_receipt(
+        session, tenant_id=tenant_id, agent="recruiter", action=ReceiptAction.WRITE,
+        subject_type="manager", subject_id=str(manager.id), verified=True,
+        summary="Lead von Hand angelegt",
+        payload={
+            "stage": "bus_dev",
+            "source": ConfidenceSource.THIRD_PARTY_SOURCE.value,
+            "company_id": str(company_id),
+            "fields": sorted(f for f in ("role_title", "email", "phone", "source_url") if getattr(payload, f)),
+        },
+        actor_name=actor,
+    )
     await session.commit()
     await session.refresh(manager)
     return manager

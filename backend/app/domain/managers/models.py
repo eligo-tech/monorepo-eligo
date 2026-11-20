@@ -132,6 +132,18 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     #: ELI-60's "Kein Interesse" from a call.
     removed_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
     removed_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: ELI-65: the vacancy a lead entered by hand is about ("Job" on the
+    #: "+ Lead" form) — a job Markt does not hold, so there is no ad row to
+    #: link it to. Shown on the Leads row and the lead page like a Markt
+    #: lead's ad. NULL for every other contact.
+    lead_job_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    @property
+    def manual_lead(self) -> bool:
+        """ELI-65: a lead entered by hand rather than taken from Markt —
+        the "manuell" mark on the Leads list. Derived: a Markt lead is the
+        public ad's (`public_web`), a hand-entered one carries its job."""
+        return self.stage == "bus_dev" and self.source != ConfidenceSource.PUBLIC_WEB.value
 
     interactions: Mapped[list["ManagerInteraction"]] = relationship(
         "ManagerInteraction",

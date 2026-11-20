@@ -89,8 +89,12 @@ The client-side funnel runs `markt` → `leads` / `companies` → `managers` →
 Markt searches the shared corpus; on a company card "Ansprechpartner" lists the
 people its public ads name, and adopting one creates the company and a
 `managers` row with `stage = bus_dev`, provenance (the ad URL) and the Art. 14
-flag. **Leads** lists only those bus-dev contacts — never imports or
-hand-entered people — with phone, e-mail, LinkedIn/XING (stored profile, else a
+flag. **Leads** lists only those bus-dev contacts — never imports or people
+added through "Manager hinzufügen" — plus the leads entered with "+ Lead"
+(ELI-65, `leads/NewLead.tsx`: Job · Link zur Anzeige/LinkedIn · Name ·
+Jobtitel · Firma · E-Mail · Nummer → `POST /managers/leads`; marked
+"manuell", the job on the row and the manager page; a 409 offers the person
+already held), with phone, e-mail, LinkedIn/XING (stored profile, else a
 people search) and the adoption date. After the first contact "Zu Managern"
 promotes the record to the Manager screen. **Unternehmen** (`CompanyScreen`,
 ELI-33) lists EVERY company of the workspace — Alle / Kunden (≥1 manager) /

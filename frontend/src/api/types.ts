@@ -494,6 +494,10 @@ export interface ManagerDTO {
   removed_reason?: RemoveReason | null
   /** ELI-66: the recruiter's words with "Sonstiges". */
   removed_note?: string | null
+  /** ELI-65: the job a lead entered by hand ("+ Lead") is about. */
+  lead_job_title?: string | null
+  /** ELI-65: entered by hand, not taken from Markt. */
+  manual_lead?: boolean
   created_at: string
   /** "MNGR197" — the reference a recruiter reads out on a call. */
   external_code?: string | null
@@ -1260,6 +1264,8 @@ export interface ContactRowDTO {
   added_at: string | null
   source: string
   source_detail: string | null
+  /** ELI-65: entered by hand ("+ Lead"), not taken from Markt. */
+  manual?: boolean
   art14_outstanding: boolean
   /** ELI-32: marked "Nicht mehr kontaktieren" — shown, never due. */
   do_not_contact_at?: string | null
@@ -1279,6 +1285,20 @@ export interface ContactRowDTO {
   last_note_at?: string | null
   /** A history row or a free-text note — "Mit Notizen". */
   has_notes?: boolean
+}
+
+/** ELI-65: "+ Lead" — a lead entered by hand. The company is named; an
+ *  existing workspace company of that name is used, else one is created. */
+export interface LeadCreateBody {
+  job_title: string
+  source_url?: string | null
+  full_name: string
+  role_title?: string | null
+  company_name: string
+  email?: string | null
+  phone?: string | null
+  /** Erased here on request and come back of their own accord (409 otherwise). */
+  override_suppression?: boolean
 }
 
 /** ELI-37: an ad naming the lead (`url`) and/or this workspace's job (`job_id`). */

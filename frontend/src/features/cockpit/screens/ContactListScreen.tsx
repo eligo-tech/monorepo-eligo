@@ -1,5 +1,6 @@
 // "Leads" (ELI-23, ELI-29): NEW contacts taken from Markt — people a public
-// job ad names — not yet vetted managers; open call-backs first (ELI-38), then
+// job ad names — or entered by hand with "+ Lead" (ELI-65, marked "manuell");
+// not yet vetted managers; open call-backs first (ELI-38), then
 // newest first. "Zu Managern" moves the person to the Manager screen (same
 // record, nothing copied). Per company
 // they are on the company page in Unternehmen (`CompanyScreen`, ELI-33).
@@ -9,7 +10,7 @@ import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
 import { useEffect, useRef, useState } from 'react'
-import { BellPlus, Briefcase, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
+import { BellPlus, Briefcase, ExternalLink, Mail, Phone, PhoneCall, Plus, Search, UserCheck, Users } from 'lucide-react'
 import { ApiError, api } from '@/api/client'
 import { useActorLabel } from '@/auth/memberNames'
 import type { ContactPageDTO, ContactRowDTO, NoteCountsDTO, SwitchboardDTO } from '@/api/types'
@@ -31,6 +32,7 @@ import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
 import { DoNotContactChip } from '../erasure/DoNotContact'
 import { NoInterestChip, RemoveLeadButton, ReviveLeadButton } from '../leads/NoInterest'
+import { ManualLeadChip, NewLead } from '../leads/NewLead'
 import { FollowUpForm } from '../ui/FollowUpForm'
 import { DateField } from '../ui/DateField'
 import { announceFollowUpsChanged, followUpWhen, localIsoDate } from '../ui/followUps'
@@ -213,6 +215,8 @@ export function ContactRow({
           {row.full_name}
         </a>
         {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
+        {/* ELI-65: entered by hand with "+ Lead", not taken from Markt. */}
+        {row.manual && <ManualLeadChip source={row.source_detail} />}
         {row.do_not_contact_at && <DoNotContactChip since={row.do_not_contact_at} />}
         {row.no_interest_at && <NoInterestChip since={row.no_interest_at} reason={row.removed_reason} />}
         {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
@@ -239,7 +243,9 @@ export function ContactRow({
               ·{' '}
             </>
           )}
-          {t('übernommen am {date}', { date: day(row.added_at) })}
+          {row.manual
+            ? t('angelegt am {date}', { date: day(row.added_at) })
+            : t('übernommen am {date}', { date: day(row.added_at) })}
         </span>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[12px] text-cockpit-dim">
@@ -259,6 +265,12 @@ export function ContactRow({
           <a href={row.source_detail} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1 hover:text-mint-400">
             <ExternalLink className="h-3 w-3" />
             {t('aus Anzeige')}
+          </a>
+        )}
+        {row.manual && row.source_detail?.startsWith('http') && (
+          <a href={row.source_detail} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1 hover:text-mint-400">
+            <ExternalLink className="h-3 w-3" />
+            {t('Quelle')}
           </a>
         )}
         {row.last_call_at && (
@@ -422,7 +434,8 @@ export function NotesFilter({
   )
 }
 
-/** Everyone adopted from Markt in this workspace — open call-backs first, then newest. */
+/** Everyone adopted from Markt in this workspace, and the leads entered by
+ *  hand (ELI-65) — open call-backs first, then newest. */
 function ContactsTab() {
   const [page, setPage] = useState<ContactPageDTO | null>(null)
   const [companyId, setCompanyId] = useState('')
@@ -435,6 +448,8 @@ function ContactsTab() {
   const [error, setError] = useState<string | null>(null)
   const latest = useRef(0)
   const [bump, setBump] = useState(0)
+  // ELI-65: "+ Lead" — a lead entered by hand.
+  const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     const mine = ++latest.current
@@ -508,7 +523,22 @@ function ContactsTab() {
           {page?.no_interest_total ? ` (${page.no_interest_total})` : ''}
         </button>
         <Button type="submit">{t('Suchen')}</Button>
+        <Button tone="primary" onClick={() => setAdding((a) => !a)}>
+          <Plus className="h-4 w-4" />
+          {t('Lead')}
+        </Button>
       </form>
+      {adding && (
+        <div className="mb-3">
+          <NewLead
+            onCancel={() => setAdding(false)}
+            onSaved={() => {
+              setAdding(false)
+              called()
+            }}
+          />
+        </div>
+      )}
       <div className="mb-3">
         <NotesFilter value={notes} counts={page?.note_counts ?? null} onChange={setNotes} />
       </div>
@@ -530,7 +560,7 @@ function ContactsTab() {
         <p className="text-[13px] text-cockpit-dim">
           {filtering
             ? t('Keine Kontakte für diese Auswahl.')
-            : t('Noch keine Kontakte — im Markt bei einem Unternehmen „Ansprechpartner“ öffnen und eine Person übernehmen.')}
+            : t('Noch keine Kontakte — im Markt bei einem Unternehmen „Ansprechpartner“ öffnen und eine Person übernehmen, oder mit „+ Lead“ von Hand anlegen.')}
         </p>
       ) : (
         <ul>
@@ -558,7 +588,7 @@ export function ContactListScreen() {
     <div className="space-y-5">
       <SectionHeader
         title={t('Leads')}
-        hint={t('Neue Kontakte aus dem Markt — noch keine geprüften Manager. Nach dem Erstkontakt „Zu Managern“.')}
+        hint={t('Neue Kontakte aus dem Markt oder von Hand angelegt — noch keine geprüften Manager. Nach dem Erstkontakt „Zu Managern“.')}
         icon={<Users className="h-4 w-4" />}
       />
       <ContactsTab />
