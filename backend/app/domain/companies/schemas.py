@@ -56,9 +56,9 @@ class CompanyStatusUpdate(BaseModel):
 
 
 class FrameworkContractWrite(BaseModel):
-    """ELI-64: the day the framework agreement was signed."""
+    """ELI-64: the day the framework agreement was signed; null removes it."""
 
-    signed_on: dt.date
+    signed_on: dt.date | None
 
 
 class CompanyRead(CompanyBase):

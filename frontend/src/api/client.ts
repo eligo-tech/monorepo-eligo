@@ -187,8 +187,8 @@ export const api = {
   /** ELI-64: "Rahmenvertrag abgeschlossen am" — null takes it back. */
   setFrameworkContract: (id: string, signedOn: string | null) =>
     request<CompanyPageDTO>(`/companies/${id}/framework-contract`, {
-      method: signedOn ? 'PUT' : 'DELETE',
-      ...(signedOn ? { body: JSON.stringify({ signed_on: signedOn }) } : {}),
+      method: 'PUT',
+      body: JSON.stringify({ signed_on: signedOn }),
     }),
 
   /** ELI-15/64: Ist vs. Ziel, goals and the Prozess funnel for one period. */

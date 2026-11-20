@@ -195,16 +195,9 @@ async def set_framework_contract(
     db: AsyncSession = Depends(get_db),
 ) -> CompanyPage:
     """ELI-64: "Rahmenvertrag abgeschlossen" — counted by Tracking."""
+    # `signed_on: null` takes it back. A PUT, not a DELETE: every DELETE is
+    # admin-only (ELI-27), and correcting one's own date is not a deletion.
     return await _framework(db, actor, company_id, payload.signed_on)
-
-
-@router.delete("/{company_id}/framework-contract", response_model=CompanyPage)
-async def clear_framework_contract(
-    company_id: uuid.UUID,
-    actor: Actor = Depends(get_current_actor),
-    db: AsyncSession = Depends(get_db),
-) -> CompanyPage:
-    return await _framework(db, actor, company_id, None)
 
 
 async def _framework(db: AsyncSession, actor: Actor, company_id: uuid.UUID, signed_on) -> CompanyPage:  # noqa: ANN001

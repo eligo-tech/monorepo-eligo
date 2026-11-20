@@ -280,7 +280,9 @@ async def test_a_framework_contract_is_a_dated_mark_on_the_company() -> None:
         assert _kpi(panel, "framework_contracts")["available"] is True
         assert _kpi(panel, "framework_contracts")["ist"] == 1
 
-        gone = await c.delete(f"/api/v1/companies/{company_id}/framework-contract")
+        gone = await c.put(
+            f"/api/v1/companies/{company_id}/framework-contract", json={"signed_on": None}
+        )
         assert gone.status_code == 200
         assert gone.json()["company"]["framework_contract_on"] is None
         panel = (await c.get("/api/v1/activity/tracking?period=monat")).json()
