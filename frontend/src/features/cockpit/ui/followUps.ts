@@ -5,6 +5,8 @@
 // server stores a plain date ("Anfang Februar" is 01.02., wherever you are)
 // and has no idea which time zone the person reading it sits in.
 
+import { date as fmtDate } from '@/i18n/format'
+
 import type { FollowUpDTO, FollowUpSuggestionDTO } from '@/api/types'
 import { berlinIsoDate } from './datePicker'
 
@@ -73,6 +75,15 @@ export function parseLocalDate(isoDate: string): Date {
 
 /** `HH:MM` of a `HH:MM:SS` time, or null. */
 export const shortTime = (t: string | null): string | null => (t ? t.slice(0, 5) : null)
+
+/** ELI-63: what a follow-up's "when" shows — the date always, the time
+ *  only when somebody set one. Nothing fills a time in for them: the form's
+ *  "um (optional)" starts empty and saves null, every follow-up created from
+ *  a note sends null, and a call's next contact is a day (ELI-35). So a time
+ *  on the record is one a person chose. */
+export function followUpWhen(row: Pick<FollowUpDTO, 'due_date' | 'due_time'>): { date: string; time: string | null } {
+  return { date: fmtDate(parseLocalDate(row.due_date)), time: shortTime(row.due_time) }
+}
 
 /** Date, then time (a to-do without a time leads its day), then written order. */
 function soonest(a: FollowUpDTO, b: FollowUpDTO): number {
