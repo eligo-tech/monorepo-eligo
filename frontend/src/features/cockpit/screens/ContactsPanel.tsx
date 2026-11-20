@@ -188,7 +188,7 @@ function ContactRow({
           {held && contact.no_interest_at ? (
             // ELI-60: already here as a lead with "Kein Interesse" — not taken again.
             <a href={`#managers/${contact.manager_id}`}>
-              <NoInterestChip since={contact.no_interest_at} />
+              <NoInterestChip since={contact.no_interest_at} reason={contact.removed_reason} />
             </a>
           ) : held ? (
             <span className="flex items-center gap-1.5 px-2 font-mono text-[12px] text-mint-400">

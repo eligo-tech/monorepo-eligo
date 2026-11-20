@@ -110,7 +110,20 @@ export const EN: Record<string, string> = {
   'Beim Anruf kein Interesse — nicht mehr in den Leads. Anruf und Notizen bleiben gespeichert.':
     'Not interested on the call — no longer in Leads. The call and notes are kept.',
   'Wieder als Lead aufnehmen': 'Make a lead again',
-  'Leads mit „Kein Interesse“ — ausgeblendet, aber gespeichert.': 'Leads marked “Not interested” — hidden, but kept.',
+  // ELI-66: Leads entfernen
+  'Entfernte Leads und Leads mit „Kein Interesse“ — ausgeblendet, aber gespeichert.': 'Removed leads and leads marked “Not interested” — hidden, but kept.',
+  'Ausgeblendet': 'Hidden',
+  'Personalberatung': 'Recruitment agency',
+  'Nicht interessant': 'Not relevant',
+  'Aus den Leads entfernt — nicht gelöscht. Anrufe und Notizen bleiben gespeichert.': 'Removed from Leads — not deleted. Calls and notes are kept.',
+  'Entfernt: {reason} (seit {date})': 'Removed: {reason} (since {date})',
+  'Aus den Leads entfernen — ausgeblendet, nicht gelöscht.': 'Remove from Leads — hidden, not deleted.',
+  'Warum entfernen?': 'Why remove?',
+  'Grund (optional)': 'Reason (optional)',
+  'Weitere Personalberatungen blendet Markt mit „Personalberatungen ausblenden“ aus.': 'Markt hides other recruitment agencies with “Hide recruitment agencies”.',
+  'Lead öffnen — Daten bearbeiten': 'Open lead — edit details',
+  'Bitte einen Namen angeben.': 'Please enter a name.',
+  'XING-Profil': 'XING profile',
   'Schon im Workspace — „Kein Interesse“. Nicht erneut übernommen.':
     'Already in the workspace — “Not interested”. Not added again.',
   'Keine Domain in den Anzeigentexten.': 'No domain in the ad texts.',

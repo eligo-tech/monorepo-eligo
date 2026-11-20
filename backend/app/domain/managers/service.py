@@ -41,6 +41,10 @@ class CompanyNotInTenant(Exception):
     """
 
 
+class NotALead(Exception):
+    """ELI-66: only a lead (stage `bus_dev`) is removed from the Leads list."""
+
+
 class NotInterested(Exception):
     """ELI-60: the person is already this workspace's lead, marked
     "Kein Interesse" — they are not created a second time."""
@@ -266,7 +270,16 @@ async def update_manager(
     tenant_id: uuid.UUID,
     manager_id: uuid.UUID,
     payload: ManagerUpdate,
+    editor: str | None = None,
 ) -> Manager | None:
+    """A recruiter's edit of a contact (ELI-45/46/66).
+
+    Each field that really changes goes through `verify_and_commit` as a
+    `human_verified` proposal — the recruiter is the field's provenance, the
+    same rule as a candidate's manual edit — leaving an `EnrichmentRecord`
+    and receipts naming the field. A move to another company is checked to
+    be one of this workspace's own (`CompanyNotInTenant` otherwise).
+    """
     manager = await session.scalar(
         select(Manager).where(
             Manager.id == manager_id, Manager.tenant_id == tenant_id
@@ -299,14 +312,78 @@ async def update_manager(
             on = guard.erased_on(company_name=None, surname=None, phone=number)
             if on is not None:
                 raise erasure.Suppressed(on)
-    for field, value in changes.items():
-        setattr(manager, field, value)
+    if changes.get("company_id") and changes["company_id"] != manager.company_id:
+        await _own_company(session, tenant_id=tenant_id, company_id=changes["company_id"])
+    effective = {f: v for f, v in changes.items() if getattr(manager, f, None) != v}
     if phones is not None:
+        wanted = [{"number": p.number, "kind": p.kind} for p in phones]
+        if wanted != [{"number": p["number"], "kind": p["kind"]} for p in manager.phones]:
+            effective["phones"] = wanted
+    detail = f"manual edit via recruiter UI ({editor})" if editor else "manual edit via recruiter UI"
+    for field, value in effective.items():
+        await _commit_edit(session, manager, field, value, detail=detail, editor=editor)
+    if phones is not None and "phones" in effective:
         _set_phones(manager, phones)
-    elif "phone" in changes and not manager.phone and manager.extra_phones:
+    elif "phone" in effective and not manager.phone and manager.extra_phones:
         # The primary was removed by a writer that knows only `phone`: the
         # next number moves up rather than the contact showing no primary.
         _set_phones(manager, [ManagerPhoneIn(number=p.number, kind=p.kind) for p in manager.extra_phones])
+    await session.commit()
+    await session.refresh(manager)
+    return manager
+
+
+async def _commit_edit(session: AsyncSession, manager: Manager, field: str, value: object, *,
+                       detail: str, editor: str | None) -> None:
+    """One hand-edited field through the verification gate. `phones` is
+    recorded here and written by `_set_phones` after."""
+    import json
+
+    from app.domain.verification import service as verification
+    from app.domain.verification.schemas import ProposedChange
+
+    text = value if value is None or isinstance(value, str) else (
+        json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else str(value))
+    change = ProposedChange(
+        tenant_id=manager.tenant_id, entity_type="manager", entity_id=manager.id, field=field,
+        proposed_value=text, source=ConfidenceSource.HUMAN_VERIFIED, source_detail=detail, confidence=1.0,
+    )
+
+    async def _apply(_s: AsyncSession, _c: ProposedChange) -> None:
+        if field != "phones":
+            setattr(manager, field, value)
+
+    await verification.verify_and_commit(
+        session, change=change, agent="recruiter_manual_edit", apply_hook=_apply, actor=editor,
+    )
+
+
+async def remove_lead(session: AsyncSession, *, tenant_id: uuid.UUID, manager_id: uuid.UUID,
+                      reason: str, note: str | None = None) -> Manager | None:
+    """ELI-66 "Entfernen": the lead leaves the Leads list and the record
+    stays — the same `no_interest_at` as "Kein Interesse" (restorable by
+    `revive_lead`, not taken again from Markt), plus the reason code and the
+    recruiter's words. A lead already hidden keeps its date. One receipt
+    naming the code, never the words. Raises `NotALead` for a vetted
+    manager: they are not on the Leads list to be removed from."""
+    from app.domain.common.enums import ReceiptAction
+    from app.domain.verification import service as verification
+
+    manager = await session.scalar(
+        select(Manager).where(Manager.id == manager_id, Manager.tenant_id == tenant_id)
+    )
+    if manager is None:
+        return None
+    if manager.stage != "bus_dev":
+        raise NotALead(str(manager.id))
+    manager.no_interest_at = manager.no_interest_at or dt.datetime.now(dt.UTC)
+    manager.removed_reason = reason
+    manager.removed_note = (note or "").strip() or None
+    await verification.append_receipt(
+        session, tenant_id=tenant_id, agent="recruiter", action=ReceiptAction.WRITE,
+        subject_type="manager", subject_id=str(manager.id), verified=True,
+        summary="Lead entfernt", payload={"status": "removed", "reason": reason},
+    )
     await session.commit()
     await session.refresh(manager)
     return manager
@@ -360,6 +437,8 @@ async def revive_lead(session: AsyncSession, *, tenant_id: uuid.UUID, manager_id
         return None
     if manager.no_interest_at is not None:
         manager.no_interest_at = None
+        manager.removed_reason = None
+        manager.removed_note = None
         await verification.append_receipt(
             session, tenant_id=tenant_id, agent="recruiter", action=ReceiptAction.WRITE,
             subject_type="manager", subject_id=str(manager.id), verified=True,

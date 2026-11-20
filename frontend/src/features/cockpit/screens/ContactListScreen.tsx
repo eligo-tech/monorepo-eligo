@@ -30,7 +30,7 @@ import { leadPhone } from '../ui/switchboard'
 import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
 import { DoNotContactChip } from '../erasure/DoNotContact'
-import { NoInterestChip, ReviveLeadButton } from '../leads/NoInterest'
+import { NoInterestChip, RemoveLeadButton, ReviveLeadButton } from '../leads/NoInterest'
 import { FollowUpForm } from '../ui/FollowUpForm'
 import { DateField } from '../ui/DateField'
 import { announceFollowUpsChanged, followUpWhen, localIsoDate } from '../ui/followUps'
@@ -204,10 +204,17 @@ export function ContactRow({
   return (
     <li className={cn('border-b border-cockpit-line/40 py-3 last:border-0', row.due && 'bg-gold-500/[0.04]')}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-[15px] font-medium text-cockpit-text">{row.full_name}</span>
+        {/* ELI-66: the lead's page — every field is edited there. */}
+        <a
+          href={`#managers/${row.manager_id}`}
+          className="text-[15px] font-medium text-cockpit-text hover:text-mint-400"
+          title={t('Lead öffnen — Daten bearbeiten')}
+        >
+          {row.full_name}
+        </a>
         {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
         {row.do_not_contact_at && <DoNotContactChip since={row.do_not_contact_at} />}
-        {row.no_interest_at && <NoInterestChip since={row.no_interest_at} />}
+        {row.no_interest_at && <NoInterestChip since={row.no_interest_at} reason={row.removed_reason} />}
         {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
         {/* ELI-38: the open next call is the lead's status — on the name
             line, and kept by the backend until a call reaches the person. */}
@@ -277,12 +284,16 @@ export function ContactRow({
             {row.no_interest_at ? (
               <ReviveLeadButton managerId={row.manager_id} onRevived={onCalled} />
             ) : (
-              <span title={t('Erstkontakt erledigt — als Manager übernehmen.')}>
-                <Button onClick={promote} disabled={moving}>
-                  <UserCheck className="h-4 w-4" />
-                  {t('Zu Managern')}
-                </Button>
-              </span>
+              <>
+                <span title={t('Erstkontakt erledigt — als Manager übernehmen.')}>
+                  <Button onClick={promote} disabled={moving}>
+                    <UserCheck className="h-4 w-4" />
+                    {t('Zu Managern')}
+                  </Button>
+                </span>
+                {/* ELI-66: hidden with a reason, never deleted. */}
+                <RemoveLeadButton managerId={row.manager_id} onRemoved={onCalled} />
+              </>
             )}
             <Button onClick={() => setPlanning((p) => !p)}>
               <BellPlus className="h-4 w-4" />
@@ -485,7 +496,7 @@ function ContactsTab() {
           type="button"
           aria-pressed={noInterest}
           onClick={() => setNoInterest((v) => !v)}
-          title={t('Leads mit „Kein Interesse“ — ausgeblendet, aber gespeichert.')}
+          title={t('Entfernte Leads und Leads mit „Kein Interesse“ — ausgeblendet, aber gespeichert.')}
           className={cn(
             'rounded-md border px-2 py-0.5 font-mono text-[12px] transition-colors',
             noInterest
@@ -493,7 +504,7 @@ function ContactsTab() {
               : 'border-cockpit-line text-cockpit-dim hover:border-cockpit-edge hover:text-cockpit-text',
           )}
         >
-          {t('Kein Interesse')}
+          {t('Ausgeblendet')}
           {page?.no_interest_total ? ` (${page.no_interest_total})` : ''}
         </button>
         <Button type="submit">{t('Suchen')}</Button>
