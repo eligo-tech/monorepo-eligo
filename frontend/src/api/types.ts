@@ -456,6 +456,9 @@ export interface ManagerPhoneDTO {
   is_primary: boolean
 }
 
+/** ELI-66: why a lead was removed — a code; the label is the UI's. */
+export type RemoveReason = 'agency' | 'not_relevant' | 'other'
+
 export interface ManagerDTO {
   id: string
   company_id: string
@@ -480,11 +483,21 @@ export interface ManagerDTO {
   art14_outstanding: boolean
   notes: string | null
   status: string
+  /** ELI-23: "bus_dev" (a lead) | "manager". */
+  stage?: string
   /** ELI-32: marked "Nicht mehr kontaktieren" — when, and why (a code). */
   do_not_contact_at?: string | null
   do_not_contact_reason?: string | null
   /** ELI-60: a lead with "Kein Interesse" since then — off the Leads list. */
   no_interest_at?: string | null
+  /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
+  removed_reason?: RemoveReason | null
+  /** ELI-66: the recruiter's words with "Sonstiges". */
+  removed_note?: string | null
+  /** ELI-65: the job a lead entered by hand ("+ Lead") is about. */
+  lead_job_title?: string | null
+  /** ELI-65: entered by hand, not taken from Markt. */
+  manual_lead?: boolean
   created_at: string
   /** "MNGR197" — the reference a recruiter reads out on a call. */
   external_code?: string | null
@@ -713,6 +726,8 @@ export interface ContactCandidateDTO {
   manager_id: string | null
   /** ELI-60: that manager is a lead with "Kein Interesse" since then. */
   no_interest_at?: string | null
+  /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
+  removed_reason?: RemoveReason | null
   /** ELI-25: "model" — proposed by the AI, checked word for word in the ad. */
   found_by?: 'rules' | 'model'
 }
@@ -1251,11 +1266,15 @@ export interface ContactRowDTO {
   added_at: string | null
   source: string
   source_detail: string | null
+  /** ELI-65: entered by hand ("+ Lead"), not taken from Markt. */
+  manual?: boolean
   art14_outstanding: boolean
   /** ELI-32: marked "Nicht mehr kontaktieren" — shown, never due. */
   do_not_contact_at?: string | null
   /** ELI-60: "Kein Interesse" since — only under that filter. */
   no_interest_at?: string | null
+  /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
+  removed_reason?: RemoveReason | null
   last_outcome: string | null
   last_call_at: string | null
   last_call_by: string | null
@@ -1268,6 +1287,20 @@ export interface ContactRowDTO {
   last_note_at?: string | null
   /** A history row or a free-text note — "Mit Notizen". */
   has_notes?: boolean
+}
+
+/** ELI-65: "+ Lead" — a lead entered by hand. The company is named; an
+ *  existing workspace company of that name is used, else one is created. */
+export interface LeadCreateBody {
+  job_title: string
+  source_url?: string | null
+  full_name: string
+  role_title?: string | null
+  company_name: string
+  email?: string | null
+  phone?: string | null
+  /** Erased here on request and come back of their own accord (409 otherwise). */
+  override_suppression?: boolean
 }
 
 /** ELI-37: an ad naming the lead (`url`) and/or this workspace's job (`job_id`). */
@@ -1326,6 +1359,8 @@ export interface CompanyPersonDTO {
   last_contact_at: string | null
   /** ELI-60: a lead with "Kein Interesse" since then. */
   no_interest_at?: string | null
+  /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
+  removed_reason?: RemoveReason | null
 }
 
 /** ELI-33: one company — its managers, leads, mandates, Impressum switchboard. */

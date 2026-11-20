@@ -2967,6 +2967,7 @@ async def company_contacts(
             # ELI-60: shown as "Kein Interesse" — not offered to take again.
             nat = m.no_interest_at if m else None
             person["no_interest_at"] = nat.replace(tzinfo=dt.UTC) if nat is not None and nat.tzinfo is None else nat
+            person["removed_reason"] = m.removed_reason if m else None
 
     contacts = sorted(
         people.values(),

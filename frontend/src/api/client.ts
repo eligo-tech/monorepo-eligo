@@ -34,6 +34,8 @@ import type {
   FollowUpSuggestionDTO,
   FollowUpWrite,
   ManagerDTO,
+  RemoveReason,
+  LeadCreateBody,
   ManagerPhoneDTO,
   ManagerInteractionDTO,
   HubSearchPageDTO,
@@ -434,6 +436,15 @@ export const api = {
       /** ELI-46: the whole list, replacing the stored one. Not with `phone`. */
       phones?: ManagerPhoneDTO[]
       linkedin_url?: string | null
+      /** ELI-66: every field of a lead — name, company, XING, address. */
+      full_name?: string
+      first_name?: string | null
+      last_name?: string | null
+      company_id?: string
+      xing_url?: string | null
+      street?: string | null
+      postal_code?: string | null
+      city?: string | null
       override_suppression?: boolean
     },
   ) => request<ManagerDTO>(`/managers/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
@@ -547,8 +558,21 @@ export const api = {
       body: JSON.stringify({ text, reference_date: referenceDate }),
     }),
 
+  /** ELI-65 "+ Lead": a lead entered by hand. 409 `lead_exists` names the
+   *  person already held at that company. */
+  createLead: (body: LeadCreateBody) =>
+    request<ManagerDTO>('/managers/leads', { method: 'POST', body: JSON.stringify(body) }),
+
   /** ELI-23: move a bus-dev contact to Managers after the first contact. */
   promoteManager: (id: string) => request<ManagerDTO>(`/managers/${id}/promote`, { method: 'POST' }),
+
+  /** ELI-66: "Entfernen" — off the Leads list with a reason; hidden, never
+   *  deleted, undone by `reviveLead`. */
+  removeLead: (id: string, reason: RemoveReason, note?: string) =>
+    request<ManagerDTO>(`/managers/${id}/remove`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, note: note || null }),
+    }),
 
   /** ELI-60: "Wieder als Lead aufnehmen" — clears "Kein Interesse". */
   reviveLead: (id: string) => request<ManagerDTO>(`/managers/${id}/no-interest`, { method: 'DELETE' }),
