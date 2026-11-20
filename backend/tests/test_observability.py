@@ -17,6 +17,7 @@ setting is never mistaken for decoration.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 
 import pytest
@@ -29,6 +30,24 @@ from app.core.database import current_tenant_var
 CANDIDATE_EMAIL = "nesim.celik@hotmail.de"
 CANDIDATE_NAME = "Nesim Celik"
 CANDIDATE_SALARY = 70000
+
+
+def _carries_number(blob: str, value: int) -> bool:
+    """True when `value` appears in `blob` as a number of its own.
+
+    A plain substring check is not enough: every event carries random hex
+    ids, and `6960700006bc45658fd47667d7e10f12` (a real event_id from CI)
+    contains `70000`. So the digits only count when no letter or digit
+    touches them, and no dot precedes them. A trailing dot counts only
+    when it starts a fraction that changes the value: `70000.0`,
+    `Decimal('70000.00')` and `... 70000.` are the salary; `70000.5` is not.
+    That matches every form a leaked value takes (`"salary": "70000"`,
+    `70000,`, `'70000'`) but never a run of digits inside a hex id, a uuid
+    or a fractional timestamp. A unit glued on (`70000EUR`) is missed; that
+    is the price of ignoring hex ids, whose letters touch digits.
+    """
+    pattern = rf"(?<![0-9A-Za-z.]){value}(?![0-9A-Za-z]|\.\d*[1-9])"
+    return re.search(pattern, blob) is not None
 
 
 @pytest.fixture(autouse=True)
@@ -128,7 +147,7 @@ def test_a_candidate_in_a_failing_frame_never_reaches_the_wire(captured) -> None
 
     blob = json.dumps(captured, default=str)
     assert CANDIDATE_EMAIL not in blob
-    assert str(CANDIDATE_SALARY) not in blob
+    assert not _carries_number(blob, CANDIDATE_SALARY)
     # Still worth sending: without these the report is useless and the trade
     # would not be worth making.
     assert "could not save candidate" in blob
@@ -151,7 +170,44 @@ def test_a_candidate_in_a_frame_would_leak_by_default() -> None:
     sentry_sdk.flush()
     sentry_sdk.init(dsn=None)
 
-    assert CANDIDATE_EMAIL in json.dumps(events, default=str)
+    blob = json.dumps(events, default=str)
+    assert CANDIDATE_EMAIL in blob
+    # Also proves `_carries_number` sees the salary when it really leaks.
+    assert _carries_number(blob, CANDIDATE_SALARY)
+
+
+@pytest.mark.parametrize(
+    "blob",
+    [
+        '{"event_id": "6960700006bc45658fd47667d7e10f12"}',  # CI run 44827525694
+        '{"trace_id": "a1b2c370000d4e5f"}',
+        '{"id": "123e4567-e89b-12d3-a456-170000174000"}',
+        '{"timestamp": "2026-11-21T10:11:12.170000Z"}',
+        '{"timestamp": 1763700000.5}',
+        '{"amount": 170000}',
+    ],
+)
+def test_a_salary_check_ignores_the_same_digits_inside_other_values(blob) -> None:
+    """A random id that happens to contain the digits is not a leak."""
+    assert str(CANDIDATE_SALARY) in blob  # the old substring check fails here
+    assert not _carries_number(blob, CANDIDATE_SALARY)
+
+
+@pytest.mark.parametrize(
+    "blob",
+    [
+        '{"vars": {"salary": "70000"}}',
+        '{"salary": 70000}',
+        '{"salary": 70000, "x": 1}',
+        "{'salary': '70000'}",
+        '{"message": "expects 70000 EUR"}',
+        '{"salary": 70000.0}',
+        "{'salary': \"Decimal('70000.00')\"}",
+        '{"message": "expects 70000."}',
+    ],
+)
+def test_a_salary_check_still_sees_a_real_leak(blob) -> None:
+    assert _carries_number(blob, CANDIDATE_SALARY)
 
 
 # ── the scrubber ──────────────────────────────────────────────────────────
