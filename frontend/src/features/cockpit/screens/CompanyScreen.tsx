@@ -149,7 +149,7 @@ function PersonRow({ person, href, action }: { person: CompanyPersonDTO; href: s
         {person.full_name}
         {person.role_title && <span className="ml-2 text-[13px] text-cockpit-faint">{person.role_title}</span>}
       </a>
-      {person.no_interest_at && <NoInterestChip since={person.no_interest_at} />}
+      {person.no_interest_at && <NoInterestChip since={person.no_interest_at} reason={person.removed_reason} />}
       <span className="flex flex-wrap items-center gap-3 font-mono text-[12px] text-cockpit-dim">
         {person.phone && (
           <a href={telHref(person.phone)} className="flex items-center gap-1 hover:text-mint-400">

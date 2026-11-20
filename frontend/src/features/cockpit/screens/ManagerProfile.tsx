@@ -41,7 +41,7 @@ import { cn } from '@/lib/cn'
 import { Chip } from '../ui/primitives'
 import { EraseSection } from '../erasure/EraseSection'
 import { DoNotContactBanner } from '../erasure/DoNotContact'
-import { NoInterestChip, ReviveLeadButton } from '../leads/NoInterest'
+import { NoInterestChip, RemoveLeadButton, ReviveLeadButton } from '../leads/NoInterest'
 import { isAdmin, useMe } from '../useMe'
 import { useAsync } from '@/hooks/useAsync'
 import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
@@ -55,7 +55,7 @@ import {
 } from '../ui/interactionKinds'
 import { appointmentIcs, isAppointmentKind, splitAppointments } from '../ui/appointments'
 import { announceFollowUpsChanged } from '../ui/followUps'
-import { Button } from '../ui/forms'
+import { Button, SelectInput, TextInput } from '../ui/forms'
 import { CONTACT_KEYS, ContactFields, contactDraftOf, contactPatch } from '../ui/contactFields'
 import { PhoneList, PhoneListEditor, phonesOf, phonesPatch } from '../ui/phoneList'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
@@ -215,6 +215,9 @@ export function ManagerProfile({
   onErased?: () => void
 }) {
   const [manager, setManager] = useState(initial)
+  // ELI-66: the company can be changed on the page — its name follows.
+  const [shownCompany, setShownCompany] = useState(companyName)
+  useEffect(() => setShownCompany(companyName), [companyName])
   const [history, setHistory] = useState<ManagerInteractionDTO[] | null>(null)
   const [appointments, setAppointments] = useState<ManagerInteractionDTO[] | null>(null)
   const [tab, setTab] = useState<TabKey>('notes')
@@ -227,7 +230,7 @@ export function ManagerProfile({
   const me = useMe()
   // One read of the company page for the sidebar: its open jobs (ELI-33) and
   // its Impressum switchboard, shown as "Zentrale (Firma)" (ELI-46).
-  const companyPage = useAsync(() => api.companyPage(initial.company_id), [initial.company_id])
+  const companyPage = useAsync(() => api.companyPage(manager.company_id), [manager.company_id])
 
   useEffect(() => {
     let alive = true
@@ -327,7 +330,7 @@ export function ManagerProfile({
             </h1>
             <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-[15px] text-cockpit-dim">
               {manager.role_title && <span>{manager.role_title}</span>}
-              {companyName && companyName !== '—' && (
+              {shownCompany && shownCompany !== '—' && (
                 <>
                   <span className="text-cockpit-faint">{t('bei')}</span>
                   <a
@@ -335,7 +338,7 @@ export function ManagerProfile({
                     className="text-mint-400 underline-offset-4 hover:underline"
                     title={t('Zur Firmenseite')}
                   >
-                    {companyName}
+                    {shownCompany}
                   </a>
                 </>
               )}
@@ -384,14 +387,31 @@ export function ManagerProfile({
             )}
           </div>
         </div>
-        {manager.no_interest_at && (
+        {manager.no_interest_at ? (
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <NoInterestChip since={manager.no_interest_at} />
+            <NoInterestChip since={manager.no_interest_at} reason={manager.removed_reason} note={manager.removed_note} />
             <ReviveLeadButton
               managerId={manager.id}
-              onRevived={() => setManager((m) => ({ ...m, no_interest_at: null }))}
+              onRevived={() => setManager((m) => ({ ...m, no_interest_at: null, removed_reason: null, removed_note: null }))}
             />
           </div>
+        ) : (
+          // ELI-66: a lead is removed from the Leads list here too — hidden, never deleted.
+          manager.stage === 'bus_dev' && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <RemoveLeadButton
+                managerId={manager.id}
+                onRemoved={(m) =>
+                  setManager((cur) => ({
+                    ...cur,
+                    no_interest_at: m.no_interest_at,
+                    removed_reason: m.removed_reason,
+                    removed_note: m.removed_note,
+                  }))
+                }
+              />
+            </div>
+          )
         )}
         {manager.do_not_contact_at && (
           <div className="mt-4">
@@ -622,8 +642,10 @@ export function ManagerProfile({
           <RailSection title={t('Erreichbar')}>
             <EditContact
               manager={manager}
-              onSaved={(updated) => {
+              companyName={shownCompany}
+              onSaved={(updated, company) => {
                 setManager(updated)
+                if (company) setShownCompany(company)
                 onNotified(updated)
               }}
             />
@@ -689,7 +711,7 @@ export function ManagerProfile({
             </RailSection>
           ) : null}
 
-          {companyName && companyName !== '—' && (
+          {shownCompany && shownCompany !== '—' && (
             <RailSection title={t('Firma')}>
               <a
                 href={`#companies/${manager.company_id}`}
@@ -697,7 +719,7 @@ export function ManagerProfile({
                 title={t('Zur Firmenseite')}
               >
                 <Building2 className="h-4 w-4 shrink-0 text-cockpit-faint" />
-                {companyName}
+                {shownCompany}
               </a>
             </RailSection>
           )}
@@ -738,12 +760,17 @@ export function ManagerProfile({
  *  same erasure confirmation as creating a contact. */
 function EditContact({
   manager,
+  companyName,
   onSaved,
 }: {
   manager: ManagerDTO
-  onSaved: (updated: ManagerDTO) => void
+  companyName: string
+  /** `company`: the new company's name when the contact moved. */
+  onSaved: (updated: ManagerDTO, company?: string) => void
 }) {
   const [draft, setDraft] = useState(() => contactDraftOf(manager))
+  const [lead, setLead] = useState(() => leadDraftOf(manager))
+  const [companies, setCompanies] = useState<{ id: string; name: string }[] | null>(null)
   const [phones, setPhones] = useState(() => phonesOf(manager))
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -755,7 +782,23 @@ function EditContact({
         type="button"
         onClick={() => {
           setDraft(contactDraftOf(manager))
+          setLead(leadDraftOf(manager))
           setPhones(phonesOf(manager))
+          // ELI-66: the company is one of the workspace's own.
+          // The list endpoint caps at 500; the current company always shows,
+          // so the picker never displays a company the contact is not at.
+          if (companies === null)
+            api
+              .companies(500)
+              .then((rows) => {
+                const list = rows.map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name))
+                setCompanies(
+                  list.some((c) => c.id === manager.company_id)
+                    ? list
+                    : [{ id: manager.company_id, name: companyName || '—' }, ...list],
+                )
+              })
+              .catch(() => setCompanies([]))
           setError(null)
           setOpen(true)
         }}
@@ -770,7 +813,11 @@ function EditContact({
   async function save() {
     // ELI-46: numbers go as the whole list (`phones`); the single phone
     // field is not shown here, so `phone` never appears in this patch.
-    const patch: Parameters<typeof api.updateManager>[1] = contactPatch(manager, draft)
+    if (!lead.full_name.trim()) {
+      setError(t('Bitte einen Namen angeben.'))
+      return
+    }
+    const patch: Parameters<typeof api.updateManager>[1] = { ...contactPatch(manager, draft), ...leadPatch(manager, lead) }
     const nextPhones = phonesPatch(manager, phones)
     if (nextPhones) patch.phones = nextPhones
     if (Object.keys(patch).length === 0) {
@@ -784,8 +831,11 @@ function EditContact({
         api.updateManager(manager.id, { ...patch, override_suppression: override || undefined }),
       )
       // The PATCH answer carries no counts; keep the profile's, take the fields.
-      const fields = Object.fromEntries([...CONTACT_KEYS, 'phones' as const].map((k) => [k, updated[k]]))
-      onSaved({ ...manager, ...fields })
+      const fields = Object.fromEntries(
+        [...CONTACT_KEYS, ...LEAD_KEYS, 'company_id' as const, 'phones' as const].map((k) => [k, updated[k]]),
+      )
+      const moved = updated.company_id !== manager.company_id
+      onSaved({ ...manager, ...fields }, moved ? companies?.find((c) => c.id === updated.company_id)?.name : undefined)
       setOpen(false)
     } catch (e) {
       setError(
@@ -801,6 +851,7 @@ function EditContact({
 
   return (
     <div className="mb-3 space-y-3">
+      <LeadFields value={lead} onChange={setLead} companies={companies} />
       <ContactFields value={draft} onChange={setDraft} withPhone={false} />
       <PhoneListEditor value={phones} onChange={setPhones} />
       <div className="flex items-center gap-2">
@@ -812,6 +863,72 @@ function EditContact({
         </Button>
       </div>
       {error && <p className="text-[12.5px] text-coral-400">{error}</p>}
+    </div>
+  )
+}
+
+// ELI-66: the rest of a lead's fields — name, company, XING, address — next
+// to ELI-45's contact details. Kept here rather than in `ui/contactFields`,
+// which also serves the create forms.
+const LEAD_KEYS = ['full_name', 'first_name', 'last_name', 'xing_url', 'street', 'postal_code', 'city'] as const
+type LeadKey = (typeof LEAD_KEYS)[number]
+type LeadDraft = Record<LeadKey, string> & { company_id: string }
+
+function leadDraftOf(m: ManagerDTO): LeadDraft {
+  return {
+    ...(Object.fromEntries(LEAD_KEYS.map((k) => [k, m[k] ?? ''])) as Record<LeadKey, string>),
+    company_id: m.company_id,
+  }
+}
+
+/** Only what changed; an emptied field is sent as null (the name never is). */
+function leadPatch(m: ManagerDTO, d: LeadDraft): Parameters<typeof api.updateManager>[1] {
+  const patch: Record<string, string | null> = {}
+  for (const k of LEAD_KEYS) {
+    const next = d[k].trim() || null
+    if (next !== (m[k] ?? null)) patch[k] = next
+  }
+  if (d.company_id && d.company_id !== m.company_id) patch.company_id = d.company_id
+  return patch as Parameters<typeof api.updateManager>[1]
+}
+
+function LeadFields({
+  value,
+  onChange,
+  companies,
+}: {
+  value: LeadDraft
+  onChange: (next: LeadDraft) => void
+  companies: { id: string; name: string }[] | null
+}) {
+  const set = (k: keyof LeadDraft) => (v: string) => onChange({ ...value, [k]: v })
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="sm:col-span-2">
+        <TextInput label={t('Name')} value={value.full_name} onChange={set('full_name')} />
+      </div>
+      <TextInput label={t('Vorname')} value={value.first_name} onChange={set('first_name')} placeholder={t('optional')} />
+      <TextInput label={t('Nachname')} value={value.last_name} onChange={set('last_name')} placeholder={t('optional')} />
+      <div className="sm:col-span-2">
+        {companies && companies.length > 0 ? (
+          <SelectInput
+            label={t('Firma')}
+            value={value.company_id}
+            onChange={set('company_id')}
+            options={companies.map((c) => ({ value: c.id, label: c.name }))}
+          />
+        ) : (
+          <p className="font-mono text-[12px] text-cockpit-faint">{companies ? '' : t('lädt…')}</p>
+        )}
+      </div>
+      <div className="sm:col-span-2">
+        <TextInput label={t('XING-Profil')} value={value.xing_url} onChange={set('xing_url')} placeholder="https://www.xing.com/profile/…" />
+      </div>
+      <div className="sm:col-span-2">
+        <TextInput label={t('Straße')} value={value.street} onChange={set('street')} placeholder={t('optional')} />
+      </div>
+      <TextInput label={t('PLZ')} value={value.postal_code} onChange={set('postal_code')} placeholder={t('optional')} />
+      <TextInput label={t('Ort')} value={value.city} onChange={set('city')} placeholder={t('optional')} />
     </div>
   )
 }

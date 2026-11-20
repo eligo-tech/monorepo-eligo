@@ -98,6 +98,8 @@ class ContactRow(BaseModel):
     do_not_contact_at: dt.datetime | None = None
     #: ELI-60: "Kein Interesse" since — only under the filter.
     no_interest_at: dt.datetime | None = None
+    #: ELI-66: removed by hand — why (a code); NULL = "Kein Interesse" by call.
+    removed_reason: str | None = None
     last_outcome: str | None
     last_call_at: dt.datetime | None
     last_call_by: str | None

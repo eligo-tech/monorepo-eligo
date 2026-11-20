@@ -463,6 +463,7 @@ async def contacts(
             "art14_outstanding": bool(manager.art14_outstanding),
             "do_not_contact_at": aware(manager.do_not_contact_at),
             "no_interest_at": aware(manager.no_interest_at),
+            "removed_reason": manager.removed_reason,
             "last_outcome": call.outcome if call else None,
             "last_call_at": aware(call.occurred_at) if call else None,
             "last_call_by": call.actor_name if call else None,

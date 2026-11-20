@@ -456,6 +456,9 @@ export interface ManagerPhoneDTO {
   is_primary: boolean
 }
 
+/** ELI-66: why a lead was removed — a code; the label is the UI's. */
+export type RemoveReason = 'agency' | 'not_relevant' | 'other'
+
 export interface ManagerDTO {
   id: string
   company_id: string
@@ -480,11 +483,17 @@ export interface ManagerDTO {
   art14_outstanding: boolean
   notes: string | null
   status: string
+  /** ELI-23: "bus_dev" (a lead) | "manager". */
+  stage?: string
   /** ELI-32: marked "Nicht mehr kontaktieren" — when, and why (a code). */
   do_not_contact_at?: string | null
   do_not_contact_reason?: string | null
   /** ELI-60: a lead with "Kein Interesse" since then — off the Leads list. */
   no_interest_at?: string | null
+  /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
+  removed_reason?: RemoveReason | null
+  /** ELI-66: the recruiter's words with "Sonstiges". */
+  removed_note?: string | null
   created_at: string
   /** "MNGR197" — the reference a recruiter reads out on a call. */
   external_code?: string | null
@@ -713,6 +722,8 @@ export interface ContactCandidateDTO {
   manager_id: string | null
   /** ELI-60: that manager is a lead with "Kein Interesse" since then. */
   no_interest_at?: string | null
+  /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
+  removed_reason?: RemoveReason | null
   /** ELI-25: "model" — proposed by the AI, checked word for word in the ad. */
   found_by?: 'rules' | 'model'
 }
@@ -1254,6 +1265,8 @@ export interface ContactRowDTO {
   do_not_contact_at?: string | null
   /** ELI-60: "Kein Interesse" since — only under that filter. */
   no_interest_at?: string | null
+  /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
+  removed_reason?: RemoveReason | null
   last_outcome: string | null
   last_call_at: string | null
   last_call_by: string | null
@@ -1324,6 +1337,8 @@ export interface CompanyPersonDTO {
   last_contact_at: string | null
   /** ELI-60: a lead with "Kein Interesse" since then. */
   no_interest_at?: string | null
+  /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
+  removed_reason?: RemoveReason | null
 }
 
 /** ELI-33: one company — its managers, leads, mandates, Impressum switchboard. */

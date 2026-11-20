@@ -92,6 +92,8 @@ class CompanyPerson(BaseModel):
     last_contact_at: dt.datetime | None
     #: ELI-60: a lead with "Kein Interesse" — shown with the date.
     no_interest_at: dt.datetime | None = None
+    #: ELI-66: removed by hand, and why (a code).
+    removed_reason: str | None = None
 
 
 class CompanyMandate(BaseModel):

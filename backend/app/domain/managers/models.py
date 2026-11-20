@@ -125,6 +125,13 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     #: them again; the record, the call and its note stay. Cleared by
     #: "Wieder als Lead aufnehmen". Set only on leads (stage `bus_dev`).
     no_interest_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: ELI-66: "Entfernen" — a lead hidden by hand, on the same
+    #: `no_interest_at` (off Leads, restorable, not taken again from Markt),
+    #: with WHY: a code (`REMOVE_REASONS`) and, optionally, the recruiter's
+    #: words. Both cleared with `no_interest_at`. NULL reason with a date =
+    #: ELI-60's "Kein Interesse" from a call.
+    removed_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    removed_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     interactions: Mapped[list["ManagerInteraction"]] = relationship(
         "ManagerInteraction",

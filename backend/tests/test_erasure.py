@@ -651,3 +651,40 @@ async def test_erasing_a_manager_removes_every_number_and_suppresses_each() -> N
     assert refused.json()["detail"]["code"] == "suppressed"
     assert fine.status_code == 200, fine.text
     assert confirmed.status_code == 200, confirmed.text
+
+
+async def test_renaming_or_moving_a_contact_onto_an_erased_person_is_refused() -> None:
+    """ELI-66: name and company are editable now. Create refuses an erased
+    person by surname at their employer; a rename or a move onto that
+    surname at that employer is the same act."""
+    tenant = settings.default_tenant_id
+    await create_all()
+    async with SessionLocal() as s:
+        company = Company(tenant_id=tenant, name=f"Kunde {uuid.uuid4()}")
+        elsewhere = Company(tenant_id=tenant, name=f"Andere {uuid.uuid4()}")
+        s.add_all([company, elsewhere])
+        await s.flush()
+        gone = Manager(tenant_id=tenant, company_id=company.id, full_name="Gerda Schwind", last_name="Schwind")
+        here = Manager(tenant_id=tenant, company_id=company.id, full_name="Ina Bleibt", last_name="Bleibt")
+        away = Manager(tenant_id=tenant, company_id=elsewhere.id, full_name="Gerda Schwind", last_name="Schwind")
+        s.add_all([gone, here, away])
+        await s.commit()
+        ids = (gone.id, here.id, away.id, company.id)
+    async with SessionLocal() as s:
+        await erasure.erase_manager(s, tenant_id=tenant, manager_id=ids[0], confirm_name="gerda schwind",
+                                    reason="erasure", requested_on=dt.date(2026, 11, 20),
+                                    actor_user_id="u", actor_name="A")
+        await s.commit()
+    base = settings.api_v1_prefix
+    async with _client() as c:
+        renamed = await c.patch(f"{base}/managers/{ids[1]}", json={"full_name": "Gerda Schwind", "last_name": "Schwind"})
+        moved = await c.patch(f"{base}/managers/{ids[2]}", json={"company_id": str(ids[3])})
+        other_name = await c.patch(f"{base}/managers/{ids[1]}", json={"full_name": "Ina Bleibt-Neu"})
+        confirmed = await c.patch(f"{base}/managers/{ids[2]}",
+                                  json={"company_id": str(ids[3]), "override_suppression": True})
+        no_name = await c.patch(f"{base}/managers/{ids[1]}", json={"full_name": None})
+    assert renamed.status_code == 409 and renamed.json()["detail"]["code"] == "suppressed", renamed.text
+    assert moved.status_code == 409, moved.text
+    assert other_name.status_code == 200, other_name.text
+    assert confirmed.status_code == 200, confirmed.text
+    assert no_name.status_code == 422, no_name.text

@@ -392,6 +392,15 @@ These are enforced in code. Do not route around them.
   `no_interest=true`; the Markt card shows them; `create_manager` for a
   public-web lead the call list's `_existing_manager` recognises as such a
   person answers 409 `{code: "no_interest"}` instead of a second record.
+- **"Entfernen"** (ELI-66) hides a lead BY HAND on the same `no_interest_at`
+  — never a delete: `POST /managers/{id}/remove {reason, note?}` sets it
+  (an earlier date is kept) plus `removed_reason` (`agency` · `not_relevant`
+  · `other`) and `removed_note` (migration 0083); one receipt naming the
+  code, never the words; 409 `{code: "not_a_lead"}` for a vetted manager;
+  the ELI-60 restore clears all three. A hand edit of a manager (`PATCH
+  /managers/{id}`, now also name, `company_id` — own companies only, 422
+  otherwise — XING, address) goes field by field through
+  `verify_and_commit` as `human_verified`, the recruiter as provenance.
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing

@@ -16,6 +16,7 @@ from app.domain.managers.schemas import (
     ManagerInteractionCreate,
     ManagerInteractionRead,
     ManagerRead,
+    ManagerRemove,
     ManagerUpdate,
 )
 
@@ -105,12 +106,17 @@ async def create_manager(
 async def update_manager(
     manager_id: uuid.UUID,
     payload: ManagerUpdate,
-    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> ManagerRead:
-    row = await service.update_manager(
-        db, tenant_id=tenant_id, manager_id=manager_id, payload=payload
-    )
+    try:
+        row = await service.update_manager(
+            db, tenant_id=actor.tenant_id, manager_id=manager_id, payload=payload, editor=actor.name
+        )
+    except service.CompanyNotInTenant as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, f"company {exc} does not belong to this workspace"
+        ) from exc
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
     return ManagerRead.model_validate(row)
@@ -140,6 +146,26 @@ async def promote_manager(
 ) -> ManagerRead:
     """Move a bus-dev contact to Managers after the first contact (ELI-23)."""
     row = await service.promote_manager(db, tenant_id=tenant_id, manager_id=manager_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
+    return ManagerRead.model_validate(row)
+
+
+@router.post("/{manager_id}/remove", response_model=ManagerRead)
+async def remove_lead(
+    manager_id: uuid.UUID,
+    payload: ManagerRemove,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerRead:
+    """ELI-66 "Entfernen": off the Leads list with a reason — hidden, never
+    deleted; undone by `DELETE /{id}/no-interest`."""
+    try:
+        row = await service.remove_lead(
+            db, tenant_id=tenant_id, manager_id=manager_id, reason=payload.reason, note=payload.note
+        )
+    except service.NotALead as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, {"code": "not_a_lead"}) from exc
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
     return ManagerRead.model_validate(row)
