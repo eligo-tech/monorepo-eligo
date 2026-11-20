@@ -104,7 +104,7 @@ a create with Name + Ort links the same-name same-town Markt employer at once,
 a duplicate answers 409 and the form offers "Vorhandenes Unternehmen öffnen" —
 and one page per company (`#companies/<id>`): managers, leads, mandates, the
 Impressum switchboard, the open jobs in Markt and the careers page
-(`companies/market.py`; also in the manager page's sidebar), "Manager hinzufügen".
+(`companies/market.py`; also in the manager page's sidebar), "Manager hinzufügen", and "Zu Managern" on each lead row (ELI-68).
 An unlinked company with same-name Markt sites elsewhere shows them for a
 person: "Das ist unser Unternehmen" (the other sites shown are ruled out),
 "Alle davon" (a chain), "Keiner davon"; a link can be undone. Filter "Zu prüfen". Company names on the manager page
