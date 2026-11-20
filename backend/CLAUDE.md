@@ -401,6 +401,18 @@ These are enforced in code. Do not route around them.
   /managers/{id}`, now also name, `company_id` — own companies only, 422
   otherwise — XING, address) goes field by field through
   `verify_and_commit` as `human_verified`, the recruiter as provenance.
+- **Leads entered by hand** (ELI-65, `POST /managers/leads`,
+  `managers.service.create_manual_lead`): the only path besides Markt that
+  creates a `bus_dev` row. Job (`managers.lead_job_title`, migration 0084) ·
+  name · title · company NAME (the workspace's own by `companies.find_existing`,
+  else created like "+ Unternehmen") · e-mail · number · source link.
+  `source=third_party_source` (Art. 14 owed), `source_detail` = the link or
+  "von Hand angelegt"; a LinkedIn/XING link is also the profile. The same
+  person at that company (`call_list._existing_manager`) answers 409
+  `{code: "lead_exists", manager_id, stage}`; erased people are refused
+  before any company is created. One receipt, references only.
+  `Manager.manual_lead` / the Leads row's `manual` mark it; `lead_jobs` lists
+  the job first. Managers added any other way still never enter Leads.
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing

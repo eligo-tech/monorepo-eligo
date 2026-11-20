@@ -23,6 +23,7 @@ import { t } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
+  Briefcase,
   Building2,
   CalendarDays,
   Check,
@@ -42,6 +43,7 @@ import { Chip } from '../ui/primitives'
 import { EraseSection } from '../erasure/EraseSection'
 import { DoNotContactBanner } from '../erasure/DoNotContact'
 import { NoInterestChip, RemoveLeadButton, ReviveLeadButton } from '../leads/NoInterest'
+import { ManualLeadChip } from '../leads/NewLead'
 import { isAdmin, useMe } from '../useMe'
 import { useAsync } from '@/hooks/useAsync'
 import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
@@ -344,6 +346,29 @@ export function ManagerProfile({
               )}
               {place && <span className="text-cockpit-faint">· {place}</span>}
             </p>
+            {/* ELI-65: a lead entered by hand — the job it is about, and where it came from. */}
+            {(manager.lead_job_title || manager.manual_lead) && (
+              <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[12px] text-cockpit-dim">
+                {manager.manual_lead && <ManualLeadChip source={manager.source_detail} />}
+                {manager.lead_job_title && (
+                  <span className="flex items-center gap-1.5">
+                    <Briefcase className="h-3.5 w-3.5 text-cockpit-faint" />
+                    {t('Job')}: {manager.lead_job_title}
+                  </span>
+                )}
+                {manager.manual_lead && manager.source_detail?.startsWith('http') && (
+                  <a
+                    href={manager.source_detail}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="flex items-center gap-1 hover:text-mint-400"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t('Quelle')}
+                  </a>
+                )}
+              </p>
+            )}
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">

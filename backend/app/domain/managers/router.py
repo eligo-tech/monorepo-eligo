@@ -12,6 +12,7 @@ from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.managers import service
 from app.domain.managers.schemas import (
+    LeadCreate,
     ManagerCreate,
     ManagerInteractionCreate,
     ManagerInteractionRead,
@@ -98,6 +99,26 @@ async def create_manager(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"company {exc} does not belong to this workspace",
+        ) from exc
+    return ManagerRead.model_validate(row)
+
+
+@router.post("/leads", response_model=ManagerRead, status_code=status.HTTP_201_CREATED)
+async def create_lead(
+    payload: LeadCreate,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerRead:
+    """ELI-65 "+ Lead": a lead entered by hand from a job ad or a LinkedIn
+    profile. 409 `{code: "lead_exists", manager_id, stage, full_name}` when
+    the person is already held at that company — shown, not doubled."""
+    try:
+        row = await service.create_manual_lead(db, tenant_id=actor.tenant_id, payload=payload, actor=actor.name)
+    except service.LeadExists as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"code": "lead_exists", "manager_id": str(exc.manager.id), "stage": exc.manager.stage,
+             "full_name": exc.manager.full_name},
         ) from exc
     return ManagerRead.model_validate(row)
 

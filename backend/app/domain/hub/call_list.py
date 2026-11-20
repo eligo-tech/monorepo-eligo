@@ -460,6 +460,8 @@ async def contacts(
             "added_at": aware(manager.created_at),
             "source": manager.source,
             "source_detail": manager.source_detail,
+            # ELI-65: entered by hand ("+ Lead"), not taken from Markt.
+            "manual": manager.manual_lead,
             "art14_outstanding": bool(manager.art14_outstanding),
             "do_not_contact_at": aware(manager.do_not_contact_at),
             "no_interest_at": aware(manager.no_interest_at),
@@ -586,9 +588,16 @@ async def lead_jobs(session: AsyncSession, tenant_id: uuid.UUID, managers: list)
         if job.manager_id is not None:
             owned.setdefault(job.manager_id, []).append(job)
 
+    from app.domain.managers.service import lead_job_url
+
     out: dict[uuid.UUID, list[dict]] = {}
     for m in managers:
         entries: list[dict] = []
+        if m.lead_job_title:
+            # ELI-65: the job a lead entered by hand is about — no ad row
+            # exists for it; its link is the ad it came from, if one.
+            entries.append({"title": m.lead_job_title, "location": None, "url": lead_job_url(m),
+                            "posting_id": None, "job_id": None})
         seen_ads: dict[tuple[str, str | None], dict] = {}
         for ad in named.get(m.id, []):
             location = ad.city or ad.location_text

@@ -29,6 +29,7 @@ import type {
   FollowUpWrite,
   ManagerDTO,
   RemoveReason,
+  LeadCreateBody,
   ManagerPhoneDTO,
   ManagerInteractionDTO,
   HubSearchPageDTO,
@@ -517,6 +518,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text, reference_date: referenceDate }),
     }),
+
+  /** ELI-65 "+ Lead": a lead entered by hand. 409 `lead_exists` names the
+   *  person already held at that company. */
+  createLead: (body: LeadCreateBody) =>
+    request<ManagerDTO>('/managers/leads', { method: 'POST', body: JSON.stringify(body) }),
 
   /** ELI-23: move a bus-dev contact to Managers after the first contact. */
   promoteManager: (id: string) => request<ManagerDTO>(`/managers/${id}/promote`, { method: 'POST' }),

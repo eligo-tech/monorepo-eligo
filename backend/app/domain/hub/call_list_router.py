@@ -93,6 +93,8 @@ class ContactRow(BaseModel):
     added_at: dt.datetime | None
     source: str
     source_detail: str | None
+    #: ELI-65: entered by hand ("+ Lead"), not taken from Markt.
+    manual: bool = False
     art14_outstanding: bool
     #: ELI-32: marked "Nicht mehr kontaktieren" — shown, never due.
     do_not_contact_at: dt.datetime | None = None
