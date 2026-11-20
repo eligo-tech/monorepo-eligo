@@ -3,13 +3,12 @@
 // the cockpit and a person's page fetch, this renders.
 
 import { t } from '@/i18n'
-import { date as fmtDate } from '@/i18n/format'
 
 import { CalendarDays, Check, Pencil, Trash2 } from 'lucide-react'
 
 import type { FollowUpDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
-import { bucketFollowUps, parseLocalDate, personHref, shortTime } from './followUps'
+import { bucketFollowUps, followUpWhen, personHref } from './followUps'
 
 const KIND_LABEL: Record<FollowUpDTO['subject_kind'], string> = {
   lead: t('Lead'),
@@ -66,10 +65,7 @@ export function FollowUpRows({
                     g.key === 'overdue' && 'bg-coral-800/10',
                   )}
                 >
-                  <span className={cn('w-[6.5rem] shrink-0 font-mono text-[13px]', g.tone)}>
-                    {fmtDate(parseLocalDate(row.due_date))}
-                    {row.due_time && <span className="ml-1 text-cockpit-faint">{shortTime(row.due_time)}</span>}
-                  </span>
+                  <FollowUpWhen row={row} tone={g.tone} />
                   {showPerson && (
                     <a href={personHref(row)} className="min-w-[10rem] text-[14px] font-medium text-cockpit-text hover:text-mint-400">
                       {row.person_name}
@@ -79,7 +75,9 @@ export function FollowUpRows({
                       </span>
                     </a>
                   )}
-                  <span className="min-w-0 flex-1 text-[13.5px] text-cockpit-dim">{row.text}</span>
+                  {/* A floor, so on a phone the to-do takes its own line
+                      rather than a one-word column beside the name. */}
+                  <span className="min-w-[12rem] flex-1 text-[13.5px] text-cockpit-dim">{row.text}</span>
                   <span className="ml-auto flex shrink-0 items-center gap-3 font-mono text-[12px]">
                     <button
                       type="button"
@@ -134,5 +132,26 @@ export function FollowUpRows({
         ),
       )}
     </div>
+  )
+}
+
+/** ELI-63: the date cell. One fixed width for every row so the names line
+ *  up, wide enough for "20.11.2026 10:00" (16 mono characters at 13px ≈
+ *  7.8rem) in either language — en-GB's "20/11/2026" is as long. It was
+ *  6.5rem, so a time ran into the name. Below `sm` the time stacks under the
+ *  date instead; the row's own gap keeps the name clear at every width. */
+function FollowUpWhen({ row, tone }: { row: FollowUpDTO; tone: string }) {
+  const when = followUpWhen(row)
+  return (
+    <span
+      className={cn(
+        'flex w-[5.75rem] shrink-0 flex-col font-mono text-[13px] leading-tight sm:w-[8.75rem] sm:flex-row sm:gap-x-1.5',
+        tone,
+      )}
+      data-testid="follow-up-when"
+    >
+      <span>{when.date}</span>
+      {when.time && <span className="text-cockpit-faint">{when.time}</span>}
+    </span>
   )
 }

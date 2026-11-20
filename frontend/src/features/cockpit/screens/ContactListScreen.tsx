@@ -6,7 +6,7 @@
 
 
 import { t } from '@/i18n'
-import { date as fmtDay, locale } from '@/i18n/format'
+import { locale } from '@/i18n/format'
 
 import { useEffect, useRef, useState } from 'react'
 import { BellPlus, Briefcase, ExternalLink, Mail, Phone, PhoneCall, Search, UserCheck, Users } from 'lucide-react'
@@ -33,7 +33,7 @@ import { DoNotContactChip } from '../erasure/DoNotContact'
 import { NoInterestChip, ReviveLeadButton } from '../leads/NoInterest'
 import { FollowUpForm } from '../ui/FollowUpForm'
 import { DateField } from '../ui/DateField'
-import { announceFollowUpsChanged, localIsoDate, parseLocalDate, shortTime } from '../ui/followUps'
+import { announceFollowUpsChanged, followUpWhen, localIsoDate } from '../ui/followUps'
 import { NoteFollowUpOffer, type SavedNote } from '../followups/NoteFollowUpOffer'
 import { readDateFromText, useOpenFollowUps } from '../followups/useFollowUps'
 import type { FollowUpDTO } from '@/api/types'
@@ -219,8 +219,7 @@ export function ContactRow({
         {followUp && (
           <Chip tone={followUp.due_date < today ? 'coral' : followUp.due_date === today ? 'gold' : undefined}>
             <span title={followUp.text}>
-              {t('Wiedervorlage')}: {fmtDay(parseLocalDate(followUp.due_date))}
-              {followUp.due_time ? ` ${shortTime(followUp.due_time)}` : ''}
+              {t('Wiedervorlage')}: {(({ date, time }) => [date, time].filter(Boolean).join(' '))(followUpWhen(followUp))}
             </span>
           </Chip>
         )}

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { t } from '@/i18n'
+import { getLang, setLang, t } from '@/i18n'
 import { date as fmtDate } from '@/i18n/format'
 import type { FollowUpDTO } from '@/api/types'
 
 import { FollowUpOffer } from './FollowUpOffer'
 import { FollowUpRows } from './FollowUpList'
+import { followUpWhen } from './followUps'
 
 // ELI-44. No DOM here: rendered to markup.
 
@@ -141,5 +142,68 @@ describe('FollowUpRows', () => {
       <FollowUpRows rows={rows.slice(0, 1)} today="2026-11-17" onDone={noop} onCalendar={noop} />,
     )
     expect(html).not.toContain('href="#managers/m1"')
+  })
+})
+
+// ELI-63: "20.11.2026 10:00Doris Böhner" — the time ran into the name.
+/** Runs `fn` in one language and puts the previous one back — the runner's
+ *  own language comes from its locale, so neither may be assumed. */
+function inLang<T>(lang: 'de' | 'en', fn: () => T): T {
+  const before = getLang()
+  setLang(lang)
+  try {
+    return fn()
+  } finally {
+    setLang(before)
+  }
+}
+
+describe('followUpWhen — a time only when one was set (ELI-63)', () => {
+  it('a follow-up saved without a time shows only its date', () => {
+    expect(inLang('de', () => followUpWhen({ due_date: '2026-11-20', due_time: null }))).toEqual({ date: '20.11.2026', time: null })
+  })
+
+  it('a time somebody set shows as HH:MM', () => {
+    expect(inLang('de', () => followUpWhen({ due_date: '2026-11-20', due_time: '10:00:00' }))).toEqual({ date: '20.11.2026', time: '10:00' })
+  })
+
+  it('formats the date the English way too', () => {
+    expect(inLang('en', () => followUpWhen({ due_date: '2026-11-20', due_time: '09:30:00' }))).toEqual({
+      date: '20/11/2026',
+      time: '09:30',
+    })
+  })
+})
+
+describe('FollowUpRows — the date cell (ELI-63)', () => {
+  const render = (due_time: string | null) =>
+    inLang('de', () =>
+      renderToStaticMarkup(
+        <FollowUpRows rows={[row({ due_date: '2026-11-20', due_time })]} today="2026-11-17" showPerson onDone={noop} onCalendar={noop} />,
+      ),
+    )
+
+  it('renders no time for a follow-up without one', () => {
+    const html = render(null)
+    expect(html).toContain('20.11.2026')
+    expect(html).not.toMatch(/\d\d:\d\d/)
+  })
+
+  it('renders date and time as separate pieces that can wrap, never one run-on string', () => {
+    const html = render('10:00:00')
+    expect(html).toContain('>20.11.2026<')
+    expect(html).toContain('>10:00<')
+    expect(html).not.toContain('20.11.202610:00')
+  })
+
+  it('gives the cell a width that holds "20.11.2026 10:00" and lets it stack when narrow', () => {
+    const html = render('10:00:00')
+    const cell = html.match(/<span class="([^"]*)" data-testid="follow-up-when"/)
+    expect(cell).not.toBeNull()
+    // Wide enough for 16 mono characters at 13px (≈ 7.8rem) plus the gap…
+    expect(cell![1]).toContain('sm:w-[8.75rem]')
+    // …and stacked (time under the date) below the sm breakpoint.
+    expect(cell![1]).toContain('flex-col')
+    expect(cell![1]).toContain('sm:flex-row')
   })
 })
