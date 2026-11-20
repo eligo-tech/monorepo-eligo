@@ -220,6 +220,59 @@ async def test_service_keeps_the_lead_in_its_workspace() -> None:
     assert len((await _contacts(tenant=other))["rows"]) == 1
 
 
+async def test_a_salutation_or_title_is_not_a_first_name() -> None:
+    """"Frau Kraft" copied from an ad is the Anna Kraft already held."""
+    async with _api() as c:
+        first = (await c.post(f"{API}/managers/leads", json=LEAD)).json()
+        again = await c.post(f"{API}/managers/leads", json={**LEAD, "full_name": "Frau Kraft"})
+        titled = await c.post(
+            f"{API}/managers/leads",
+            json={**LEAD, "full_name": "Herr Dr. Jonas Weber", "company_name": "Weber AG"},
+        )
+    assert again.status_code == 409 and again.json()["detail"]["manager_id"] == first["id"]
+    assert titled.status_code == 201, titled.text
+    assert titled.json()["first_name"] == "Jonas" and titled.json()["last_name"] == "Weber"
+    assert titled.json()["full_name"] == "Herr Dr. Jonas Weber"
+
+
+def test_links_fit_their_columns_and_keep_one_spelling() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from app.domain.managers.models import Manager as M
+
+    # A bare host gets its scheme, and the prefixed link still fits.
+    assert LeadCreate(**{**LEAD, "source_url": "www.jobs.example/1"}).source_url == "https://www.jobs.example/1"
+    assert LeadCreate(**{**LEAD, "source_url": "HTTPS://Jobs.Example/1"}).source_url == "https://Jobs.Example/1"
+    width = M.__table__.c.source_detail.type.length
+    with pytest.raises(ValidationError):
+        LeadCreate(**{**LEAD, "source_url": "www.x.de/" + "a" * (width - 9)})
+    # A profile link too long for the profile column stays the source only.
+    long_profile = "https://www.linkedin.com/in/anna?" + "x" * 300
+    assert managers.profile_links(long_profile) == {}
+    assert managers.profile_links("https://de.linkedin.com/in/anna") == {"linkedin_url": "https://de.linkedin.com/in/anna"}
+    assert managers.profile_links("https://www.xing.com/profile/Anna_Kraft") == {
+        "xing_url": "https://www.xing.com/profile/Anna_Kraft"}
+    assert managers.profile_links("https://jobs.example/1") == {}
+
+
+async def test_a_failure_after_the_company_leaves_nothing_behind(monkeypatch) -> None:
+    from app.domain.verification import service as verification
+
+    async def broken(*_a, **_k):
+        raise RuntimeError("ledger down")
+
+    monkeypatch.setattr(verification, "append_receipt", broken)
+    async with SessionLocal() as s:
+        try:
+            await managers.create_manual_lead(s, tenant_id=DEFAULT, payload=LeadCreate(**LEAD))
+        except RuntimeError:
+            await s.rollback()
+    async with SessionLocal() as s:
+        assert await s.scalar(select(func.count()).select_from(Company)) == 0
+        assert await s.scalar(select(func.count()).select_from(Manager)) == 0
+
+
 async def test_someone_erased_here_is_not_entered_again_by_hand(monkeypatch) -> None:
     import datetime as dt
 

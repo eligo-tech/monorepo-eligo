@@ -279,9 +279,31 @@ BY_HAND = "von Hand angelegt"
 
 
 def _split_name(full_name: str) -> tuple[str | None, str]:
-    """"Anna Maria Kraft" → ("Anna Maria", "Kraft"); one word is a surname."""
-    parts = full_name.split()
+    """"Anna Maria Kraft" → ("Anna Maria", "Kraft"); one word is a surname.
+
+    Copied from an ad, the name often carries a salutation or a title —
+    "Frau Kraft", "Herr Dr. Jonas Weber". Neither is a first name: kept as
+    one, the same-person check would miss the Anna Kraft already held."""
+    import re
+
+    from app.domain.hub.contacts import _TITLE
+
+    parts = [p for p in full_name.split() if not re.fullmatch(rf"(?i:Frau|Herrn?)|{_TITLE}", p)]
+    parts = parts or full_name.split()
     return (" ".join(parts[:-1]) or None, parts[-1])
+
+
+#: Width of `managers.linkedin_url` / `xing_url`.
+_PROFILE_WIDTH = 300
+
+
+def profile_links(url: str | None) -> dict[str, str]:
+    """The profile column a LinkedIn/XING source link also fills, if it fits
+    (ELI-65). A longer link stays the source only — never a 500."""
+    network = _profile_network(url)
+    if network is None or url is None or len(url) > _PROFILE_WIDTH:
+        return {}
+    return {f"{network}_url": url}
 
 
 def _profile_network(url: str | None) -> str | None:
@@ -330,6 +352,17 @@ async def create_manual_lead(
     if company is not None:
         key = _surname_key(last_name, payload.full_name)
         found = await _existing_manager(session, tenant_id, company.id, key, first_name) if key else None
+        if found is None and key and first_name is None:
+            # "Frau Kraft" with no first name: the ONE Kraft held there is
+            # shown — not merged, so a wrong guess costs a click, and a
+            # second Kraft is entered with the first name.
+            same = [
+                m for m in (await session.scalars(
+                    select(Manager).where(Manager.tenant_id == tenant_id, Manager.company_id == company.id)
+                )).all()
+                if _surname_key(m.last_name, m.full_name) == key
+            ]
+            found = same[0] if len(same) == 1 else None
         if found is not None:
             raise LeadExists(found)
 
@@ -345,11 +378,14 @@ async def create_manual_lead(
             raise erasure.Suppressed(on)
 
     if company is None:
-        company = await companies.create_company(
-            session, data=CompanyCreate(tenant_id=tenant_id, name=payload.company_name, source="manual"), actor=actor,
-        )
+        # What "+ Unternehmen" stores for a name without a town (no Markt
+        # link: a name alone is ambiguous) — but in THIS transaction, so a
+        # lead that fails leaves no empty company and no lifted suppression.
+        data = CompanyCreate(tenant_id=tenant_id, name=payload.company_name, source="manual")
+        company = Company(tenant_id=tenant_id, name=data.name, is_client=data.is_client, source=data.source)
+        session.add(company)
+        await session.flush()
     company_id = company.id
-    network = _profile_network(payload.source_url)
     manager = Manager(
         tenant_id=tenant_id,
         company_id=company_id,
@@ -359,8 +395,7 @@ async def create_manual_lead(
         role_title=payload.role_title,
         email=payload.email,
         phone=payload.phone,
-        linkedin_url=payload.source_url if network == "linkedin" else None,
-        xing_url=payload.source_url if network == "xing" else None,
+        **profile_links(payload.source_url),
         source=ConfidenceSource.THIRD_PARTY_SOURCE.value,
         source_detail=payload.source_url or BY_HAND,
         stage="bus_dev",

@@ -267,7 +267,8 @@ export function ContactRow({
             {t('aus Anzeige')}
           </a>
         )}
-        {row.manual && row.source_detail?.startsWith('http') && (
+        {/* ELI-65: the link it came from — unless the job already links to it. */}
+        {row.manual && row.source_detail?.startsWith('http') && !row.jobs?.some((j) => j.url === row.source_detail) && (
           <a href={row.source_detail} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1 hover:text-mint-400">
             <ExternalLink className="h-3 w-3" />
             {t('Quelle')}

@@ -20,11 +20,21 @@ const row = {
 } as ContactRowDTO
 
 describe('a lead entered by hand on the Leads list (ELI-65)', () => {
-  it('is marked manuell, shows its job and links its source', () => {
+  it('is marked manuell and shows its job, linked to the ad — once', () => {
     const html = renderToStaticMarkup(<ContactRow row={row} showCompany onCalled={() => {}} />)
     expect(html).toContain(`>${t('manuell')}<`)
     expect(html).toContain('Controller (m/w/d)')
-    expect(html).toContain(t('Quelle'))
+    expect(html.split('href="https://jobs.example/123"')).toHaveLength(2)
+    expect(html).not.toContain(`>${t('Quelle')}<`)
+    // A profile link the job does not use is the source.
+    const fromProfile = renderToStaticMarkup(
+      <ContactRow
+        row={{ ...row, source_detail: 'https://www.linkedin.com/in/ben', jobs: [{ ...row.jobs![0], url: null }] }}
+        showCompany
+        onCalled={() => {}}
+      />,
+    )
+    expect(fromProfile).toContain(t('Quelle'))
     expect(html).toContain(t('angelegt am {date}', { date: '20.11.2026' }).split(' ')[0])
   })
 

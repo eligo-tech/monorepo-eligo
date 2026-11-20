@@ -142,7 +142,9 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin):
     def manual_lead(self) -> bool:
         """ELI-65: a lead entered by hand rather than taken from Markt —
         the "manuell" mark on the Leads list. Derived: a Markt lead is the
-        public ad's (`public_web`), a hand-entered one carries its job."""
+        public ad's (`public_web`); `create_manual_lead` is the only path
+        that writes a `bus_dev` row from any other source. A new such path
+        must decide whether it is "manuell" too."""
         return self.stage == "bus_dev" and self.source != ConfidenceSource.PUBLIC_WEB.value
 
     interactions: Mapped[list["ManagerInteraction"]] = relationship(

@@ -207,10 +207,17 @@ class LeadCreate(BaseModel):
         value = _blank_none(value)
         if value is None:
             return None
-        if not re.match(r"^https?://[^\s/]+\.[^\s]+$", value, flags=re.IGNORECASE):
-            if re.match(r"^(www\.)?[^\s/:]+\.[a-z]{2,}(/\S*)?$", value, flags=re.IGNORECASE):
-                return f"https://{value}"
+        scheme = re.match(r"^(https?)://(?=[^\s/]+\.[^\s]+$)", value, flags=re.IGNORECASE)
+        if scheme:
+            # One spelling of the scheme: readers test `startswith("http")`.
+            value = scheme.group(1).lower() + value[len(scheme.group(1)):]
+        elif re.match(r"^(www\.)?[^\s/:]+\.[a-z]{2,}(/\S*)?$", value, flags=re.IGNORECASE):
+            value = f"https://{value}"
+        else:
             raise ValueError("source_url must be a web link (https://…)")
+        # Checked after the prefix: `source_detail` is 500 wide (ELI-45).
+        if len(value) > 500:
+            raise ValueError("source_url is too long")
         return value
 
 
