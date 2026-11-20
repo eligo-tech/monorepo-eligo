@@ -111,7 +111,21 @@ person: "Das ist unser Unternehmen" (the other sites shown are ruled out),
 and in Leads link there; `#managers/<id>` opens a manager.
 **Mandate** (key `mandate`, `JobsScreen`) are the workspace's own jobs.
 Retired hashes still land: `kontakte` → `leads`, `jobs` → `mandate`;
-Workspace, Projekte and Anrufen → `leads`; `tracking` onto `cockpit`, so old links still land somewhere.
+Workspace, Projekte and Anrufen → `leads`, so old links still land somewhere.
+**Tracking** (`TrackingScreen`, key `tracking`, back in the menu since ELI-64)
+shows everything from `GET /activity/tracking`: 01 Business (Umsatz = Honorar
+of deals whose Vertrag step is in the period, plus the people's goals —
+shared by a group or starting on a date), 02 Business Development
+(Kontaktpunkte, Business Call oder Meeting, Leads, Rahmenverträge, Mandate),
+03 Prozess (n of m + median days per transition, blank — never 0 % — when
+nobody was in a step). Per Woche/Monat/Quartal and per consultant. Pieces in
+`tracking/` (`TrackingParts` draws, `trackingMath` does the arithmetic). The
+Cockpit shows the tiles each person chose (`tracking/CockpitTracking`,
+stored per person via `/activity/preferences`; default Umsatz · Business
+Calls · Leads). Goals are set by admins in Einstellungen › Tracking-Ziele
+(`TrackingGoalsPanel`). The Honorar is typed on the Vertrag step
+(`StepEditor`), the Rahmenvertrag date on the company page
+(`FrameworkContractLine`).
 
 ### Parked surfaces
 

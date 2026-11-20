@@ -218,6 +218,9 @@ export interface ProcessCard {
   /** Ring percentage, top-left of the card. */
   progress: Figure
   fee: Figure
+  /** ELI-64: the Honorar (€) entered on the Vertrag step, when the card is
+   *  one process in the record. Umsatz in Tracking adds these up. */
+  feeEur?: number | null
   /** Status pill next to the title, e.g. "Mündl. Zusage · Vertrag ausstehend". */
   statusNote?: string
   steps: ProcessStep[]

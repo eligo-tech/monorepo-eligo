@@ -15,6 +15,7 @@ import { ProcessSection } from '../sections/ProcessSection'
 import { RevenueSection } from '../sections/RevenueSection'
 import { SignalsPanel } from '../sections/SignalsPanel'
 import { FollowUpsSection } from '../followups/FollowUpsSection'
+import { CockpitTracking } from '../tracking/CockpitTracking'
 import { MandateDrawer } from './MandateDrawer'
 import { MandateView } from './MandateView'
 import { cn } from '@/lib/cn'
@@ -221,6 +222,8 @@ export function CockpitScreen({
             ELI-44: the day's Wiedervorlagen come first — the recruiter's own
             to-dos, before anything the system noticed. */}
         <FollowUpsSection />
+        {/* ELI-64: the tracking tiles this person chose. */}
+        <CockpitTracking onOpenTracking={onGoToScreen ? () => onGoToScreen('tracking') : undefined} />
         <SignalsPanel signals={data.signals} />
         <RevenueSection slides={data.slides} closingIsLive={live.closing} />
         <ProcessSection

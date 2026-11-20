@@ -8,11 +8,11 @@ from sqlalchemy import Index, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
+from app.domain.common.mixins import CreatedByMixin, IDMixin, TenantMixin, TimestampMixin
 from app.domain.common.types import JSONList
 
 
-class Job(Base, IDMixin, TenantMixin, TimestampMixin):
+class Job(Base, IDMixin, TenantMixin, TimestampMixin, CreatedByMixin):
     """A role a client wants filled."""
 
     __tablename__ = "jobs"

@@ -445,6 +445,19 @@ Three domain facts worth knowing before you add a field:
   confirms. Delete is admin-only (ELI-27); anyone marks done. The ELI-22/38
   call-back date (`manager_interactions.next_action_at`) is separate and
   unchanged.
+- **`activity`** (ELI-15, ELI-64) is Tracking: `kpis.py` defines every KPI
+  (label, source, group, unit) and the Prozess funnel; `service.py` counts
+  each one LIVE from the row that records it — notes (`manager_interactions`,
+  spellings derived from `normalise_interaction_type`), leads (`managers`
+  created as `bus_dev`, `created_by_user_id`), mandates (`jobs` minus
+  imports), `companies.framework_contract_on`, and Umsatz = sum of
+  `applications.fee_eur` over deals whose Vertrag step is dated in the
+  period, attributed to that step's author. `CreatedByMixin`
+  (`common/mixins.py`) fills `created_by_*` from `current_actor_var` at
+  insert, so every create path is attributed without remembering to. Goals
+  (`activity_targets`): workspace default, one consultant's, or a group's
+  (`members`, ≥2), each optionally `valid_from`; before that date there is no
+  goal, not a goal of 0. `tracking_preferences` = each person's Cockpit tiles.
 - **`presentation`** (ELI-20) renders the Kandidatenprofil a client
   receives: `GET /candidates/{id}/cover-sheet?variant=cover|cover_cv|
   cover_cv_references|anonymous` (+ `/preview`, which lists empty sections,

@@ -44,6 +44,11 @@ class Application(Base, IDMixin, TenantMixin, TimestampMixin):
     )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: ELI-64: "Honorar (€)" — the fee this placement earns, entered on the
+    #: Vertrag step when the deal closes. Umsatz is the sum of these over the
+    #: deals whose Vertrag date falls in the period. Whole euros; NULL = not
+    #: entered yet (the tracking screen counts those, it does not guess).
+    fee_eur: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Append-only audit of stage/status transitions (who, from, to, when).
     history: Mapped[list] = mapped_column(JSONList, default=list, nullable=False)

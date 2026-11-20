@@ -1,6 +1,12 @@
 // Thin typed fetch client for the Eligo Labs backend.
 // Base path is /api/v1; the Vite dev server proxies /api → http://localhost:8000.
 import type {
+  ConsultantDTO,
+  TargetDTO,
+  TargetWritePayload,
+  TrackingDTO,
+  TrackingPeriod,
+  TrackingTilesDTO,
   AgencyDetailDTO,
   BrandingDTO,
   BrandingWrite,
@@ -176,6 +182,39 @@ export const api = {
     request<CompanyPageDTO>(`/companies/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
+    }),
+
+  /** ELI-64: "Rahmenvertrag abgeschlossen am" — null takes it back. */
+  setFrameworkContract: (id: string, signedOn: string | null) =>
+    request<CompanyPageDTO>(`/companies/${id}/framework-contract`, {
+      method: signedOn ? 'PUT' : 'DELETE',
+      ...(signedOn ? { body: JSON.stringify({ signed_on: signedOn }) } : {}),
+    }),
+
+  /** ELI-15/64: Ist vs. Ziel, goals and the Prozess funnel for one period. */
+  tracking: (period: TrackingPeriod, who = 'team') =>
+    request<TrackingDTO>(
+      `/activity/tracking?period=${encodeURIComponent(period)}&who=${encodeURIComponent(who)}`,
+    ),
+  consultants: () => request<ConsultantDTO[]>('/activity/consultants'),
+  targets: () => request<TargetDTO[]>('/activity/targets'),
+  /** Admin only. */
+  setTarget: (body: TargetWritePayload) =>
+    request<TargetDTO>('/activity/targets', { method: 'PUT', body: JSON.stringify(body) }),
+  deleteTarget: async (id: string): Promise<void> => {
+    // 204, no body — `request` would try to parse one.
+    const res = await fetch(`${BASE}/activity/targets/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    })
+    if (!res.ok) throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText)
+  },
+  /** Which tracking tiles THIS person shows on the Cockpit. */
+  trackingTiles: () => request<TrackingTilesDTO>('/activity/preferences'),
+  setTrackingTiles: (tiles: string[]) =>
+    request<TrackingTilesDTO>('/activity/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ tiles }),
     }),
 
   /** A new mandate. `POST /jobs` has always existed; nothing called it. */
@@ -726,7 +765,9 @@ export const api = {
       note?: string | null
       /** Fields to empty. Omitting a field means "unchanged", so taking a
        *  value back needs saying so. */
-      clear?: ('scheduled_at' | 'done_at' | 'note')[]
+      clear?: ('scheduled_at' | 'done_at' | 'note' | 'fee_eur')[]
+      /** ELI-64: Honorar (€) — only on the Vertrag step. */
+      fee_eur?: number | null
     },
   ) =>
     request<ProcessStepDTO>(

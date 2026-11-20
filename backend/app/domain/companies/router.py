@@ -19,6 +19,7 @@ from app.domain.companies.schemas import (
     CompanyPage,
     CompanyRead,
     CompanyStatusUpdate,
+    FrameworkContractWrite,
     MarketSites,
 )
 from app.domain.hub.schemas import Switchboard
@@ -181,6 +182,40 @@ async def set_company_status(
     try:
         await service.set_status(
             db, tenant_id=actor.tenant_id, company_id=company_id, status=payload.status, actor=actor.name
+        )
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found") from exc
+    return await _page_or_404(db, actor.tenant_id, company_id)
+
+@router.put("/{company_id}/framework-contract", response_model=CompanyPage)
+async def set_framework_contract(
+    company_id: uuid.UUID,
+    payload: FrameworkContractWrite,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> CompanyPage:
+    """ELI-64: "Rahmenvertrag abgeschlossen" — counted by Tracking."""
+    return await _framework(db, actor, company_id, payload.signed_on)
+
+
+@router.delete("/{company_id}/framework-contract", response_model=CompanyPage)
+async def clear_framework_contract(
+    company_id: uuid.UUID,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> CompanyPage:
+    return await _framework(db, actor, company_id, None)
+
+
+async def _framework(db: AsyncSession, actor: Actor, company_id: uuid.UUID, signed_on) -> CompanyPage:  # noqa: ANN001
+    try:
+        await service.set_framework_contract(
+            db,
+            tenant_id=actor.tenant_id,
+            company_id=company_id,
+            signed_on=signed_on,
+            actor_user_id=actor.user_id,
+            actor_name=actor.name if actor.user_id else None,
         )
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "company not found") from exc

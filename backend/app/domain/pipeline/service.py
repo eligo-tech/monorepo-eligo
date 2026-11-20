@@ -299,6 +299,13 @@ def derive_stage(steps: list[ProcessStep]) -> PipelineStage:
     return PipelineStage.BEWERBUNG
 
 
+class FeeNotOnDeal(ValueError):
+    """A Honorar sent for a step that is not the Vertrag (ELI-64)."""
+
+    def __init__(self, step_key: str) -> None:
+        super().__init__(f"Honorar nur beim Schritt „Vertrag“, nicht bei {step_key}")
+
+
 async def set_step(
     session: AsyncSession,
     *,
@@ -312,16 +319,24 @@ async def set_step(
     clear: list[str] | None = None,
     actor: str = "recruiter",
     actor_user_id: str | None = None,
+    fee_eur: int | None = None,
 ) -> ProcessStep:
     """Create or update one step, then re-derive the application's stage.
 
     Idempotent per (application, step): the tracker is a checklist someone
     ticks and re-ticks, not an event log.
+
+    ELI-64: `fee_eur` is the Honorar, accepted only on the Vertrag step —
+    Umsatz is a closed deal, and a fee on an offer would be a forecast
+    counted as revenue. `clear: ["fee_eur"]` removes it.
     """
     if not steps_mod.is_known(step_key):
         raise ValueError(f"unknown step {step_key}")
     if outcome is not None and outcome not in steps_mod.OUTCOMES:
         raise ValueError(f"unknown outcome {outcome}")
+    clear_fee = "fee_eur" in (clear or ())
+    if (fee_eur is not None or clear_fee) and step_key != "vertrag":
+        raise FeeNotOnDeal(step_key)
 
     app = await get_application(
         session, tenant_id=tenant_id, application_id=application_id, lock=True
@@ -361,9 +376,14 @@ async def set_step(
     if note is not None:
         row.note = note or None
     for field in clear or ():
+        if field == "fee_eur":
+            app.fee_eur = None
+            continue
         if field not in {"scheduled_at", "done_at", "note"}:
             raise ValueError(f"cannot clear {field}")
         setattr(row, field, None)
+    if fee_eur is not None:
+        app.fee_eur = fee_eur
     await session.flush()
 
     current = await list_steps(
@@ -820,6 +840,8 @@ async def processes(
                 "candidate_id": candidate.id,
                 "candidate_name": candidate.full_name,
                 "stage": app.stage,
+                # ELI-64: the Honorar entered on the Vertrag step.
+                "fee_eur": app.fee_eur,
                 # Done, else booked — the rule the Präsentationen KPI counts
                 # by; the step dialog no longer asks for a done date (ELI-21).
                 "presented_at": as_utc(

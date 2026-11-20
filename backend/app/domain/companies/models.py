@@ -6,7 +6,9 @@ the market-map agent from PUBLIC sources only.
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, String
+import datetime as dt
+
+from sqlalchemy import Boolean, Date, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -20,6 +22,14 @@ class Company(Base, IDMixin, TenantMixin, TimestampMixin):
     __tablename__ = "companies"
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    #: ELI-64: "Rahmenvertrag abgeschlossen" — the day a framework agreement
+    #: with this company was signed, as a person entered it on the company
+    #: page. The cheapest honest source for the tracking KPI: there is no
+    #: contract entity, and a date plus who set it is what the KPI counts.
+    #: NULL = none recorded (not "none exists").
+    framework_contract_on: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    framework_contract_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    framework_contract_by_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     #: Identity in the system this row was imported from. Unique per
     #: (tenant, source, external_id) so a re-import updates instead of

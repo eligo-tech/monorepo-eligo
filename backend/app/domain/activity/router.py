@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import datetime as dt
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, require_admin
@@ -15,6 +16,8 @@ from app.domain.activity.schemas import (
     ConsultantRead,
     TargetRead,
     TargetWrite,
+    TilesRead,
+    TilesWrite,
     TrackingRead,
 )
 
@@ -102,7 +105,53 @@ async def set_target(
             period=payload.period,
             value=payload.value,
             actor_user_id=payload.actor_user_id,
+            members=payload.members,
+            label=payload.label,
+            valid_from=payload.valid_from,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     return TargetRead.model_validate(row)
+
+
+@router.delete("/targets/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_target(
+    target_id: uuid.UUID,
+    actor: Actor = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Remove a goal. Admin only, like setting one."""
+    if not await service.delete_target(db, tenant_id=actor.tenant_id, target_id=target_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "target not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _me(actor: Actor) -> str:
+    # The auth-disabled demo has no person; it gets one shared choice.
+    return actor.user_id or ""
+
+
+@router.get("/preferences", response_model=TilesRead)
+async def get_preferences(
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> TilesRead:
+    """ELI-64: which tracking tiles THIS person shows on the Cockpit."""
+    tiles, saved = await service.tiles(db, tenant_id=actor.tenant_id, user_id=_me(actor))
+    return TilesRead(tiles=tiles, saved=saved)
+
+
+@router.put("/preferences", response_model=TilesRead)
+async def set_preferences(
+    payload: TilesWrite,
+    actor: Actor = Depends(get_current_actor),
+    db: AsyncSession = Depends(get_db),
+) -> TilesRead:
+    """Anyone sets their own — "soll jeder selbst konfigurieren können"."""
+    try:
+        tiles = await service.set_tiles(
+            db, tenant_id=actor.tenant_id, user_id=_me(actor), chosen=payload.tiles
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    return TilesRead(tiles=tiles, saved=True)
