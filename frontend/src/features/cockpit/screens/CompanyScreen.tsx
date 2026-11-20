@@ -7,8 +7,8 @@
 import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
-import { useMemo, useState } from 'react'
-import { ArrowLeft, Briefcase, Building2, Mail, MapPin, Newspaper, Phone, Plus, Search, UserRound, Users } from 'lucide-react'
+import { type ReactNode, useMemo, useState } from 'react'
+import { ArrowLeft, Briefcase, Building2, Mail, MapPin, Newspaper, Phone, Plus, Search, UserCheck, UserRound, Users } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CompanyOverviewRowDTO, CompanyPersonDTO, CompanyStatus, MarketSuggestionDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
@@ -142,7 +142,7 @@ function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
   )
 }
 
-function PersonRow({ person, href }: { person: CompanyPersonDTO; href: string }) {
+function PersonRow({ person, href, action }: { person: CompanyPersonDTO; href: string; action?: ReactNode }) {
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-cockpit-line/60 py-2 last:border-0">
       <a href={href} className="min-w-0 flex-1 text-[14px] text-cockpit-text hover:text-mint-400">
@@ -167,7 +167,46 @@ function PersonRow({ person, href }: { person: CompanyPersonDTO; href: string })
           <span className="text-cockpit-faint">{t('zuletzt {date}', { date: day(person.last_contact_at) ?? '' })}</span>
         )}
       </span>
+      {action}
     </li>
+  )
+}
+
+/** ELI-68: a lead of this company, made a manager right here — the same
+ *  `POST /managers/{id}/promote` as "Zu Managern" on the Leads list. A lead
+ *  with "Kein Interesse" is not offered it: the way back is on the person. */
+export function LeadRow({ person, onPromoted }: { person: CompanyPersonDTO; onPromoted: () => void }) {
+  const [moving, setMoving] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const promote = async () => {
+    setMoving(true)
+    setFailed(false)
+    try {
+      await api.promoteManager(person.id)
+      onPromoted() // re-read: the person now sits under Manager
+    } catch {
+      setFailed(true)
+    } finally {
+      setMoving(false)
+    }
+  }
+  return (
+    <PersonRow
+      person={person}
+      // ELI-60: a "Kein Interesse" lead is not on the Leads list — open the person.
+      href={person.no_interest_at ? `#managers/${person.id}` : '#leads'}
+      action={
+        !person.no_interest_at && (
+          <span className="flex items-center gap-2" title={t('Erstkontakt erledigt — als Manager übernehmen.')}>
+            {failed && <span className="text-[13px] text-coral-400">{t('Speichern fehlgeschlagen.')}</span>}
+            <Button onClick={promote} disabled={moving}>
+              <UserCheck className="h-4 w-4" />
+              {t('Zu Managern')}
+            </Button>
+          </span>
+        )
+      }
+    />
   )
 }
 
@@ -253,13 +292,12 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
             <Panel className="p-4">
               <SectionHeader
                 title={t('Leads')}
-                hint={t('Neue Kontakte aus dem Markt — in den Leads anrufen und „Zu Managern“ übernehmen.')}
+                hint={t('Neue Kontakte aus dem Markt — nach dem Erstkontakt „Zu Managern“.')}
                 icon={<Users className="h-4 w-4" />}
               />
               <ul className="mt-2">
                 {data.leads.map((m) => (
-                  // ELI-60: a "Kein Interesse" lead is not on the Leads list — open the person.
-                  <PersonRow key={m.id} person={m} href={m.no_interest_at ? `#managers/${m.id}` : '#leads'} />
+                  <LeadRow key={m.id} person={m} onPromoted={() => setBump((b) => b + 1)} />
                 ))}
               </ul>
             </Panel>
