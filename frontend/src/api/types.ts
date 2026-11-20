@@ -334,6 +334,29 @@ export interface HubFacetsDTO {
   families?: FacetValueDTO[]
   /** Open ads not yet labelled by the nightly backfill. */
   families_pending?: number
+  /** ELI-54: hiring employers with a known headcount; absent in an older snapshot. */
+  headcount?: HeadcountCoverageDTO | null
+}
+
+/** ELI-54: how many hiring employers have a headcount, and whether Markt offers the filter (≥ 30 %). */
+export interface HeadcountCoverageDTO {
+  employers: number
+  known: number
+  coverage: number
+  filter_available: boolean
+  /** Employers per bucket; a range counts in every bucket it overlaps. */
+  buckets: FacetValueDTO[]
+}
+
+/** ELI-54: an employer's headcount and the evidence it rests on. */
+export interface HeadcountDTO {
+  min: number
+  /** null = open-ended ("über 500"). */
+  max: number | null
+  source: string | null
+  source_ref: string | null
+  evidence: string | null
+  as_of: string | null
 }
 
 /** Corpus-wide totals, counted in the database rather than over a page. */
@@ -363,6 +386,8 @@ export interface HubEmployerHitDTO {
   suspected_natural_person: boolean
   website_domain: string | null
   hub_company_ids: string[]
+  /** ELI-54: headcount, null when unknown. */
+  headcount?: HeadcountDTO | null
   /** The roles that justify the hit — the answer carries its own evidence. */
   matching_roles: HubJobPostingDTO[]
   tracked: boolean
@@ -385,6 +410,8 @@ export interface HubSearchPageDTO {
   /** Words the server re-spelled because the typed ones reached almost
    *  nothing. Shown, never applied silently. */
   corrections: QueryCorrectionDTO[]
+  /** ELI-54: with a headcount filter, the employers it hid for unknown size. */
+  unknown_size?: number | null
 }
 
 export interface QueryCorrectionDTO {

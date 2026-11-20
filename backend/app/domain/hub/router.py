@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_tenant, get_ingest_tenant
 from app.core.database import get_db
-from app.domain.hub import liveness, service
+from app.domain.hub import headcount, liveness, service
 from app.domain.hub.adapters.factory import available_sources, get_source_adapter
 from app.domain.hub.gate import PreconditionFailed
 from app.domain.searches import service as searches_service
@@ -55,6 +55,12 @@ from app.domain.hub.schemas import (
 )
 
 router = APIRouter(prefix="/hub", tags=["hub"])
+
+#: ELI-54 headcount buckets — the same keys as `headcount.BUCKETS`.
+HeadcountBucket = Literal[
+    "1-3", "4-10", "11-50", "51-150", "151-300", "301-650",
+    "651-1000", "1001-5000", "5001-10000", "10001+",
+]
 
 
 @router.get("/sources")
@@ -133,8 +139,14 @@ async def search_hub_employers(
     ),
     size: list[Literal["s", "m", "l", "xl"]] | None = Query(
         default=None,
-        description="employer size by OPEN ADS in the corpus (no headcount exists): "
+        description="employer size by OPEN ADS in the corpus (the headcount is `employees`): "
         "s 1–4 · m 5–19 · l 20–99 · xl 100+; repeatable",
+    ),
+    employees: list[HeadcountBucket] | None = Query(
+        default=None,
+        description="ELI-54 headcount buckets (Mitarbeitende); repeatable. A range matches "
+        "every bucket it overlaps; employers of unknown size are left out and counted "
+        "in `unknown_size`",
     ),
     limit: int = Query(default=40, ge=1, le=200),
     cursor: str | None = Query(
@@ -154,7 +166,7 @@ async def search_hub_employers(
     hundreds of which are the same discounter once per branch — is not a surface
     anyone can work with.
     """
-    async def page(query: str | None) -> tuple[list[dict], int]:
+    async def page(query: str | None) -> tuple[list[dict], int, int | None]:
         found = await service.search_employers(
             db,
             q=query,
@@ -168,6 +180,7 @@ async def search_hub_employers(
             min_relevance=min_relevance,
             exclude_agencies=exclude_agencies,
             sizes=size,
+            employees=employees,
         )
         # Counted once, on the first page only: it does not change as the
         # reader pages, and it is a second aggregate over the same set.
@@ -182,13 +195,31 @@ async def search_hub_employers(
                 min_relevance=min_relevance,
                 exclude_agencies=exclude_agencies,
                 sizes=size,
+                employees=employees,
             )
             if cursor is None
             else 0
         )
-        return found, counted
+        # ELI-54: what the headcount filter hid — the same search, unknown size.
+        unknown = (
+            await service.count_employers(
+                db,
+                q=query,
+                city=city,
+                regions=region,
+                berufsfelder=berufsfeld,
+                families=family,
+                min_relevance=min_relevance,
+                exclude_agencies=exclude_agencies,
+                sizes=size,
+                employees_unknown=True,
+            )
+            if employees and cursor is None
+            else None
+        )
+        return found, counted, unknown
 
-    hits, total = await page(q)
+    hits, total, unknown_size = await page(q)
 
     # Spelling is checked AFTER the search, never before: resolving every term
     # up front cost 76–300 ms on searches that were already working, and this
@@ -207,9 +238,9 @@ async def search_hub_employers(
     ):
         corrected, corrections = await service.resolve_query(db, q)
         if corrections:
-            retried, retried_total = await page(corrected)
+            retried, retried_total, retried_unknown = await page(corrected)
             if retried_total > total:
-                hits, total = retried, retried_total
+                hits, total, unknown_size = retried, retried_total, retried_unknown
             else:
                 corrections = []  # the other spelling was no better; say nothing
 
@@ -234,6 +265,7 @@ async def search_hub_employers(
         # offering a cursor that returns nothing is cheaper than a count per page.
         next_cursor=service.encode_cursor(hits[-1]) if len(hits) == limit else None,
         corrections=[QueryCorrection(**c) for c in corrections],
+        unknown_size=unknown_size,
     )
 
 
@@ -734,6 +766,34 @@ async def ad_contacts_model_backfill(
     return await contact_model.backfill(
         db, limit=limit, reader=contact_model.reader_from_settings(), count=progress
     )
+
+
+@router.post("/headcount/backfill")
+async def headcount_backfill(
+    limit: int = Query(default=2_000, ge=1, le=5_000),
+    after: uuid.UUID | None = Query(default=None, description="the previous batch's last_id"),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Read up to `limit` due employers' ad texts for a headcount statement
+    (ELI-54, `hub/headcount.py`). Machine-only: the weekly chain repeats it,
+    keyset-paged, until `done`. Reads text already in the corpus — no fetch."""
+    return await headcount.backfill(db, limit=limit, after=after)
+
+
+@router.post("/headcount/wikidata")
+async def headcount_wikidata(
+    limit: int = Query(default=120, ge=1, le=400),
+    after: str | None = Query(default=None, max_length=255, description="the previous batch's last_domain"),
+    _tenant_id: uuid.UUID = Depends(get_ingest_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Ask Wikidata (P1128) about up to `limit` hiring employers' domains,
+    matched only by official website = registrable domain (ELI-54). An
+    outbound read of a public source: machine-only."""
+    from app.domain.hub.adapters.wikidata import WikidataClient
+
+    return await headcount.wikidata_backfill(db, limit=limit, client=WikidataClient(), after=after)
 
 
 @router.post("/vacancy-keys/backfill")

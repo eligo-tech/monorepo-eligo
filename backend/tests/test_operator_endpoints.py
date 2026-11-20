@@ -49,6 +49,9 @@ DECLARED_OPERATOR_ROUTES: set[tuple[str, str]] = {
     # Stores the persons open ads name (hub_ad_contacts) — a bounded corpus write.
     ("POST", "/hub/ad-contacts/backfill"),
     ("POST", "/hub/ad-contacts/model-backfill"),
+    # ELI-54: headcount from ad texts (a corpus write) and Wikidata (outbound).
+    ("POST", "/hub/headcount/backfill"),
+    ("POST", "/hub/headcount/wikidata"),
     ("GET", "/hub/crawl-profiles"),
     ("POST", "/hub/crawl-profiles/mark-crawled"),
     # Rebuilds the agency finder's derived profiles from the corpus.
