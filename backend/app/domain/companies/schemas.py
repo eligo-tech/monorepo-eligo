@@ -55,6 +55,12 @@ class CompanyStatusUpdate(BaseModel):
     status: CompanyStatus
 
 
+class FrameworkContractWrite(BaseModel):
+    """ELI-64: the day the framework agreement was signed; null removes it."""
+
+    signed_on: dt.date | None
+
+
 class CompanyRead(CompanyBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -115,6 +121,9 @@ class CompanyCore(BaseModel):
     status: CompanyStatus | None = None
     #: True when `status` is a person's decision, not derived.
     status_set: bool = False
+    #: ELI-64: "Rahmenvertrag abgeschlossen am" — set by a person.
+    framework_contract_on: dt.date | None = None
+    framework_contract_by_name: str | None = None
 
 
 class MarketJob(BaseModel):

@@ -226,7 +226,10 @@ async def set_step(
             # ELI-15: who ticked it. The step row IS the event the KPI
             # counts, so it carries its own author.
             actor_user_id=actor.user_id,
+            fee_eur=payload.fee_eur,
         )
+    except service.FeeNotOnDeal as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     return _step_read(row)

@@ -10,6 +10,7 @@ import { locale } from '@/i18n/format'
 import { type ReactNode, useMemo, useState } from 'react'
 import { ArrowLeft, Briefcase, Building2, Mail, MapPin, Newspaper, Phone, Plus, Search, UserCheck, UserRound, Users } from 'lucide-react'
 import { api } from '@/api/client'
+import { FrameworkContractLine } from './FrameworkContractLine'
 import type { CompanyOverviewRowDTO, CompanyPersonDTO, CompanyStatus, MarketSuggestionDTO } from '@/api/types'
 import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
@@ -244,6 +245,13 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
               companyId={data.company.id}
               status={data.company.status ?? null}
               decided={!!data.company.status_set}
+              onDone={() => setBump((b) => b + 1)}
+            />
+            {/* ELI-64: counted by Tracking › Rahmenvertrag abgeschlossen. */}
+            <FrameworkContractLine
+              companyId={data.company.id}
+              signedOn={data.company.framework_contract_on ?? null}
+              byName={data.company.framework_contract_by_name ?? null}
               onDone={() => setBump((b) => b + 1)}
             />
             {data.switchboard && (

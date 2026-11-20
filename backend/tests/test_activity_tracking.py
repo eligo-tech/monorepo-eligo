@@ -146,10 +146,11 @@ async def test_moving_when_it_happened_moves_which_week_it_counts_in() -> None:
     )
 
 
-@pytest.mark.parametrize("kind", ["na", "note", "message", "candidate_call", "meeting"])
+@pytest.mark.parametrize("kind", ["na", "note", "message", "candidate_call", "profiles_sent"])
 async def test_only_a_call_with_a_manager_counts(kind) -> None:
     # "NA" is a call that did not connect; a candidate call is a different
-    # conversation. Neither is a Business Call.
+    # conversation. Neither is a Business Call. (A meeting is — ELI-64 made
+    # the KPI "Business Call oder Meeting"; see test_tracking_eli64.)
     await _call(when=dt.datetime(2026, 10, 20, tzinfo=dt.UTC), kind=kind)
     assert await _count(*WEEK) == 0
 
@@ -271,23 +272,27 @@ async def test_an_unknown_kpi_or_period_is_refused() -> None:
 # ── what cannot be measured ───────────────────────────────────────────────
 
 
-async def test_the_two_unmeasurable_kpis_show_no_number_and_say_why() -> None:
-    """THE one that matters. There is no Contract entity and no LinkedIn
-    integration, so these two cannot be counted — and a confident 0 next to
-    a target is worse than a blank, because somebody gets measured on it."""
+async def test_an_unmeasurable_kpi_shows_no_number_and_says_why(monkeypatch) -> None:
+    """THE one that matters: a confident 0 next to a target is worse than a
+    blank, because somebody gets measured on it. ELI-64 gave every KPI of
+    the ticket a source, so the rule is pinned with one that has none."""
+    blind = kpis.Kpi(
+        key="network_growth", label="Netzwerk-Wachstum", source="LinkedIn",
+        counts=None, available=False, unavailable_because="Noch keine LinkedIn-Anbindung",
+    )
+    monkeypatch.setattr(kpis, "KPIS", (*kpis.KPIS, blind))
     async with SessionLocal() as s:
         panel = await service.tracking(s, tenant_id=TENANT, period="monat")
-    for key in ("framework_contracts", "network_growth"):
-        kpi = next(k for k in panel["kpis"] if k["key"] == key)
-        assert kpi["available"] is False
-        assert kpi["ist"] is None, "an unmeasurable KPI must not render as a count"
-        assert kpi["unavailable_because"]
+    kpi = next(k for k in panel["kpis"] if k["key"] == "network_growth")
+    assert kpi["available"] is False
+    assert kpi["ist"] is None, "an unmeasurable KPI must not render as a count"
+    assert kpi["unavailable_because"]
 
 
 async def test_the_measurable_ones_are_measurable() -> None:
     async with SessionLocal() as s:
         panel = await service.tracking(s, tenant_id=TENANT, period="monat")
-    for key in ("business_calls", "candidates_presented"):
+    for key in [k.key for k in kpis.KPIS]:
         kpi = next(k for k in panel["kpis"] if k["key"] == key)
         assert kpi["available"] is True and isinstance(kpi["ist"], int)
 
@@ -500,7 +505,7 @@ async def test_a_call_counts_whatever_it_is_spelled_like(stored) -> None:
     assert await _count(*WEEK) == 1, f"{stored!r} was not counted as a manager call"
 
 
-@pytest.mark.parametrize("stored", ["N/A", "n/a", "Meeting Notes", "E-Mail", "Job Spec"])
+@pytest.mark.parametrize("stored", ["N/A", "n/a", "E-Mail", "Job Spec"])
 async def test_the_other_imported_spellings_are_still_not_calls(stored) -> None:
     # "N/A" is the commonest kind in the record — a call that did not
     # connect. Folding it in would roughly double the number and make the

@@ -15,6 +15,7 @@ import {
   autoDoneAt,
   initialStepInputs,
   isPlaced,
+  parseFee,
   placementJustHappened,
   presentedStep,
   type StepFacts,
@@ -243,5 +244,30 @@ describe('presentedStep', () => {
     // Saved straight after "Zu Mandat zuordnen", it is presented now.
     const now = new Date('2026-07-01T06:00:00Z')
     expect(autoDoneAt(s, { scheduled: '', outcome: 'open' }, now)).toBe(now.toISOString())
+  })
+})
+
+
+// ELI-64: the Honorar on the Vertrag step is what Umsatz adds up. People type
+// it the way they write it; a misread number is revenue that never happened.
+describe('the Honorar as typed', () => {
+  it('reads whole euros however they are written', () => {
+    expect(parseFee('25000')).toBe(25000)
+    expect(parseFee('25.000')).toBe(25000)
+    expect(parseFee('25 000 €')).toBe(25000)
+    expect(parseFee('25.000,00')).toBe(25000)
+  })
+
+  it('treats empty as no fee and refuses what is not a whole number', () => {
+    expect(parseFee('')).toBeNull()
+    expect(parseFee('  ')).toBeNull()
+    expect(parseFee('25k')).toBe('invalid')
+    expect(parseFee('12,5')).toBe('invalid')
+    expect(parseFee('-3')).toBe('invalid')
+    // A dot is a thousands separator only before groups of three digits;
+    // '12.5' must not silently become 125.
+    expect(parseFee('12.5')).toBe('invalid')
+    expect(parseFee('1.5')).toBe('invalid')
+    expect(parseFee('1.250.000')).toBe(1250000)
   })
 })

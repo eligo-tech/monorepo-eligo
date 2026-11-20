@@ -148,6 +148,8 @@ def test_the_admin_only_routes_are_the_ones_we_meant() -> None:
         # READING the tracking is not: a consultant must be able to see
         # their own numbers.
         ("PUT", "/activity/targets"),
+        # ELI-64: removing a goal is the same decision as setting one.
+        ("DELETE", "/activity/targets/{target_id}"),
         # ELI-20: the workspace's CI is printed on every cover sheet anyone
         # sends a client — the logo and the AGB text are the agency's, set
         # once by an admin. Downloading a cover sheet is everybody's work.

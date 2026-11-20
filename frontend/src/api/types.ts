@@ -820,6 +820,8 @@ export interface ProcessCandidateDTO {
   candidate_id: string
   candidate_name: string
   stage: string
+  /** ELI-64: the Honorar (€) entered on the Vertrag step. */
+  fee_eur?: number | null
   presented_at: string | null
   next_appointment: string | null
   note: string | null
@@ -1374,6 +1376,9 @@ export interface CompanyPageDTO {
     status?: CompanyStatus | null
     /** True when `status` is a person's decision, not derived from the counts. */
     status_set?: boolean
+    /** ELI-64: "Rahmenvertrag abgeschlossen am" (YYYY-MM-DD), set by a person. */
+    framework_contract_on?: string | null
+    framework_contract_by_name?: string | null
   }
   managers: CompanyPersonDTO[]
   leads: CompanyPersonDTO[]
@@ -1525,4 +1530,98 @@ export interface CoverSheetParams {
   contact_name?: string
   contact_email?: string
   contact_phone?: string
+}
+
+// ── Tracking (ELI-15, ELI-64) ──
+
+export type TrackingPeriod = 'woche' | 'monat' | 'quartal'
+
+export interface KpiDTO {
+  key: string
+  /** German label; the dictionary is keyed by it. */
+  label: string
+  source: string
+  /** 'business' · 'bd' · 'prozess' — the ticket's three headings. */
+  group: string
+  unit: 'count' | 'eur'
+  /** null when nothing measures this KPI — render the reason, not a 0. */
+  ist: number | null
+  /** null when no target is set. Distinct from 0, which is a target of none. */
+  ziel: number | null
+  /** Umsatz only: closed deals with no Honorar entered. */
+  missing: number
+  available: boolean
+  unavailable_because: string
+}
+
+/** A goal belonging to people: one consultant's, or one shared by several. */
+export interface GoalDTO {
+  id: string
+  kpi: string
+  label: string | null
+  members: string[]
+  shared: boolean
+  /** null before `valid_from` — no goal yet, not a goal of 0. */
+  ziel: number | null
+  valid_from: string | null
+  ist: number
+}
+
+/** One transition of the Prozess funnel. */
+export interface FunnelStepDTO {
+  from_key: string
+  to_key: string
+  from_label: string
+  to_label: string
+  of: number
+  reached: number
+  /** null when `of` is 0. */
+  ratio: number | null
+  /** null when no pair of dates could be measured. */
+  median_days: number | null
+  source: string
+}
+
+export interface TrackingDTO {
+  period: TrackingPeriod
+  period_start: string
+  period_end: string
+  /** null = the whole workspace. */
+  actor_user_id: string | null
+  kpis: KpiDTO[]
+  goals: GoalDTO[]
+  funnel: FunnelStepDTO[]
+}
+
+/** Somebody with activity in the record, for the per-consultant switch. */
+export interface ConsultantDTO {
+  actor_user_id: string | null
+  name: string
+  events: number
+}
+
+export interface TargetDTO {
+  id: string
+  actor_user_id: string | null
+  kpi: string
+  period: TrackingPeriod
+  value: number
+  members: string[]
+  label: string | null
+  valid_from: string | null
+}
+
+export interface TargetWritePayload {
+  kpi: string
+  period: TrackingPeriod
+  value: number
+  actor_user_id?: string | null
+  members?: string[]
+  label?: string | null
+  valid_from?: string | null
+}
+
+export interface TrackingTilesDTO {
+  tiles: string[]
+  saved: boolean
 }

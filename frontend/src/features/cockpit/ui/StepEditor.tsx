@@ -146,7 +146,7 @@ export function presentedStep(): ProcessStep {
 
 /** What the editor reads off a card — all a fresh assignment can supply, so
  *  the dialog opens straight after "Zu Mandat zuordnen" without a board. */
-export type StepCard = Pick<ProcessCard, 'id' | 'jobId' | 'candidateName' | 'role' | 'steps'>
+export type StepCard = Pick<ProcessCard, 'id' | 'jobId' | 'candidateName' | 'role' | 'steps' | 'feeEur'>
 
 // ── Placement: the question at the moment a role is filled (ELI-8) ──────────
 //
@@ -231,6 +231,16 @@ const OUTCOMES: {
   },
 ]
 
+/** The Honorar as typed: a whole number of euros, empty, or not a number.
+ *  "25.000" and "25 000 €" are how people write it — separators go. */
+export function parseFee(raw: string): number | null | 'invalid' {
+  const cleaned = raw.replace(/[\s€]/g, '').replace(/,00$/, '')
+  if (!cleaned) return null
+  if (/^\d{1,3}(\.\d{3})+$/.test(cleaned)) return Number(cleaned.replace(/\./g, ''))
+  if (!/^\d+$/.test(cleaned)) return 'invalid'
+  return Number(cleaned)
+}
+
 export function StepEditor({
   card,
   step,
@@ -247,6 +257,10 @@ export function StepEditor({
   const [scheduled, setScheduled] = useState(initial.scheduled)
   const [outcome, setOutcome] = useState(step.outcome ?? 'open')
   const [note, setNote] = useState(step.note ?? '')
+  // ELI-64: the deal's Honorar — asked only on the Vertrag step, where the
+  // Umsatz is booked. Whole euros, as typed.
+  const isDeal = step.key === 'vertrag'
+  const [fee, setFee] = useState(card.feeEur != null ? String(card.feeEur) : '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const terminRef = useRef<HTMLInputElement>(null)
@@ -276,14 +290,20 @@ export function StepEditor({
     }
     // ELI-21: not typed any more — recorded when the step happened.
     const doneIso = autoDoneAt(step, { scheduled, outcome })
+    const feeValue = parseFee(fee)
+    if (isDeal && feeValue === 'invalid') {
+      setError(t('Honorar bitte als ganze Zahl in Euro eingeben.'))
+      return
+    }
 
     setBusy(true)
     setError(null)
     // Anything the recruiter emptied is cleared explicitly — leaving a field
     // out means 'unchanged', so a cancelled appointment would otherwise stay.
-    const clear: ('scheduled_at' | 'note')[] = []
+    const clear: ('scheduled_at' | 'note' | 'fee_eur')[] = []
     if (!scheduled && step.scheduledAt) clear.push('scheduled_at')
     if (!note.trim() && step.note) clear.push('note')
+    if (isDeal && feeValue === null && card.feeEur != null) clear.push('fee_eur')
     try {
       const saved = await api.setProcessStep(card.id, step.key, {
         scheduled_at: scheduledIso ?? undefined,
@@ -291,6 +311,7 @@ export function StepEditor({
         outcome,
         note: note.trim() || undefined,
         clear,
+        ...(isDeal && typeof feeValue === 'number' ? { fee_eur: feeValue } : {}),
       })
       // Check the answer instead of assuming it. The endpoint returns the
       // stored row, so a write that quietly changed nothing is visible here
@@ -449,6 +470,24 @@ export function StepEditor({
               </p>
             )}
           </div>
+
+          {isDeal && (
+            <label className="block space-y-1">
+              <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">
+                {t('Honorar (€)')}
+              </span>
+              <input
+                inputMode="numeric"
+                value={fee}
+                onChange={(e) => setFee(e.target.value)}
+                placeholder={t('z. B. 25000')}
+                className={cn(FIELD, 'w-full font-mono')}
+              />
+              <span className="block text-[12px] text-cockpit-faint">
+                {t('Zählt als Umsatz im Monat des Vertrags (Tracking).')}
+              </span>
+            </label>
+          )}
 
           <label className="block space-y-1">
             <span className="font-mono text-[12px] uppercase tracking-wide text-cockpit-faint">

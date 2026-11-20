@@ -260,7 +260,13 @@ export function processCardsFromSteps(
           Math.round(((reached + 1) / steps.length) * 100),
           t('Aus den abgehakten Prozess-Schritten'),
         ),
-        fee: demo(0, t('Kein Honorarmodell hinterlegt')),
+        // ELI-64: the Honorar entered on the Vertrag step is a fact; with
+        // none entered there is still no fee model to estimate one from.
+        fee:
+          person.fee_eur != null
+            ? live(person.fee_eur, t('Honorar, eingetragen beim Schritt „Vertrag“'))
+            : demo(0, t('Kein Honorarmodell hinterlegt')),
+        feeEur: person.fee_eur ?? null,
         statusNote: out
           ? `${t('Abgesagt')} · ${stepLabel(out.step_key, out.label)}`
           : person.next_appointment

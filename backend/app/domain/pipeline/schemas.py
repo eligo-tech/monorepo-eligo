@@ -123,7 +123,10 @@ class ProcessStepUpdate(BaseModel):
     done_at: dt.datetime | None = None
     outcome: Literal["open", "pass", "out"] | None = None
     note: str | None = None
-    clear: list[Literal["scheduled_at", "done_at", "note"]] = Field(
+    #: ELI-64: "Honorar (€)", only on the Vertrag step — the deal's fee,
+    #: which Umsatz adds up. Whole euros.
+    fee_eur: int | None = Field(default=None, ge=0, le=10_000_000)
+    clear: list[Literal["scheduled_at", "done_at", "note", "fee_eur"]] = Field(
         default_factory=list
     )
 
@@ -217,6 +220,8 @@ class ProcessCandidateRead(BaseModel):
     candidate_id: uuid.UUID
     candidate_name: str
     stage: PipelineStage
+    #: ELI-64: the Honorar entered on the Vertrag step, if any.
+    fee_eur: int | None = None
     presented_at: dt.datetime | None
     #: The soonest appointment still open — what the recruiter needs on Monday.
     next_appointment: dt.datetime | None

@@ -17,6 +17,7 @@ import { ReaddHost } from './erasure/ReaddHost'
 import { CockpitScreen } from './screens/CockpitScreen'
 import { KandidatenScreen } from './screens/kandidaten/KandidatenScreen'
 import { EinstellungenScreen } from './screens/EinstellungenScreen'
+import { TrackingScreen } from './screens/TrackingScreen'
 import { ContactListScreen } from './screens/ContactListScreen'
 import { CompanyScreen } from './screens/CompanyScreen'
 import { JobsScreen } from './screens/JobsScreen'
@@ -40,6 +41,7 @@ export type ScreenKey =
   | 'managers'
   | 'mandate'
   | 'kandidaten'
+  | 'tracking'
   | 'einstellungen'
 
 // The order the product reads in: the book of business, then the market it
@@ -55,6 +57,8 @@ export const SCREENS: SectionOption<ScreenKey>[] = [
   { key: 'managers', label: t('Manager') },
   { key: 'mandate', label: t('Mandate') },
   { key: 'kandidaten', label: t('Kandidaten') },
+  // ELI-64: back in the menu — Umsatz, Business Development, Prozess.
+  { key: 'tracking', label: t('Tracking') },
   { key: 'einstellungen', label: t('Einstellungen') },
 ]
 
@@ -67,16 +71,15 @@ export const isScreenKey = (v: string): v is ScreenKey =>
 
 /** Links and bookmarks to retired screens. One line is cheaper than a dead
  *  hash that silently lands on the cockpit. ELI-23: Workspace, Projekte and
- *  Anrufen were replaced by Kontakte; Tracking left the menu (its backend
- *  and KPI data stay, only the screen is gone). ELI-29: Kontakte became
- *  Leads, Jobs became Mandate. */
+ *  Anrufen were replaced by Kontakte. ELI-29: Kontakte became Leads, Jobs
+ *  became Mandate. (Tracking left the menu in ELI-23 and is back since
+ *  ELI-64.) */
 const RETIRED: Record<string, ScreenKey> = {
   kontakte: 'leads',
   jobs: 'mandate',
   workspace: 'leads',
   projekte: 'leads',
   anrufen: 'leads',
-  tracking: 'cockpit',
 }
 
 /** `#cockpit/<jobId>`: the screen, then what it is focused on.
@@ -253,6 +256,7 @@ export function CockpitShell({ initialScreen = 'cockpit' }: { initialScreen?: Sc
             }}
           />
         )}
+        {screen === 'tracking' && <TrackingScreen me={me} />}
         {screen === 'einstellungen' && <EinstellungenScreen me={me} />}
         </ErrorBoundary>
       </main>

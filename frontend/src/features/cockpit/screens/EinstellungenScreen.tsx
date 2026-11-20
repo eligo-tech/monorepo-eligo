@@ -26,6 +26,7 @@ import { ErasureLog } from '../erasure/ErasureLog'
 import { AiFeaturesPanel } from './AiFeaturesPanel'
 import { BrandingPanel } from './BrandingPanel'
 import { FileImportPanel } from './FileImportPanel'
+import { TrackingGoalsPanel } from './TrackingGoalsPanel'
 import { Button, TextInput } from '../ui/forms'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 
@@ -404,12 +405,23 @@ export function EinstellungenScreen({ me }: { me: MeDTO | null }) {
         <BrandingPanel admin={admin} />
       </section>
 
+      {/* ELI-64: the goals the Tracking page and the Cockpit measure against. */}
+      <section className="space-y-5">
+        <SectionHeader
+          id="section-tracking-ziele"
+          index="05"
+          title={t('Tracking-Ziele')}
+          hint={t('Umsatz- und Aktivitätsziele je Team, Person oder Gruppe')}
+        />
+        <TrackingGoalsPanel admin={admin} me={me} />
+      </section>
+
       {/* GDPR Art. 17/21 inside the workspace. Erasing happens on the
           person's own page; this is the record that it happened. */}
       <section className="space-y-5">
         <SectionHeader
           id="section-loeschung"
-          index="05"
+          index="06"
           title={t('Löschanträge')}
           hint={t('DSGVO Art. 17 und 21')}
         />

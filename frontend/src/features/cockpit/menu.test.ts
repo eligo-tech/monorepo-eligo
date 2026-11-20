@@ -4,9 +4,10 @@ import { SCREENS, resolveDetail, resolveScreen } from './CockpitShell'
 // ELI-29: the ground structure — Markt · Leads · Companies · Manager · Mandate
 // · Kandidaten — and old links that still land.
 describe('menu', () => {
-  it('is Cockpit · Markt · Leads · Companies · Manager · Mandate · Kandidaten · Einstellungen', () => {
+  it('is Cockpit · Markt · Leads · Companies · Manager · Mandate · Kandidaten · Tracking · Einstellungen', () => {
+    // ELI-64: Tracking is back in the menu.
     expect(SCREENS.map((s) => s.key)).toEqual([
-      'cockpit', 'markt', 'leads', 'companies', 'managers', 'mandate', 'kandidaten', 'einstellungen',
+      'cockpit', 'markt', 'leads', 'companies', 'managers', 'mandate', 'kandidaten', 'tracking', 'einstellungen',
     ])
   })
 
@@ -16,7 +17,8 @@ describe('menu', () => {
     expect(resolveScreen('projekte')).toBe('leads')
     expect(resolveScreen('workspace')).toBe('leads')
     expect(resolveScreen('anrufen')).toBe('leads')
-    expect(resolveScreen('tracking')).toBe('cockpit')
+    // ELI-64: a link to #tracking opens the Tracking page again.
+    expect(resolveScreen('tracking')).toBe('tracking')
     expect(resolveScreen('leads')).toBe('leads')
     expect(resolveScreen('companies')).toBe('companies')
   })

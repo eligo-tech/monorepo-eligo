@@ -190,6 +190,33 @@ async def set_status(
     return company
 
 
+async def set_framework_contract(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    company_id: uuid.UUID,
+    signed_on: dt.date | None,
+    actor_user_id: str | None,
+    actor_name: str | None,
+) -> Company:
+    """ELI-64: "Rahmenvertrag abgeschlossen am …" on the company page.
+
+    A person's statement of a fact outside the system, so it is stored as
+    they entered it — a day and who said so — and the tracking KPI counts
+    it in the period of that day. `signed_on=None` takes it back. Raises
+    LookupError for a company not in this workspace.
+    """
+    company = await get_company(session, tenant_id=tenant_id, company_id=company_id)
+    if company is None:
+        raise LookupError(str(company_id))
+    company.framework_contract_on = signed_on
+    company.framework_contract_by = actor_user_id if signed_on else None
+    company.framework_contract_by_name = actor_name if signed_on else None
+    await session.commit()
+    await session.refresh(company)
+    return company
+
+
 def _decided():
     """True where a person set Lead / Kunde (ELI-43): a committed `is_client`
     record. Then `is_client` is that decision; elsewhere it is not (imports
@@ -392,6 +419,8 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
             "industry": company.industry,
             "source": company.source,
             **await _page_status(session, company, people),
+            "framework_contract_on": company.framework_contract_on,
+            "framework_contract_by_name": company.framework_contract_by_name,
         },
         "managers": [person(m, at) for m, at in people if m.stage != "bus_dev"],
         "leads": [person(m, at) for m, at in people if m.stage == "bus_dev"],
