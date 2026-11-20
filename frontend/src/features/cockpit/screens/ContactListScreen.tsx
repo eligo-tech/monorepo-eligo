@@ -219,7 +219,7 @@ export function ContactRow({
         {followUp && (
           <Chip tone={followUp.due_date < today ? 'coral' : followUp.due_date === today ? 'gold' : undefined}>
             <span title={followUp.text}>
-              {t('Wiedervorlage')}: {Object.values(followUpWhen(followUp)).filter(Boolean).join(' ')}
+              {t('Wiedervorlage')}: {(({ date, time }) => [date, time].filter(Boolean).join(' '))(followUpWhen(followUp))}
             </span>
           </Chip>
         )}
