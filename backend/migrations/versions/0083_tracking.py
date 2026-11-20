@@ -41,7 +41,10 @@ depends_on: str | Sequence[str] | None = None
 _TABLE = "tracking_preferences"
 _PREDICATE = "tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid"
 
-_COLUMNS: dict[str, list[sa.Column]] = {
+def _columns() -> dict[str, list[sa.Column]]:
+    """Fresh Column objects per call: one attached to a table by
+    `add_column` cannot be attached again in the same process."""
+    return {
     "applications": [sa.Column("fee_eur", sa.Integer(), nullable=True)],
     "companies": [
         sa.Column("framework_contract_on", sa.Date(), nullable=True),
@@ -62,13 +65,13 @@ _COLUMNS: dict[str, list[sa.Column]] = {
         sa.Column("label", sa.String(80), nullable=True),
         sa.Column("valid_from", sa.Date(), nullable=True),
     ],
-}
+    }
 
 
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
-    for table, columns in _COLUMNS.items():
+    for table, columns in _columns().items():
         have = {c["name"] for c in inspector.get_columns(table)}
         for column in columns:
             if column.name not in have:
@@ -98,8 +101,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if _TABLE in set(sa.inspect(op.get_bind()).get_table_names()):
+    inspector = sa.inspect(op.get_bind())
+    if _TABLE in set(inspector.get_table_names()):
         op.drop_table(_TABLE)
-    for table, columns in _COLUMNS.items():
+    for table, columns in _columns().items():
+        have = {c["name"] for c in inspector.get_columns(table)}
         for column in columns:
-            op.drop_column(table, column.name)
+            if column.name in have:
+                op.drop_column(table, column.name)

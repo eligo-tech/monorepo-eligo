@@ -108,8 +108,16 @@ def _deals(tenant_id: uuid.UUID, start: dt.datetime, end: dt.datetime) -> Select
     Attributed to whoever recorded the Vertrag step — the consultant who
     closed it. One row per application: `uq_process_step` allows one
     Vertrag step per process, so a fee can never be added twice.
+
+    A contract only PLANNED for a later day is a forecast, not revenue: it
+    counts once it is done, marked green, or its date has passed.
     """
     when = func.coalesce(ProcessStep.done_at, ProcessStep.scheduled_at)
+    signed = or_(
+        ProcessStep.done_at.isnot(None),
+        ProcessStep.outcome == "pass",
+        ProcessStep.scheduled_at <= dt.datetime.now(dt.UTC),
+    )
     return (
         select(Application.fee_eur.label("fee"), ProcessStep.actor_user_id)
         .select_from(ProcessStep)
@@ -125,6 +133,7 @@ def _deals(tenant_id: uuid.UUID, start: dt.datetime, end: dt.datetime) -> Select
             ProcessStep.step_key == kpi_defs.DEAL_STEP,
             ProcessStep.active.is_(True),
             ProcessStep.outcome != "out",
+            signed,
             and_(when >= start, when < end),
         )
     )
@@ -161,11 +170,17 @@ def _mandates(tenant_id: uuid.UUID, start: dt.datetime, end: dt.datetime) -> Sel
     """ELI-64 "Mandat hinzugefügt": mandates created in this workspace.
 
     Imports are not "added": a re-run of the aiFind import would otherwise
-    book every historic mandate into the week it ran.
+    book every historic mandate into the week it ran. A mandate taken from
+    Markt (`external_source = "hub"`) IS ours — but only once it is no longer
+    a lead. There is no "won at" date, so it counts in the period it was
+    taken from Markt.
     """
+    from app.domain.common.enums import JobStatus
+
     return select(Job).where(
         Job.tenant_id == tenant_id,
-        Job.external_id.is_(None),
+        or_(Job.external_id.is_(None), Job.external_source == "hub"),
+        Job.status != JobStatus.LEAD.value,
         Job.created_at >= start,
         Job.created_at < end,
     )
@@ -378,19 +393,19 @@ def _target_for(
     goals are not anybody's own number — they are listed as goals.
     """
     candidates = [
-        r
-        for r in rows
-        if r.kpi == kpi
-        and r.period == period
-        and not _members(r)
-        and (end is None or _applies(r, end))
+        r for r in rows if r.kpi == kpi and r.period == period and not _members(r)
     ]
-    own = next((r.value for r in candidates if r.actor_user_id == actor_user_id), None)
+    live = lambda r: end is None or _applies(r, end)  # noqa: E731
+    own = next((r for r in candidates if r.actor_user_id == actor_user_id), None)
     if own is not None:
-        return own
+        # Their own goal that has not started yet means NO goal — not the
+        # default they would inherit if they had none at all.
+        return own.value if live(own) else None
     if actor_user_id is None:
         return None
-    return next((r.value for r in candidates if r.actor_user_id is None), None)
+    return next(
+        (r.value for r in candidates if r.actor_user_id is None and live(r)), None
+    )
 
 
 # ── the Prozess funnel ────────────────────────────────────────────────────
@@ -437,9 +452,13 @@ async def process_funnel(
 
     #: application → milestone → (date or None, author)
     reached: dict[uuid.UUID, dict[str, tuple[dt.datetime | None, str | None]]] = {}
-    for app_id, key, label, done, scheduled, _outcome, author in rows:
+    for app_id, key, label, done, scheduled, outcome, author in rows:
         milestone = kpi_defs.milestone_for(key, label)
         if milestone is None:
+            continue
+        # A red Vertrag is a deal that did NOT happen (Umsatz skips it too).
+        # A red interview still happened — it is the verdict after it.
+        if milestone == "deal" and outcome == "out":
             continue
         when = _aware(done or scheduled)
         seen = reached.setdefault(app_id, {})

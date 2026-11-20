@@ -509,3 +509,60 @@ async def test_cockpit_tiles_default_and_are_saved_per_person() -> None:
         # An empty Cockpit is a choice too.
         await c.put("/api/v1/activity/preferences", json={"tiles": []})
         assert (await c.get("/api/v1/activity/preferences")).json()["tiles"] == []
+
+
+# ── review findings ───────────────────────────────────────────────────────
+
+
+async def test_a_personal_goal_not_started_yet_does_not_fall_back_to_the_default() -> None:
+    """Xaver's goal starts in January: in December he has NO goal — not the
+    workspace default he would otherwise inherit."""
+    async with SessionLocal() as s:
+        await service.set_target(s, tenant_id=TENANT, kpi="revenue", period="monat", value=50_000)
+        await service.set_target(
+            s, tenant_id=TENANT, kpi="revenue", period="monat", value=15_000,
+            actor_user_id=XAVER, valid_from=dt.date(2027, 1, 1),
+        )
+        dec = await service.tracking(
+            s, tenant_id=TENANT, period="monat", at=dt.datetime(2026, 12, 15, tzinfo=dt.UTC),
+            everyone=False, actor_user_id=XAVER,
+        )
+        jan = await service.tracking(
+            s, tenant_id=TENANT, period="monat", at=dt.datetime(2027, 1, 15, tzinfo=dt.UTC),
+            everyone=False, actor_user_id=XAVER,
+        )
+    assert _kpi(dec, "revenue")["ziel"] is None
+    assert _kpi(jan, "revenue")["ziel"] == 15_000
+
+
+async def test_a_mandate_won_from_markt_counts_and_a_markt_lead_does_not() -> None:
+    async with SessionLocal() as s:
+        s.add(Job(tenant_id=TENANT, title="Won", created_at=NOV, status="active",
+                  external_source="hub", external_id="p1"))
+        s.add(Job(tenant_id=TENANT, title="Lead", created_at=NOV, status="lead",
+                  external_source="hub", external_id="p2"))
+        await s.commit()
+    assert _kpi(await _panel(), "mandates_added")["ist"] == 1
+
+
+async def test_a_contract_only_planned_for_later_is_not_revenue_yet() -> None:
+    future = dt.datetime.now(dt.UTC) + dt.timedelta(days=400)
+    app_id = await _application()
+    async with SessionLocal() as s:
+        app = await s.get(Application, app_id)
+        app.fee_eur = 9_000
+        s.add(ProcessStep(tenant_id=TENANT, application_id=app_id, step_key="vertrag",
+                          position=0, scheduled_at=future, actor_user_id=JONAS))
+        await s.commit()
+        panel = await service.tracking(s, tenant_id=TENANT, period="monat", at=future)
+    assert _kpi(panel, "revenue")["ist"] == 0
+
+
+async def test_a_contract_marked_out_is_not_a_deal_in_the_funnel() -> None:
+    a = await _application()
+    await _step(a, "offer", _d(5))
+    await _step(a, "vertrag", _d(8), outcome="out")
+    async with SessionLocal() as s:
+        funnel = await service.process_funnel(s, tenant_id=TENANT, start=NOV_WINDOW[0], end=NOV_WINDOW[1])
+    deal = next(f for f in funnel if f["to_key"] == "deal")
+    assert (deal["reached"], deal["of"]) == (0, 1)

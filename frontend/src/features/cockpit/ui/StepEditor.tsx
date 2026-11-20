@@ -234,8 +234,9 @@ const OUTCOMES: {
 /** The Honorar as typed: a whole number of euros, empty, or not a number.
  *  "25.000" and "25 000 €" are how people write it — separators go. */
 export function parseFee(raw: string): number | null | 'invalid' {
-  const cleaned = raw.replace(/[\s.€]/g, '').replace(/,00$/, '')
+  const cleaned = raw.replace(/[\s€]/g, '').replace(/,00$/, '')
   if (!cleaned) return null
+  if (/^\d{1,3}(\.\d{3})+$/.test(cleaned)) return Number(cleaned.replace(/\./g, ''))
   if (!/^\d+$/.test(cleaned)) return 'invalid'
   return Number(cleaned)
 }

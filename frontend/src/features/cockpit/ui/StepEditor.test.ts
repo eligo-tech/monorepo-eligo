@@ -264,5 +264,10 @@ describe('the Honorar as typed', () => {
     expect(parseFee('25k')).toBe('invalid')
     expect(parseFee('12,5')).toBe('invalid')
     expect(parseFee('-3')).toBe('invalid')
+    // A dot is a thousands separator only before groups of three digits;
+    // '12.5' must not silently become 125.
+    expect(parseFee('12.5')).toBe('invalid')
+    expect(parseFee('1.5')).toBe('invalid')
+    expect(parseFee('1.250.000')).toBe(1250000)
   })
 })
