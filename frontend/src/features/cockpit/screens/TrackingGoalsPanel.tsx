@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 
 import { ApiError, api } from '@/api/client'
+import { useMemberNames } from '@/auth/memberNames'
 import type { ConsultantDTO, KpiDTO, MeDTO, TargetDTO, TrackingPeriod } from '@/api/types'
 import { Button, FIELD, FieldLabel, SelectInput, TextInput } from '../ui/forms'
 import { Panel } from '../ui/primitives'
@@ -24,11 +25,26 @@ import { PERIOD_OPTIONS } from './TrackingScreen'
 const GROUP = '__group__'
 const TEAM = '__team__'
 
-/** The people a goal can name: who has activity, plus the admin themself
- *  (somebody new has nothing in the record yet, but can set their own). */
-export function goalPeople(people: ConsultantDTO[], me: MeDTO | null): ConsultantDTO[] {
-  const named = people.filter((p) => p.actor_user_id !== null)
-  if (me?.user_id && !named.some((p) => p.actor_user_id === me.user_id)) {
+/** The people a goal can name: every member of the workspace (Clerk's member
+ *  list — somebody new has nothing in the record yet but still needs a goal),
+ *  everyone with activity, and the admin themself. A member's account name
+ *  wins over whatever the record holds, which may be a bare user id. */
+export function goalPeople(
+  people: ConsultantDTO[],
+  me: MeDTO | null,
+  members: ReadonlyMap<string, string> = new Map(),
+): ConsultantDTO[] {
+  const named = people
+    .filter((p) => p.actor_user_id !== null)
+    .map((p) => ({ ...p, name: members.get(p.actor_user_id as string) ?? p.name }))
+  const known = new Set(named.map((p) => p.actor_user_id))
+  for (const [id, name] of members) {
+    if (!known.has(id)) {
+      named.push({ actor_user_id: id, name, events: 0 })
+      known.add(id)
+    }
+  }
+  if (me?.user_id && !known.has(me.user_id)) {
     named.push({ actor_user_id: me.user_id, name: me.name, events: 0 })
   }
   return named
@@ -69,7 +85,8 @@ export function TrackingGoalsPanel({ admin, me }: { admin: boolean; me: MeDTO | 
     void load()
   }, [load])
 
-  const choosable = useMemo(() => goalPeople(people, me), [people, me])
+  const memberNames = useMemberNames()
+  const choosable = useMemo(() => goalPeople(people, me, memberNames), [people, me, memberNames])
   const unit = kpis.find((k) => k.key === kpi)?.unit ?? 'count'
   const kpiLabel = (key: string) => t(kpis.find((k) => k.key === key)?.label ?? key)
 

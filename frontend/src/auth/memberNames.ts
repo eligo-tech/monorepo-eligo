@@ -52,7 +52,7 @@ function useClerkMemberNames(): ReadonlyMap<string, string> {
 // Without a Clerk key there is no ClerkProvider (demo mode), and calling a
 // Clerk hook would throw. `authEnabled` is fixed at build time, so the choice
 // of hook never changes between renders.
-const useMemberNames: () => ReadonlyMap<string, string> = authEnabled ? useClerkMemberNames : () => NOBODY
+export const useMemberNames: () => ReadonlyMap<string, string> = authEnabled ? useClerkMemberNames : () => NOBODY
 
 /** `label(raw)` — the readable author for a recorded actor name or id. */
 export function useActorLabel(): (raw: string | null | undefined) => string | null {
