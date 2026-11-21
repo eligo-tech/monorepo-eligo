@@ -31,6 +31,8 @@ import { JOB_STATUS_TONE, jobStatus, jobStatusLabel } from '../ui/jobStatus'
 import { telHref } from '../ui/switchboard'
 import { SwitchboardLine } from '../ui/SwitchboardLine'
 import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
+import { CreatedByChip, CreatedByFilter, CreatedByLine } from '../ui/createdBy'
+import { useCreators } from '../data/useCreators'
 
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric' }) : null
@@ -50,7 +52,10 @@ export function CompanyScreen({
 }
 
 function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
-  const rows = useAsync<CompanyOverviewRowDTO[]>(() => api.companiesOverview(), [])
+  // ELI-69: "Angelegt von" — '' Alle, 'me' Ich, else an account id; the server filters.
+  const [createdBy, setCreatedBy] = useState('')
+  const creators = useCreators('companies')
+  const rows = useAsync<CompanyOverviewRowDTO[]>(() => api.companiesOverview(createdBy), [createdBy])
   const [kind, setKind] = useState<CompanyKind>('all')
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
@@ -95,6 +100,7 @@ function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
               className={cn(FIELD, 'pl-8')}
             />
           </div>
+          <CreatedByFilter value={createdBy} onChange={setCreatedBy} creators={creators} />
         </div>
         {rows.error && <p className="text-[13px] text-coral-400">{t('Unternehmen konnten nicht geladen werden.')}</p>}
         {rows.loading && !rows.data && <p className="text-[13px] text-cockpit-faint">{t('lädt…')}</p>}
@@ -103,39 +109,7 @@ function CompanyList({ onOpen }: { onOpen: (id: string) => void }) {
         )}
         <ul>
           {shown.map((c) => (
-            <li key={c.id} className="border-b border-cockpit-line/60 last:border-0">
-              <button
-                type="button"
-                onClick={() => onOpen(c.id)}
-                className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 py-2.5 text-left hover:bg-white/[0.02]"
-              >
-                <span className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-medium text-cockpit-text">
-                  <Building2 className="h-4 w-4 shrink-0 text-cockpit-faint" />
-                  <span className="truncate">{c.name}</span>
-                  {c.location && <span className="truncate text-[13px] font-normal text-cockpit-faint">{c.location}</span>}
-                </span>
-                <span className="flex items-center gap-3 font-mono text-[12px] text-cockpit-dim">
-                  {c.managers > 0 && <span>{t('{n} Manager', { n: String(c.managers) })}</span>}
-                  {c.leads > 0 && <Chip tone="gold">{t('{n} Leads', { n: String(c.leads) })}</Chip>}
-                  {c.status === 'client' && c.managers === 0 && <Chip tone="mint">{t('Kunde')}</Chip>}
-                  {c.leads === 0 && c.status === 'lead' && <Chip tone="gold">{t('Lead')}</Chip>}
-                  {c.leads === 0 && !c.status && c.markt_lead && (
-                    <Chip tone="gold" title={t('Aus dem Markt übernommen — noch ohne Ansprechpartner.')}>
-                      {t('Lead')}
-                    </Chip>
-                  )}
-                  {c.mandates > 0 && <span>{t('{n} Mandate', { n: String(c.mandates) })}</span>}
-                  {(c.to_review ?? 0) > 0 && (
-                    <Chip tone="lav" title={t('Im Markt gibt es Unternehmen gleichen Namens — bitte bestätigen oder verwerfen.')}>
-                      {t('prüfen')}
-                    </Chip>
-                  )}
-                  {c.last_contact_at && (
-                    <span className="text-cockpit-faint">{t('zuletzt {date}', { date: day(c.last_contact_at) ?? '' })}</span>
-                  )}
-                </span>
-              </button>
-            </li>
+            <CompanyListItem key={c.id} company={c} onOpen={onOpen} />
           ))}
         </ul>
       </Panel>
@@ -211,6 +185,47 @@ export function LeadRow({ person, onPromoted }: { person: CompanyPersonDTO; onPr
   )
 }
 
+/** One row of the Unternehmen list. */
+export function CompanyListItem({ company: c, onOpen }: { company: CompanyOverviewRowDTO; onOpen: (id: string) => void }) {
+  return (
+    <li className="border-b border-cockpit-line/60 last:border-0">
+      <button
+        type="button"
+        onClick={() => onOpen(c.id)}
+        className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 py-2.5 text-left hover:bg-white/[0.02]"
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-medium text-cockpit-text">
+          <Building2 className="h-4 w-4 shrink-0 text-cockpit-faint" />
+          <span className="truncate">{c.name}</span>
+          {c.location && <span className="truncate text-[13px] font-normal text-cockpit-faint">{c.location}</span>}
+        </span>
+        <span className="flex items-center gap-3 font-mono text-[12px] text-cockpit-dim">
+          {c.managers > 0 && <span>{t('{n} Manager', { n: String(c.managers) })}</span>}
+          {c.leads > 0 && <Chip tone="gold">{t('{n} Leads', { n: String(c.leads) })}</Chip>}
+          {c.status === 'client' && c.managers === 0 && <Chip tone="mint">{t('Kunde')}</Chip>}
+          {c.leads === 0 && c.status === 'lead' && <Chip tone="gold">{t('Lead')}</Chip>}
+          {c.leads === 0 && !c.status && c.markt_lead && (
+            <Chip tone="gold" title={t('Aus dem Markt übernommen — noch ohne Ansprechpartner.')}>
+              {t('Lead')}
+            </Chip>
+          )}
+          {c.mandates > 0 && <span>{t('{n} Mandate', { n: String(c.mandates) })}</span>}
+          {(c.to_review ?? 0) > 0 && (
+            <Chip tone="lav" title={t('Im Markt gibt es Unternehmen gleichen Namens — bitte bestätigen oder verwerfen.')}>
+              {t('prüfen')}
+            </Chip>
+          )}
+          {c.last_contact_at && (
+            <span className="text-cockpit-faint">{t('zuletzt {date}', { date: day(c.last_contact_at) ?? '' })}</span>
+          )}
+          {/* ELI-69: who added this company — nothing when unknown. */}
+          <CreatedByChip name={c.created_by_name} />
+        </span>
+      </button>
+    </li>
+  )
+}
+
 function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => void }) {
   const [bump, setBump] = useState(0)
   const page = useAsync(() => api.companyPage(companyId), [companyId, bump])
@@ -240,6 +255,10 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
               )}
               {data.company.industry && <span>{data.company.industry}</span>}
               <CareersLink market={data.market} />
+            </p>
+            {/* ELI-69: who added this company — set by the system. */}
+            <p className="mt-2">
+              <CreatedByLine name={data.company.created_by_name} />
             </p>
             <StatusSwitch
               companyId={data.company.id}

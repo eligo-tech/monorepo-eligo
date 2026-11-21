@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.context import unattributed
+
 from app.domain.imports.spec import SPECS, EntitySpec
 
 #: A cell can hold "Python, Spark; Airflow" — all three separators appear.
@@ -283,6 +285,23 @@ def _model(spec: EntitySpec):
 
 
 async def commit(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    entity: str,
+    rows: list[dict[str, str]],
+    mapping: dict[str, str],
+) -> dict:
+    """Perform the plan (see `_commit`).
+
+    ELI-69: the rows are the source system's, not the account that started
+    the import — written `unattributed()`, so `created_by_*` stays NULL.
+    """
+    with unattributed():
+        return await _commit(session, tenant_id=tenant_id, entity=entity, rows=rows, mapping=mapping)
+
+
+async def _commit(
     session: AsyncSession,
     *,
     tenant_id: uuid.UUID,

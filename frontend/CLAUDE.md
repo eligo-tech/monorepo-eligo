@@ -96,7 +96,11 @@ Jobtitel · Firma · E-Mail · Nummer → `POST /managers/leads`; marked
 "manuell", the job on the row and the manager page; a 409 offers the person
 already held), with phone, e-mail, LinkedIn/XING (stored profile, else a
 people search) and the adoption date. After the first contact "Zu Managern"
-promotes the record to the Manager screen. **Unternehmen** (`CompanyScreen`,
+promotes the record to the Manager screen. ELI-69: Leads, Manager and
+Unternehmen rows carry "Angelegt von <Name>" (`ui/createdBy.tsx`; nothing
+when unknown, "Angelegt von: unbekannt" on the lead/manager and company
+page) and an "Angelegt von" filter (Alle / Ich / each creator here —
+`data/useCreators`), filtered by the server. **Unternehmen** (`CompanyScreen`,
 ELI-33) lists EVERY company of the workspace — Alle / Kunden (≥1 manager) /
 Leads (≥1 bus-dev contact, or taken from Markt with "Übernehmen" and no
 contact/manager yet — `markt_lead`, ELI-31; the Markt card then links

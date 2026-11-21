@@ -37,6 +37,8 @@ import { searchScore } from '@/lib/search'
 import { Panel, SectionHeader } from '../ui/primitives'
 import { ManagerProfile } from './ManagerProfile'
 import { FIELD } from '../ui/forms'
+import { CreatedByChip, CreatedByFilter } from '../ui/createdBy'
+import { useCreators } from '../data/useCreators'
 
 const dateDe = (iso: string | null) =>
   iso
@@ -64,7 +66,7 @@ const SOURCE_LABEL: Record<string, { text: string; owes: boolean }> = {
 }
 
 /** One contact, expandable to their interaction history. */
-function ManagerRow({
+export function ManagerRow({
   manager,
   companyName,
   onOpen,
@@ -103,6 +105,8 @@ function ManagerRow({
             {manager.city}
           </span>
         )}
+        {/* ELI-69: who added this manager — nothing when unknown. */}
+        <CreatedByChip name={manager.created_by_name} />
 
         <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
           {manager.email && (
@@ -179,7 +183,10 @@ export function ManagerScreen({
   // fit comfortably in the browser, where the scorer can also rank them.
   // Bumped after an erasure, so the erased contact leaves the list.
   const [reloadKey, setReloadKey] = useState(0)
-  const managers = useAsync(() => api.managersPage(), [reloadKey])
+  // ELI-69: "Angelegt von" — filtered by the server, the pool reloads.
+  const [createdBy, setCreatedBy] = useState('')
+  const creators = useCreators('managers')
+  const managers = useAsync(() => api.managersPage(1000, createdBy), [reloadKey, createdBy])
   const companies = useAsync<CompanyDTO[]>(() => api.companies(), [])
   const art14 = useAsync<ManagerDTO[]>(() => api.managersOwingArt14(), [])
 
@@ -200,7 +207,8 @@ export function ManagerScreen({
   const selected = managerId ? (all.find((m) => m.id === managerId) ?? linked.data) : picked
   const setSelected = (m: ManagerDTO | null) => (onSelect ? onSelect(m?.id ?? null) : setPicked(m))
   const poolTotal = managers.data?.total ?? all.length
-  const truncated = poolTotal > all.length
+  // The header counts the whole pool; a filtered list is not a truncated one.
+  const truncated = !createdBy && poolTotal > all.length
 
   const term = query.trim()
   // Scored and ranked, like Jobs and Kandidaten: "CTO Bergfreunde" finds the
@@ -272,6 +280,7 @@ export function ManagerScreen({
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
+            <CreatedByFilter value={createdBy} onChange={setCreatedBy} creators={creators} />
             {/* An obligation with a deadline belongs next to the work, not in a
                 report nobody opens. */}
             {owing > 0 && (
@@ -311,6 +320,8 @@ export function ManagerScreen({
                     {t('Suche zurücksetzen')}
                   </button>
                 </>
+              ) : createdBy ? (
+                t('Keine Kontakte für diese Auswahl.')
               ) : (
                 t('Noch keine Ansprechpartner. Übernehmen Sie ein Unternehmen aus dem Markt oder importieren Sie Ihr bestehendes System.')
               )}

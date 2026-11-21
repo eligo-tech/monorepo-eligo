@@ -12,12 +12,18 @@ from sqlalchemy import Boolean, Date, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.domain.common.mixins import IDMixin, TenantMixin, TimestampMixin
+from app.domain.common.mixins import CreatedByMixin, IDMixin, TenantMixin, TimestampMixin
 from app.domain.common.types import JSONDict
 
 
-class Company(Base, IDMixin, TenantMixin, TimestampMixin):
-    """A client or external company."""
+class Company(Base, IDMixin, TenantMixin, TimestampMixin, CreatedByMixin):
+    """A client or external company.
+
+    ELI-69: `created_by_*` (from `CreatedByMixin`) is the account that added
+    it — "+ Unternehmen", a lead by hand, adoption from Markt. NULL for an
+    import, a system job, or a row older than the column that no receipt
+    attributes (`scripts/backfill_created_by.py`).
+    """
 
     __tablename__ = "companies"
 

@@ -499,6 +499,9 @@ export interface ManagerDTO {
   /** ELI-65: entered by hand, not taken from Markt. */
   manual_lead?: boolean
   created_at: string
+  /** ELI-69: "Angelegt von" — the account that added it, as named then; null = unknown. */
+  created_by_user_id?: string | null
+  created_by_name?: string | null
   /** "MNGR197" — the reference a recruiter reads out on a call. */
   external_code?: string | null
   street?: string | null
@@ -1255,6 +1258,9 @@ export interface AgencyDetailDTO {
 /** ELI-23 "Kontakte": a contact taken from Markt, not yet a vetted manager. */
 export interface ContactRowDTO {
   manager_id: string
+  /** ELI-69: "Angelegt von" — the account that added it, as named then; null = unknown. */
+  created_by_user_id?: string | null
+  created_by_name?: string | null
   company_id: string
   company_name: string
   full_name: string
@@ -1347,6 +1353,15 @@ export interface CompanyOverviewRowDTO {
   last_contact_at: string | null
   /** ELI-33 2b: Markt sites of the same name waiting for a yes or no. */
   to_review?: number
+  /** ELI-69: "Angelegt von" — the account that added it, as named then; null = unknown. */
+  created_by_user_id?: string | null
+  created_by_name?: string | null
+}
+
+/** ELI-69: one choice of the "Angelegt von" filter. */
+export interface CreatorDTO {
+  user_id: string
+  name: string
 }
 
 export interface CompanyPersonDTO {
@@ -1379,6 +1394,9 @@ export interface CompanyPageDTO {
     /** ELI-64: "Rahmenvertrag abgeschlossen am" (YYYY-MM-DD), set by a person. */
     framework_contract_on?: string | null
     framework_contract_by_name?: string | null
+    /** ELI-69: "Angelegt von" — the account that added it, as named then; null = unknown. */
+    created_by_user_id?: string | null
+    created_by_name?: string | null
   }
   managers: CompanyPersonDTO[]
   leads: CompanyPersonDTO[]

@@ -270,6 +270,7 @@ async def overview(
     tenant_id: uuid.UUID,
     kind: str = "all",
     q: str | None = None,
+    created_by: str | None = None,
     limit: int = 1000,
 ) -> list[dict]:
     """Every company here with how many managers, leads and mandates it has
@@ -302,7 +303,11 @@ async def overview(
     stmt = select(
         Company.id, Company.name, Company.location, managers, leads, mandates, last_contact,
         markt_lead.label("markt_lead"), status.label("status"),
+        Company.created_by_user_id, Company.created_by_name,
     ).where(Company.tenant_id == tenant_id)
+    if created_by is not None:
+        # ELI-69 "Angelegt von": an account id, resolved from "me" by the router.
+        stmt = stmt.where(Company.created_by_user_id == created_by)
     if kind == "clients":
         stmt = stmt.where(
             or_(and_(decided, Company.is_client.is_(True)), and_(not_(decided), _count_people("manager") > 0))
@@ -335,6 +340,8 @@ async def overview(
             "last_contact_at": _aware(r.last_contact_at),
             # ELI-33 step 2b: Markt sites of the same name to confirm or dismiss.
             "to_review": review.get(r.id, 0),
+            "created_by_user_id": r.created_by_user_id,
+            "created_by_name": r.created_by_name,
         }
         for r in rows
     ]
@@ -421,6 +428,8 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
             **await _page_status(session, company, people),
             "framework_contract_on": company.framework_contract_on,
             "framework_contract_by_name": company.framework_contract_by_name,
+            "created_by_user_id": company.created_by_user_id,
+            "created_by_name": company.created_by_name,
         },
         "managers": [person(m, at) for m, at in people if m.stage != "bus_dev"],
         "leads": [person(m, at) for m, at in people if m.stage == "bus_dev"],

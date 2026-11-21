@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
+from app.domain.common import creators
 from app.domain.common.enums import CallOutcome
 from app.domain.hub import call_list
 from app.domain.hub.schemas import Switchboard
@@ -113,6 +114,10 @@ class ContactRow(BaseModel):
     last_note_at: dt.datetime | None = None
     #: A history row or a free-text note — "Mit Notizen".
     has_notes: bool = False
+    #: ELI-69: "Angelegt von" — the account that added it, as named then.
+    #: Set by the system at creation, never edited; NULL = not known.
+    created_by_user_id: str | None = None
+    created_by_name: str | None = None
 
 
 class CompanyFacet(BaseModel):
@@ -178,13 +183,18 @@ async def contacts(
     due_only: bool = False,
     notes: Literal["none", "with"] | None = Query(default=None, description="ELI-62: none | with"),
     no_interest: bool = Query(default=False, description='ELI-60: only the leads with "Kein Interesse"'),
+    created_by: str | None = Query(
+        default=None, max_length=80, description='ELI-69 "Angelegt von": an account id, or "me"'
+    ),
     limit: int = Query(default=500, ge=1, le=1000),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> ContactPage:
     """"Kontakte": every contact in this workspace — open call-backs first (ELI-38), then newest first (ELI-23)."""
     return ContactPage(**await call_list.contacts(
-        db, tenant_id=tenant_id, company_id=company_id, q=q, due_only=due_only, notes=notes, no_interest=no_interest, limit=limit))
+        db, tenant_id=tenant_id, company_id=company_id, q=q, due_only=due_only, notes=notes,
+        no_interest=no_interest, created_by=creators.resolve(created_by, actor.user_id), limit=limit))
 
 
 @router.get("/follow-ups", response_model=list[FollowUpRow])

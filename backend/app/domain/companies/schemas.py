@@ -68,6 +68,10 @@ class CompanyRead(CompanyBase):
     tenant_id: uuid.UUID
     created_at: dt.datetime
     updated_at: dt.datetime
+    #: ELI-69: "Angelegt von" — the account that added it, as named then.
+    #: Set by the system at creation, never edited; NULL = not known.
+    created_by_user_id: str | None = None
+    created_by_name: str | None = None
 
 # --- Unternehmen (ELI-33) ----------------------------------------------------
 
@@ -86,6 +90,10 @@ class CompanyOverviewRow(BaseModel):
     last_contact_at: dt.datetime | None
     #: ELI-33: Markt sites of the same name waiting for a person's yes/no.
     to_review: int = 0
+    #: ELI-69: "Angelegt von" — the account that added it, as named then.
+    #: Set by the system at creation, never edited; NULL = not known.
+    created_by_user_id: str | None = None
+    created_by_name: str | None = None
 
 
 class CompanyPerson(BaseModel):
@@ -124,6 +132,10 @@ class CompanyCore(BaseModel):
     #: ELI-64: "Rahmenvertrag abgeschlossen am" — set by a person.
     framework_contract_on: dt.date | None = None
     framework_contract_by_name: str | None = None
+    #: ELI-69: "Angelegt von" — the account that added it, as named then.
+    #: Set by the system at creation, never edited; NULL = not known.
+    created_by_user_id: str | None = None
+    created_by_name: str | None = None
 
 
 class MarketJob(BaseModel):

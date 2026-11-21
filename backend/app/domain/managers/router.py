@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
+from app.domain.common import creators
 from app.domain.managers import service
+from app.domain.managers.models import Manager
 from app.domain.managers.schemas import (
     LeadCreate,
     ManagerCreate,
@@ -31,7 +33,11 @@ async def list_managers(
     q: str | None = Query(default=None, description="name, role or company"),
     limit: int = Query(default=100, ge=1, le=1000),
     stage: Literal["bus_dev", "manager"] | None = Query(default=None, description="ELI-23: bus_dev | manager"),
+    created_by: str | None = Query(
+        default=None, max_length=80, description='ELI-69 "Angelegt von": an account id, or "me"'
+    ),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> list[ManagerRead]:
     """This workspace's contacts, with `X-Total-Count` for the whole set.
@@ -43,12 +49,25 @@ async def list_managers(
     page, not about the query.
     """
     rows = await service.list_managers(
-        db, tenant_id=tenant_id, company_id=company_id, q=q, limit=limit, stage=stage
+        db, tenant_id=tenant_id, company_id=company_id, q=q, limit=limit, stage=stage,
+        created_by=creators.resolve(created_by, actor.user_id),
     )
     response.headers["X-Total-Count"] = str(
         await service.count_managers(db, tenant_id=tenant_id, company_id=company_id, stage=stage)
     )
     return [ManagerRead.model_validate(r) for r in rows]
+
+
+@router.get("/creators", response_model=list[creators.Creator])
+async def manager_creators(
+    stage: Literal["bus_dev", "manager"] | None = Query(default=None, description="bus_dev (Leads) | manager"),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[creators.Creator]:
+    """ELI-69: the choices of "Angelegt von" — every account that added a
+    lead (or manager) in THIS workspace. Before `/{manager_id}`."""
+    where = (Manager.stage == stage,) if stage else ()
+    return [creators.Creator(**c) for c in await creators.creators(db, Manager, tenant_id=tenant_id, where=where)]
 
 
 @router.get("/art14-outstanding", response_model=list[ManagerRead])
