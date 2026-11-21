@@ -25,6 +25,8 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.context import unattributed
+
 from app.domain.atsimport.connectors.base import AtsExport
 from app.domain.candidates.employment import normalize_employment_form
 from app.domain.candidates import service as candidates_service
@@ -94,6 +96,22 @@ async def _by_external_id(
 
 
 async def import_export(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    export: AtsExport,
+    source: str,
+) -> ImportSummary:
+    """Upsert one connector's export into this workspace (see `_import_export`).
+
+    ELI-69: the rows are the source system's, not the account that started
+    the import — written `unattributed()`, so `created_by_*` stays NULL.
+    """
+    with unattributed():
+        return await _import_export(session, tenant_id=tenant_id, export=export, source=source)
+
+
+async def _import_export(
     session: AsyncSession,
     *,
     tenant_id: uuid.UUID,

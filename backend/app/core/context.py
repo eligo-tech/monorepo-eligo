@@ -12,6 +12,8 @@ would close a cycle.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import NamedTuple
 
@@ -36,3 +38,17 @@ class ActorRef(NamedTuple):
 current_actor_var: ContextVar[ActorRef | None] = ContextVar(
     "current_actor", default=None
 )
+
+
+@contextmanager
+def unattributed() -> Iterator[None]:
+    """Write rows that are nobody's (ELI-69): an import moves the old
+    system's records, so the person who uploaded the file did not create
+    them. `CreatedByMixin` fills `created_by_*` at FLUSH from this variable —
+    an explicit `None` on the row is skipped by the ORM and the default fires
+    anyway — so the whole write, flush and commit included, runs inside."""
+    token = current_actor_var.set(None)
+    try:
+        yield
+    finally:
+        current_actor_var.reset(token)

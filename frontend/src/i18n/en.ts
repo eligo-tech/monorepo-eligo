@@ -1632,4 +1632,11 @@ export const EN: Record<string, string> = {
   '{name} ist bei dieser Firma schon als Manager gespeichert.': '{name} is already saved as a manager at this company.',
   'Vorhandenen Eintrag öffnen': 'Open existing record',
   'angelegt am {date}': 'created on {date}',
+  // ELI-69: "Angelegt von".
+  'Angelegt von {name}': 'Added by {name}',
+  'Angelegt von: unbekannt': 'Added by: unknown',
+  'Angelegt von': 'Added by',
+  'Ich': 'Me',
+  'Vom System beim Anlegen gesetzt, nicht änderbar.': 'Set by the system when it was added; cannot be changed.',
+  'Importiert, vom System angelegt oder älter als diese Angabe.': 'Imported, added by the system, or older than this label.',
 }

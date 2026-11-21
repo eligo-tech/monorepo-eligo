@@ -34,6 +34,8 @@ import { DoNotContactChip } from '../erasure/DoNotContact'
 import { NoInterestChip, RemoveLeadButton, ReviveLeadButton } from '../leads/NoInterest'
 import { ManualLeadChip, NewLead } from '../leads/NewLead'
 import { FollowUpForm } from '../ui/FollowUpForm'
+import { CreatedByChip, CreatedByFilter } from '../ui/createdBy'
+import { useCreators } from '../data/useCreators'
 import { DateField } from '../ui/DateField'
 import { announceFollowUpsChanged, followUpWhen, localIsoDate } from '../ui/followUps'
 import { NoteFollowUpOffer, type SavedNote } from '../followups/NoteFollowUpOffer'
@@ -217,6 +219,8 @@ export function ContactRow({
         {row.role_title && <span className="text-[13px] text-cockpit-dim">{row.role_title}</span>}
         {/* ELI-65: entered by hand with "+ Lead", not taken from Markt. */}
         {row.manual && <ManualLeadChip source={row.source_detail} />}
+        {/* ELI-69: who added this lead — nothing when unknown. */}
+        <CreatedByChip name={row.created_by_name} />
         {row.do_not_contact_at && <DoNotContactChip since={row.do_not_contact_at} />}
         {row.no_interest_at && <NoInterestChip since={row.no_interest_at} reason={row.removed_reason} />}
         {row.last_outcome && <Chip tone={CALL_OUTCOME_TONE[row.last_outcome]}>{callOutcomeLabel(row.last_outcome)}</Chip>}
@@ -446,23 +450,33 @@ function ContactsTab() {
   const [notes, setNotes] = useState<NotesChoice>('')
   // ELI-60: "Kein Interesse" leads are hidden unless this chip is on.
   const [noInterest, setNoInterest] = useState(false)
+  // ELI-69: "Angelegt von" — '' Alle, 'me' Ich, else an account id.
+  const [createdBy, setCreatedBy] = useState('')
   const [error, setError] = useState<string | null>(null)
   const latest = useRef(0)
   const [bump, setBump] = useState(0)
+  const creators = useCreators('leads', bump)
   // ELI-65: "+ Lead" — a lead entered by hand.
   const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     const mine = ++latest.current
     api
-      .callListContacts({ companyId: companyId || undefined, q: query || undefined, dueOnly, notes: notes || undefined, noInterest })
+      .callListContacts({
+        companyId: companyId || undefined,
+        q: query || undefined,
+        dueOnly,
+        notes: notes || undefined,
+        noInterest,
+        createdBy: createdBy || undefined,
+      })
       .then((p) => {
         if (mine !== latest.current) return
         setPage(p)
         setError(null)
       })
       .catch((e) => mine === latest.current && setError(e instanceof Error ? e.message.slice(0, 200) : String(e)))
-  }, [companyId, query, dueOnly, notes, noInterest, bump])
+  }, [companyId, query, dueOnly, notes, noInterest, createdBy, bump])
 
   const rows = page?.rows ?? []
   // ELI-44: each lead's next open Wiedervorlage — one call for the page.
@@ -480,7 +494,7 @@ function ContactsTab() {
     })
   const shown = new Set(rows.map((r) => r.manager_id))
   const boards = new Map((page?.companies ?? []).map((c) => [c.company_id, c.switchboard ?? null]))
-  const filtering = Boolean(companyId || query || dueOnly || notes || noInterest)
+  const filtering = Boolean(companyId || query || dueOnly || notes || noInterest || createdBy)
   const called = () => setBump((b) => b + 1)
 
   return (
@@ -504,6 +518,15 @@ function ContactsTab() {
             </option>
           ))}
         </select>
+        <CreatedByFilter
+          value={createdBy}
+          onChange={(v) => {
+            // The company list is cut by the creator too: a chosen company may not be in it.
+            setCompanyId('')
+            setCreatedBy(v)
+          }}
+          creators={creators}
+        />
         <label className="flex items-center gap-2 text-[13px] text-cockpit-dim">
           <input type="checkbox" checked={dueOnly} onChange={(e) => setDueOnly(e.target.checked)} className="accent-mint-500" />
           {t('nur fällige Rückrufe')}

@@ -44,6 +44,7 @@ import { EraseSection } from '../erasure/EraseSection'
 import { DoNotContactBanner } from '../erasure/DoNotContact'
 import { NoInterestChip, RemoveLeadButton, ReviveLeadButton } from '../leads/NoInterest'
 import { ManualLeadChip } from '../leads/NewLead'
+import { CreatedByLine } from '../ui/createdBy'
 import { isAdmin, useMe } from '../useMe'
 import { useAsync } from '@/hooks/useAsync'
 import { CareersLink, OpenJobs } from '../ui/OpenJobsList'
@@ -345,6 +346,10 @@ export function ManagerProfile({
                 </>
               )}
               {place && <span className="text-cockpit-faint">· {place}</span>}
+            </p>
+            {/* ELI-69: who added this lead or manager — set by the system. */}
+            <p className="mt-2">
+              <CreatedByLine name={manager.created_by_name} />
             </p>
             {/* ELI-65: a lead entered by hand — the job it is about, and where it came from. */}
             {(manager.lead_job_title || manager.manual_lead) && (

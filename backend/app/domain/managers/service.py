@@ -92,6 +92,7 @@ async def list_managers(
     q: str | None = None,
     limit: int = 100,
     stage: str | None = None,
+    created_by: str | None = None,
 ) -> list[Manager]:
     """This workspace's contacts, optionally narrowed.
 
@@ -107,6 +108,9 @@ async def list_managers(
         # ELI-23: the Manager screen asks for "manager" — vetted contacts only;
         # the bus-dev contacts from Markt have their own list.
         stmt = stmt.where(Manager.stage == stage)
+    if created_by is not None:
+        # ELI-69 "Angelegt von": an account id, resolved from "me" by the router.
+        stmt = stmt.where(Manager.created_by_user_id == created_by)
     if q and q.strip():
         needle = f"%{q.strip().lower()}%"
         stmt = stmt.join(Company, Company.id == Manager.company_id).where(
@@ -414,7 +418,8 @@ async def create_manual_lead(
             "company_id": str(company_id),
             "fields": sorted(f for f in ("role_title", "email", "phone", "source_url") if getattr(payload, f)),
         },
-        actor_name=actor,
+        # ELI-69: no `actor_name=` — naming only the name made the ledger drop
+        # the account id; the request's actor carries both.
     )
     await session.commit()
     await session.refresh(manager)

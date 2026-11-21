@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
+from app.domain.common import creators
 from app.domain.companies import service
+from app.domain.companies.models import Company
 from app.domain.companies import market
 from app.domain.companies.schemas import (
     CompanyCreate,
@@ -41,12 +43,29 @@ async def list_companies(
 async def companies_overview(
     kind: Literal["all", "clients", "leads"] = Query(default="all"),
     q: str | None = Query(default=None, max_length=200),
+    created_by: str | None = Query(
+        default=None, max_length=80, description='ELI-69 "Angelegt von": an account id, or "me"'
+    ),
     tenant_id: uuid.UUID = Depends(get_current_tenant),
+    actor: Actor = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> list[CompanyOverviewRow]:
     """Unternehmen (ELI-33): every company here — clients (≥1 manager) and
     lead companies (≥1 new contact from Markt) — with counts, A–Z."""
-    return [CompanyOverviewRow(**r) for r in await service.overview(db, tenant_id=tenant_id, kind=kind, q=q)]
+    rows = await service.overview(
+        db, tenant_id=tenant_id, kind=kind, q=q, created_by=creators.resolve(created_by, actor.user_id)
+    )
+    return [CompanyOverviewRow(**r) for r in rows]
+
+
+@router.get("/creators", response_model=list[creators.Creator])
+async def company_creators(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[creators.Creator]:
+    """ELI-69: the choices of "Angelegt von" — every account that added a
+    company in THIS workspace. Before `/{company_id}`."""
+    return [creators.Creator(**c) for c in await creators.creators(db, Company, tenant_id=tenant_id)]
 
 
 @router.get("/{company_id}/page", response_model=CompanyPage)

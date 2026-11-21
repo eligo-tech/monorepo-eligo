@@ -21,6 +21,7 @@ import type {
   CandidateUpdatePayload,
   CompanyDTO,
   CompanyOverviewRowDTO,
+  CreatorDTO,
   CompanyPageDTO,
   CompanyStatus,
   NewCompanyPayload,
@@ -383,10 +384,13 @@ export const api = {
    *  and for the same reason: the screen ranks these rows in the browser. */
   managersPage: async (
     limit = 1000,
+    createdBy = '',
   ): Promise<{ items: ManagerDTO[]; total: number }> => {
     // ELI-23: the Manager screen lists vetted managers; bus-dev contacts from
     // Markt have their own list until they are moved over.
-    const res = await fetch(`${BASE}/managers?limit=${limit}&stage=manager`, {
+    // ELI-69: `createdBy` — an account id or "me" ("Angelegt von").
+    const by = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : ''
+    const res = await fetch(`${BASE}/managers?limit=${limit}&stage=manager${by}`, {
       headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     })
     if (!res.ok) {
@@ -455,7 +459,19 @@ export const api = {
   manager: (id: string) => request<ManagerDTO>(`/managers/${id}`),
 
   /** ELI-33: Unternehmen — every company here with counts, A–Z. */
-  companiesOverview: () => request<CompanyOverviewRowDTO[]>('/companies/overview'),
+  companiesOverview: (createdBy = '') =>
+    request<CompanyOverviewRowDTO[]>(
+      createdBy ? `/companies/overview?created_by=${encodeURIComponent(createdBy)}` : '/companies/overview',
+    ),
+
+  /** ELI-69: the accounts that added leads, managers or companies in this
+   *  workspace — the choices of "Angelegt von". */
+  creators: (kind: 'leads' | 'managers' | 'companies') =>
+    request<CreatorDTO[]>(
+      kind === 'companies'
+        ? '/companies/creators'
+        : `/managers/creators?stage=${kind === 'leads' ? 'bus_dev' : 'manager'}`,
+    ),
 
   /** ELI-33: one company — managers, leads, mandates, Impressum switchboard. */
   companyPage: (id: string) => request<CompanyPageDTO>(`/companies/${id}/page`),
@@ -511,7 +527,7 @@ export const api = {
     }),
 
   /** Kontakte (ELI-23): contacts taken from Markt (stage bus_dev) — open call-backs first (ELI-38), then newest. */
-  callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean; notes?: 'none' | 'with'; noInterest?: boolean }) => {
+  callListContacts: (params: { companyId?: string; q?: string; dueOnly?: boolean; notes?: 'none' | 'with'; noInterest?: boolean; createdBy?: string }) => {
     const qs = new URLSearchParams()
     if (params.companyId) qs.set('company_id', params.companyId)
     if (params.q) qs.set('q', params.q)
@@ -520,6 +536,8 @@ export const api = {
     if (params.notes) qs.set('notes', params.notes)
     // ELI-60: only the leads with "Kein Interesse" (hidden otherwise).
     if (params.noInterest) qs.set('no_interest', 'true')
+    // ELI-69: "Angelegt von" — an account id or "me".
+    if (params.createdBy) qs.set('created_by', params.createdBy)
     return request<ContactPageDTO>(`/hub/call-list/contacts?${qs}`)
   },
 

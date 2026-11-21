@@ -335,6 +335,7 @@ async def contacts(
     due_only: bool = False,
     notes: str | None = None,
     no_interest: bool = False,
+    created_by: str | None = None,
     limit: int = 500,
     now: dt.datetime | None = None,
 ) -> dict:
@@ -386,6 +387,9 @@ async def contacts(
     )
     if company_id is not None:
         base = base.where(Manager.company_id == company_id)
+    # ELI-69 "Angelegt von": an account id, resolved from "me" by the router.
+    by_creator = (Manager.created_by_user_id == created_by,) if created_by is not None else ()
+    base = base.where(*by_creator)
     if company_name and company_name.strip():
         base = base.where(func.lower(Company.name).like(_contains(company_name), escape="\\"))
     if q and q.strip():
@@ -475,6 +479,8 @@ async def contacts(
             "note_count": int(note_n or 0),
             "last_note_at": aware(last_note_at),
             "has_notes": bool(row_has_notes),
+            "created_by_user_id": manager.created_by_user_id,
+            "created_by_name": manager.created_by_name,
         })
 
     facet = (
@@ -482,7 +488,7 @@ async def contacts(
             select(Company.id, Company.name, func.count(Manager.id).label("n"))
             .join(Manager, Manager.company_id == Company.id)
             .where(Company.tenant_id == tenant_id, Manager.tenant_id == tenant_id, Manager.stage == "bus_dev",
-                   shelved)
+                   shelved, *by_creator)
             .group_by(Company.id, Company.name)
             .order_by(func.count(Manager.id).desc(), Company.name)
         )

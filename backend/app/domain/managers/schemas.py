@@ -329,6 +329,10 @@ class ManagerRead(BaseModel):
     lead_job_title: str | None = None
     manual_lead: bool = False
     created_at: dt.datetime
+    #: ELI-69: "Angelegt von" — the account that added it, as named then.
+    #: Set by the system at creation, never edited; NULL = not known.
+    created_by_user_id: str | None = None
+    created_by_name: str | None = None
 
     # --- detail, from the source's own profile ----------------------------
     #: "MNGR197" — the reference a recruiter reads out on a call.

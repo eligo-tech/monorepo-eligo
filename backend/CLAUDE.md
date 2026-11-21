@@ -475,7 +475,14 @@ Three domain facts worth knowing before you add a field:
   `applications.fee_eur` over deals whose Vertrag step is dated in the
   period, attributed to that step's author. `CreatedByMixin`
   (`common/mixins.py`) fills `created_by_*` from `current_actor_var` at
-  insert, so every create path is attributed without remembering to. Goals
+  insert, so every create path is attributed without remembering to —
+  on `managers`, `jobs` and (ELI-69, migration 0086) `companies`. Imports
+  write inside `core.context.unattributed()` and stay NULL. ELI-69 shows it
+  as "Angelegt von" and filters `/managers`, `/hub/call-list/contacts` and
+  `/companies/overview` by `created_by=<user id>|me` (`common/creators.py`;
+  choices: `/managers/creators?stage=`, `/companies/creators`, per
+  workspace). Older rows: `scripts/backfill_created_by.py` copies the actor
+  of a CREATION receipt only (hand lead, Markt adoption), else NULL. Goals
   (`activity_targets`): workspace default, one consultant's, or a group's
   (`members`, ≥2), each optionally `valid_from`; before that date there is no
   goal, not a goal of 0. `tracking_preferences` = each person's Cockpit tiles.
