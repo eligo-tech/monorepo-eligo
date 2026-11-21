@@ -418,7 +418,8 @@ async def create_manual_lead(
             "company_id": str(company_id),
             "fields": sorted(f for f in ("role_title", "email", "phone", "source_url") if getattr(payload, f)),
         },
-        actor_name=actor,
+        # ELI-69: no `actor_name=` — naming only the name made the ledger drop
+        # the account id; the request's actor carries both.
     )
     await session.commit()
     await session.refresh(manager)

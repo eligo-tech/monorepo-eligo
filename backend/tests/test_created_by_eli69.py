@@ -453,6 +453,80 @@ async def test_the_backfill_copies_only_proven_creators() -> None:
     assert await by(Company, "silent") == (None, None)
 
 
+async def test_a_hand_lead_receipt_names_the_account(api) -> None:
+    """The ledger must say WHO entered the lead, not just a display name —
+    it is the only proof the backfill may use."""
+    from app.domain.verification.models import Receipt
+
+    _as(JONAS, "Jonas")
+    async with api() as c:
+        lead = (await c.post(f"{API}/managers/leads", json=LEAD)).json()
+    async with SessionLocal() as s:
+        receipt = (await s.scalars(select(Receipt).where(Receipt.subject_id == lead["id"]))).one()
+    assert (receipt.actor_user_id, receipt.actor_name) == (JONAS, "Jonas")
+
+
+async def _forget_creators() -> None:
+    """The rows as they were before the columns existed.
+
+    Also lines up `created_at`: on Postgres the lead and the company it
+    created share the transaction's `now()`; SQLite's CURRENT_TIMESTAMP is
+    per statement and may tick over a second between the two inserts."""
+    from sqlalchemy import update
+
+    async with SessionLocal() as s:
+        lead = (await s.scalars(select(Manager))).one()
+        await s.execute(update(Company).where(Company.id == lead.company_id).values(created_at=lead.created_at))
+        for model in (Manager, Company):
+            await s.execute(update(model).values(created_by_user_id=None, created_by_name=None))
+        await s.commit()
+
+
+async def test_the_backfill_proves_a_real_hand_lead_and_its_company(api) -> None:
+    from scripts import backfill_created_by as backfill
+
+    _as(XAVER, "Xaver")
+    async with api() as c:
+        lead = (await c.post(f"{API}/managers/leads", json=LEAD)).json()
+    await _forget_creators()
+    assert await backfill.run(apply=True) == {"managers": 1, "companies": 1}
+    assert (await _row(Manager, lead["id"])).created_by_user_id == XAVER
+    assert (await _row(Company, lead["company_id"])).created_by_user_id == XAVER
+
+
+async def test_an_old_hand_lead_receipt_with_only_a_name_proves_the_company_through_the_lead() -> None:
+    """Before this change the hand-lead receipt carried the actor's NAME
+    only. A name is not an account, so the lead stays as it is; but a lead
+    the request already stamped (since 0085) proves the company created in
+    the same transaction."""
+    from scripts import backfill_created_by as backfill
+
+    moment = dt.datetime(2026, 11, 19, 10, 0, tzinfo=dt.UTC)
+    async with SessionLocal() as s:
+        company = Company(tenant_id=DEFAULT, name="Neu", created_at=moment)
+        s.add(company)
+        await s.flush()
+        stamped = Manager(tenant_id=DEFAULT, company_id=company.id, full_name="A", stage="bus_dev",
+                          source="third_party_source", created_at=moment,
+                          created_by_user_id=JONAS, created_by_name="Jonas")
+        unstamped = Manager(tenant_id=DEFAULT, company_id=company.id, full_name="B", stage="bus_dev",
+                            source="third_party_source")
+        s.add_all([stamped, unstamped])
+        await s.commit()
+        ids = (company.id, stamped.id, unstamped.id)
+    for manager_id in ids[1:]:
+        async with SessionLocal() as s:
+            await verification.append_receipt(
+                s, tenant_id=DEFAULT, agent="recruiter", action=ReceiptAction.WRITE,
+                subject_type="manager", subject_id=str(manager_id), verified=True,
+                summary="Lead von Hand angelegt", payload={"company_id": str(ids[0])}, actor_name="Jonas",
+            )
+            await s.commit()
+    assert await backfill.run(apply=True) == {"managers": 0, "companies": 1}
+    assert (await _row(Company, ids[0])).created_by_user_id == JONAS
+    assert (await _row(Manager, ids[2])).created_by_user_id is None
+
+
 async def test_the_backfill_dry_run_writes_nothing() -> None:
     from scripts import backfill_created_by as backfill
 

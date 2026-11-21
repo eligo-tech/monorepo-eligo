@@ -452,10 +452,10 @@ function ContactsTab() {
   const [noInterest, setNoInterest] = useState(false)
   // ELI-69: "Angelegt von" — '' Alle, 'me' Ich, else an account id.
   const [createdBy, setCreatedBy] = useState('')
-  const creators = useCreators('leads')
   const [error, setError] = useState<string | null>(null)
   const latest = useRef(0)
   const [bump, setBump] = useState(0)
+  const creators = useCreators('leads', bump)
   // ELI-65: "+ Lead" — a lead entered by hand.
   const [adding, setAdding] = useState(false)
 
@@ -518,7 +518,15 @@ function ContactsTab() {
             </option>
           ))}
         </select>
-        <CreatedByFilter value={createdBy} onChange={setCreatedBy} creators={creators} />
+        <CreatedByFilter
+          value={createdBy}
+          onChange={(v) => {
+            // The company list is cut by the creator too: a chosen company may not be in it.
+            setCompanyId('')
+            setCreatedBy(v)
+          }}
+          creators={creators}
+        />
         <label className="flex items-center gap-2 text-[13px] text-cockpit-dim">
           <input type="checkbox" checked={dueOnly} onChange={(e) => setDueOnly(e.target.checked)} className="accent-mint-500" />
           {t('nur fällige Rückrufe')}
