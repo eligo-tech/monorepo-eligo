@@ -148,7 +148,7 @@ export function TrackingGoalsPanel({ admin, me }: { admin: boolean; me: MeDTO | 
   return (
     <Panel className="space-y-5 px-6 py-5">
       <p className="text-[13px] leading-relaxed text-cockpit-dim">
-        {t('Ziele je Kennzahl und Zeitraum: als Standard fürs Team, für eine Person (auch ab einem Startdatum) oder gemeinsam für mehrere Personen. Personen erscheinen hier, sobald sie etwas im System erfasst haben.')}
+        {t('Ziele je Kennzahl und Zeitraum: als Standard fürs Team, für eine Person (auch ab einem Startdatum) oder gemeinsam für mehrere Personen. Zur Auswahl stehen alle Mitglieder dieses Workspace.')}
       </p>
 
       {targets.length > 0 && (

@@ -1568,7 +1568,7 @@ export const EN: Record<string, string> = {
   'Das Ziel konnte nicht gespeichert werden.': 'The goal could not be saved.',
   'Das Ziel konnte nicht gelöscht werden.': 'The goal could not be deleted.',
   'Team-Standard': 'Team default',
-  'Ziele je Kennzahl und Zeitraum: als Standard fürs Team, für eine Person (auch ab einem Startdatum) oder gemeinsam für mehrere Personen. Personen erscheinen hier, sobald sie etwas im System erfasst haben.': 'Goals per metric and period: as the team default, for one person (also from a start date) or shared by several people. People appear here once they have recorded something in the system.',
+  'Ziele je Kennzahl und Zeitraum: als Standard fürs Team, für eine Person (auch ab einem Startdatum) oder gemeinsam für mehrere Personen. Zur Auswahl stehen alle Mitglieder dieses Workspace.': 'Goals per metric and period: as the team default, for one person (also from a start date) or shared by several people. Every member of this workspace can be chosen.',
   'ab {date}': 'from {date}',
   'Ziel löschen': 'Delete goal',
   'Kennzahl': 'Metric',
