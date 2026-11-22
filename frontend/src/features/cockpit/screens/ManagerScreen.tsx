@@ -106,7 +106,7 @@ export function ManagerRow({
           </span>
         )}
         {/* ELI-69: who added this manager — nothing when unknown. */}
-        <CreatedByChip name={manager.created_by_name} />
+        <CreatedByChip userId={manager.created_by_user_id} name={manager.created_by_name} />
 
         <span className="ml-auto flex items-center gap-3 font-mono text-[12px] text-cockpit-faint">
           {manager.email && (

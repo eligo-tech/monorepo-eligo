@@ -349,7 +349,7 @@ export function ManagerProfile({
             </p>
             {/* ELI-69: who added this lead or manager — set by the system. */}
             <p className="mt-2">
-              <CreatedByLine name={manager.created_by_name} />
+              <CreatedByLine userId={manager.created_by_user_id} name={manager.created_by_name} />
             </p>
             {/* ELI-65: a lead entered by hand — the job it is about, and where it came from. */}
             {(manager.lead_job_title || manager.manual_lead) && (

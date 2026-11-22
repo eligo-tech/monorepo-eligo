@@ -41,18 +41,62 @@ export function memberNameMap(members: readonly (MemberPublicData | null | undef
   return out
 }
 
+/** ELI-70: user id → the account's e-mail address (Clerk's sign-in
+ *  identifier, kept only when it is an address — a username or a phone
+ *  number names nobody a colleague would recognise). */
+export function memberEmailMap(members: readonly (MemberPublicData | null | undefined)[]): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const m of members) {
+    const email = m?.identifier?.trim()
+    if (m?.userId && email && email.includes('@')) out.set(m.userId, email)
+  }
+  return out
+}
+
+/** ELI-70 "Angelegt von": the creator's e-mail, else the name recorded at
+ *  creation — never a raw account id. */
+export function creatorLabel(
+  userId: string | null | undefined,
+  recordedName: string | null | undefined,
+  emails: ReadonlyMap<string, string>,
+): string | null {
+  const email = userId ? emails.get(userId) : undefined
+  if (email) return email
+  const name = recordedName?.trim()
+  return name && !isClerkUserId(name) ? name : null
+}
+
 const NOBODY: ReadonlyMap<string, string> = new Map()
 
-function useClerkMemberNames(): ReadonlyMap<string, string> {
+function useClerkMembers() {
   const { memberships } = useOrganization({ memberships: { pageSize: 100 } })
-  const data = memberships?.data
+  return memberships?.data
+}
+
+function useClerkMemberNames(): ReadonlyMap<string, string> {
+  const data = useClerkMembers()
   return useMemo(() => memberNameMap((data ?? []).map((m) => m.publicUserData)), [data])
+}
+
+function useClerkMemberEmails(): ReadonlyMap<string, string> {
+  const data = useClerkMembers()
+  return useMemo(() => memberEmailMap((data ?? []).map((m) => m.publicUserData)), [data])
 }
 
 // Without a Clerk key there is no ClerkProvider (demo mode), and calling a
 // Clerk hook would throw. `authEnabled` is fixed at build time, so the choice
 // of hook never changes between renders.
 export const useMemberNames: () => ReadonlyMap<string, string> = authEnabled ? useClerkMemberNames : () => NOBODY
+const useMemberEmails: () => ReadonlyMap<string, string> = authEnabled ? useClerkMemberEmails : () => NOBODY
+
+/** `label(userId, recordedName)` — who added a record, by e-mail (ELI-70). */
+export function useCreatorLabel(): (userId?: string | null, recordedName?: string | null) => string | null {
+  const emails = useMemberEmails()
+  return useMemo(
+    () => (userId?: string | null, recordedName?: string | null) => creatorLabel(userId, recordedName, emails),
+    [emails],
+  )
+}
 
 /** `label(raw)` — the readable author for a recorded actor name or id. */
 export function useActorLabel(): (raw: string | null | undefined) => string | null {

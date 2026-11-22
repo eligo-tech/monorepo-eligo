@@ -1058,6 +1058,8 @@ export const EN: Record<string, string> = {
   'Soll dieses Mandat noch einmal angelegt werden?': 'Should this mandate be created again?',
   'Sonstiges': 'Other',
   'Sortiert nach': 'Sorted by',
+  'Sortieren': 'Sort',
+  'Rückrufe, dann neueste': 'Call-backs, then newest',
   'Spalte': 'Column',
   'Speichern': 'Save',
   'Speichern fehlgeschlagen': 'Saving failed',
