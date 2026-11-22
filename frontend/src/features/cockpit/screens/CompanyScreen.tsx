@@ -219,7 +219,7 @@ export function CompanyListItem({ company: c, onOpen }: { company: CompanyOvervi
             <span className="text-cockpit-faint">{t('zuletzt {date}', { date: day(c.last_contact_at) ?? '' })}</span>
           )}
           {/* ELI-69: who added this company — nothing when unknown. */}
-          <CreatedByChip name={c.created_by_name} />
+          <CreatedByChip userId={c.created_by_user_id} name={c.created_by_name} />
         </span>
       </button>
     </li>
@@ -258,7 +258,7 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
             </p>
             {/* ELI-69: who added this company — set by the system. */}
             <p className="mt-2">
-              <CreatedByLine name={data.company.created_by_name} />
+              <CreatedByLine userId={data.company.created_by_user_id} name={data.company.created_by_name} />
             </p>
             <StatusSwitch
               companyId={data.company.id}
