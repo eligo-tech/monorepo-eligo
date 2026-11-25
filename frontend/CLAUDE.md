@@ -118,6 +118,12 @@ fixed, `company_id` sent); `#companies/<id>/lead` opens the page with it — the
 Markt card's "Lead anlegen" after "Übernehmen", and the ContactsPanel when no
 ad names a person. A manager added by hand nobody has spoken to carries
 "Zu Leads" (`can_be_lead`), and the "+ Lead" 409 for such a manager offers it.
+ELI-77: "+ Lead" starts with "LinkedIn-/XING-Profil": `leads/profileLink.ts`
+reads the name from the link's slug only (trailing ids and degrees dropped,
+umlauts kept as written — "mueller" is never guessed to "Müller", a single
+word is not split) and `withProfile` fills the name field only while it is
+empty or still holds that prefill. Nothing is fetched; the 409 says
+"schon mit diesem Profil gespeichert" for a profile match.
 An unlinked company with same-name Markt sites elsewhere shows them for a
 person: "Das ist unser Unternehmen" (the other sites shown are ruled out),
 "Alle davon" (a chain), "Keiner davon"; a link can be undone. Filter "Zu prüfen". Company names on the manager page

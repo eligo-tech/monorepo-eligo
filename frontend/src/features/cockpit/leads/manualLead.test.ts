@@ -32,6 +32,8 @@ describe('leadPayload', () => {
       email: null,
       phone: null,
       source_url: 'https://www.linkedin.com/in/ben-ott',
+      // ELI-77: the profile box was left empty.
+      profile_url: null,
     })
   })
 })

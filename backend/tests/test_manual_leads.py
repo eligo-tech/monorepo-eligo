@@ -150,6 +150,8 @@ async def test_a_manager_already_held_is_shown_and_not_moved_into_leads() -> Non
     assert r.status_code == 409
     assert r.json()["detail"] == {
         "code": "lead_exists", "manager_id": str(held_id), "stage": "manager", "full_name": "Anna Kraft",
+        # ELI-77: matched by name at that company, not by a profile link.
+        "match": "name",
     }
     # The old rule stands for every other way in: a manager typed in or
     # imported is not a lead.

@@ -421,6 +421,14 @@ These are enforced in code. Do not route around them.
   (`has_contact`), no mandate (`jobs.manager_id`, `has_mandate`) — else
   409 `{code}`. Stage only; provenance stays; one receipt, references only.
   The company page's `can_be_lead` says where it is offered.
+  ELI-77: `profile_url` (a pasted LinkedIn `/in/`·`/pub/` or XING
+  `/profile/` link, 422 otherwise) goes to `linkedin_url`/`xing_url` in one
+  spelling (`managers/profiles.canonical_url`). Before the name rule,
+  `held_profile` compares `profiles.profile_key` (host, case, query,
+  encoding folded) against every stored profile in the workspace — ANY
+  company — and answers the same 409 with `match: "profile"` (`"name"`
+  otherwise). The name is prefilled in the browser from the link's slug;
+  nothing ever fetches the profile (RULE 1).
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing

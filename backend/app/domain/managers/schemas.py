@@ -185,6 +185,10 @@ class LeadCreate(BaseModel):
     full_name: str = Field(max_length=200)
     role_title: str | None = Field(default=None, max_length=200)
     company_name: str = Field(max_length=200)
+    #: ELI-77: the person's LinkedIn or XING profile, pasted. Stored in
+    #: `linkedin_url` / `xing_url` in one spelling (`profiles.canonical_url`)
+    #: and matched against the profiles already held. Never fetched.
+    profile_url: str | None = Field(default=None, max_length=500)
     #: ELI-78: "+ Lead" on a company page — the lead goes to THAT company
     #: (this workspace's own, else 422), not to the first one of its name.
     company_id: uuid.UUID | None = None
@@ -222,6 +226,24 @@ class LeadCreate(BaseModel):
         if len(value) > 500:
             raise ValueError("source_url is too long")
         return value
+
+
+    @field_validator("profile_url")
+    @classmethod
+    def _a_profile(cls, value: str | None) -> str | None:
+        from app.domain.managers.profiles import canonical_url
+
+        value = _blank_none(value)
+        if value is None:
+            return None
+        canonical = canonical_url(value)
+        # A company page or a job ad on LinkedIn is not a person's profile.
+        if canonical is None:
+            raise ValueError("profile_url must be a LinkedIn /in/ or XING /profile/ link")
+        # `linkedin_url` / `xing_url` are 300 wide.
+        if len(canonical) > 300:
+            raise ValueError("profile_url is too long")
+        return canonical
 
 
 class ManagerUpdate(BaseModel):

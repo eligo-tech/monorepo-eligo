@@ -141,7 +141,7 @@ async def create_lead(
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             {"code": "lead_exists", "manager_id": str(exc.manager.id), "stage": exc.manager.stage,
-             "full_name": exc.manager.full_name},
+             "full_name": exc.manager.full_name, "match": exc.match},
         ) from exc
     return ManagerRead.model_validate(row)
 
