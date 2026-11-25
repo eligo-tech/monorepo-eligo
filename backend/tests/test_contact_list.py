@@ -239,3 +239,21 @@ async def test_leads_with_an_open_call_back_come_first_due_ones_on_top() -> None
     async with SessionLocal() as s:
         rows = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
     assert [r["full_name"] for r in rows] == ["Overdue", "Upcoming", "Newest Lead", "Done"]
+
+
+async def test_a_row_carries_every_number_primary_first() -> None:
+    """ELI-76: a number added on the Leads row shows there at once — also a
+    second one, which `phone` (the primary) alone would not show."""
+    from app.domain.managers.models import ManagerPhone
+
+    ids = await _seed()
+    async with SessionLocal() as s:
+        s.add(ManagerPhone(tenant_id=TENANT, manager_id=ids["ozcan"], number="+49 171 555", kind="mobile"))
+        await s.commit()
+    async with SessionLocal() as s:
+        rows = (await call_list.contacts(s, tenant_id=TENANT, now=NOW))["rows"]
+    ozcan = next(r for r in rows if r["full_name"] == "Nazlican Özcan")
+    assert [(p["number"], p["is_primary"]) for p in ozcan["phones"]] == [
+        ("+49 731 1234567", True), ("+49 171 555", False),
+    ]
+    assert next(r for r in rows if r["full_name"] == "Petra Vogel")["phones"] == []

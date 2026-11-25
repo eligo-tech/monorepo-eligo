@@ -74,6 +74,63 @@ export function phonesPatch(
   return key(next) === key(phonesOf(m)) ? undefined : next
 }
 
+/** ELI-76: the numbers held plus one more — the primary stays, the first
+ *  number becomes it. Null for a blank number or one already held
+ *  (digits compared, as the server does). */
+export function appendPhone(
+  held: ManagerPhoneDTO[],
+  added: { number: string; kind: string },
+): ManagerPhoneDTO[] | null {
+  const number = added.number.trim()
+  if (!number) return null
+  const key = (n: string) => digits(n) || n
+  if (held.some((p) => key(p.number) === key(number))) return null
+  return [...held, { number, kind: added.kind, is_primary: held.length === 0 }]
+}
+
+/** Type and number of one phone — the ELI-75 layout: a compact type, the
+ *  number taking the rest with a readable minimum. Used in a `flex-wrap`
+ *  row, so on a phone the number gets a line of its own. */
+export function PhoneNumberFields({
+  kind,
+  number,
+  onKind,
+  onNumber,
+  autoFocus,
+}: {
+  kind: string
+  number: string
+  onKind: (kind: PhoneKind) => void
+  onNumber: (number: string) => void
+  autoFocus?: boolean
+}) {
+  return (
+    <>
+      <select
+        value={kind}
+        onChange={(e) => onKind(e.target.value as PhoneKind)}
+        aria-label={t('Art der Nummer')}
+        className={cn(FIELD_BOX, 'w-[8.5rem] shrink-0')}
+      >
+        {PHONE_KINDS.map((k) => (
+          <option key={k} value={k} className="bg-cockpit-surface">
+            {phoneKindLabel(k)}
+          </option>
+        ))}
+      </select>
+      <input
+        value={number}
+        onChange={(e) => onNumber(e.target.value)}
+        placeholder="+49 30 1234567"
+        aria-label={t('Telefon')}
+        type="tel"
+        autoFocus={autoFocus}
+        className={cn(FIELD_BOX, 'min-w-[11rem] flex-1 font-mono')}
+      />
+    </>
+  )
+}
+
 export function PhoneListEditor({
   value,
   onChange,
@@ -109,24 +166,11 @@ export function PhoneListEditor({
           >
             <Star className={cn('h-4 w-4', p.is_primary && 'fill-current')} />
           </button>
-          <select
-            value={p.kind}
-            onChange={(e) => set(i, { kind: e.target.value as PhoneKind })}
-            aria-label={t('Art der Nummer')}
-            className={cn(FIELD_BOX, 'w-[8.5rem] shrink-0')}
-          >
-            {PHONE_KINDS.map((k) => (
-              <option key={k} value={k} className="bg-cockpit-surface">
-                {phoneKindLabel(k)}
-              </option>
-            ))}
-          </select>
-          <input
-            value={p.number}
-            onChange={(e) => set(i, { number: e.target.value })}
-            placeholder="+49 30 1234567"
-            aria-label={t('Telefon')}
-            className={cn(FIELD_BOX, 'min-w-[11rem] flex-1 font-mono')}
+          <PhoneNumberFields
+            kind={p.kind}
+            number={p.number}
+            onKind={(kind) => set(i, { kind })}
+            onNumber={(number) => set(i, { number })}
           />
           <button
             type="button"

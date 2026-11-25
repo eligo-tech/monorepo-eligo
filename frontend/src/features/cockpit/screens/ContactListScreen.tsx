@@ -33,6 +33,8 @@ import { NetworkLink } from './ContactsPanel'
 import { DoNotContactChip } from '../erasure/DoNotContact'
 import { NoInterestChip, RemoveLeadButton, ReviveLeadButton } from '../leads/NoInterest'
 import { ManualLeadChip, NewLead } from '../leads/NewLead'
+import { AddPhoneButton, AddPhoneForm } from '../leads/AddLeadPhone'
+import { phoneKindLabel } from '../ui/phoneList'
 import { FollowUpForm } from '../ui/FollowUpForm'
 import { CreatedByChip, CreatedByFilter, sortByCreator } from '../ui/createdBy'
 import { useCreators } from '../data/useCreators'
@@ -185,6 +187,9 @@ export function ContactRow({
   const reach = leadPhone(row.phone, switchboard)
   const callerName = useActorLabel()(row.last_call_by)
   const [calling, setCalling] = useState(false)
+  // ELI-76: "+ Nummer" — a number found while calling, saved on the row.
+  const [addingPhone, setAddingPhone] = useState(false)
+  const morePhones = (row.phones ?? []).filter((p) => !p.is_primary)
   // ELI-44: a follow-up by hand, and the offer read from a call's note.
   const [planning, setPlanning] = useState(false)
   const today = localIsoDate()
@@ -257,6 +262,17 @@ export function ContactRow({
           <PhoneLink phone={reach.phone} />
           {reach.fromImpressum && <ImpressumBadge />}
         </span>
+        {/* ELI-76: the further numbers, so one just added shows here. */}
+        {morePhones.map((p) => (
+          <span key={p.number} className="flex items-center gap-1.5">
+            <a href={`tel:${p.number.replace(/[^\d+]/g, '')}`} className="flex items-center gap-1 text-cockpit-text hover:text-mint-400">
+              <Phone className="h-3.5 w-3.5 text-cockpit-faint" />
+              {p.number}
+            </a>
+            <span className="text-[11px] text-cockpit-faint">{phoneKindLabel(p.kind)}</span>
+          </span>
+        ))}
+        {!addingPhone && <AddPhoneButton onClick={() => setAddingPhone(true)} />}
         {row.email && (
           <a href={`mailto:${row.email}`} className="flex items-center gap-1 hover:text-mint-400">
             <Mail className="h-3.5 w-3.5 text-cockpit-faint" />
@@ -348,6 +364,16 @@ export function ContactRow({
             )
           })}
         </ul>
+      )}
+      {addingPhone && (
+        <AddPhoneForm
+          managerId={row.manager_id}
+          onCancel={() => setAddingPhone(false)}
+          onSaved={() => {
+            setAddingPhone(false)
+            onCalled() // re-read: the number shows on the row
+          }}
+        />
       )}
       {calling && (
         <CallForm
