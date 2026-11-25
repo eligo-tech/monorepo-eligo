@@ -458,6 +458,9 @@ async def contacts(
             "full_name": manager.full_name,
             "role_title": manager.role_title,
             "phone": manager.phone,
+            # ELI-76: every number, the primary first — a number added on the
+            # row shows there. `extra_phones` loads selectin, one IN per page.
+            "phones": manager.phones,
             "email": manager.email,
             "linkedin_url": manager.linkedin_url,
             "xing_url": manager.xing_url,

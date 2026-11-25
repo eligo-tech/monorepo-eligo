@@ -108,6 +108,9 @@ class CompanyPerson(BaseModel):
     no_interest_at: dt.datetime | None = None
     #: ELI-66: removed by hand, and why (a code).
     removed_reason: str | None = None
+    #: ELI-78: a manager that "Zu Leads" would accept (added by hand, no
+    #: contact, no mandate, not imported). Always False for a lead.
+    can_be_lead: bool = False
 
 
 class CompanyMandate(BaseModel):

@@ -37,6 +37,7 @@ import {
   Search,
   Star,
   Trash2,
+  UserPlus,
   UserRound,
   Users,
   X,
@@ -59,7 +60,7 @@ import { cn } from '@/lib/cn'
 import { Chip, Panel, SectionHeader } from '../ui/primitives'
 import { Button, FIELD } from '../ui/forms'
 import { adoptLeads, leadError, leadSummary } from '../ui/leadAdopt'
-import { alreadyAdoptedId, companyHref } from '../ui/companyList'
+import { alreadyAdoptedId, companyHref, companyLeadHref } from '../ui/companyList'
 import {
   bucketLabel,
   HEADCOUNT_BUCKETS,
@@ -790,15 +791,26 @@ function EmployerCard({ hit, terms }: { hit: HubEmployerHitDTO; terms: string[] 
             {t('Ansprechpartner')}
           </Button>
           {adoptedId ? (
-            // ELI-31: say where it went — Unternehmen → Leads, its own page.
-            <a
-              href={companyHref(adoptedId)}
-              className="flex items-center gap-1.5 text-mint-400 hover:text-mint-300"
-              title={t('Als Lead übernommen — unter Unternehmen öffnen')}
-            >
-              <Check className="h-4 w-4" />
-              {t('Lead · öffnen')}
-            </a>
+            <>
+              {/* ELI-31: say where it went — Unternehmen → Leads, its own page. */}
+              <a
+                href={companyHref(adoptedId)}
+                className="flex items-center gap-1.5 text-mint-400 hover:text-mint-300"
+                title={t('Als Lead übernommen — unter Unternehmen öffnen')}
+              >
+                <Check className="h-4 w-4" />
+                {t('Lead · öffnen')}
+              </a>
+              {/* ELI-78: a person the ads do not name, straight into Leads. */}
+              <a
+                href={companyLeadHref(adoptedId)}
+                className="flex items-center gap-1.5 text-cockpit-dim hover:text-mint-300"
+                title={t('Öffnet das Unternehmen mit dem Formular „+ Lead“ — die Person erscheint unter Leads.')}
+              >
+                <UserPlus className="h-4 w-4" />
+                {t('Lead anlegen')}
+              </a>
+            </>
           ) : (
             <Button onClick={() => setAdopting(true)} disabled={!anchorId}>
               <UserRound className="h-4 w-4" />

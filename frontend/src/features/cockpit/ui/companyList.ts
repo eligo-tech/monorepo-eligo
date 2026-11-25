@@ -44,6 +44,10 @@ export function filterCompanies<R extends Pick<CompanyOverviewRowDTO, 'name' | '
 /** A company's own page under Unternehmen (ELI-31: where "Übernehmen" lands). */
 export const companyHref = (id: string) => `#companies/${id}`
 
+/** ELI-78: that page with the "+ Lead" form open — for a person the ads do
+ *  not name but the recruiter knows. */
+export const companyLeadHref = (id: string) => `#companies/${id}/lead`
+
 /** The adopt route answers 409 "already adopted as company <id>" — the
  *  company is already here; this is its id, so the card can link to it. */
 export function alreadyAdoptedId(detail: string): string | null {
