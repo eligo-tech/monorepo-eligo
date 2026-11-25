@@ -1617,6 +1617,37 @@ export interface TrackingDTO {
   funnel: FunnelStepDTO[]
 }
 
+/** ELI-74 Team-Übersicht: one person's figure on one KPI. */
+export interface TeamCellDTO {
+  key: string
+  /** null when nothing measures this KPI. */
+  ist: number | null
+  /** Umsatz only: closed deals with no Honorar entered. */
+  missing: number
+  /** null when no goal applies — no percentage, never 0 %. */
+  ziel: number | null
+  /** 'own' · 'team' (Team-Standard) · 'shared' (a group's goal) · null. */
+  ziel_from: 'own' | 'team' | 'shared' | null
+}
+
+export interface TeamRowDTO {
+  /** 'person' · 'unassigned' (rows nobody is recorded for) · 'group'. */
+  kind: 'person' | 'unassigned' | 'group'
+  actor_user_id: string | null
+  members: string[]
+  /** The recorded name or the id; the UI names members from Clerk. */
+  name: string
+  cells: TeamCellDTO[]
+}
+
+export interface TeamDTO {
+  period: TrackingPeriod
+  period_start: string
+  period_end: string
+  kpis: Pick<KpiDTO, 'key' | 'label' | 'source' | 'group' | 'unit' | 'available'>[]
+  rows: TeamRowDTO[]
+}
+
 /** Somebody with activity in the record, for the per-consultant switch. */
 export interface ConsultantDTO {
   actor_user_id: string | null

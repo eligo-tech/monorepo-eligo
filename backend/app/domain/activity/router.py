@@ -16,6 +16,7 @@ from app.domain.activity.schemas import (
     ConsultantRead,
     TargetRead,
     TargetWrite,
+    TeamRead,
     TilesRead,
     TilesWrite,
     TrackingRead,
@@ -56,6 +57,37 @@ async def tracking(
             at=at,
             everyone=who == TEAM,
             actor_user_id=None if who in (TEAM, "unassigned") else who,
+        )
+    )
+
+
+@router.get("/tracking/team", response_model=TeamRead)
+async def tracking_team(
+    period: str = Query(default="monat"),
+    members: list[str] = Query(
+        default=[],
+        max_length=service.MAX_TEAM_MEMBERS,
+        description="The workspace's member ids (Clerk), so a member with "
+        "nothing recorded still gets a row.",
+    ),
+    at: dt.datetime | None = Query(default=None),
+    actor: Actor = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> TeamRead:
+    """ELI-74 Team-Übersicht: every person's figures side by side. Admin only
+    — "Ich als Admin muss das Tracking der einzelnen Mitarbeiter überwachen
+    können." Counted inside the caller's workspace only: an id it names from
+    elsewhere gets this workspace's record for them, which is nothing."""
+    if period not in PERIODS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"unbekannter Zeitraum {period} — erwartet: {', '.join(PERIODS)}",
+        )
+    if any(len(m) > 128 for m in members):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "ungültige Mitglieds-ID")
+    return TeamRead(
+        **await service.team(
+            db, tenant_id=actor.tenant_id, period=period, at=at, members=members
         )
     )
 
