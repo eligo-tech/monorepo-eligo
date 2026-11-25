@@ -326,6 +326,8 @@ async def held_profile(
 
 #: Provenance of a lead entered by hand without a link (ELI-65).
 BY_HAND = "von Hand angelegt"
+#: ELI-73: provenance of a lead whose fields came from pasted ad text.
+FROM_PASTED_TEXT = "aus eingefügtem Anzeigentext"
 
 
 def _split_name(full_name: str) -> tuple[str | None, str]:
@@ -463,7 +465,8 @@ async def create_manual_lead(
             **({f"{_profiles.network(payload.profile_url)}_url": payload.profile_url} if payload.profile_url else {}),
         },
         source=ConfidenceSource.THIRD_PARTY_SOURCE.value,
-        source_detail=payload.source_url or payload.profile_url or BY_HAND,
+        source_detail=payload.source_url or payload.profile_url
+        or (FROM_PASTED_TEXT if payload.from_pasted_text else BY_HAND),
         stage="bus_dev",
         lead_job_title=payload.job_title,
     )

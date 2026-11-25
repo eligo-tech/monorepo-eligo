@@ -189,6 +189,9 @@ class LeadCreate(BaseModel):
     #: `linkedin_url` / `xing_url` in one spelling (`profiles.canonical_url`)
     #: and matched against the profiles already held. Never fetched.
     profile_url: str | None = Field(default=None, max_length=500)
+    #: ELI-73: the fields came from ad text the recruiter pasted (no link):
+    #: the lead's provenance says so instead of "von Hand angelegt".
+    from_pasted_text: bool = False
     #: ELI-78: "+ Lead" on a company page — the lead goes to THAT company
     #: (this workspace's own, else 422), not to the first one of its name.
     company_id: uuid.UUID | None = None
@@ -244,6 +247,50 @@ class LeadCreate(BaseModel):
         if len(canonical) > 300:
             raise ValueError("profile_url is too long")
         return canonical
+
+
+class LeadPrefillRequest(BaseModel):
+    """ELI-73: a job-ad link, or the ad's text — one of the two."""
+
+    url: str | None = Field(default=None, max_length=1000)
+    #: Capped: the contact rules are not linear in the text (`prefill.MAX_TEXT`).
+    text: str | None = Field(default=None, max_length=8_000)
+
+    @model_validator(mode="after")
+    def _one(self) -> "LeadPrefillRequest":
+        if not (self.url or "").strip() and not (self.text or "").strip():
+            raise ValueError("a link or the ad text is required")
+        return self
+
+
+class LeadPrefillContact(BaseModel):
+    full_name: str
+    role_title: str | None
+    email: str | None
+    phone: str | None
+    #: "rules" (hub/contacts.py) or "model" (the nightly pass, checked word
+    #: for word against the ad) — shown, so the recruiter knows.
+    found_by: Literal["rules", "model"]
+    #: The ad line naming the person — the evidence beside the proposal.
+    quote: str | None = None
+
+
+class LeadPrefill(BaseModel):
+    """ELI-73: a proposal for the "+ Lead" form. Nothing is saved."""
+
+    #: corpus · not_in_corpus · text
+    found: Literal["corpus", "not_in_corpus", "text"]
+    job_title: str | None
+    company_name: str | None
+    posting_id: uuid.UUID | None
+    #: The ad's own page — what the saved lead records as its source.
+    source_url: str | None
+    #: The employer reads as a staffing firm (`hub_companies.staffing_name`).
+    is_agency: bool
+    contacts: list[LeadPrefillContact]
+    #: The workspace has erasures it cannot check right now: nobody is
+    #: proposed — said, so it is not read as "the ad names nobody".
+    contacts_withheld: bool = False
 
 
 class ManagerUpdate(BaseModel):

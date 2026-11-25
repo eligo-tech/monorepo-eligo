@@ -124,6 +124,12 @@ umlauts kept as written — "mueller" is never guessed to "Müller", a single
 word is not split) and `withProfile` fills the name field only while it is
 empty or still holds that prefill. Nothing is fetched; the 409 says
 "schon mit diesem Profil gespeichert" for a profile match.
+ELI-73: "Aus Anzeige übernehmen" sends the ad link to `/managers/leads/prefill`
+(looked up in Markt, never opened); not in Markt → "Diese Anzeige ist nicht im
+Markt – Text der Anzeige hier einfügen" and a textarea ("Text auslesen").
+`leads/adPrefill.applyPrefill` fills only EMPTY fields; several people named →
+the recruiter picks one; an agency's ad is marked. Nothing is saved before
+"Lead anlegen"; pasted text sends `from_pasted_text`.
 An unlinked company with same-name Markt sites elsewhere shows them for a
 person: "Das ist unser Unternehmen" (the other sites shown are ruled out),
 "Alle davon" (a chain), "Keiner davon"; a link can be undone. Filter "Zu prüfen". Company names on the manager page

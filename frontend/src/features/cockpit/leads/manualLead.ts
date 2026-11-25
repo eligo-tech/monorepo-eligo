@@ -12,6 +12,8 @@ import { parseProfileLink } from './profileLink'
 export interface LeadForm {
   /** ELI-77: the person's LinkedIn/XING profile, pasted. */
   profileUrl: string
+  /** ELI-73: the fields were read from ad text the recruiter pasted. */
+  fromPastedText: boolean
   jobTitle: string
   sourceUrl: string
   fullName: string
@@ -23,6 +25,7 @@ export interface LeadForm {
 
 export const EMPTY_LEAD_FORM: LeadForm = {
   profileUrl: '',
+  fromPastedText: false,
   jobTitle: '',
   sourceUrl: '',
   fullName: '',
@@ -61,6 +64,7 @@ export function leadPayload(form: LeadForm, fixed?: LeadCompany | null): LeadCre
     phone: opt(form.phone),
     source_url: opt(form.sourceUrl),
     profile_url: profile?.url ?? null,
+    ...(form.fromPastedText ? { from_pasted_text: true } : {}),
   }
 }
 

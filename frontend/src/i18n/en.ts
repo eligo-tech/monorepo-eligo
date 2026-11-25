@@ -1671,4 +1671,18 @@ export const EN: Record<string, string> = {
   'Profil erkannt.': 'Profile recognised.',
   'Aus dem Link lässt sich kein Name sicher lesen — bitte eintragen.': 'The link does not reliably give a name — please enter it.',
   '{name} ist mit diesem Profil schon gespeichert.': '{name} is already saved with this profile.',
+  // ELI-73: "+ Lead" filled from a job ad — looked up in Markt or read from pasted text, never opened
+  'Aus Anzeige übernehmen': 'Fill from job ad',
+  'Anzeigentext einfügen': 'Paste ad text',
+  'Aus dem Markt übernommen — bitte prüfen.': 'Taken from Market — please check.',
+  'Aus dem Anzeigentext gelesen — bitte prüfen.': 'Read from the ad text — please check.',
+  'Achtung: Die Anzeige stammt von einer Personalberatung.': 'Note: this ad comes from a recruitment agency.',
+  'Anzeige konnte nicht gelesen werden — bitte erneut versuchen.': 'The ad could not be read — please try again.',
+  'Diese Anzeige ist nicht im Markt – Text der Anzeige hier einfügen.': 'This ad is not in Market – paste the ad text here.',
+  'Text der Stellenanzeige': 'Text of the job ad',
+  'Text auslesen': 'Read text',
+  'Die Anzeige nennt keine Person — bitte selbst eintragen.': 'The ad names no person — please enter one.',
+  'Die Anzeige nennt mehrere Personen:': 'The ad names several people:',
+  'Personen aus der Anzeige können gerade nicht gegen Löschanträge geprüft werden — bitte selbst eintragen.': 'People in the ad cannot be checked against erasure requests right now — please enter the contact yourself.',
+  'Von Hand angelegt — aus eingefügtem Anzeigentext.': 'Added by hand — from pasted ad text.',
 }
