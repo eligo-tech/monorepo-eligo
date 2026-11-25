@@ -412,7 +412,15 @@ These are enforced in code. Do not route around them.
   `{code: "lead_exists", manager_id, stage}`; erased people are refused
   before any company is created. One receipt, references only.
   `Manager.manual_lead` / the Leads row's `manual` mark it; `lead_jobs` lists
-  the job first. Managers added any other way still never enter Leads.
+  the job first. ELI-78: `company_id` on the body (the company page's
+  "+ Lead") pins the lead to that company — own only, else 422. Managers
+  added any other way never enter Leads on their own; ELI-78's
+  `POST /managers/{id}/to-lead` ("Zu Leads", the reverse of promote) moves
+  one by hand, only while `lead_blockers` finds nothing: not imported
+  (`external_source`), no interaction and no `last_contact_at`
+  (`has_contact`), no mandate (`jobs.manager_id`, `has_mandate`) — else
+  409 `{code}`. Stage only; provenance stays; one receipt, references only.
+  The company page's `can_be_lead` says where it is offered.
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing

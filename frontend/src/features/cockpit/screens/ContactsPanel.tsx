@@ -23,6 +23,7 @@ import { Button } from '../ui/forms'
 import { linkedInSearchUrl, xingSearchUrl } from '../ui/contactReach'
 import { SwitchboardLine } from '../ui/SwitchboardLine'
 import { NoInterestChip } from '../leads/NoInterest'
+import { companyLeadHref } from '../ui/companyList'
 
 export const dateDe = (iso: string | null) =>
   iso
@@ -254,6 +255,24 @@ function ContactRow({
   )
 }
 
+/** ELI-78: no ad names a person — the way to a lead the recruiter found
+ *  elsewhere: "+ Lead" on the company's page, open at once. Before the
+ *  company is taken, the step that comes first. */
+export function NoNamedContactNext({ companyId }: { companyId: string | null }) {
+  return companyId ? (
+    <a
+      href={companyLeadHref(companyId)}
+      className="ml-2 inline-flex items-center gap-1 whitespace-nowrap text-mint-400 hover:text-mint-300"
+      title={t('Öffnet das Unternehmen mit dem Formular „+ Lead“ — die Person erscheint unter Leads.')}
+    >
+      <UserPlus className="h-3.5 w-3.5" />
+      {t('Lead anlegen')}
+    </a>
+  ) : (
+    <span className="ml-1 text-cockpit-faint">{t('Kennen Sie die Person? Erst „Übernehmen“, dann „Lead anlegen“.')}</span>
+  )
+}
+
 /**
  * The people behind one employer's ads. Loaded on demand — the button is the
  * funnel step, and reading a large employer's ads is not free.
@@ -376,6 +395,7 @@ export function ContactsPanel({
               : data.switchboard
                 ? t('Keine der Anzeigen nennt eine Person — unten steht die Zentrale laut Impressum des Unternehmens.')
                 : t('Keine der Anzeigen nennt eine Person — nur Firmenpostfächer. Das ist bei großen Arbeitgebern mit zentralem Recruiting häufig.')}
+          <NoNamedContactNext companyId={knownCompanyId} />
         </p>
       ) : (
         <ul>

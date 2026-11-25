@@ -10,9 +10,17 @@ import { api } from '@/api/client'
 import { t } from '@/i18n'
 
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
-import { Button, TextInput } from '../ui/forms'
+import { Button, FieldLabel, TextInput } from '../ui/forms'
 import { Panel } from '../ui/primitives'
-import { EMPTY_LEAD_FORM, type ExistingLead, type LeadForm, existingLead, leadPayload } from './manualLead'
+import {
+  EMPTY_LEAD_FORM,
+  type ExistingLead,
+  type LeadCompany,
+  type LeadForm,
+  existingLead,
+  leadPayload,
+  toLeadRefusal,
+} from './manualLead'
 
 /** The "manuell" mark on a lead entered by hand. */
 export function ManualLeadChip({ source }: { source?: string | null }) {
@@ -26,12 +34,21 @@ export function ManualLeadChip({ source }: { source?: string | null }) {
   )
 }
 
-export function NewLead({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => void }) {
+export function NewLead({
+  onCancel,
+  onSaved,
+  company,
+}: {
+  onCancel: () => void
+  onSaved: () => void
+  /** ELI-78: entered on this company's page — the company is fixed. */
+  company?: LeadCompany
+}) {
   const [form, setForm] = useState<LeadForm>(EMPTY_LEAD_FORM)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [existing, setExisting] = useState<ExistingLead | null>(null)
-  const payload = leadPayload(form)
+  const payload = leadPayload(form, company)
   const set = (patch: Partial<LeadForm>) => {
     setForm((f) => ({ ...f, ...patch }))
     setExisting(null)
@@ -56,6 +73,22 @@ export function NewLead({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
     setBusy(false)
   }
 
+  // ELI-78: the person is held as a manager nobody has spoken to yet — move
+  // them to Leads instead of entering them a second time.
+  async function toLeads(managerId: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.managerToLead(managerId)
+      setExisting(null)
+      setForm(EMPTY_LEAD_FORM)
+      onSaved()
+    } catch (e) {
+      setError(toLeadRefusal(e) ?? t('Nicht gespeichert — bitte erneut versuchen.'))
+    }
+    setBusy(false)
+  }
+
   return (
     <Panel className="p-4">
       <form
@@ -74,11 +107,20 @@ export function NewLead({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
         />
         <TextInput label={t('Name Ansprechpartner *')} value={form.fullName} onChange={(fullName) => set({ fullName })} />
         <TextInput label={t('Jobtitel Ansprechpartner')} value={form.roleTitle} onChange={(roleTitle) => set({ roleTitle })} />
-        <TextInput label={t('Firma *')} value={form.companyName} onChange={(companyName) => set({ companyName })} />
+        {company ? (
+          <div className="min-w-0">
+            <FieldLabel>{t('Firma')}</FieldLabel>
+            <span className="block py-2 text-[14px] text-cockpit-text">{company.name}</span>
+          </div>
+        ) : (
+          <TextInput label={t('Firma *')} value={form.companyName} onChange={(companyName) => set({ companyName })} />
+        )}
         <TextInput label={t('E-Mail')} type="email" value={form.email} onChange={(email) => set({ email })} />
         <TextInput label={t('Nummer')} value={form.phone} onChange={(phone) => set({ phone })} />
         <p className="self-end text-[12px] text-cockpit-faint">
-          {t('Gibt es die Firma hier schon (gleicher Name), wird der Lead dort angelegt, sonst wird sie neu angelegt.')}
+          {company
+            ? t('Der Lead erscheint unter Leads; nach dem Erstkontakt „Zu Managern“.')
+            : t('Gibt es die Firma hier schon (gleicher Name), wird der Lead dort angelegt, sonst wird sie neu angelegt.')}
         </p>
         <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
           <Button type="submit" tone="primary" disabled={busy || !payload}>
@@ -98,6 +140,11 @@ export function NewLead({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
               >
                 {t('Vorhandenen Eintrag öffnen')}
               </a>
+              {existing.stage !== 'bus_dev' && (
+                <Button onClick={() => void toLeads(existing.managerId)} disabled={busy}>
+                  {t('Zu Leads')}
+                </Button>
+              )}
             </span>
           )}
           {error && <span className="text-[13px] text-coral-400">{error}</span>}

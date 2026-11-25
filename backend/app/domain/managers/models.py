@@ -144,7 +144,8 @@ class Manager(Base, IDMixin, TenantMixin, TimestampMixin, CreatedByMixin):
         the "manuell" mark on the Leads list. Derived: a Markt lead is the
         public ad's (`public_web`); `create_manual_lead` is the only path
         that writes a `bus_dev` row from any other source. A new such path
-        must decide whether it is "manuell" too."""
+        must decide whether it is "manuell" too. ELI-78's "Zu Leads" does:
+        a manager typed in by hand and moved to Leads IS manuell (no job)."""
         return self.stage == "bus_dev" and self.source != ConfidenceSource.PUBLIC_WEB.value
 
     interactions: Mapped[list["ManagerInteraction"]] = relationship(

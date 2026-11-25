@@ -1305,6 +1305,8 @@ export interface LeadCreateBody {
   full_name: string
   role_title?: string | null
   company_name: string
+  /** ELI-78: from a company page — the lead goes to that company. */
+  company_id?: string
   email?: string | null
   phone?: string | null
   /** Erased here on request and come back of their own accord (409 otherwise). */
@@ -1378,6 +1380,8 @@ export interface CompanyPersonDTO {
   no_interest_at?: string | null
   /** ELI-66: removed by hand — why; null with a date = "Kein Interesse" from a call. */
   removed_reason?: RemoveReason | null
+  /** ELI-78: a manager "Zu Leads" would accept — added by hand, no contact, no mandate. */
+  can_be_lead?: boolean
 }
 
 /** ELI-33: one company — its managers, leads, mandates, Impressum switchboard. */

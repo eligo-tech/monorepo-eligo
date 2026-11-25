@@ -133,6 +133,10 @@ async def create_lead(
     the person is already held at that company — shown, not doubled."""
     try:
         row = await service.create_manual_lead(db, tenant_id=actor.tenant_id, payload=payload, actor=actor.name)
+    except service.CompanyNotInTenant as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, f"company {exc} does not belong to this workspace"
+        ) from exc
     except service.LeadExists as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -186,6 +190,24 @@ async def promote_manager(
 ) -> ManagerRead:
     """Move a bus-dev contact to Managers after the first contact (ELI-23)."""
     row = await service.promote_manager(db, tenant_id=tenant_id, manager_id=manager_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
+    return ManagerRead.model_validate(row)
+
+
+@router.post("/{manager_id}/to-lead", response_model=ManagerRead)
+async def move_to_leads(
+    manager_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ManagerRead:
+    """ELI-78 "Zu Leads": a manager added by hand, not contacted yet, back
+    to the Leads list — the reverse of `/promote`. 409 `{code}`:
+    `has_contact` · `has_mandate` · `imported` · `do_not_contact`."""
+    try:
+        row = await service.move_to_leads(db, tenant_id=tenant_id, manager_id=manager_id)
+    except service.CannotBeLead as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, {"code": exc.code}) from exc
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "manager not found")
     return ManagerRead.model_validate(row)

@@ -584,6 +584,10 @@ export const api = {
   /** ELI-23: move a bus-dev contact to Managers after the first contact. */
   promoteManager: (id: string) => request<ManagerDTO>(`/managers/${id}/promote`, { method: 'POST' }),
 
+  /** ELI-78: "Zu Leads" — a manager added by hand, not contacted yet, back to
+   *  Leads. 409 `{code}` once contacted, owning a mandate or imported. */
+  managerToLead: (id: string) => request<ManagerDTO>(`/managers/${id}/to-lead`, { method: 'POST' }),
+
   /** ELI-66: "Entfernen" — off the Leads list with a reason; hidden, never
    *  deleted, undone by `reviveLead`. */
   removeLead: (id: string, reason: RemoveReason, note?: string) =>
