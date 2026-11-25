@@ -1632,7 +1632,7 @@ export const EN: Record<string, string> = {
   'Der Link muss eine Webadresse sein (https://…).': 'The link must be a web address (https://…).',
   'Job *': 'Vacancy *',
   'z. B. Senior Java Entwickler (m/w/d)': 'e.g. Senior Java Developer',
-  'Link zur Stellenanzeige / LinkedIn-Profil': 'Link to the job ad / LinkedIn profile',
+  'Link zur Stellenanzeige': 'Link to the job ad',
   'Name Ansprechpartner *': 'Contact name *',
   'Jobtitel Ansprechpartner': 'Contact job title',
   'Firma *': 'Company *',
@@ -1664,4 +1664,11 @@ export const EN: Record<string, string> = {
   'Erscheint unter Leads — für eine Person, mit der noch kein Kontakt war.': 'Appears under Leads — for a person you have not contacted yet.',
   'Öffnet das Unternehmen mit dem Formular „+ Lead“ — die Person erscheint unter Leads.': 'Opens the company with the “+ Lead” form — the person appears under Leads.',
   'Kennen Sie die Person? Erst „Übernehmen“, dann „Lead anlegen“.': 'Know the person? First “Adopt”, then “Create lead”.',
+  // ELI-77: a contact from a pasted LinkedIn/XING profile link (never fetched)
+  'LinkedIn-/XING-Profil': 'LinkedIn/XING profile',
+  'Kein LinkedIn- oder XING-Profil (…/in/… oder …/profile/…).': 'Not a LinkedIn or XING profile (…/in/… or …/profile/…).',
+  'Name aus dem Link übernommen — bitte prüfen.': 'Name taken from the link — please check.',
+  'Profil erkannt.': 'Profile recognised.',
+  'Aus dem Link lässt sich kein Name sicher lesen — bitte eintragen.': 'The link does not reliably give a name — please enter it.',
+  '{name} ist mit diesem Profil schon gespeichert.': '{name} is already saved with this profile.',
 }

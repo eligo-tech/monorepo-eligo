@@ -51,7 +51,7 @@ describe('the + Lead form (ELI-65)', () => {
   it('asks for job, link, name, title, company, e-mail and number', () => {
     const html = renderToStaticMarkup(<NewLead onCancel={() => {}} onSaved={() => {}} />)
     for (const label of [
-      'Job *', 'Link zur Stellenanzeige / LinkedIn-Profil', 'Name Ansprechpartner *',
+      'LinkedIn-/XING-Profil', 'Job *', 'Link zur Stellenanzeige', 'Name Ansprechpartner *',
       'Jobtitel Ansprechpartner', 'Firma *', 'E-Mail', 'Nummer',
     ]) expect(html).toContain(t(label))
     // Nothing to save until Job, Name and Firma are filled.

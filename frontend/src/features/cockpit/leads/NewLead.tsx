@@ -20,7 +20,9 @@ import {
   existingLead,
   leadPayload,
   toLeadRefusal,
+  withProfile,
 } from './manualLead'
+import { parseProfileLink } from './profileLink'
 
 /** The "manuell" mark on a lead entered by hand. */
 export function ManualLeadChip({ source }: { source?: string | null }) {
@@ -48,7 +50,17 @@ export function NewLead({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [existing, setExisting] = useState<ExistingLead | null>(null)
+  // ELI-77: the name this form filled in from the profile link, so a changed
+  // link may replace it — but never a name the recruiter typed.
+  const [prefilled, setPrefilled] = useState('')
   const payload = leadPayload(form, company)
+  const profile = form.profileUrl.trim() ? parseProfileLink(form.profileUrl) : null
+  const pasteProfile = (raw: string) => {
+    const next = withProfile(form, raw, prefilled)
+    setForm(next.form)
+    setPrefilled(next.prefilled)
+    setExisting(null)
+  }
   const set = (patch: Partial<LeadForm>) => {
     setForm((f) => ({ ...f, ...patch }))
     setExisting(null)
@@ -62,12 +74,15 @@ export function NewLead({
     try {
       await withReaddConfirm((override) => api.createLead({ ...payload, override_suppression: override || undefined }))
       setForm(EMPTY_LEAD_FORM)
+      setPrefilled('')
       onSaved()
     } catch (e) {
       const held = existingLead(e)
       if (held) setExisting(held)
       else if (e instanceof ReaddDeclined) setError(e.message)
       else if (e instanceof Error && e.message.includes('source_url')) setError(t('Der Link muss eine Webadresse sein (https://…).'))
+      else if (e instanceof Error && e.message.includes('profile_url'))
+        setError(t('Kein LinkedIn- oder XING-Profil (…/in/… oder …/profile/…).'))
       else setError(t('Nicht gespeichert — bitte erneut versuchen.'))
     }
     setBusy(false)
@@ -98,9 +113,30 @@ export function NewLead({
           void save()
         }}
       >
+        {/* ELI-77: the name is read from the link itself — Eligo never opens
+            LinkedIn or XING. */}
+        <div className="sm:col-span-2">
+          <TextInput
+            label={t('LinkedIn-/XING-Profil')}
+            value={form.profileUrl}
+            onChange={pasteProfile}
+            placeholder="https://www.linkedin.com/in/…"
+          />
+          {form.profileUrl.trim() && (
+            <p className={`mt-1 text-[12px] ${profile ? 'text-cockpit-faint' : 'text-coral-400'}`}>
+              {!profile
+                ? t('Kein LinkedIn- oder XING-Profil (…/in/… oder …/profile/…).')
+                : profile.name && form.fullName === profile.name
+                  ? t('Name aus dem Link übernommen — bitte prüfen.')
+                  : profile.name
+                    ? t('Profil erkannt.')
+                    : t('Aus dem Link lässt sich kein Name sicher lesen — bitte eintragen.')}
+            </p>
+          )}
+        </div>
         <TextInput label={t('Job *')} value={form.jobTitle} onChange={(jobTitle) => set({ jobTitle })} placeholder={t('z. B. Senior Java Entwickler (m/w/d)')} />
         <TextInput
-          label={t('Link zur Stellenanzeige / LinkedIn-Profil')}
+          label={t('Link zur Stellenanzeige')}
           value={form.sourceUrl}
           onChange={(sourceUrl) => set({ sourceUrl })}
           placeholder="https://"
@@ -131,7 +167,9 @@ export function NewLead({
           </Button>
           {existing && (
             <span className="flex flex-wrap items-center gap-2 text-[13px] text-gold-400">
-              {existing.stage === 'bus_dev'
+              {existing.byProfile
+                ? t('{name} ist mit diesem Profil schon gespeichert.', { name: existing.fullName })
+                : existing.stage === 'bus_dev'
                 ? t('{name} ist bei dieser Firma schon ein Lead.', { name: existing.fullName })
                 : t('{name} ist bei dieser Firma schon als Manager gespeichert.', { name: existing.fullName })}
               <a

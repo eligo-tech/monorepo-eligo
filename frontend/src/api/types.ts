@@ -1307,6 +1307,8 @@ export interface LeadCreateBody {
   company_name: string
   /** ELI-78: from a company page — the lead goes to that company. */
   company_id?: string
+  /** ELI-77: the person's LinkedIn/XING profile, in one spelling — never fetched. */
+  profile_url?: string | null
   email?: string | null
   phone?: string | null
   /** Erased here on request and come back of their own accord (409 otherwise). */

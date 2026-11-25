@@ -23,6 +23,7 @@ from app.domain.common.enums import (
 )
 from app.domain.companies.models import Company
 from app.domain.jobs.models import Job
+from app.domain.managers import profiles as _profiles
 from app.domain.managers.models import Manager, ManagerInteraction, ManagerPhone
 from app.domain.managers.schemas import (
     LeadCreate,
@@ -273,9 +274,54 @@ class LeadExists(Exception):
     """ELI-65: the person is already held at that company — a lead or a
     manager. Shown to the recruiter instead of a second record."""
 
-    def __init__(self, manager: Manager) -> None:
+    def __init__(self, manager: Manager, match: str = "name") -> None:
         super().__init__(str(manager.id))
         self.manager = manager
+        #: ELI-77: "name" (same person at that company) or "profile" (the
+        #: same LinkedIn/XING profile, at any company of this workspace).
+        self.match = match
+
+
+#: ELI-77: the one key per profile — re-exported for the service's callers.
+profile_key = _profiles.profile_key
+
+
+async def held_profile(
+    session: AsyncSession, *, tenant_id: uuid.UUID, urls: list[str | None]
+) -> Manager | None:
+    """ELI-77: the person in this workspace whose stored LinkedIn or XING
+    profile is one of `urls` — any company: people change employers, the
+    profile stays. Compared by `profile_key`, so `de.` vs `www.`, a query
+    string or an encoded umlaut is the same profile."""
+    import re
+
+    keys = {k for k in (profile_key(u) for u in urls) if k}
+    if not keys:
+        return None
+    # Narrow in SQL first: each slug's longest ASCII run ("anna" in
+    # "anna-berg") is in every stored spelling of it — raw, encoded or not —
+    # and a run of 3+ narrows a workspace's profiles to a handful. The exact
+    # comparison stays in Python, on the key.
+    near = []
+    for k in keys:
+        runs = sorted(re.findall(r"[a-z0-9]{3,}", k.split("/", 1)[1]), key=len, reverse=True)
+        if not runs:
+            near = []
+            break
+        near += [func.lower(Manager.linkedin_url).contains(runs[0], autoescape=True),
+                 func.lower(Manager.xing_url).contains(runs[0], autoescape=True)]
+    held = or_(Manager.linkedin_url.is_not(None), Manager.xing_url.is_not(None))
+    rows = (
+        await session.scalars(
+            select(Manager)
+            .where(Manager.tenant_id == tenant_id, or_(*near) if near else held)
+            .order_by(Manager.created_at, Manager.id)
+        )
+    ).all()
+    for m in rows:
+        if profile_key(m.linkedin_url) in keys or profile_key(m.xing_url) in keys:
+            return m
+    return None
 
 
 #: Provenance of a lead entered by hand without a link (ELI-65).
@@ -352,6 +398,10 @@ async def create_manual_lead(
     from app.domain.verification import service as verification
 
     first_name, last_name = _split_name(payload.full_name)
+    # ELI-77: the same profile held already — whatever the name or company.
+    same_profile = await held_profile(session, tenant_id=tenant_id, urls=[payload.profile_url, payload.source_url])
+    if same_profile is not None:
+        raise LeadExists(same_profile, match="profile")
     if payload.company_id is not None:
         # ELI-78: from the company page — that company, never a namesake.
         company = await _own_company(session, tenant_id=tenant_id, company_id=payload.company_id)
@@ -405,9 +455,15 @@ async def create_manual_lead(
         role_title=payload.role_title,
         email=payload.email,
         phone=payload.phone,
-        **profile_links(payload.source_url),
+        # ELI-77: the pasted profile, in its one spelling, wins over a
+        # profile that came in as the source link — one dict, so both
+        # LinkedIn never names the same column twice.
+        **{
+            **profile_links(payload.source_url),
+            **({f"{_profiles.network(payload.profile_url)}_url": payload.profile_url} if payload.profile_url else {}),
+        },
         source=ConfidenceSource.THIRD_PARTY_SOURCE.value,
-        source_detail=payload.source_url or BY_HAND,
+        source_detail=payload.source_url or payload.profile_url or BY_HAND,
         stage="bus_dev",
         lead_job_title=payload.job_title,
     )
@@ -422,7 +478,9 @@ async def create_manual_lead(
             "stage": "bus_dev",
             "source": ConfidenceSource.THIRD_PARTY_SOURCE.value,
             "company_id": str(company_id),
-            "fields": sorted(f for f in ("role_title", "email", "phone", "source_url") if getattr(payload, f)),
+            "fields": sorted(
+                f for f in ("role_title", "email", "phone", "source_url", "profile_url") if getattr(payload, f)
+            ),
         },
         # ELI-69: no `actor_name=` — naming only the name made the ledger drop
         # the account id; the request's actor carries both.
