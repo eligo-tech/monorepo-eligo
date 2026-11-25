@@ -10,9 +10,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
+/** The field chrome without a width. `cn` does not merge Tailwind classes,
+ *  so a width added to `FIELD` loses to its `w-full` (ELI-75) — a field
+ *  that needs its own width starts from this one. */
+export const FIELD_BOX =
+  'rounded-lg border border-cockpit-line bg-cockpit-inset px-2.5 py-1.5 text-[14px] text-cockpit-text placeholder:text-cockpit-faint outline-none transition-colors focus:border-mint-600'
+
 /** Shared field chrome: dark inset, hairline that brightens on focus. */
-export const FIELD =
-  'w-full rounded-lg border border-cockpit-line bg-cockpit-inset px-2.5 py-1.5 text-[14px] text-cockpit-text placeholder:text-cockpit-faint outline-none transition-colors focus:border-mint-600'
+export const FIELD = `w-full ${FIELD_BOX}`
 
 export function FieldLabel({ children }: { children: ReactNode }) {
   return (
