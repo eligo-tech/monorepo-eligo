@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import type { ContactRowDTO, ManagerDTO, ManagerPhoneDTO } from '@/api/types'
+import { ApiError } from '@/api/client'
 import { t } from '@/i18n'
+
+import { ReaddDeclined } from '../erasure/readd'
 
 import { ContactRow } from '../screens/ContactListScreen'
 import { appendPhone } from '../ui/phoneList'
@@ -32,6 +35,12 @@ describe('"+ Nummer" on the Leads row (ELI-76)', () => {
     const html = markup(row())
     expect(html).toContain(t('keine Nummer'))
     expect(html).toContain('data-action="add-phone"')
+  })
+
+  it('a row whose primary is empty shows its numbers, not "keine Nummer"', () => {
+    const html = markup(row({ phone: null, phones: [{ number: '+49 171 2', kind: 'mobile', is_primary: false }] }))
+    expect(html).toContain('+49 171 2')
+    expect(html).not.toContain(t('keine Nummer'))
   })
 
   it('a row with numbers offers it too, and lists every number', () => {
@@ -65,6 +74,19 @@ describe('appendPhone', () => {
     ])
   })
 
+  it('mends a stored list the server would refuse — a doubled number, an unknown kind', () => {
+    const stored = [
+      { number: '+49 30 1', kind: 'direct', is_primary: true },
+      { number: '+49 (30) 1', kind: 'mobile', is_primary: false },
+      { number: '+49 171 2', kind: 'fax', is_primary: false },
+    ]
+    expect(appendPhone(stored, { number: '+49 89 3', kind: 'mobile' })).toEqual([
+      { number: '+49 30 1', kind: 'direct', is_primary: true },
+      { number: '+49 171 2', kind: 'other', is_primary: false },
+      { number: '+49 89 3', kind: 'mobile', is_primary: false },
+    ])
+  })
+
   it('refuses a blank number and one already held (digits compared)', () => {
     expect(appendPhone(held, { number: '  ', kind: 'mobile' })).toBeNull()
     expect(appendPhone(held, { number: '+49 (30) 1', kind: 'mobile' })).toBeNull()
@@ -91,5 +113,16 @@ describe('saveAddedPhone', () => {
     const result = await saveAddedPhone('m1', { number: '+49 171 2', kind: 'mobile' }, { read: async () => manager, update })
     expect(result).toBe('duplicate')
     expect(update).not.toHaveBeenCalled()
+  })
+
+  it('a number of someone erased here is not saved unless the recruiter confirms', async () => {
+    const suppressed = new ApiError(409, JSON.stringify({ detail: { code: 'suppressed', requested_on: '2026-10-01' } }))
+    const update = vi.fn(async () => {
+      throw suppressed
+    })
+    await expect(
+      saveAddedPhone('m1', { number: '+49 89 3', kind: 'mobile' }, { read: async () => manager, update }),
+    ).rejects.toBeInstanceOf(ReaddDeclined)
+    expect(update).toHaveBeenCalledTimes(1)
   })
 })

@@ -83,9 +83,16 @@ export function appendPhone(
 ): ManagerPhoneDTO[] | null {
   const number = added.number.trim()
   if (!number) return null
-  const key = (n: string) => digits(n) || n
+  const key = (n: string) => digits(n.trim()) || n.trim()
   if (held.some((p) => key(p.number) === key(number))) return null
-  return [...held, { number, kind: added.kind, is_primary: held.length === 0 }]
+  // The whole list goes back through the server's checks: a stored list it
+  // would refuse (a number twice, a kind it does not know) is mended here,
+  // or one old flaw would block every number added to this lead.
+  const seen = new Set<string>()
+  const kept = held
+    .filter((p) => p.number.trim() && !seen.has(key(p.number)) && seen.add(key(p.number)))
+    .map((p) => ({ ...p, kind: (PHONE_KINDS as string[]).includes(p.kind) ? p.kind : 'other' }))
+  return [...kept, { number, kind: added.kind, is_primary: kept.length === 0 }]
 }
 
 /** Type and number of one phone — the ELI-75 layout: a compact type, the

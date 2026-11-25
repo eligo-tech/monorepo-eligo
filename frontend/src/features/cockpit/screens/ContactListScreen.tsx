@@ -27,7 +27,7 @@ import {
 } from '../ui/callOutcomes'
 import { networkLinks } from '../ui/contactReach'
 import { leadJobLine, mandateHref } from '../ui/leadJobs'
-import { leadPhone } from '../ui/switchboard'
+import { leadPhone, telHref } from '../ui/switchboard'
 import { ImpressumBadge } from '../ui/SwitchboardLine'
 import { NetworkLink } from './ContactsPanel'
 import { DoNotContactChip } from '../erasure/DoNotContact'
@@ -184,12 +184,15 @@ export function ContactRow({
   /** ELI-30: the company's Impressum switchboard, dialled when the lead has no number. */
   switchboard?: SwitchboardDTO | null
 }) {
-  const reach = leadPhone(row.phone, switchboard)
+  // ELI-76: every number the lead has; without a primary, the first one.
+  const numbers = row.phones ?? []
+  const own = row.phone ?? numbers[0]?.number ?? null
+  const reach = leadPhone(own, switchboard)
   const callerName = useActorLabel()(row.last_call_by)
   const [calling, setCalling] = useState(false)
   // ELI-76: "+ Nummer" — a number found while calling, saved on the row.
   const [addingPhone, setAddingPhone] = useState(false)
-  const morePhones = (row.phones ?? []).filter((p) => !p.is_primary)
+  const morePhones = numbers.filter((p) => p.number !== own)
   // ELI-44: a follow-up by hand, and the offer read from a call's note.
   const [planning, setPlanning] = useState(false)
   const today = localIsoDate()
@@ -265,7 +268,7 @@ export function ContactRow({
         {/* ELI-76: the further numbers, so one just added shows here. */}
         {morePhones.map((p) => (
           <span key={p.number} className="flex items-center gap-1.5">
-            <a href={`tel:${p.number.replace(/[^\d+]/g, '')}`} className="flex items-center gap-1 text-cockpit-text hover:text-mint-400">
+            <a href={telHref(p.number)} className="flex items-center gap-1 text-cockpit-text hover:text-mint-400">
               <Phone className="h-3.5 w-3.5 text-cockpit-faint" />
               {p.number}
             </a>
