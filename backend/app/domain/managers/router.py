@@ -11,10 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import Actor, get_current_actor, get_current_tenant
 from app.core.database import get_db
 from app.domain.common import creators
-from app.domain.managers import service
+from app.domain.managers import prefill, service
 from app.domain.managers.models import Manager
 from app.domain.managers.schemas import (
     LeadCreate,
+    LeadPrefill,
+    LeadPrefillRequest,
     ManagerCreate,
     ManagerInteractionCreate,
     ManagerInteractionRead,
@@ -144,6 +146,19 @@ async def create_lead(
              "full_name": exc.manager.full_name, "match": exc.match},
         ) from exc
     return ManagerRead.model_validate(row)
+
+
+@router.post("/leads/prefill", response_model=LeadPrefill)
+async def prefill_lead(
+    payload: LeadPrefillRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> LeadPrefill:
+    """ELI-73: the "+ Lead" form filled from a job ad — a proposal, nothing
+    saved. A link is looked up in the corpus by the ad's own reference; it
+    is NEVER opened (RULE 1). Not in Markt → `found: "not_in_corpus"`, and the
+    pasted text is read by the deterministic contact rules instead."""
+    return LeadPrefill(**await prefill.prefill(db, tenant_id=tenant_id, url=payload.url, text=payload.text))
 
 
 @router.patch("/{manager_id}", response_model=ManagerRead)

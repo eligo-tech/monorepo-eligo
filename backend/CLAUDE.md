@@ -429,6 +429,19 @@ These are enforced in code. Do not route around them.
   company — and answers the same 409 with `match: "profile"` (`"name"`
   otherwise). The name is prefilled in the browser from the link's slug;
   nothing ever fetches the profile (RULE 1).
+  ELI-73 `POST /managers/leads/prefill {url|text}` (`managers/prefill.py`)
+  fills the form from a job ad — a PROPOSAL, writes nothing, opens nothing.
+  A link → `hub/posting_links.posting_ref` (the inverse of
+  `source_detail_url`) → the indexed `(source, external_id)`; NOT
+  `source_url` (unindexed — a partner-board copy gets the paste path).
+  Found: title, employer, `is_agency` (`staffing_name`, marked not
+  hidden), and the people the ad names — `hub/contacts` rules on the
+  `hub_suppressions`-redacted text plus `hub_ad_contacts` found by the
+  verified model pass (minus `rules.names`). Not found → `not_in_corpus`;
+  pasted text → the same rules, no model call, title only from a line that
+  plainly is one. People THIS workspace erased are dropped
+  (`person_guard`); erasures without a key → nobody proposed. Saved with
+  `from_pasted_text` → `source_detail` "aus eingefügtem Anzeigentext".
 
 Full rules, data classification, and the GDPR/SOC 2 obligation map live in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) at the repo root. Read it before changing

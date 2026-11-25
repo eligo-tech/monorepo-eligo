@@ -38,6 +38,7 @@ import type {
   ManagerDTO,
   RemoveReason,
   LeadCreateBody,
+  LeadPrefillDTO,
   ManagerPhoneDTO,
   ManagerInteractionDTO,
   HubSearchPageDTO,
@@ -589,6 +590,11 @@ export const api = {
    *  person already held at that company. */
   createLead: (body: LeadCreateBody) =>
     request<ManagerDTO>('/managers/leads', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** ELI-73: fill "+ Lead" from a job ad — a link Markt holds, or the pasted
+   *  text. A proposal; the link is looked up, never opened. */
+  prefillLead: (body: { url?: string; text?: string }) =>
+    request<LeadPrefillDTO>('/managers/leads/prefill', { method: 'POST', body: JSON.stringify(body) }),
 
   /** ELI-23: move a bus-dev contact to Managers after the first contact. */
   promoteManager: (id: string) => request<ManagerDTO>(`/managers/${id}/promote`, { method: 'POST' }),

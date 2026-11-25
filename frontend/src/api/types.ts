@@ -1309,10 +1309,36 @@ export interface LeadCreateBody {
   company_id?: string
   /** ELI-77: the person's LinkedIn/XING profile, in one spelling — never fetched. */
   profile_url?: string | null
+  /** ELI-73: the fields came from ad text the recruiter pasted (no link). */
+  from_pasted_text?: boolean
   email?: string | null
   phone?: string | null
   /** Erased here on request and come back of their own accord (409 otherwise). */
   override_suppression?: boolean
+}
+
+/** ELI-73: one person a job ad names — a proposal for the "+ Lead" form. */
+export interface LeadPrefillContactDTO {
+  full_name: string
+  role_title: string | null
+  email: string | null
+  phone: string | null
+  /** "rules" (deterministic) or "model" (nightly pass, checked word for word). */
+  found_by: 'rules' | 'model'
+  quote: string | null
+}
+
+/** ELI-73: `POST /managers/leads/prefill` — read from Markt or pasted text, nothing saved. */
+export interface LeadPrefillDTO {
+  found: 'corpus' | 'not_in_corpus' | 'text'
+  job_title: string | null
+  company_name: string | null
+  posting_id: string | null
+  source_url: string | null
+  is_agency: boolean
+  contacts: LeadPrefillContactDTO[]
+  /** The workspace's erasures cannot be checked right now: nobody proposed. */
+  contacts_withheld?: boolean
 }
 
 /** ELI-37: an ad naming the lead (`url`) and/or this workspace's job (`job_id`). */
