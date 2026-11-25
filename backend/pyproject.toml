@@ -61,9 +61,9 @@ llm = [
 # dependency: the scaffold runs with no external services, and a reporter that
 # reads every request is not something to inherit by accident.
 monitoring = [
-    # <3: sentry-sdk 3.0 (Nov 2026) refuses `send_default_pii`, the option
-    # the scrubbing relies on (`core/observability.py`); production runs the
-    # locked 2.73. Lift the cap together with a port of that setting.
+    # <3: sentry-sdk 3.0 (2026-11) drops `send_default_pii` and the 2.x
+    # transport; `core/observability.py` and its scrubbing tests are written
+    # against 2.x. Moving to 3.x is its own change, with those tests rewritten.
     "sentry-sdk>=2.0,<3",
 ]
 dev = [

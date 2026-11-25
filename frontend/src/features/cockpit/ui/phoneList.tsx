@@ -11,7 +11,7 @@ import { Phone, Plus, Star, Trash2 } from 'lucide-react'
 import { t } from '@/i18n'
 import type { ManagerDTO, ManagerPhoneDTO, PhoneKind, SwitchboardDTO } from '@/api/types'
 import { cn } from '@/lib/cn'
-import { FIELD } from './forms'
+import { FIELD_BOX } from './forms'
 import { telHref } from './switchboard'
 
 export const PHONE_KINDS: PhoneKind[] = ['mobile', 'direct', 'switchboard', 'other']
@@ -94,7 +94,9 @@ export function PhoneListEditor({
         {t('Telefonnummern')}
       </span>
       {value.map((p, i) => (
-        <div key={i} className="flex items-center gap-2">
+        // ELI-75: the number takes the rest of the row and never less than
+        // a readable width; on a phone it wraps onto a line of its own.
+        <div key={i} className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => makePrimary(i)}
@@ -111,7 +113,7 @@ export function PhoneListEditor({
             value={p.kind}
             onChange={(e) => set(i, { kind: e.target.value as PhoneKind })}
             aria-label={t('Art der Nummer')}
-            className={cn(FIELD, 'w-[8.5rem] shrink-0')}
+            className={cn(FIELD_BOX, 'w-[8.5rem] shrink-0')}
           >
             {PHONE_KINDS.map((k) => (
               <option key={k} value={k} className="bg-cockpit-surface">
@@ -124,7 +126,7 @@ export function PhoneListEditor({
             onChange={(e) => set(i, { number: e.target.value })}
             placeholder="+49 30 1234567"
             aria-label={t('Telefon')}
-            className={cn(FIELD, 'min-w-0 flex-1 font-mono')}
+            className={cn(FIELD_BOX, 'min-w-[11rem] flex-1 font-mono')}
           />
           <button
             type="button"
