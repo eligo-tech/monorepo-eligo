@@ -122,3 +122,47 @@ class TilesRead(BaseModel):
 
 class TilesWrite(BaseModel):
     tiles: list[str] = Field(max_length=20)
+
+
+# ── Team-Übersicht (ELI-74) ───────────────────────────────────────────────
+
+
+class TeamKpiRead(BaseModel):
+    key: str
+    label: str
+    source: str
+    group: str
+    unit: str
+    available: bool
+
+
+class TeamCellRead(BaseModel):
+    """One person's figure on one KPI, and their goal if they have one."""
+
+    key: str
+    #: None when nothing measures this KPI.
+    ist: int | None
+    #: Umsatz only: closed deals in the period with no Honorar entered.
+    missing: int = 0
+    #: None when no goal applies — the UI shows no percentage, never 0 %.
+    ziel: int | None
+    #: "own" · "team" (the Team-Standard) · "shared" (a group's goal) · None.
+    ziel_from: str | None
+
+
+class TeamRowRead(BaseModel):
+    #: "person" · "unassigned" (rows nobody is recorded for) · "group".
+    kind: str
+    actor_user_id: str | None
+    members: list[str]
+    #: The recorded name or the id; the UI names members from Clerk.
+    name: str
+    cells: list[TeamCellRead]
+
+
+class TeamRead(BaseModel):
+    period: str
+    period_start: dt.datetime
+    period_end: dt.datetime
+    kpis: list[TeamKpiRead]
+    rows: list[TeamRowRead]

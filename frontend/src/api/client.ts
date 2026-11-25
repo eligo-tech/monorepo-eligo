@@ -4,6 +4,7 @@ import type {
   ConsultantDTO,
   TargetDTO,
   TargetWritePayload,
+  TeamDTO,
   TrackingDTO,
   TrackingPeriod,
   TrackingTilesDTO,
@@ -200,6 +201,14 @@ export const api = {
       `/activity/tracking?period=${encodeURIComponent(period)}&who=${encodeURIComponent(who)}`,
     ),
   consultants: () => request<ConsultantDTO[]>('/activity/consultants'),
+  /** ELI-74, admin only: every person's figures side by side. `members` are
+   *  the workspace's member ids, so somebody with nothing recorded still
+   *  gets a row. */
+  trackingTeam: (period: TrackingPeriod, members: readonly string[] = []) => {
+    const q = new URLSearchParams({ period })
+    for (const m of members) q.append('members', m)
+    return request<TeamDTO>(`/activity/tracking/team?${q.toString()}`)
+  },
   targets: () => request<TargetDTO[]>('/activity/targets'),
   /** Admin only. */
   setTarget: (body: TargetWritePayload) =>

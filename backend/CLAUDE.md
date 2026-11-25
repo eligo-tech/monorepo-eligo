@@ -486,6 +486,11 @@ Three domain facts worth knowing before you add a field:
   (`activity_targets`): workspace default, one consultant's, or a group's
   (`members`, ≥2), each optionally `valid_from`; before that date there is no
   goal, not a goal of 0. `tracking_preferences` = each person's Cockpit tiles.
+  ELI-74 `GET /activity/tracking/team` (admin only): `count_by_author` runs
+  each Business/BD KPI's own query grouped by its author column — one query
+  per KPI, never a second formula; rows = `members` the browser sends
+  (Clerk) ∪ activity ∪ own goals, zeros included; goal own else default;
+  shared goals are group rows.
 - **`presentation`** (ELI-20) renders the Kandidatenprofil a client
   receives: `GET /candidates/{id}/cover-sheet?variant=cover|cover_cv|
   cover_cv_references|anonymous` (+ `/preview`, which lists empty sections,

@@ -11,13 +11,16 @@
 import { t } from '@/i18n'
 import { date } from '@/i18n/format'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api } from '@/api/client'
-import type { ConsultantDTO, MeDTO, TrackingDTO, TrackingPeriod } from '@/api/types'
+import type { ConsultantDTO, MeDTO, TeamDTO, TrackingDTO, TrackingPeriod } from '@/api/types'
+import { useMemberNames } from '@/auth/memberNames'
 import { isAdmin } from '../useMe'
 import { SectionHeader, SegmentedControl } from '../ui/primitives'
 import { FunnelPanel, GoalsList, KpiTile } from '../tracking/TrackingParts'
+import { TeamOverview } from '../tracking/TeamOverview'
+import { teamMemberIds, withChosen } from '../tracking/teamMath'
 
 export const PERIOD_OPTIONS = (): { key: TrackingPeriod; label: string }[] => [
   { key: 'woche', label: t('Woche') },
@@ -43,6 +46,14 @@ export function TrackingScreen({ me }: { me: MeDTO | null }) {
   const [data, setData] = useState<TrackingDTO | null>(null)
   const [people, setPeople] = useState<ConsultantDTO[]>([])
   const [error, setError] = useState<string | null>(null)
+  // ELI-74: the admin's Team-Übersicht, and the name of whoever was opened
+  // from it (the switch lists only people with activity).
+  const admin = isAdmin(me)
+  const names = useMemberNames()
+  const memberKey = teamMemberIds(names, me).join(',')
+  const [team, setTeam] = useState<TeamDTO | null>(null)
+  const [teamError, setTeamError] = useState<string | null>(null)
+  const [chosenLabel, setChosenLabel] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +72,40 @@ export function TrackingScreen({ me }: { me: MeDTO | null }) {
     void load()
   }, [load])
 
+  const showTeam = admin && who === 'team'
+  useEffect(() => {
+    if (!showTeam) return
+    let live = true
+    // Never last period's rows under this period's label.
+    setTeam(null)
+    api
+      .trackingTeam(period, memberKey ? memberKey.split(',') : [])
+      .then((overview) => {
+        if (!live) return
+        setTeam(overview)
+        setTeamError(null)
+      })
+      .catch(() => {
+        // Said, not papered over: no rows rather than invented ones.
+        if (!live) return
+        setTeam(null)
+        setTeamError(t('Die Team-Übersicht konnte nicht geladen werden.'))
+      })
+    return () => {
+      live = false
+    }
+  }, [showTeam, period, memberKey])
+
+  const options = useMemo(
+    () => withChosen(whoOptions(people), who, chosenLabel || who),
+    [people, who, chosenLabel],
+  )
+  const openPerson = (id: string, label: string) => {
+    setChosenLabel(label)
+    setWho(id)
+    document.getElementById('section-tracking')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
   const byGroup = (group: string) => (data?.kpis ?? []).filter((k) => k.group === group)
   const revenue = data?.kpis.find((k) => k.key === 'revenue')
 
@@ -75,7 +120,7 @@ export function TrackingScreen({ me }: { me: MeDTO | null }) {
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <SegmentedControl options={PERIOD_OPTIONS()} value={period} onChange={setPeriod} size="sm" />
-          <SegmentedControl size="sm" value={who} onChange={setWho} options={whoOptions(people)} />
+          <SegmentedControl size="sm" value={who} onChange={setWho} options={options} />
         </div>
         {data && (
           <p className="mt-2 font-mono text-[11px] text-cockpit-faint">
@@ -89,6 +134,18 @@ export function TrackingScreen({ me }: { me: MeDTO | null }) {
       </header>
 
       {error && <p className="text-[13px] text-coral-400">{error}</p>}
+
+      {showTeam && (
+        <section className="space-y-4">
+          <SectionHeader
+            id="section-tracking-team"
+            title={t('Team-Übersicht')}
+            hint={t('Alle Mitarbeiter im Vergleich — nur für Administratoren')}
+          />
+          {teamError && <p className="text-[13px] text-coral-400">{teamError}</p>}
+          {team && <TeamOverview data={team} names={names} onOpen={openPerson} />}
+        </section>
+      )}
 
       {data && (
         <>

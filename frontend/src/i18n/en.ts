@@ -1602,6 +1602,15 @@ export const EN: Record<string, string> = {
   '{n} Deals ohne Honorar': '{n} deals without a fee',
   'gemeinsames Ziel': 'shared goal',
   'Ziel gilt ab {date}': 'Goal applies from {date}',
+  // ELI-74: Team-Übersicht.
+  'Team-Übersicht': 'Team overview',
+  'Alle Mitarbeiter im Vergleich — nur für Administratoren': 'All employees side by side — administrators only',
+  'Die Team-Übersicht konnte nicht geladen werden.': 'The team overview could not be loaded.',
+  'Mitarbeiter': 'Employee',
+  'Eigenes Ziel': 'Own goal',
+  'Unbekanntes Mitglied': 'Unknown member',
+  'Prozent = Anteil am Ziel der Person (eigenes Ziel, sonst Team-Standard); ohne Ziel steht nur die Zahl. Gemeinsame Ziele stehen als eigene Zeile und zählen nicht in die Quote einer einzelnen Person. Eine Zeile öffnet die Einzelansicht.':
+    'Percent = share of the person’s goal (their own goal, else the team default); without a goal only the figure is shown. Shared goals are a row of their own and do not count towards one person’s share. A row opens the individual view.',
   'Prozess · Schrittdaten (erledigt, sonst geplant). Kohorte: Prozesse, deren erster Schritt im Zeitraum liegt. 2. Interview = Interviewtermin 2+ oder ein eigener Schritt „… Interview“.': 'Process · step dates (done, else scheduled). Cohort: processes whose first step falls in the period. 2nd interview = interview round 2+ or a custom step “… interview”.',
   '{n} von {m} · {pct} %': '{n} of {m} · {pct} %',
   'Median 1 Tag': 'Median 1 day',

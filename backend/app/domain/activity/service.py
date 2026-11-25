@@ -17,7 +17,7 @@ import statistics
 import uuid
 from collections.abc import Callable
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.activity import kpis as kpi_defs
@@ -385,7 +385,21 @@ def _target_for(
     actor_user_id: str | None,
     end: dt.datetime | None = None,
 ) -> int | None:
-    """One consultant's number, or the workspace default they inherit.
+    """One consultant's number, or the workspace default they inherit."""
+    return _goal_for(
+        rows, kpi=kpi, period=period, actor_user_id=actor_user_id, end=end
+    )[0]
+
+
+def _goal_for(
+    rows: list[ActivityTarget],
+    *,
+    kpi: str,
+    period: str,
+    actor_user_id: str | None,
+    end: dt.datetime | None = None,
+) -> tuple[int | None, str | None]:
+    """(value, where it comes from: "own" · "team" · None).
 
     Their own row wins. Nothing at all returns None rather than 0: "no
     target" and "a target of zero" are different statements, and showing
@@ -400,12 +414,13 @@ def _target_for(
     if own is not None:
         # Their own goal that has not started yet means NO goal — not the
         # default they would inherit if they had none at all.
-        return own.value if live(own) else None
+        return (own.value, "own") if live(own) else (None, None)
     if actor_user_id is None:
-        return None
-    return next(
+        return None, None
+    default = next(
         (r.value for r in candidates if r.actor_user_id is None and live(r)), None
     )
+    return (default, "team") if default is not None else (None, None)
 
 
 # ── the Prozess funnel ────────────────────────────────────────────────────
@@ -643,6 +658,191 @@ async def consultants(session: AsyncSession, *, tenant_id: uuid.UUID) -> list[di
         ),
         key=lambda r: -r["events"],
     )
+
+
+# ── Team-Übersicht (ELI-74) ───────────────────────────────────────────────
+
+#: The groups the overview compares people on — Business and Business
+#: Development. The Prozess funnel is a cohort, not a per-person tally.
+TEAM_GROUPS = ("business", "bd")
+
+#: How many member ids the browser may name in one request.
+MAX_TEAM_MEMBERS = 200
+
+
+async def count_by_author(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    counts: str,
+    start: dt.datetime,
+    end: dt.datetime,
+) -> dict[str | None, tuple[int, int]]:
+    """author → (count or euros, deals without a fee) for one KPI, in ONE query.
+
+    The same query `count` runs, grouped by the same author column — not a
+    second formula — so a cell of the overview and the person's own panel
+    cannot disagree (`tests/test_tracking_team_eli74.py` checks it).
+    """
+    build, author = _SOURCES[counts]
+    if counts == kpi_defs.REVENUE:
+        total = func.coalesce(func.sum(Application.fee_eur), 0)
+        missing = func.sum(case((Application.fee_eur.is_(None), 1), else_=0))
+    else:
+        total, missing = func.count(), literal(0)
+    rows = await session.execute(
+        build(tenant_id, start, end)
+        .with_only_columns(author, total, missing)
+        .group_by(author)
+    )
+    return {who: (int(n or 0), int(gap or 0)) for who, n, gap in rows.all()}
+
+
+async def team(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    period: str,
+    at: dt.datetime | None = None,
+    members: list[str] | None = None,
+) -> dict:
+    """Every person's Business and BD figures for one period, side by side.
+
+    Rows: the workspace members the browser names (Clerk holds membership;
+    there is no users table), everyone with activity in the record, and
+    everyone with a goal of their own — a member with nothing recorded is a
+    row of zeros, not missing. The rows nobody is recorded for are a row
+    only when they hold something in the period.
+
+    A person's goal is their own, else the Team-Standard. A shared goal is
+    nobody's own number: each group with one is a row of its own, counted
+    over its members together, exactly as the panel's goal list counts it.
+    """
+    start, end = kpi_defs.window(period, at or dt.datetime.now(dt.UTC))
+    configured = await targets(session, tenant_id=tenant_id)
+    shown = [k for k in kpi_defs.KPIS if k.group in TEAM_GROUPS]
+
+    tallies: dict[str, dict[str | None, tuple[int, int]]] = {}
+    for kpi in shown:
+        if kpi.available and kpi.counts:
+            tallies[kpi.key] = await count_by_author(
+                session, tenant_id=tenant_id, counts=kpi.counts, start=start, end=end
+            )
+
+    known = {
+        row["actor_user_id"]: row["name"]
+        for row in await consultants(session, tenant_id=tenant_id)
+    }
+
+    people: dict[str, str] = {}
+
+    def add(who: str | None) -> None:
+        if who is not None and who not in people:
+            people[who] = known.get(who) or who
+
+    for who in [m.strip() for m in members or [] if m and m.strip()]:
+        add(who)
+    for who in known:
+        add(who)
+    for by_author in tallies.values():
+        for who in by_author:
+            add(who)
+    for row in configured:
+        if not _members(row):
+            add(row.actor_user_id)
+
+    def cells(authors: list[str | None], goal) -> list[dict]:  # noqa: ANN001
+        out = []
+        for kpi in shown:
+            by_author = tallies.get(kpi.key)
+            ziel, ziel_from = goal(kpi.key)
+            out.append(
+                {
+                    "key": kpi.key,
+                    "ist": None
+                    if by_author is None
+                    else sum(by_author.get(a, (0, 0))[0] for a in authors),
+                    "missing": 0
+                    if by_author is None
+                    else sum(by_author.get(a, (0, 0))[1] for a in authors),
+                    "ziel": ziel,
+                    "ziel_from": ziel_from,
+                }
+            )
+        return out
+
+    rows: list[dict] = []
+    for who, name in people.items():
+        rows.append(
+            {
+                "kind": "person",
+                "actor_user_id": who,
+                "members": [who],
+                "name": name,
+                "cells": cells(
+                    [who],
+                    lambda key, who=who: _goal_for(
+                        configured, kpi=key, period=period, actor_user_id=who, end=end
+                    ),
+                ),
+            }
+        )
+
+    if any(any(by_author.get(None, (0, 0))) for by_author in tallies.values()):
+        rows.append(
+            {
+                "kind": "unassigned",
+                "actor_user_id": None,
+                "members": [],
+                "name": "",
+                "cells": cells([None], lambda key: (None, None)),
+            }
+        )
+
+    groups: dict[tuple[str, ...], dict] = {}
+    for row in configured:
+        group = tuple(sorted(_members(row)))
+        if not group or row.period != period or row.kpi not in tallies:
+            continue
+        entry = groups.setdefault(group, {"label": None, "goals": {}})
+        entry["label"] = entry["label"] or row.label
+        entry["goals"][row.kpi] = row.value if _applies(row, end) else None
+    for group, entry in groups.items():
+        goals = entry["goals"]
+        rows.append(
+            {
+                "kind": "group",
+                "actor_user_id": None,
+                "members": list(group),
+                "name": entry["label"] or "",
+                "cells": cells(
+                    list(group),
+                    lambda key, goals=goals: (
+                        (goals[key], "shared")
+                        if goals.get(key) is not None
+                        else (None, None)
+                    ),
+                ),
+            }
+        )
+
+    return {
+        "period": period,
+        "period_start": start,
+        "period_end": end,
+        "kpis": [
+            {
+                "key": k.key,
+                "label": k.label,
+                "source": k.source,
+                "group": k.group,
+                "unit": k.unit,
+                "available": k.available,
+            }
+            for k in shown
+        ],
+        "rows": rows,
+    }
 
 
 # ── Cockpit tiles, per person ─────────────────────────────────────────────

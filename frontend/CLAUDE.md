@@ -130,7 +130,12 @@ nobody was in a step). Per Woche/Monat/Quartal and per consultant. Pieces in
 `tracking/` (`TrackingParts` draws, `trackingMath` does the arithmetic). The
 Cockpit shows the tiles each person chose (`tracking/CockpitTracking`,
 stored per person via `/activity/preferences`; default Umsatz · Business
-Calls · Leads). Goals are set by admins in Einstellungen › Tracking-Ziele
+Calls · Leads). Admins also see the **Team-Übersicht** (ELI-74,
+`tracking/TeamOverview`, `GET /activity/tracking/team`, admin-only): every
+Clerk member plus anyone with activity, one row each, the Business/BD KPIs
+with % of their own goal else the Team-Standard ("—" when it cannot be
+computed), shared goals as group rows; a row opens that person's view.
+Goals are set by admins in Einstellungen › Tracking-Ziele
 (`TrackingGoalsPanel`). The Honorar is typed on the Vertrag step
 (`StepEditor`), the Rahmenvertrag date on the company page
 (`FrameworkContractLine`).
