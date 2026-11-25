@@ -1641,4 +1641,15 @@ export const EN: Record<string, string> = {
   'Ich': 'Me',
   'Vom System beim Anlegen gesetzt, nicht änderbar.': 'Set by the system when it was added; cannot be changed.',
   'Importiert, vom System angelegt oder älter als diese Angabe.': 'Imported, added by the system, or older than this label.',
+  // ELI-78: a lead from the company page, and the way back from Manager to Leads
+  'Zu Leads': 'To Leads',
+  'Mit dieser Person gab es schon Kontakt — sie bleibt Manager.': 'There has already been contact with this person — they stay a manager.',
+  'Diese Person hat ein Mandat — sie bleibt Manager.': 'This person has a mandate — they stay a manager.',
+  'Aus dem eigenen System importiert — bleibt Manager.': 'Imported from your own system — stays a manager.',
+  'Diese Person möchte nicht kontaktiert werden — sie bleibt Manager.': 'This person asked not to be contacted — they stay a manager.',
+  'Der Lead erscheint unter Leads; nach dem Erstkontakt „Zu Managern“.': 'The lead appears under Leads; after the first contact, “To Managers”.',
+  'Noch kein Kontakt — unter Leads führen.': 'No contact yet — keep under Leads.',
+  'Erscheint unter Leads — für eine Person, mit der noch kein Kontakt war.': 'Appears under Leads — for a person you have not contacted yet.',
+  'Öffnet das Unternehmen mit dem Formular „+ Lead“ — die Person erscheint unter Leads.': 'Opens the company with the “+ Lead” form — the person appears under Leads.',
+  'Kennen Sie die Person? Erst „Übernehmen“, dann „Lead anlegen“.': 'Know the person? First “Adopt”, then “Create lead”.',
 }

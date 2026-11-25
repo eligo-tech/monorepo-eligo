@@ -392,8 +392,14 @@ async def company_page(session: AsyncSession, *, tenant_id: uuid.UUID, company_i
         )
     ).all()
 
+    from app.domain.managers.service import lead_blockers
+
+    blockers = await lead_blockers(session, tenant_id=tenant_id, rows=[m for m, _ in people])
+
     def person(m, at) -> dict:
         return {
+            # ELI-78: "Zu Leads" is offered only where it would be accepted.
+            "can_be_lead": m.stage != "bus_dev" and blockers.get(m.id) is None,
             "id": m.id,
             "full_name": m.full_name,
             "role_title": m.role_title,

@@ -113,6 +113,11 @@ a duplicate answers 409 and the form offers "Vorhandenes Unternehmen öffnen" �
 and one page per company (`#companies/<id>`): managers, leads, mandates, the
 Impressum switchboard, the open jobs in Markt and the careers page
 (`companies/market.py`; also in the manager page's sidebar), "Manager hinzufügen", and "Zu Managern" on each lead row (ELI-68).
+ELI-78: next to "Manager hinzufügen" sits "+ Lead" (`NewLead` with the company
+fixed, `company_id` sent); `#companies/<id>/lead` opens the page with it — the
+Markt card's "Lead anlegen" after "Übernehmen", and the ContactsPanel when no
+ad names a person. A manager added by hand nobody has spoken to carries
+"Zu Leads" (`can_be_lead`), and the "+ Lead" 409 for such a manager offers it.
 An unlinked company with same-name Markt sites elsewhere shows them for a
 person: "Das ist unser Unternehmen" (the other sites shown are ruled out),
 "Alle davon" (a chain), "Keiner davon"; a link can be undone. Filter "Zu prüfen". Company names on the manager page

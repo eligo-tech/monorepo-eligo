@@ -352,7 +352,13 @@ async def create_manual_lead(
     from app.domain.verification import service as verification
 
     first_name, last_name = _split_name(payload.full_name)
-    company = await companies.find_existing(session, tenant_id=tenant_id, name=payload.company_name, location=None)
+    if payload.company_id is not None:
+        # ELI-78: from the company page — that company, never a namesake.
+        company = await _own_company(session, tenant_id=tenant_id, company_id=payload.company_id)
+    else:
+        company = await companies.find_existing(
+            session, tenant_id=tenant_id, name=payload.company_name, location=None
+        )
     if company is not None:
         key = _surname_key(last_name, payload.full_name)
         found = await _existing_manager(session, tenant_id, company.id, key, first_name) if key else None
@@ -641,6 +647,97 @@ def stage_for(source: str | None) -> str:
     """Where a new contact starts (ELI-23): from Markt (a public ad) as a
     bus-dev contact, otherwise as a manager."""
     return "bus_dev" if source == ConfidenceSource.PUBLIC_WEB.value else "manager"
+
+
+class CannotBeLead(Exception):
+    """ELI-78: "Zu Leads" is refused — the relationship has begun (`code`)."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+async def lead_blockers(
+    session: AsyncSession, *, tenant_id: uuid.UUID, rows: list[Manager]
+) -> dict[uuid.UUID, str | None]:
+    """ELI-78: why each MANAGER may not move back to Leads, or None if it may.
+
+    Leads are people nobody has worked yet, so the way back is only for a
+    contact added by hand and not touched since:
+      * `imported` — from the customer's own system (`external_source`):
+        it is their contact, and Leads never lists imports;
+      * `has_contact` — a call or note is recorded, or a last contact came
+        with the record: the first contact is done, which is exactly when
+        "Zu Managern" applies;
+      * `has_mandate` — the person owns a mandate (`jobs.manager_id`);
+      * `do_not_contact` — asked not to be contacted (ELI-32).
+    Two queries for the whole list. A lead (stage `bus_dev`) is None."""
+    from app.domain.jobs.models import Job
+
+    ids = [m.id for m in rows if m.stage != "bus_dev"]
+    if not ids:
+        return {m.id: None for m in rows}
+    contacted = set(
+        (await session.scalars(
+            select(ManagerInteraction.manager_id).where(
+                ManagerInteraction.tenant_id == tenant_id, ManagerInteraction.manager_id.in_(ids)
+            ).distinct()
+        )).all()
+    )
+    owning = set(
+        (await session.scalars(
+            select(Job.manager_id).where(Job.tenant_id == tenant_id, Job.manager_id.in_(ids)).distinct()
+        )).all()
+    )
+
+    def why(m: Manager) -> str | None:
+        if m.stage == "bus_dev":
+            return None
+        if m.external_source:
+            return "imported"
+        if m.do_not_contact_at is not None:
+            # ELI-32: never on a list of people to call.
+            return "do_not_contact"
+        if m.id in contacted or m.last_contact_at is not None:
+            return "has_contact"
+        if m.id in owning:
+            return "has_mandate"
+        return None
+
+    return {m.id: why(m) for m in rows}
+
+
+async def move_to_leads(
+    session: AsyncSession, *, tenant_id: uuid.UUID, manager_id: uuid.UUID
+) -> Manager | None:
+    """ELI-78 "Zu Leads": the reverse of `promote_manager`, for a person
+    added with "Manager hinzufügen" before anyone spoke to them. Raises
+    `CannotBeLead` (see `lead_blockers`). Idempotent; nothing about the
+    person changes but the stage — provenance and the Art. 14 duty stay as
+    they were. One receipt, references only."""
+    from app.domain.common.enums import ReceiptAction
+    from app.domain.verification import service as verification
+
+    manager = await session.scalar(
+        select(Manager).where(Manager.id == manager_id, Manager.tenant_id == tenant_id).with_for_update()
+    )
+    if manager is None:
+        return None
+    if manager.stage == "bus_dev":
+        return manager
+    blocker = (await lead_blockers(session, tenant_id=tenant_id, rows=[manager]))[manager.id]
+    if blocker is not None:
+        raise CannotBeLead(blocker)
+    # `promoted_at` is left as it is: an earlier promotion stays on record.
+    manager.stage = "bus_dev"
+    await verification.append_receipt(
+        session, tenant_id=tenant_id, agent="recruiter", action=ReceiptAction.WRITE,
+        subject_type="manager", subject_id=str(manager.id), verified=True,
+        summary="Zu Leads verschoben", payload={"stage": "bus_dev", "from": "manager"},
+    )
+    await session.commit()
+    await session.refresh(manager)
+    return manager
 
 
 async def promote_manager(

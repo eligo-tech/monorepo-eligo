@@ -185,6 +185,9 @@ class LeadCreate(BaseModel):
     full_name: str = Field(max_length=200)
     role_title: str | None = Field(default=None, max_length=200)
     company_name: str = Field(max_length=200)
+    #: ELI-78: "+ Lead" on a company page — the lead goes to THAT company
+    #: (this workspace's own, else 422), not to the first one of its name.
+    company_id: uuid.UUID | None = None
     email: str | None = Field(default=None, max_length=320)
     phone: str | None = Field(default=None, max_length=50)
 

@@ -5,6 +5,7 @@ import type { LeadCreateBody } from '@/api/types'
 
 import { refusal } from '../erasure/erasureView'
 import { ApiError } from '@/api/client'
+import { t } from '@/i18n'
 
 export interface LeadForm {
   jobTitle: string
@@ -28,16 +29,25 @@ export const EMPTY_LEAD_FORM: LeadForm = {
 
 const opt = (v: string) => v.trim() || null
 
-/** The request, or null while Job, Name or Firma is missing. */
-export function leadPayload(form: LeadForm): LeadCreateBody | null {
+/** The company a lead is entered for from its own page (ELI-78). */
+export interface LeadCompany {
+  id: string
+  name: string
+}
+
+/** The request, or null while Job, Name or Firma is missing. From a
+ *  company page the company is fixed: its id goes along, so the lead lands
+ *  at that company and not at the first one of its name. */
+export function leadPayload(form: LeadForm, fixed?: LeadCompany | null): LeadCreateBody | null {
   const job = form.jobTitle.trim()
   const name = form.fullName.trim()
-  const company = form.companyName.trim()
+  const company = fixed ? fixed.name : form.companyName.trim()
   if (!job || !name || !company) return null
   return {
     job_title: job,
     full_name: name,
     company_name: company,
+    ...(fixed ? { company_id: fixed.id } : {}),
     role_title: opt(form.roleTitle),
     email: opt(form.email),
     phone: opt(form.phone),
@@ -50,6 +60,23 @@ export interface ExistingLead {
   /** "bus_dev" (a lead) or "manager". */
   stage: string
   fullName: string
+}
+
+/** ELI-78: why "Zu Leads" was refused (409 `{code}`), in words; null if it
+ *  was not such a refusal. */
+export function toLeadRefusal(e: unknown): string | null {
+  switch (refusal(e)?.code) {
+    case 'has_contact':
+      return t('Mit dieser Person gab es schon Kontakt — sie bleibt Manager.')
+    case 'has_mandate':
+      return t('Diese Person hat ein Mandat — sie bleibt Manager.')
+    case 'imported':
+      return t('Aus dem eigenen System importiert — bleibt Manager.')
+    case 'do_not_contact':
+      return t('Diese Person möchte nicht kontaktiert werden — sie bleibt Manager.')
+    default:
+      return null
+  }
 }
 
 /** The person already held at that company (409 `lead_exists`), else null. */

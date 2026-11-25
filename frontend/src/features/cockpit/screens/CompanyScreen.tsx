@@ -7,7 +7,7 @@
 import { t } from '@/i18n'
 import { locale } from '@/i18n/format'
 
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Briefcase, Building2, Mail, MapPin, Newspaper, Phone, Plus, Search, UserCheck, UserRound, Users } from 'lucide-react'
 import { api } from '@/api/client'
 import { FrameworkContractLine } from './FrameworkContractLine'
@@ -16,6 +16,8 @@ import { useAsync } from '@/hooks/useAsync'
 import { cn } from '@/lib/cn'
 import { ReaddDeclined, withReaddConfirm } from '../erasure/readd'
 import { NoInterestChip } from '../leads/NoInterest'
+import { NewLead } from '../leads/NewLead'
+import { toLeadRefusal } from '../leads/manualLead'
 import { Button, FIELD } from '../ui/forms'
 import { Chip, Panel, SectionHeader, SegmentedControl } from '../ui/primitives'
 import {
@@ -37,6 +39,13 @@ import { useCreators } from '../data/useCreators'
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric' }) : null
 
+/** `#companies/<id>` is the page; `#companies/<id>/lead` opens it with the
+ *  "+ Lead" form (ELI-78 — the Markt card's "Lead anlegen"). */
+export function companyDetail(detail: string): { id: string; newLead: boolean } {
+  const [id, what] = detail.split('/')
+  return { id, newLead: what === 'lead' }
+}
+
 export function CompanyScreen({
   companyId,
   onSelect,
@@ -44,8 +53,9 @@ export function CompanyScreen({
   companyId: string | null
   onSelect: (id: string | null) => void
 }) {
-  return companyId ? (
-    <CompanyPage companyId={companyId} onBack={() => onSelect(null)} />
+  const detail = companyId ? companyDetail(companyId) : null
+  return detail ? (
+    <CompanyPage companyId={detail.id} startWithLead={detail.newLead} onBack={() => onSelect(null)} />
   ) : (
     <CompanyList onOpen={onSelect} />
   )
@@ -185,6 +195,43 @@ export function LeadRow({ person, onPromoted }: { person: CompanyPersonDTO; onPr
   )
 }
 
+/** ELI-78: a manager of this company. One added by hand that nobody has
+ *  spoken to yet can still be moved to Leads ("Zu Leads", the reverse of
+ *  "Zu Managern") — the person found for a Markt company that named nobody. */
+export function ManagerRow({ person, onMoved }: { person: CompanyPersonDTO; onMoved: () => void }) {
+  const [moving, setMoving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const move = async () => {
+    setMoving(true)
+    setError(null)
+    try {
+      await api.managerToLead(person.id)
+      onMoved() // re-read: the person now sits under Leads
+    } catch (e) {
+      setError(toLeadRefusal(e) ?? t('Speichern fehlgeschlagen.'))
+    } finally {
+      setMoving(false)
+    }
+  }
+  return (
+    <PersonRow
+      person={person}
+      href={`#managers/${person.id}`}
+      action={
+        person.can_be_lead && (
+          <span className="flex items-center gap-2" title={t('Noch kein Kontakt — unter Leads führen.')}>
+            {error && <span className="text-[13px] text-coral-400">{error}</span>}
+            <Button onClick={move} disabled={moving}>
+              <Users className="h-4 w-4" />
+              {t('Zu Leads')}
+            </Button>
+          </span>
+        )
+      }
+    />
+  )
+}
+
 /** One row of the Unternehmen list. */
 export function CompanyListItem({ company: c, onOpen }: { company: CompanyOverviewRowDTO; onOpen: (id: string) => void }) {
   return (
@@ -226,10 +273,30 @@ export function CompanyListItem({ company: c, onOpen }: { company: CompanyOvervi
   )
 }
 
-function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => void }) {
+function CompanyPage({
+  companyId,
+  startWithLead = false,
+  onBack,
+}: {
+  companyId: string
+  startWithLead?: boolean
+  onBack: () => void
+}) {
   const [bump, setBump] = useState(0)
+  // ELI-78: "+ Lead" for THIS company — open at once when the Markt card sent us.
+  const [leadOpen, setLeadOpen] = useState(startWithLead)
+  const leadRef = useRef<HTMLDivElement>(null)
   const page = useAsync(() => api.companyPage(companyId), [companyId, bump])
   const data = page.data
+  const loaded = data?.company.id
+  // Closed, the address is the page again — a reload or Back does not reopen it.
+  const closeLead = () => {
+    setLeadOpen(false)
+    if (window.location.hash.endsWith('/lead')) window.history.replaceState(null, '', `#companies/${companyId}`)
+  }
+  useEffect(() => {
+    if (leadOpen && loaded) leadRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [leadOpen, loaded])
 
   return (
     <div className="space-y-5">
@@ -309,10 +376,34 @@ function CompanyPage({ companyId, onBack }: { companyId: string; onBack: () => v
             )}
             <ul>
               {data.managers.map((m) => (
-                <PersonRow key={m.id} person={m} href={`#managers/${m.id}`} />
+                <ManagerRow key={m.id} person={m} onMoved={() => setBump((b) => b + 1)} />
               ))}
             </ul>
-            <AddManager companyId={data.company.id} companyName={data.company.name} onAdded={() => setBump((b) => b + 1)} />
+            <AddManager
+              companyId={data.company.id}
+              companyName={data.company.name}
+              onAdded={() => setBump((b) => b + 1)}
+              beside={
+                !leadOpen && (
+                  <Button onClick={() => setLeadOpen(true)} title={t('Erscheint unter Leads — für eine Person, mit der noch kein Kontakt war.')}>
+                    <Plus className="h-4 w-4" />
+                    {t('Lead')}
+                  </Button>
+                )
+              }
+            />
+            {leadOpen && (
+              <div className="mt-3" ref={leadRef}>
+                <NewLead
+                  company={{ id: data.company.id, name: data.company.name }}
+                  onCancel={closeLead}
+                  onSaved={() => {
+                    closeLead()
+                    setBump((b) => b + 1)
+                  }}
+                />
+              </div>
+            )}
           </Panel>
 
           {data.leads.length > 0 && (
@@ -476,10 +567,13 @@ function AddManager({
   companyId,
   companyName,
   onAdded,
+  beside,
 }: {
   companyId: string
   companyName: string
   onAdded: () => void
+  /** ELI-78: "+ Lead", next to the button. */
+  beside?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -491,11 +585,12 @@ function AddManager({
 
   if (!open)
     return (
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button onClick={() => setOpen(true)}>
           <Plus className="h-4 w-4" />
           {t('Manager hinzufügen')}
         </Button>
+        {beside}
       </div>
     )
 
