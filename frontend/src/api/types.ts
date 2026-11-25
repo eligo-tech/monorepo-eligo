@@ -1266,6 +1266,8 @@ export interface ContactRowDTO {
   full_name: string
   role_title: string | null
   phone: string | null
+  /** ELI-76: every number, the primary (= `phone`) first. */
+  phones?: ManagerPhoneDTO[]
   email: string | null
   linkedin_url: string | null
   xing_url: string | null

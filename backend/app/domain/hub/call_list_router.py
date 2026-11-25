@@ -21,6 +21,7 @@ from app.domain.common import creators
 from app.domain.common.enums import CallOutcome
 from app.domain.hub import call_list
 from app.domain.hub.schemas import Switchboard
+from app.domain.managers.schemas import ManagerPhoneRead
 
 router = APIRouter(prefix="/hub/call-list", tags=["hub"])
 
@@ -88,6 +89,8 @@ class ContactRow(BaseModel):
     full_name: str
     role_title: str | None
     phone: str | None
+    #: ELI-76: every number, the primary (= `phone`) first.
+    phones: list[ManagerPhoneRead] = Field(default_factory=list)
     email: str | None
     linkedin_url: str | None
     xing_url: str | None = None
